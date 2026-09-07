@@ -1,5 +1,6 @@
 import QtQuick
 import "Props.js" as Props
+import "Icons.js" as Icons
 
 // One node of a published view tree, and its children under it.
 //
@@ -79,10 +80,20 @@ Item {
 
     Component {
         id: iconNode
-        // Until the shell has an icon set to map names through, an icon is
-        // its name: honest, legible, and the mapping goes here.
+        // A name becomes a Nerd Font glyph, which the bar's font carries. A
+        // name this shell has no glyph for is drawn as itself — the same
+        // honest fallback as before, now the exception rather than the rule.
+        //
+        // Drawn as plain `Text`, not `qs.Ui`'s `OpticalGlyph`: that corrects
+        // the horizontal bearing of a glyph centred in a fixed slot, and
+        // these sit in a `Row` that lays out advance widths. Text also brings
+        // its own implicit size, which an `Item` does not.
         Text {
-            text: Props.text(node.model, "name", "")
+            text: {
+                var name = Props.text(node.model, "name", "")
+                var glyph = Icons.glyph(name)
+                return glyph === "" ? name : glyph
+            }
             color: node.colorOf()
             verticalAlignment: Text.AlignVCenter
         }

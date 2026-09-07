@@ -69,7 +69,13 @@ impl Renderer {
     pub const VIEW: Renderer = renderer!(
         "omega.view",
         "shell/plugins/omega.view",
-        ["manifest.json", "BarWidget.qml", "ViewNode.qml", "Props.js"]
+        [
+            "manifest.json",
+            "BarWidget.qml",
+            "ViewNode.qml",
+            "Props.js",
+            "Icons.js"
+        ]
     );
 
     /// Every renderer omega ships.

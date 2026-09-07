@@ -226,3 +226,61 @@ fn what_matches_has_no_difference_to_report() {
     renderer.link(&plugins, &checkout()).unwrap();
     assert_eq!(renderer.installed(&plugins).difference(), None);
 }
+
+/// Every name the icon set maps, in the order the file lists them.
+fn glyph_names(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix('"'))
+        .filter_map(|rest| rest.split_once("\": \"").map(|(name, _)| name.to_owned()))
+        .collect()
+}
+
+#[test]
+fn the_icon_names_the_sdk_documents_are_the_ones_the_shell_draws() {
+    // `Icon::new` takes a string, so a name the shell has no glyph for is not
+    // a compile error — it is a word in somebody's bar. The list in the
+    // rustdoc is the only place a unit author reads, so it has to be the list
+    // the renderer actually carries.
+    let icons = Renderer::VIEW
+        .files
+        .iter()
+        .find(|asset| asset.name == "Icons.js")
+        .expect("the view renderer carries an icon set");
+
+    let drawn = glyph_names(icons.contents);
+    assert!(
+        !drawn.is_empty(),
+        "no icon names were parsed out of Icons.js"
+    );
+
+    let nodes = checkout().join("crates/omega/src/ui/nodes.rs");
+    let documented = std::fs::read_to_string(&nodes).unwrap();
+    let documented = documented
+        .split("What `omega.view` draws today:")
+        .nth(1)
+        .expect("Icon's rustdoc lists the names the shell draws");
+
+    for name in &drawn {
+        assert!(
+            documented.contains(&format!("`{name}`")),
+            "the shell draws `{name}` and {} does not document it",
+            nodes.display()
+        );
+    }
+
+    // And nothing documented that the shell would draw as a bare word.
+    for quoted in documented
+        .lines()
+        // The split leaves the tail of the marker's own line first, which is
+        // empty and would end a `take_while` before it began.
+        .skip(1)
+        .take_while(|line| line.trim_start().starts_with("///"))
+        .flat_map(|line| line.split('`').skip(1).step_by(2))
+    {
+        assert!(
+            drawn.iter().any(|name| name == quoted),
+            "`{quoted}` is documented as an icon the shell has no glyph for"
+        );
+    }
+}
