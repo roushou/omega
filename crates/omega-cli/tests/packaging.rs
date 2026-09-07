@@ -248,3 +248,79 @@ fn nothing_that_runs_cargo_builds_in_the_system_temp_directory() {
 
     assert!(checked > 0, "no cargo-running source was found to check");
 }
+
+/// A field a crate either states itself or inherits from the workspace.
+fn inherited<'a>(
+    package: &'a toml::Value,
+    workspace: &'a toml::Value,
+    key: &str,
+) -> Option<&'a toml::Value> {
+    match package.get(key) {
+        Some(value) if value.get("workspace").and_then(toml::Value::as_bool) == Some(true) => {
+            workspace.get("workspace")?.get("package")?.get(key)
+        }
+        other => other,
+    }
+}
+
+#[test]
+fn every_published_crate_carries_the_metadata_a_registry_shows() {
+    // Description and license decide whether a publish is accepted; readme,
+    // keywords and categories decide whether anybody finds the crate
+    // afterwards. All of them are invisible locally — nothing but a publish
+    // reads them — so a crate added without them is only noticed on the day
+    // it ships.
+    let workspace = manifest(&checkout().join("Cargo.toml"));
+
+    let mut checked = 0;
+    for root in crate_roots() {
+        let path = root.join("Cargo.toml");
+        let manifest = manifest(&path);
+        let package = manifest
+            .get("package")
+            .expect("a crate has a package table");
+        let name = package["name"].as_str().unwrap_or_default();
+
+        for key in [
+            "description",
+            "license",
+            "repository",
+            "readme",
+            "homepage",
+            "keywords",
+            "categories",
+        ] {
+            assert!(
+                inherited(package, &workspace, key).is_some(),
+                "{name} declares no {key}"
+            );
+        }
+
+        // crates.io's own limits, which it enforces on upload and nothing
+        // enforces here: at most five keywords, none over twenty characters.
+        let keywords = package["keywords"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name}: keywords is a list"));
+        assert!(
+            keywords.len() <= 5,
+            "{name} has {} keywords",
+            keywords.len()
+        );
+        for keyword in keywords {
+            let keyword = keyword.as_str().unwrap_or_default();
+            assert!(keyword.len() <= 20, "{name}: {keyword:?} is over 20 chars");
+            assert!(
+                keyword.starts_with(|c: char| c.is_ascii_alphanumeric()),
+                "{name}: {keyword:?} must start alphanumeric"
+            );
+        }
+
+        assert!(
+            !package["categories"].as_array().unwrap().is_empty(),
+            "{name} declares no categories"
+        );
+        checked += 1;
+    }
+
+    assert!(checked > 0, "no crate was found to check");
+}

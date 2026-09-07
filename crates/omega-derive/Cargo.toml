@@ -1,8 +1,12 @@
 [package]
 name = "omega-derive"
 version.workspace = true
+categories = ["development-tools::procedural-macro-helpers", "os::linux-apis"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["derive", "macro", "desktop", "plugin", "widget"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Derives for Omega plugins: a widget's fields declare what it needs."

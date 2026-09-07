@@ -1,8 +1,12 @@
 [package]
 name = "omega-rs"
 version.workspace = true
+categories = ["gui", "os::linux-apis", "api-bindings"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["omarchy", "hyprland", "desktop", "widget", "plugin"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Write an Omega plugin: declare what you need by holding it, and draw."

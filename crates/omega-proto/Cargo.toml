@@ -1,8 +1,12 @@
 [package]
 name = "omega-proto"
 version.workspace = true
+categories = ["encoding", "network-programming", "os::linux-apis"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["protobuf", "protocol", "ipc", "desktop", "wayland"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Omega's protocol: the protobuf ontology, frame codec, transport, and handshake."

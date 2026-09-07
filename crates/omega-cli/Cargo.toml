@@ -1,8 +1,12 @@
 [package]
 name = "omega-cli"
 version.workspace = true
+categories = ["command-line-utilities", "config", "os::linux-apis"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["omarchy", "hyprland", "desktop", "dotfiles", "config"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "The `omega` command line: scaffold, build, run, and inspect a configuration."

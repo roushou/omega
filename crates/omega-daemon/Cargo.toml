@@ -1,8 +1,12 @@
 [package]
 name = "omega-daemon"
 version.workspace = true
+categories = ["os::linux-apis", "asynchronous"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["desktop", "daemon", "supervisor", "wayland", "ipc"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "The Omega daemon: trust boundary, state owner, unit supervisor, and reconciler."

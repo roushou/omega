@@ -1,8 +1,12 @@
 [package]
 name = "omega-document"
 version.workspace = true
+categories = ["config", "os::linux-apis"]
 edition.workspace = true
+homepage.workspace = true
+keywords = ["omarchy", "desktop", "config", "declarative", "dotfiles"]
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Omega's configuration plane: the state document, and the API a config writes against."
