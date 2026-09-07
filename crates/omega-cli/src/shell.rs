@@ -38,14 +38,11 @@ pub struct Renderer {
     pub files: &'static [Asset],
 }
 
-/// Declare a renderer from files that are read out of the tree at compile
-/// time, so the list and the contents cannot disagree.
-///
-/// The path is written once and used twice: relative to this file for the
-/// compiler, and relative to a checkout for `--link`. It has to stay *inside*
-/// this crate — cargo packages a crate's own directory and nothing above it,
-/// so a renderer read from the repository root would build here and be
-/// missing from the published crate.
+/// Declare a renderer from files read out of the tree at compile time, so the
+/// list and the contents cannot disagree. The path is used twice: relative to
+/// this file for the compiler, relative to a checkout for `--link`. It must
+/// stay inside this crate — cargo packages a crate's own directory and
+/// nothing above it.
 macro_rules! renderer {
     ($id:literal, $dir:literal, [$($name:literal),* $(,)?]) => {
         Renderer {
@@ -135,17 +132,13 @@ impl Renderer {
         Ok(dir)
     }
 
-    /// Point the shell at a checkout instead of copying it.
+    /// Point the shell at a checkout instead of copying it, for editing the
+    /// QML without reinstalling. The deviation, not the default: the shell
+    /// then draws whatever is in that tree.
     ///
-    /// For somebody editing the QML, who wants their tree on screen without
-    /// reinstalling after every change. It is the deviation, not the default:
-    /// what the shell draws is then whatever is in that tree, which is the
-    /// version drift the copy exists to prevent.
-    ///
-    /// The shell finds a linked plugin — its scan globs `*/` and follows the
-    /// link — but does not *watch* one, because inotify does not descend
-    /// through a symlink. So edits need [`HostShell::reload_command`], which
-    /// is the whole difference between this and editing in place.
+    /// A linked plugin is found by the scan but not *watched* — inotify does
+    /// not descend through a symlink — so edits need
+    /// [`HostShell::reload_command`].
     pub fn link(&self, plugins: &Path, checkout: &Path) -> anyhow::Result<PathBuf> {
         let source = checkout.join(self.source);
         if !source.join("manifest.json").is_file() {
@@ -358,14 +351,9 @@ impl HostShell {
         }
     }
 
-    /// Put the widget on screen.
-    ///
-    /// Only ever asked for: `omega shell install` prints the command instead,
-    /// because rearranging somebody's bar because they installed something is
-    /// how a command stops being trusted. `omega init` is the exception — a
-    /// person setting omega up on a machine is asking for exactly this, and
-    /// an omega.view with nothing publishing yet draws nothing until there
-    /// is.
+    /// Put the widget on screen. Only ever on request: `omega shell install`
+    /// prints the command instead, because rearranging somebody's bar unasked
+    /// is how a command stops being trusted. `omega init` is the exception.
     pub fn enable(self, id: &str) -> std::io::Result<Output> {
         match self {
             Self::Omarchy => std::process::Command::new("omarchy")

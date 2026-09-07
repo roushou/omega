@@ -21,12 +21,8 @@ const UNIT_LIB: &str = include_str!("../templates/unit/src/lib.rs");
 const UNIT_MAIN: &str = include_str!("../templates/unit/src/main.rs");
 const SYSTEM_MAIN: &str = include_str!("../templates/system/src/main.rs");
 
-/// The token a unit's name replaces in a template, and the one Rust spells
-/// that name by — `battery-widget` is `battery_widget` to a `use`.
-///
-/// The scaffolded config plane has to name a unit to show what a config plane
-/// is *for*, and a name the workspace does not build fails `omega build`. The
-/// only name it can honestly use is the one being scaffolded alongside it.
+/// The token a unit's name replaces in a template. `battery-widget` is
+/// `battery_widget` to a `use`.
 const UNIT_TOKEN: &str = "{unit}";
 const CRATE_TOKEN: &str = "{unit_snake}";
 
@@ -51,17 +47,10 @@ pub enum ScaffoldError {
     Toml(#[from] TomlError),
 }
 
-/// Where a generated config gets omega's own crates from.
-///
-/// One answer, always: the published crates. A config is a git repository
-/// that has to build on every machine it is cloned onto, and an absolute path
-/// into somebody's home directory does not travel.
-///
-/// Working on omega itself is therefore not a different manifest — it is a
-/// local *override*, which is what cargo's `[patch]` is for. It lives in
-/// `.cargo/config.toml`, which the scaffold tells git to ignore, so the
-/// committed workspace stays portable while this machine builds against a
-/// checkout. See [`SourceTree`].
+/// Where a generated config gets omega's crates from: always the published
+/// ones, because a config is a git repository that must build on every
+/// machine it is cloned onto. Building against a checkout is a `[patch]`
+/// override instead — see [`SourceTree`].
 #[derive(Debug, Clone)]
 pub struct Published {
     version: String,
@@ -223,15 +212,10 @@ impl Scaffold {
         Dependency::local(format!("../units/{unit}"), &[])
     }
 
-    /// The line `omega new` prints: what to paste into the config plane to
-    /// put this plugin in a bar.
-    ///
-    /// Fully qualified, so it compiles wherever it lands whatever the config
-    /// plane happens to import — a hint that needs a second hint about an
-    /// import is a hint that failed.
-    ///
-    /// It lives here, beside the plugin template, because every name in it
-    /// has to exist in that template. A test holds the two together.
+    /// The line `omega new` prints, to paste into the config plane. Fully
+    /// qualified so it compiles wherever it lands. Lives beside the plugin
+    /// template because every name in it must exist there; a test holds the
+    /// two together.
     pub fn placement_hint(unit: &UnitName) -> String {
         let krate = unit.as_str().replace('-', "_");
         format!(
@@ -299,19 +283,9 @@ impl SourceTree {
     /// this binary was built from.
     pub const ENV: &'static str = "OMEGA_SOURCE";
 
-    /// The checkout to build against, if there is one.
-    ///
-    /// `$OMEGA_SOURCE` first — it is how a second contributor, or a second
-    /// clone, says which tree it means. Otherwise the tree this binary was
-    /// compiled from, when that tree is one somebody keeps.
-    ///
-    /// Which is not the same question as debug or release. `cargo install
-    /// --path ~/dev/omega` is a release build of a durable checkout, and a
-    /// config scaffolded by it should build against it — before anything is
-    /// published, that is the only way it builds at all. What must *not* be
-    /// linked is a tree cargo owns: `cargo install --git` unpacks into
-    /// `$CARGO_HOME` and is free to delete it afterwards, and a config
-    /// pointed there would break the moment it did.
+    /// The checkout to build against: `$OMEGA_SOURCE`, else the tree this
+    /// binary was compiled from. Never a tree cargo owns — `cargo install
+    /// --git` unpacks into `$CARGO_HOME` and may delete it afterwards.
     pub fn detect() -> Option<Self> {
         if let Some(named) = std::env::var_os(Self::ENV) {
             return Self::at(named).ok();
