@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package omega;
+
+// Unit ontology: the enums that appear on the wire (capabilities in Welcome)
+// or parse author-facing manifest names. The manifest itself is TOML
+// (unit.toml), never protobuf — this file only carries the enums.
+
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  CAPABILITY_STATE_READ = 1;
+  CAPABILITY_STATE_WRITE = 2;            // unit keyspace only
+  CAPABILITY_SPAWN = 3;                  // RunCommand / LaunchApp
+  CAPABILITY_SYSTEM_CONTROL = 4;         // lock/sleep/reboot/shutdown
+  CAPABILITY_MEDIA = 5;
+  CAPABILITY_AUDIO = 6;
+  CAPABILITY_BACKLIGHT = 7;
+  CAPABILITY_NOTIFY = 8;
+  CAPABILITY_SCREENSHOT = 9;
+  CAPABILITY_CLIPBOARD = 10;
+  CAPABILITY_NETWORK = 11;
+}
+
+// The kinds of surface a unit can expose ("one unit type, many surfaces").
+enum SurfaceKind {
+  SURFACE_KIND_UNSPECIFIED = 0;
+  SURFACE_KIND_WIDGET = 1;
+  SURFACE_KIND_COMMAND = 2;
+  SURFACE_KIND_SCHEDULE = 3;
+  SURFACE_KIND_AGENT_TOOL = 4;
+}

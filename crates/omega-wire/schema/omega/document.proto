@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/action.proto";
+import "omega/event.proto";
+import "omega/value.proto";
+
+// The configuration plane compiles to this document. It is the desired state
+// of the machine, not a script: the reconciler diffs it against actual state
+// and converges. Entities carry stable ids for that diff. Desired and actual
+// state are deliberately different types — see state.proto.
+
+message StateDocument {
+  uint64 revision = 1;                  // from omega.lock
+
+  repeated Monitor monitors = 2;
+  repeated Workspace workspaces = 3;
+  repeated Bar bars = 4;
+  repeated Keybind keybinds = 5;
+  repeated Setting settings = 6;
+  repeated Schedule schedules = 7;
+  repeated Policy policies = 8;
+  repeated UnitRef units = 9;
+  repeated EnvironmentVariable environment = 10;
+}
+
+// Desired display layout. Distinct from MonitorInfo (actual state).
+message Monitor {
+  string id = 1;                // "eDP-1"
+  bool enabled = 2;
+  int32 x = 3;
+  int32 y = 4;
+  float scale = 5;
+  uint32 refresh_mhz = 6;
+  bool primary = 7;
+}
+
+message Workspace {
+  uint32 index = 1;
+  string name = 2;
+  string monitor_id = 3;
+  bool persistent = 4;
+}
+
+message Bar {
+  string id = 1;
+  string monitor_id = 2;
+  Edge edge = 3;
+  repeated Module modules = 4;
+}
+
+enum Edge {
+  EDGE_UNSPECIFIED = 0;
+  EDGE_TOP = 1;
+  EDGE_BOTTOM = 2;
+  EDGE_LEFT = 3;
+  EDGE_RIGHT = 4;
+}
+
+message Module {
+  string id = 1;
+  oneof kind {
+    ClockModule clock = 2;
+    BatteryModule battery = 3;
+    WorkspaceModule workspaces = 4;
+    TrayModule tray = 5;
+    WidgetModule widget = 6;   // a widget unit, instantiated
+  }
+}
+
+message ClockModule {
+  string format = 1;            // strftime
+}
+
+message BatteryModule {
+  bool show_percent = 1;
+}
+
+message WorkspaceModule {}
+message TrayModule {}
+
+message WidgetModule {
+  string unit = 1;              // unit name from its manifest
+  map<string, Value> config = 2;
+}
+
+message Setting {
+  string id = 1;
+  oneof kind {
+    NightLightSetting night_light = 2;
+    IdleSetting idle = 3;
+    ThemeSetting theme = 4;
+    CursorSetting cursor = 5;
+    Value custom = 6;           // open extension
+  }
+}
+
+message NightLightSetting {
+  bool enabled = 1;
+  uint32 temperature_k = 2;     // e.g. 3500
+}
+
+message IdleSetting {
+  uint32 timeout_sec = 1;
+  oneof on_idle {
+    Lock lock = 2;
+    Sleep sleep = 3;
+    RunCommand run = 4;
+  }
+}
+
+message ThemeSetting {
+  string name = 1;
+  map<string, Value> overrides = 2;
+}
+
+message CursorSetting {
+  string theme = 1;
+  uint32 size = 2;
+}
+
+message Schedule {
+  string id = 1;
+  string cron = 2;              // "0 9 * * *" or "every 5m"
+  Action action = 3;
+}
+
+// Wires events to a policy unit (the runtime plane's imperative half).
+message Policy {
+  string id = 1;
+  string unit = 2;
+  repeated EventKind events = 3;
+  map<string, Value> config = 4;
+}
+
+// A unit enabled in the runtime plane.
+message UnitRef {
+  string name = 1;
+  bool enabled = 2;
+  map<string, Value> config = 3;
+}
+
+message EnvironmentVariable {
+  string key = 1;
+  string value = 2;
+}

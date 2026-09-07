@@ -1,0 +1,178 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/value.proto";
+
+// Actions are the closed taxonomy of things a keybind, command, schedule, or
+// policy can do. Closed on purpose: "real enums, no strings". The SDK gets
+// exhaustive matching for free, and a keybind to a nonexistent action is a
+// compile error, not a runtime surprise. RunCommand is the explicit,
+// capability-gated escape hatch for everything else.
+
+message Action {
+  oneof kind {
+    LaunchApp launch_app = 1;
+    RunCommand run_command = 2;
+    SetSetting set_setting = 3;
+    ToggleSetting toggle_setting = 4;
+    SwitchWorkspace switch_workspace = 5;
+    MoveToWorkspace move_to_workspace = 6;
+    MoveToMonitor move_to_monitor = 7;
+    CloseWindow close_window = 8;
+    Lock lock = 9;
+    Sleep sleep = 10;
+    Hibernate hibernate = 11;
+    Reboot reboot = 12;
+    Shutdown shutdown = 13;
+    Screenshot screenshot = 14;
+    MediaKey media_key = 15;
+    SetVolume set_volume = 16;
+    SetBacklight set_backlight = 17;
+    Notify notify = 18;
+    InvokeUnit invoke_unit = 19;
+    ToggleFloating toggle_floating = 20;
+    ToggleFullscreen toggle_fullscreen = 21;
+  }
+}
+
+// Launch by desktop-entry id ("firefox.desktop"). Typed, no shell involved.
+message LaunchApp {
+  string desktop_id = 1;
+  repeated string args = 2;
+}
+
+// The raw shell escape hatch. Requires CAPABILITY_SPAWN.
+message RunCommand {
+  string command = 1;
+}
+
+message SetSetting {
+  string setting_id = 1;        // id from the state document's settings
+  Value value = 2;
+}
+
+message ToggleSetting {
+  string setting_id = 1;
+}
+
+message SwitchWorkspace {
+  oneof target {
+    uint32 index = 1;
+    string name = 2;
+    Direction direction = 3;
+  }
+}
+
+message MoveToWorkspace {
+  oneof target {
+    uint32 index = 1;
+    string name = 2;
+  }
+  WindowSelector window = 10;
+}
+
+message MoveToMonitor {
+  string monitor_id = 1;
+  WindowSelector window = 2;
+}
+
+message CloseWindow {
+  WindowSelector window = 1;
+}
+
+message WindowSelector {
+  oneof target {
+    bool focused = 1;
+    string app_id = 2;
+    string title = 3;
+  }
+}
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_NEXT = 1;
+  DIRECTION_PREVIOUS = 2;
+}
+
+// No-arg actions. Empty messages are intentional oneof cases.
+message Lock {}
+message Sleep {}
+message Hibernate {}
+message Reboot {}
+message Shutdown {}
+
+message Screenshot {
+  bool fullscreen = 1;
+  string region_monitor_id = 2;
+  string output_path = 3;
+  bool clipboard = 4;
+}
+
+message MediaKey {
+  enum Key {
+    MEDIA_KEY_UNSPECIFIED = 0;
+    MEDIA_PLAY = 1;
+    MEDIA_PAUSE = 2;
+    MEDIA_PLAY_PAUSE = 3;
+    MEDIA_NEXT = 4;
+    MEDIA_PREVIOUS = 5;
+    MEDIA_STOP = 6;
+  }
+  Key key = 1;
+}
+
+message SetVolume {
+  oneof change {
+    double absolute = 1;        // 0.0 .. 1.0
+    double delta = 2;           // signed
+    bool toggle_mute = 3;
+  }
+}
+
+message SetBacklight {
+  oneof change {
+    uint32 absolute_percent = 1;
+    int32 delta_percent = 2;
+  }
+}
+
+message Notify {
+  string summary = 1;
+  string body = 2;
+  string icon = 3;
+  uint32 timeout_ms = 4;
+}
+
+// Ask the daemon to invoke another unit's command surface.
+message InvokeUnit {
+  string unit = 1;
+  string command = 2;
+  repeated Value args = 3;
+}
+
+message ToggleFloating {
+  WindowSelector window = 1;
+}
+
+message ToggleFullscreen {
+  WindowSelector window = 1;
+}
+
+// ---- keybinds ----
+
+message Keybind {
+  string id = 1;                     // stable id for reconciler diffing
+  repeated Modifier modifiers = 2;
+  string key = 3;                    // key symbol; SDK wraps this in a closed enum
+  Action action = 4;
+  bool repeat = 5;
+}
+
+enum Modifier {
+  MODIFIER_UNSPECIFIED = 0;
+  MODIFIER_SUPER = 1;
+  MODIFIER_CTRL = 2;
+  MODIFIER_ALT = 3;
+  MODIFIER_SHIFT = 4;
+}

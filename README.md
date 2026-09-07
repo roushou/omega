@@ -1,0 +1,5 @@
+# Omega
+
+## License
+
+[MIT](./LICENSE)

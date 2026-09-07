@@ -1,0 +1,17 @@
+[package]
+name = "omega-document"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Omega's configuration plane: the state document, and the API a config writes against."
+
+[lints]
+workspace = true
+
+[dependencies]
+omega-core.workspace = true
+omega-wire.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

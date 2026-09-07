@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/value.proto";
+
+// Declarative view tree rendered by the shell. Designed as a reconciler
+// target: nodes carry stable keys so the shell diffs against the previous
+// tree rather than re-rendering. The core element types are a closed set in
+// the SDK; "type" stays a string here so plugins can extend it.
+
+message ViewTree {
+  ViewNode root = 1;
+  uint64 revision = 2;          // monotonic per widget surface
+}
+
+message ViewNode {
+  string key = 1;               // stable per position, for the reconciler
+  string type = 2;              // "box" | "text" | "button" | "progress" | "icon" | ...
+  map<string, Value> props = 3;
+  repeated ViewNode children = 4;
+}

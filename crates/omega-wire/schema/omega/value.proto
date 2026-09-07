@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package omega;
+
+// The generic data model. The escape hatch for anything the closed ontology
+// does not (yet) cover: unit keyspace state, widget props, custom settings,
+// agent tool payloads. The SDK narrows this to typed accessors at the edge.
+
+message Value {
+  oneof kind {
+    bool bool_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    string string_value = 4;
+    bytes bytes_value = 5;
+    ListValue list = 6;
+    MapValue map = 7;
+    Color color = 8;
+    Image image = 9;
+  }
+}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+message MapValue {
+  map<string, Value> entries = 1;
+}
+
+message Color {
+  float r = 1;
+  float g = 2;
+  float b = 3;
+  float a = 4;   // 0.0 .. 1.0
+}
+
+message Image {
+  bytes data = 1;
+  string mime = 2;        // "image/png", ...
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 stride = 5;
+}

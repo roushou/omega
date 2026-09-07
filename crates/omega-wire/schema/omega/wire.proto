@@ -1,0 +1,232 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/action.proto";
+import "omega/event.proto";
+import "omega/state.proto";
+import "omega/ui.proto";
+import "omega/unit.proto";
+import "omega/value.proto";
+
+// One length-prefixed frame on the Unix socket. Identity is unforgeable from
+// SO_PEERCRED and never appears in a message. All traffic is multiplexed over
+// stream_id: a request and its response share one id, and a streaming response
+// sends multiple Result frames ending with done = true.
+//
+// The daemon enforces a bounded queue per unit; state patches are coalesced
+// last-value-wins, and events may be dropped under pressure according to the
+// unit's subscription. Backpressure is policy, not schema.
+
+message Frame {
+  uint64 stream_id = 1;
+
+  oneof body {
+    Hello hello = 10;
+    Welcome welcome = 11;
+    Invoke invoke = 12;
+    Result result = 13;
+    StatePatch state_patch = 14;
+    Event event = 16;
+    Ping ping = 17;
+    Pong pong = 18;
+  }
+}
+
+// Peer -> daemon, first frame. The daemon maps SO_PEERCRED to the unit it
+// exec'd and verifies the manifest hash.
+//
+// A peer with no token is not a unit. If it runs as the daemon's own user it
+// is an operator — the person who owns the daemon, who can already signal it
+// and rewrite its state dir, and who is therefore granted lifecycle control
+// and nothing else. Any other uid is refused.
+message Hello {
+  uint32 protocol_version = 1;
+  string manifest_hash = 2;
+
+  // The one-time token the daemon minted for this spawn and passed in the
+  // unit's environment. Identity is (SO_PEERCRED pid, token): a pid alone is
+  // recycled by the kernel and would let an unrelated process inherit a dead
+  // unit's grants.
+  string token = 3;
+}
+
+// Daemon -> unit. Grants capabilities (read from the manifest, never from the
+// unit) and hands over the initial state mirror.
+message Welcome {
+  uint32 protocol_version = 1;      // the version both will speak
+  string unit_id = 2;
+  string daemon_version = 3;
+  repeated Capability capabilities = 4;
+  StateSnapshot state = 5;
+
+  // The settings the document gave this unit.
+  //
+  // Construction, not state: a plugin's fields are built out of these, so
+  // they arrive once, at the handshake, and change only by the unit being run
+  // again. A widget placed in a bar is configured where it is placed, and
+  // those settings arrive per instance on RenderWidget — laid over these, so
+  // configuring a plugin once does not have to be repeated at every
+  // placement.
+  map<string, Value> config = 6;
+}
+
+// A request in either direction, correlated by stream_id on the Frame.
+// v1: one in-flight request per stream; pipelining comes later if needed.
+message Invoke {
+  oneof op {
+    // ---- unit -> daemon: daemon services ----
+    GetState get_state = 1;
+    SetState set_state = 2;
+    Subscribe subscribe = 3;
+    Unsubscribe unsubscribe = 4;
+    Act act = 5;
+    EmitEvent emit_event = 6;
+    PublishView publish_view = 7;
+
+    // ---- operator -> daemon: lifecycle ----
+    RestartUnit restart_unit = 8;
+    AdoptUnit adopt_unit = 9;
+
+    // ---- daemon -> unit: surface invocations ----
+    CallCommand call_command = 10;
+    RenderWidget render_widget = 11;
+    CallAgentTool call_agent_tool = 12;
+  }
+}
+
+message GetState {
+  repeated string topics = 1;       // empty = all subscribed topics
+}
+
+message SetState {
+  string topic = 1;                 // "unit.<name>.<key>" only
+  Value value = 2;
+}
+
+message Subscribe {
+  repeated string topics = 1;
+  repeated EventKind events = 2;
+}
+
+message Unsubscribe {
+  repeated string topics = 1;
+  repeated EventKind events = 2;
+}
+
+// Perform an action, gated by the unit's granted capabilities.
+message Act {
+  Action action = 1;
+}
+
+message EmitEvent {
+  CustomEvent event = 1;
+}
+
+// Push a widget surface's view tree to the shell (or answer RenderWidget).
+//
+// A surface can be instantiated more than once — two clocks in one bar, with
+// different formats — so a view is addressed by the module it belongs to as
+// well as the surface it renders. Empty module_id is the surface's single
+// instance: a unit that was never told about modules keeps publishing one
+// view, as it always did.
+message PublishView {
+  string surface_id = 1;
+  ViewTree view = 2;
+  string module_id = 3;
+}
+
+// Cycle a unit's process. Not a change of intent: the document still says
+// the unit should run, and this asks only that it stop being this instance
+// of it. Operators only — a unit does not restart its neighbours.
+message RestartUnit {
+  string unit = 1;
+}
+
+// Take a unit's place while it is being worked on.
+//
+// The daemon stops supervising the unit and answers with a token the caller
+// may hand to a process of its own. That process connects as the unit and is
+// granted exactly what the unit's manifest grants — no more, because the
+// manifest is still the ceiling.
+//
+// The adoption lasts as long as the operator connection that asked for it:
+// when that closes, the unit goes back to the supervisor and the built binary
+// runs again. Operators only, and it grants them nothing new — they already
+// own the state dir the built binary is copied from.
+message AdoptUnit {
+  string unit = 1;
+}
+
+// Run a unit's command surface.
+message CallCommand {
+  string command = 1;
+  repeated Value args = 2;
+}
+
+// Ask a widget surface to render for a specific bar module instance. The
+// unit answers with a Result carrying the view, and pushes later updates for
+// that module through PublishView.
+message RenderWidget {
+  string surface_id = 1;
+  string module_id = 2;
+  map<string, Value> config = 3;
+}
+
+message CallAgentTool {
+  string tool = 1;
+  string input_json = 2;
+}
+
+// The response, correlated by stream_id. Streaming responses send multiple
+// Result frames; the last carries done = true.
+message Result {
+  oneof outcome {
+    Error error = 1;
+    StatePatch state = 2;           // GetState
+    ViewTree view = 3;              // RenderWidget
+    Value value = 4;                // CallAgentTool / scalar results
+    CommandOutput output = 5;       // CallCommand (streaming)
+    Empty ok = 6;
+  }
+  bool done = 7;
+}
+
+message CommandOutput {
+  bytes chunk = 1;                  // streamed stdout/stderr
+  bool is_stderr = 2;
+  int32 exit_code = 3;              // set on the final frame
+}
+
+message Error {
+  ErrorCode code = 1;
+  string message = 2;
+}
+
+// Why the daemon refused. Closed taxonomy: a peer branches on the code, and
+// the message is for humans only.
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  // The peer is not a unit this daemon spawned.
+  ERROR_CODE_UNAUTHENTICATED = 1;
+  // The unit's manifest does not grant what the op requires, or the op names
+  // a surface the unit did not declare.
+  ERROR_CODE_PERMISSION_DENIED = 2;
+  // The frame is malformed for its op.
+  ERROR_CODE_INVALID_ARGUMENT = 3;
+  // A well-formed op this daemon does not serve yet.
+  ERROR_CODE_UNIMPLEMENTED = 4;
+  // The peer is who it says, but the connection cannot proceed: protocol
+  // version mismatch, manifest hash mismatch, no manifest on file.
+  ERROR_CODE_FAILED_PRECONDITION = 5;
+}
+
+message Empty {}
+
+message Ping {
+  uint64 nonce = 1;
+}
+
+message Pong {
+  uint64 nonce = 1;
+}

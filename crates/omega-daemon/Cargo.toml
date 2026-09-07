@@ -1,0 +1,40 @@
+[package]
+name = "omega-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The Omega daemon: trust boundary, state owner, unit supervisor, and reconciler."
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = "0.1"
+getrandom = "0.3"
+libc = "0.2"
+omega-core.workspace = true
+omega-document.workspace = true
+omega-manifest.workspace = true
+omega-wire.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "time",
+  "signal",
+  "io-util",
+  "sync",
+  "process",
+] }
+tracing.workspace = true
+
+[dev-dependencies]
+omega-document.workspace = true
+# `start_paused`: backoff pacing and keepalive timeouts are asserted on a
+# clock the test moves, not waited out.
+tokio = { workspace = true, features = ["test-util"] }

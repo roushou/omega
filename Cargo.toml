@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/roushou/omega"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+
+[workspace.dependencies]
+# Both, always: the path is what this workspace builds against, and the
+# version is what a published crate depends on. Cargo refuses to publish a
+# path dependency that has no version, and the two are held equal by a test.
+omega = { path = "crates/omega", version = "0.1.0" }
+omega-core = { path = "crates/omega-core", version = "0.1.0" }
+omega-derive = { path = "crates/omega-derive", version = "0.1.0" }
+omega-document = { path = "crates/omega-document", version = "0.1.0" }
+omega-manifest = { path = "crates/omega-manifest", version = "0.1.0" }
+omega-wire = { path = "crates/omega-wire", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = "1"
+tracing = "0.1"

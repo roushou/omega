@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/value.proto";
+
+// The system state topics. Strongly typed: this is the ontology. The daemon
+// owns all state and replicates it into units as last-value-wins patches;
+// reads in the SDK are local memory reads (omega.battery.level).
+
+message BatteryState {
+  double level = 1;             // 0.0 .. 1.0
+  bool charging = 2;
+  uint32 seconds_to_empty = 3;
+  uint32 seconds_to_full = 4;
+}
+
+message NetworkState {
+  bool connected = 1;
+  string ssid = 2;
+  string interface = 3;
+  uint32 signal_percent = 4;
+  NetworkType type = 5;
+}
+
+enum NetworkType {
+  NETWORK_TYPE_UNSPECIFIED = 0;
+  NETWORK_TYPE_ETHERNET = 1;
+  NETWORK_TYPE_WIFI = 2;
+  NETWORK_TYPE_CELLULAR = 3;
+  NETWORK_TYPE_VPN = 4;
+}
+
+message AudioState {
+  double volume = 1;            // 0.0 .. 1.0
+  bool muted = 2;
+  string default_sink = 3;
+}
+
+message BacklightState {
+  uint32 percent = 1;
+  uint32 max_percent = 2;
+}
+
+message PowerState {
+  bool on_ac = 1;
+  double load_percent = 2;
+}
+
+// Actual state of displays, as reported by the compositor. Distinct from the
+// desired Monitor in the state document: this is reality, that is intent.
+message DisplayState {
+  repeated MonitorInfo monitors = 1;
+}
+
+message MonitorInfo {
+  string id = 1;            // "eDP-1"
+  bool connected = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 refresh_mhz = 5;
+  int32 x = 6;
+  int32 y = 7;
+  float scale = 8;
+  bool primary = 9;
+}
+
+// The supervisor's view of the units it runs. Daemon-owned: a unit publishes
+// views and its own keyspace, never its own health.
+message UnitsState {
+  repeated UnitStatus units = 1;
+}
+
+message UnitStatus {
+  string unit = 1;
+  UnitPhase phase = 2;
+  uint32 restarts = 3;          // spawns after the first
+  int32 last_exit_code = 4;     // -1 when it was signalled or never ran
+  string detail = 5;            // the last failure, for humans
+}
+
+enum UnitPhase {
+  UNIT_PHASE_UNSPECIFIED = 0;
+  UNIT_PHASE_STARTING = 1;
+  UNIT_PHASE_RUNNING = 2;
+  UNIT_PHASE_RESTARTING = 3;    // exited; waiting out the backoff
+  UNIT_PHASE_FAILED = 4;        // could not be spawned at all
+  UNIT_PHASE_STOPPED = 5;       // the daemon is shutting down
+}
+
+// One topic value. "topic" is the address: "battery", "network", "audio",
+// "backlight", "power", "display", "units", or "unit.<name>.<key>" for
+// unit-owned data.
+message StateTopic {
+  string topic = 1;
+  uint64 revision = 2;          // monotonic per topic; drives coalescing
+
+  oneof value {
+    BatteryState battery = 10;
+    NetworkState network = 11;
+    AudioState audio = 12;
+    BacklightState backlight = 13;
+    PowerState power = 14;
+    DisplayState display = 15;
+    UnitsState units = 16;
+    Value generic = 20;         // unit keyspace + forward-compatible topics
+  }
+}
+
+// A coalesced batch of topic updates. The daemon collapses bursts per topic
+// before pushing, so a unit only ever sees the latest value.
+message StatePatch {
+  repeated StateTopic topics = 1;
+}
+
+// The full mirror handed to a unit on connect.
+message StateSnapshot {
+  repeated StateTopic topics = 1;
+}

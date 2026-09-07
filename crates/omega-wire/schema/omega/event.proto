@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package omega;
+
+import "omega/state.proto";
+import "omega/value.proto";
+
+// Events are the imperative inputs of the runtime plane. EventKind is the
+// closed taxonomy; the oneof carries the typed detail. Policy units subscribe
+// by EventKind in their manifest — never self-declared at runtime.
+//
+// Keep EventKind values in sync with the detail oneof cases below.
+
+message Event {
+  uint64 id = 1;
+  uint64 timestamp_ns = 2;
+  EventKind kind = 3;
+
+  oneof detail {
+    MonitorEvent monitor = 10;
+    WindowEvent window = 11;
+    PowerEvent power = 12;
+    NotificationEvent notification = 13;
+    ScheduleFired schedule = 14;
+    KeybindTriggered keybind = 15;
+    CustomEvent custom = 16;
+  }
+}
+
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  // monitor
+  EVENT_MONITOR_CONNECTED = 1;
+  EVENT_MONITOR_DISCONNECTED = 2;
+  EVENT_MONITOR_MODE_CHANGED = 3;
+  // window
+  EVENT_WINDOW_OPENED = 10;
+  EVENT_WINDOW_CLOSED = 11;
+  EVENT_WINDOW_FOCUSED = 12;
+  EVENT_WINDOW_MOVED = 13;
+  EVENT_WINDOW_TITLED = 14;
+  // power
+  EVENT_LID_CLOSED = 20;
+  EVENT_LID_OPENED = 21;
+  EVENT_AC_PLUGGED = 22;
+  EVENT_AC_UNPLUGGED = 23;
+  EVENT_BATTERY_LOW = 24;
+  EVENT_BATTERY_CRITICAL = 25;
+  EVENT_SUSPEND = 26;
+  EVENT_RESUME = 27;
+  // notification
+  EVENT_NOTIFICATION_DISMISSED = 30;
+  EVENT_NOTIFICATION_CLICKED = 31;
+  EVENT_NOTIFICATION_ACTION_INVOKED = 32;
+  // schedule / keybind
+  EVENT_SCHEDULE_FIRED = 40;
+  EVENT_KEYBIND_TRIGGERED = 41;
+  // unit-emitted
+  EVENT_CUSTOM = 50;
+}
+
+message MonitorEvent {
+  MonitorInfo monitor = 1;      // MonitorInfo from state.proto
+}
+
+message WindowEvent {
+  WindowInfo window = 1;
+}
+
+message WindowInfo {
+  string app_id = 1;
+  string title = 2;
+  string workspace = 3;
+  string monitor_id = 4;
+  uint32 pid = 5;
+}
+
+message PowerEvent {
+  // kind carries lid/ac/battery/suspend; no extra context in v1.
+}
+
+message NotificationEvent {
+  uint32 notification_id = 1;
+  string action_id = 2;         // for action-invoked
+  string reply = 3;             // for replies
+}
+
+message ScheduleFired {
+  string schedule_id = 1;
+}
+
+message KeybindTriggered {
+  string keybind_id = 1;
+}
+
+// Unit-emitted, namespaced by unit. The only event kind with open semantics.
+message CustomEvent {
+  string unit = 1;
+  string name = 2;
+  Value payload = 3;
+}

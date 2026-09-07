@@ -1,0 +1,48 @@
+[package]
+name = "omega-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The `omega` command line: scaffold, build, run, and inspect a configuration."
+
+[lints]
+workspace = true
+
+[dependencies]
+anstream = "1"
+anstyle = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+omega-core.workspace = true
+omega-daemon = { path = "../omega-daemon", version = "0.1.0" }
+omega-document.workspace = true
+omega-manifest.workspace = true
+omega-wire.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "macros",
+  "process",
+  "time",
+  "io-util",
+  "net",
+  "fs",
+] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lib]
+name = "omega_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omega"
+path = "src/main.rs"
+
+[dev-dependencies]
+# Reading this repository's own manifests, which use `workspace = true`
+# inheritance that the generated-manifest model does not describe.
+toml = "1"
