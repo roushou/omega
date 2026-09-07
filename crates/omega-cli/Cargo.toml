@@ -29,8 +29,6 @@ tokio = { workspace = true, features = [
   "net",
   "fs",
 ] }
-toml_edit = { version = "0.25", features = ["serde"] }
-tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lib]

@@ -10,6 +10,11 @@ description = "Omega's protocol: the protobuf ontology, frame codec, transport, 
 [lints]
 workspace = true
 
+# `pbjson` is used only by the serde impls `build.rs` generates, which
+# cargo-shear does not see.
+[package.metadata.cargo-shear]
+ignored = ["pbjson"]
+
 [dependencies]
 bytes = "1"
 futures-util = { version = "0.3", features = ["sink"] }

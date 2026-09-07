@@ -20,7 +20,6 @@ unimplemented = "warn"
 dbg_macro = "warn"
 
 [workspace.dependencies]
-omega = { path = "crates/omega", version = "0.1.0" }
 omega-derive = { path = "crates/omega-derive", version = "0.1.0" }
 omega-document = { path = "crates/omega-document", version = "0.1.0" }
 omega-proto = { path = "crates/omega-proto", version = "0.1.0" }

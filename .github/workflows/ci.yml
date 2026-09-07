@@ -34,3 +34,20 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+  # Separate from `check` so a new advisory against a dependency reads as a
+  # supply-chain problem rather than as this workspace's code going red.
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-shear
+
+      - name: Unused dependencies
+        run: cargo shear
+
+      - name: Licenses, advisories, bans, sources
+        uses: EmbarkStudios/cargo-deny-action@v2
