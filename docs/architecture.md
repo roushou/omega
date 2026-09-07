@@ -114,12 +114,13 @@ Four domains today:
   Cargo.toml Cargo.lock   workspace; members are system/ and units/*
   system/                 → document.json, one entry point, no side effects
   units/                  independent unit packages
+  target/                 cargo's, at cargo's default path; gitignored
 
 ~/.local/state/omega/     build output
   document.json  units.toml
   units/<name>/           the binary and its unit.toml
 
-~/.cache/omega/           target dir, and logs/<unit>.log
+~/.cache/omega/logs/      <unit>.log
 ```
 
 Logs live in the cache rather than the state dir because a build replaces the

@@ -14,11 +14,11 @@ fn a_profile_decides_which_binaries_a_build_produced() {
     // must never be confused for the release ones a machine runs.
     assert_eq!(
         layout().compiled_binary(Profile::Debug, &name),
-        std::path::Path::new("/x/target/debug/battery")
+        std::path::Path::new("/c/target/debug/battery")
     );
     assert_eq!(
         layout().compiled_binary(Profile::Release, &name),
-        std::path::Path::new("/x/target/release/battery")
+        std::path::Path::new("/c/target/release/battery")
     );
     assert_ne!(
         layout().compiled_system(Profile::Debug),

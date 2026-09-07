@@ -164,12 +164,18 @@ impl Layout {
 
     // ---- build output ----
 
-    /// `~/.cache/omega/target` — the cargo target dir.
+    /// `~/.config/omega/target` — the cargo target dir.
+    ///
+    /// Beside the source, which is where cargo puts one by default. That is
+    /// the point: `omega build` passes this path explicitly and a person
+    /// running `cargo build` in the config gets the same directory, so the
+    /// two cannot each fill one. The watcher ignores it and the scaffold
+    /// gitignores it.
     pub fn target_dir(&self) -> PathBuf {
-        self.cache.join("target")
+        self.config.join("target")
     }
 
-    /// `~/.cache/omega/target/<profile>`.
+    /// `~/.config/omega/target/<profile>`.
     pub fn profile_dir(&self, profile: Profile) -> PathBuf {
         self.target_dir().join(profile.dir())
     }
