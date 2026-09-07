@@ -221,3 +221,24 @@ async fn a_broken_build_leaves_the_running_one_alone() {
 
     stop(&handle, running).await;
 }
+
+#[tokio::test]
+async fn a_machine_nothing_has_been_built_for_yet_still_starts() {
+    // `omega init` installs the service before anything is built, so the very
+    // first start finds a state dir with no `units.toml` in it. Treating that
+    // as fatal made the daemon exit 1, and systemd restart it until it hit the
+    // start limit and gave up — permanently dead by the time the first
+    // `omega build` wrote the file three minutes later.
+    let machine = Machine::new("unbuilt");
+    assert!(
+        !machine.layout.state_units_toml().exists(),
+        "the point of this test is the file being absent"
+    );
+
+    let (handle, running) = machine.start();
+    assert!(
+        handle.supervisor.running().is_empty(),
+        "nothing was built, so nothing runs"
+    );
+    stop(&handle, running).await;
+}

@@ -263,7 +263,12 @@ impl DaemonBuilder {
             source,
         })?;
 
-        let config = self.layout.file::<StateConfig>(()).read()?;
+        // A state dir with no `units.toml` is a machine nothing has been
+        // built for yet, not a broken one. Refusing to start meant `omega
+        // init` — which installs the service before anything is built — burned
+        // through systemd's restart limit, so the daemon was permanently dead
+        // by the time the first `omega build` produced the file.
+        let config = self.layout.file::<StateConfig>(()).read_or_default()?;
         let manifests = ManifestStore::load(&config, &self.layout)?;
 
         let hub = Hub::new();
