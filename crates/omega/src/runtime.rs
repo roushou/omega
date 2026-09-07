@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 
-use omega_manifest::Manifest;
-use omega_wire::omega::{Frame, Invoke, PublishView, Result as OpResult, frame, invoke, result};
-use omega_wire::{Client, Handshake, Socket, Values};
+use omega_proto::Manifest;
+use omega_proto::omega::{Frame, Invoke, PublishView, Result as OpResult, frame, invoke, result};
+use omega_proto::{Client, Handshake, Socket, Values};
 use tokio::net::UnixStream;
 
 use crate::context::Context;
@@ -56,7 +56,7 @@ impl Runtime {
         Ok(Self::welcomed(client, welcome))
     }
 
-    fn welcomed(client: Client, welcome: omega_wire::omega::Welcome) -> Self {
+    fn welcomed(client: Client, welcome: omega_proto::omega::Welcome) -> Self {
         let (sender, effects) = tokio::sync::mpsc::unbounded_channel();
         Self {
             client,
@@ -222,8 +222,8 @@ impl Runtime {
         match answer {
             Answer::Done => result::Outcome::Ok(Default::default()),
             Answer::Value(value) => result::Outcome::Value(value),
-            Answer::Refused(message) => result::Outcome::Error(omega_wire::omega::Error {
-                code: omega_wire::omega::ErrorCode::InvalidArgument as i32,
+            Answer::Refused(message) => result::Outcome::Error(omega_proto::omega::Error {
+                code: omega_proto::omega::ErrorCode::InvalidArgument as i32,
                 message,
             }),
         }

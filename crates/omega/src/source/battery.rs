@@ -1,6 +1,6 @@
 //! The battery.
 
-use omega_wire::omega::BatteryState;
+use omega_proto::omega::BatteryState;
 
 use crate::context::Context;
 use crate::source::reads;

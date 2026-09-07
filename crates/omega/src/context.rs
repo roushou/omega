@@ -11,8 +11,8 @@
 
 use std::sync::{Arc, RwLock};
 
-use omega_wire::omega::{StatePatch, StateSnapshot, invoke};
-use omega_wire::{FromValue, SystemTopic, TopicValue, Values};
+use omega_proto::omega::{StatePatch, StateSnapshot, invoke};
+use omega_proto::{FromValue, SystemTopic, TopicValue, Values};
 
 use crate::mirror::Mirror;
 

@@ -12,7 +12,7 @@ cargo fmt --check
 ```
 
 All four must pass before a change is complete; CI runs the same four on every
-push. `omega-wire` generates its types from its own `schema/`, with a
+push. `omega-proto` generates its types from its own `schema/`, with a
 bundled `protoc` — nothing has to be installed for it.
 
 `cargo test -- --ignored` additionally runs the end-to-end cycle through the
@@ -21,7 +21,7 @@ runs that config's own tests, and is too slow for every run.
 
 ## Rules
 
-- `crates/omega-wire/schema/` is the single source of truth; that crate's
+- `crates/omega-proto/schema/` is the single source of truth; that crate's
   `build.rs` generates from it. Never hand-edit generated files.
 - Fail loud over silent drop (no `filter_map` over a closed enum).
 - Paths come from `Layout`; writes are atomic.
@@ -46,7 +46,7 @@ runs that config's own tests, and is too slow for every run.
 - Which `ErrorCode` a domain error becomes is declared once per error type in
   `refusal.rs`, not chosen at each call site. A unit's own refusal passes
   through unflattened: the daemon was the messenger.
-- Stream ids are split by parity in `omega-wire` — the daemon's even, a
+- Stream ids are split by parity in `omega-proto` — the daemon's even, a
   peer's odd — because both ends allocate on one connection and an answer has
   to be unambiguous.
 - Topic and event names are validated where they enter — `Topic::parse`,
@@ -156,7 +156,7 @@ runs that config's own tests, and is too slow for every run.
   than a default silently taken on the machine. `src/main.rs` is the library
   and a call.
 - A struct that crosses a boundary as a map of values derives both directions
-  (`Fields`, in `omega-wire` beside the `Value` it is made of): the config
+  (`Fields`, in `omega-proto` beside the `Value` it is made of): the config
   plane writes settings and the plugin reads them; a plugin writes its state
   and another reads it. A boundary where each side spells the field names for
   itself is a boundary where they can disagree. Reading is total — a field the
@@ -208,11 +208,17 @@ runs that config's own tests, and is too slow for every run.
   uses: `omega` is what a unit is written against (not "sdk", which
   names an audience rather than a thing), and `omega-document` holds the
   desired-state document (not "config", which in this repo already means the
-  config dir and `units.toml`). `omega-core` carries no domain documents —
-  it knows where a file goes, not what is in it — and depends on no other
-  omega crate, which is what keeps the on-disk contract free of the protocol.
-  `omega` depends on neither `omega-core` nor `omega-daemon`, so a
-  plugin author compiles neither.
+  config dir and `units.toml`). `omega-proto` is what both halves speak: the
+  wire format, the manifest, the identifiers, and where a file goes. It
+  depends on no other omega crate.
+- A unit author's build is a design constraint. `omega` depends on
+  `omega-proto` and `omega-derive` and nothing else, and the machinery only a
+  host runs — filesystem watching, directory staging, glob expansion,
+  workspace discovery — lives in `omega-daemon`'s `host` module rather than
+  under the protocol, so a plugin that draws a battery compiles no inotify
+  watcher. The CLI reaches that machinery through the daemon it already
+  depends on. When something shared is tempting to put in `omega-proto`, ask
+  what it costs a unit first.
 - A unit must be runnable and testable by whoever is writing it, or it is
   written once and never changed. Both are protocol problems, and both are
   solved by handing the unit a connection instead of making it find one.
@@ -303,5 +309,5 @@ runs that config's own tests, and is too slow for every run.
 ## Docs
 
 - `docs/architecture.md` — design and rationale
-- `crates/omega-wire/schema/README.md` — schema rules
+- `crates/omega-proto/schema/README.md` — schema rules
 - `crates/omega-cli/shell/README.md` — the renderer and the shell socket

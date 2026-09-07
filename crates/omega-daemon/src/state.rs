@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use omega_wire::omega::{StatePatch, StateSnapshot, StateTopic};
+use omega_proto::omega::{StatePatch, StateSnapshot, StateTopic};
 
 /// The daemon's authoritative state. Sources produce *values*; this store
 /// assigns the monotonic revisions that drive last-value-wins coalescing.

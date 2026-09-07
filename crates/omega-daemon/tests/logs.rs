@@ -3,13 +3,13 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use omega_core::UnitName;
 use omega_daemon::Shutdown;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::supervisor::{Supervisor, UnitLog, UnitSpec};
 use omega_daemon::units::UnitTable;
-use omega_wire::Socket;
+use omega_proto::Socket;
+use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 

@@ -15,7 +15,7 @@
 //! the same [`Dispatcher`] a framed one does.
 //!
 //! [`POLICY`]: crate::session::dispatch
-//! [`Frame`]: omega_wire::omega::Frame
+//! [`Frame`]: omega_proto::omega::Frame
 
 use std::path::Path;
 
@@ -23,8 +23,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
 
-use omega_wire::omega::{Frame, Invoke, frame};
-use omega_wire::{Observation, Refusal, Socket};
+use omega_proto::omega::{Frame, Invoke, frame};
+use omega_proto::{Observation, Refusal, Socket};
 
 use crate::error::ShellError;
 use crate::hub::{Hub, Observed, ViewUpdate};
@@ -128,7 +128,7 @@ struct ShellConnection {
     writer: tokio::io::WriteHalf<UnixStream>,
     requests: tokio::io::Lines<BufReader<tokio::io::ReadHalf<UnixStream>>>,
     views: broadcast::Receiver<ViewUpdate>,
-    state: broadcast::Receiver<omega_wire::omega::StatePatch>,
+    state: broadcast::Receiver<omega_proto::omega::StatePatch>,
     hub: Hub,
     /// Who this is, or why they are nobody. Reading does not depend on it;
     /// asking does.
@@ -140,7 +140,7 @@ impl ShellConnection {
     fn new(
         stream: UnixStream,
         views: broadcast::Receiver<ViewUpdate>,
-        state: broadcast::Receiver<omega_wire::omega::StatePatch>,
+        state: broadcast::Receiver<omega_proto::omega::StatePatch>,
         hub: Hub,
         peer: Result<Peer, Refusal>,
         gateway: Option<Gateway>,
@@ -163,7 +163,7 @@ impl ShellConnection {
     async fn stream(
         mut self,
         views: Vec<ViewUpdate>,
-        state: omega_wire::omega::StateSnapshot,
+        state: omega_proto::omega::StateSnapshot,
     ) -> Result<(), ShellError> {
         self.write_views(&views).await?;
         self.write_topics(&state.topics).await?;
@@ -265,7 +265,7 @@ impl ShellConnection {
 
     async fn write_topics(
         &mut self,
-        topics: &[omega_wire::omega::StateTopic],
+        topics: &[omega_proto::omega::StateTopic],
     ) -> Result<(), ShellError> {
         for topic in topics {
             self.write_line(&Observed::State(topic.clone())).await?;

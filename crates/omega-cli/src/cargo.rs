@@ -1,6 +1,6 @@
 //! Driving `cargo` over the config workspace.
 
-use omega_core::{Layout, Profile, UnitName};
+use omega_proto::{Layout, Profile, UnitName};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CargoError {

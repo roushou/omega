@@ -4,6 +4,7 @@ pub mod action;
 pub mod daemon;
 pub mod error;
 pub mod events;
+pub mod host;
 pub mod hub;
 pub mod manifest;
 pub mod process;

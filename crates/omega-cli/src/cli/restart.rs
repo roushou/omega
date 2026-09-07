@@ -1,6 +1,6 @@
 //! `omega restart`: cycle a unit without touching its neighbours.
 
-use omega_core::UnitName;
+use omega_proto::UnitName;
 
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};

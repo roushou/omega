@@ -7,8 +7,8 @@ use std::time::Duration;
 use common::{Harness, expect_ok, expect_refusal, next_result, policy_manifest, widget_manifest};
 use omega_daemon::action::ActionKind;
 use omega_daemon::manifest::ManifestStore;
-use omega_manifest::Manifest;
-use omega_wire::omega::{
+use omega_proto::Manifest;
+use omega_proto::omega::{
     Act, Action, Capability, ErrorCode, Frame, Invoke, Lock, RunCommand, action, frame, invoke,
 };
 
@@ -26,7 +26,7 @@ fn act(stream_id: u64, kind: action::Kind) -> Frame {
 async fn connected(
     tag: &str,
     manifest: Manifest,
-) -> (Harness, omega_wire::Transport<tokio::net::UnixStream>) {
+) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
     let token = harness.register_unit(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;

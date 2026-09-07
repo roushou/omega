@@ -1,6 +1,6 @@
 //! The machine's own life cycle.
 
-use omega_wire::omega::{Lock, Reboot, Shutdown, Sleep, action};
+use omega_proto::omega::{Lock, Reboot, Shutdown, Sleep, action};
 
 use crate::context::Context;
 use crate::effect::does;

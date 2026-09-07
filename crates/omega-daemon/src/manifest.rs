@@ -2,8 +2,9 @@
 
 use std::collections::HashMap;
 
-use omega_core::{Layout, UnitName};
-use omega_manifest::{Manifest, StateConfig};
+use crate::host::StateConfig;
+use omega_proto::Manifest;
+use omega_proto::{Layout, UnitName};
 
 use crate::error::ManifestStoreError;
 

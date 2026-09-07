@@ -1,0 +1,17 @@
+//! What a host does and a unit does not: watching the filesystem, staging
+//! a directory before it replaces a live one, expanding globs, and finding
+//! the units in a workspace. A plugin that draws a battery compiles none
+//! of it.
+
+pub mod cargo;
+pub mod error;
+pub mod fs;
+pub mod glob;
+pub mod state;
+pub mod units;
+
+pub use cargo::{CargoConfig, CargoManifest, CargoSlot};
+pub use error::{PatternError, UnitsError};
+pub use fs::{Changes, Recursion, StageDir, WatchError};
+pub use state::{BuiltUnit, StateConfig};
+pub use units::Units;

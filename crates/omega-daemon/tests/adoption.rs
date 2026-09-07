@@ -7,10 +7,10 @@ use std::time::Duration;
 use common::{Harness, expect_outcome, expect_refusal, next_result, unit_name, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::units::UnitRecord;
-use omega_wire::omega::{
+use omega_proto::omega::{
     AdoptUnit, ErrorCode, Frame, Invoke, UnitPhase, Welcome, frame, invoke, result, value,
 };
-use omega_wire::{Refusal, Transport};
+use omega_proto::{Refusal, Transport};
 
 fn adopt(stream_id: u64, unit: &str) -> Frame {
     Frame {
@@ -91,7 +91,7 @@ async fn a_token_the_daemon_hands_out_makes_this_process_the_unit() {
     .await;
 }
 
-fn phase_of(harness: &Harness, name: &omega_core::UnitName) -> i32 {
+fn phase_of(harness: &Harness, name: &omega_proto::UnitName) -> i32 {
     harness
         .units
         .statuses()

@@ -1,9 +1,11 @@
 use std::io;
 use std::path::PathBuf;
 
-use omega_core::{ReadError, TomlError, UnitName};
-use omega_manifest::ManifestError;
-use omega_wire::{CodecError, HandshakeError, Refusal};
+use omega_proto::ManifestError;
+use omega_proto::ReadError;
+use omega_proto::TomlError;
+use omega_proto::UnitName;
+use omega_proto::{CodecError, HandshakeError, Refusal};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DaemonError {

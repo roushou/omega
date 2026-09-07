@@ -1,6 +1,6 @@
 //! Changing the volume. To *read* it, hold an `Audio`.
 
-use omega_wire::omega::{SetVolume, action, set_volume};
+use omega_proto::omega::{SetVolume, action, set_volume};
 
 use crate::context::Context;
 use crate::effect::does;

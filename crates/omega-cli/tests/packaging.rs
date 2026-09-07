@@ -3,7 +3,7 @@
 //! Cargo packages a crate's own directory and nothing above it, so a file
 //! read from the repository root builds perfectly here and is simply missing
 //! for everyone who installs it. Both halves of omega had that at once —
-//! `omega-wire` compiled its protobuf schema from `../../schema`, and this
+//! `omega-proto` compiled its protobuf schema from `../../schema`, and this
 //! crate embedded its templates and its renderer from `../../../` — and no
 //! test or build said a word, because on a developer's machine those files
 //! are exactly where they are expected to be.
@@ -157,11 +157,11 @@ fn nothing_a_crate_compiles_reaches_above_its_own_root() {
 }
 
 #[test]
-fn the_schema_a_published_wire_crate_compiles_is_inside_it() {
-    // `omega-wire` generates its types from the schema at build time, so the
+fn the_schema_a_published_proto_crate_compiles_is_inside_it() {
+    // `omega-proto` generates its types from the schema at build time, so the
     // schema has to travel with it. The same rule as the test above, asserted
     // where a build script rather than the compiler reads the path.
-    let wire = checkout().join("crates/omega-wire");
+    let wire = checkout().join("crates/omega-proto");
     let build = std::fs::read_to_string(wire.join("build.rs")).unwrap();
 
     assert!(

@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 
-use omega_wire::omega::{StatePatch, StateSnapshot, StateTopic};
-use omega_wire::{SystemTopic, TopicValue};
+use omega_proto::omega::{StatePatch, StateSnapshot, StateTopic};
+use omega_proto::{SystemTopic, TopicValue};
 
 #[derive(Debug, Default)]
 pub(crate) struct Mirror {
@@ -35,9 +35,9 @@ impl Mirror {
 
     /// A plugin keyspace's value: generic by nature, because it is whatever
     /// the plugin that owns it says it is.
-    pub(crate) fn generic(&self, address: &str) -> Option<&omega_wire::omega::Value> {
+    pub(crate) fn generic(&self, address: &str) -> Option<&omega_proto::omega::Value> {
         match self.topics.get(address)?.value.as_ref()? {
-            omega_wire::omega::state_topic::Value::Generic(value) => Some(value),
+            omega_proto::omega::state_topic::Value::Generic(value) => Some(value),
             _ => None,
         }
     }

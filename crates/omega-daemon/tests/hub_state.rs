@@ -1,7 +1,7 @@
 //! The hub broadcasts what changed.
 
 use omega_daemon::hub::Hub;
-use omega_wire::omega::{BatteryState, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
 
 fn battery(level: f64) -> StatePatch {
     StatePatch {

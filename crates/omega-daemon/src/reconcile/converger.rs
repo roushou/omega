@@ -16,9 +16,9 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
 
-use omega_core::Layout;
+use crate::host::StateConfig;
 use omega_document::{DocumentFile, StateDocument};
-use omega_manifest::StateConfig;
+use omega_proto::Layout;
 
 use crate::error::DaemonError;
 use crate::hub::Hub;

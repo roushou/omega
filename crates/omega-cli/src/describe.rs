@@ -12,8 +12,9 @@
 
 use anyhow::{Context, bail};
 
-use omega_core::{Layout, Profile, UnitName, Validated};
-use omega_manifest::Manifest;
+use omega_proto::Manifest;
+use omega_proto::Validated;
+use omega_proto::{Layout, Profile, UnitName};
 
 #[derive(Debug)]
 pub struct Describe<'a> {

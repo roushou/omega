@@ -12,9 +12,9 @@ use tokio::process::{Child, Command};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-use omega_core::UnitName;
-use omega_wire::omega::UnitStatus;
-use omega_wire::{Handshake, Socket};
+use omega_proto::UnitName;
+use omega_proto::omega::UnitStatus;
+use omega_proto::{Handshake, Socket};
 
 use crate::manifest::ManifestStore;
 use crate::process::Signal;

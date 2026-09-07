@@ -6,10 +6,11 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{Harness, expect_refusal, unit_name, widget_manifest};
-use omega_core::Layout;
+use omega_daemon::host::StateConfig;
 use omega_daemon::manifest::ManifestStore;
-use omega_manifest::{Manifest, StateConfig};
-use omega_wire::omega::{Capability, ErrorCode, frame};
+use omega_proto::Layout;
+use omega_proto::Manifest;
+use omega_proto::omega::{Capability, ErrorCode, frame};
 
 struct StateDir(PathBuf);
 

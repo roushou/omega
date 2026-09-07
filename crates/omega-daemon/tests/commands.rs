@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use common::{Harness, command_manifest, expect_refusal, next_result, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
-use omega_manifest::Manifest;
-use omega_wire::omega::{
+use omega_proto::Manifest;
+use omega_proto::omega::{
     Act, Action, ErrorCode, Frame, Invoke, InvokeUnit, Value, action, frame, invoke, result, value,
 };
 
@@ -33,7 +33,7 @@ fn call(stream_id: u64, unit: &str, command: &str) -> Frame {
 async fn connected_unit(
     harness: &Harness,
     manifest: &Manifest,
-) -> omega_wire::Transport<tokio::net::UnixStream> {
+) -> omega_proto::Transport<tokio::net::UnixStream> {
     let token = harness.register_unit(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
@@ -77,7 +77,7 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
     // The unit answers, and the answer reaches the operator.
     unit.send(Frame {
         stream_id: frame.stream_id,
-        body: Some(frame::Body::Result(omega_wire::omega::Result {
+        body: Some(frame::Body::Result(omega_proto::omega::Result {
             outcome: Some(result::Outcome::Value(Value {
                 kind: Some(value::Kind::StringValue("on".into())),
             })),
@@ -173,9 +173,11 @@ async fn a_units_own_refusal_reaches_the_caller_as_it_was() {
         .unwrap();
 
     // The unit says no, in its own words and with its own code.
-    unit.send(omega_wire::Refusal::denied("the lamp is bolted to the wall").frame(frame.stream_id))
-        .await
-        .unwrap();
+    unit.send(
+        omega_proto::Refusal::denied("the lamp is bolted to the wall").frame(frame.stream_id),
+    )
+    .await
+    .unwrap();
 
     // The daemon was the messenger; flattening the unit's answer into one of
     // its own would lose why.

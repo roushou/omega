@@ -4,16 +4,16 @@
 
 use std::path::PathBuf;
 
-use omega_core::UnitName;
 use omega_daemon::Shutdown;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::session::{Liveness, Session};
 use omega_daemon::supervisor::Supervisor;
 use omega_daemon::units::{UnitTable, UnitToken};
-use omega_manifest::{Manifest, Surface};
-use omega_wire::omega::{Frame, SurfaceKind};
-use omega_wire::{Handshake, Socket, Transport};
+use omega_proto::UnitName;
+use omega_proto::omega::{Frame, SurfaceKind};
+use omega_proto::{Handshake, Socket, Transport};
+use omega_proto::{Manifest, Surface};
 
 /// An in-process daemon core: serves sessions over socket pairs, the same way
 /// the real daemon serves them over its listener.
@@ -96,8 +96,8 @@ impl Harness {
     }
 }
 
-pub fn surface_id(id: &str) -> omega_core::SurfaceId {
-    omega_core::SurfaceId::parse(id).unwrap()
+pub fn surface_id(id: &str) -> omega_proto::SurfaceId {
+    omega_proto::SurfaceId::parse(id).unwrap()
 }
 
 pub fn unit_name(name: &str) -> UnitName {
@@ -160,17 +160,17 @@ pub async fn next_result(transport: &mut Transport<tokio::net::UnixStream>) -> O
             .expect("timed out waiting for a Result")
             .unwrap()?;
 
-        if matches!(frame.body, Some(omega_wire::omega::frame::Body::Result(_))) {
+        if matches!(frame.body, Some(omega_proto::omega::frame::Body::Result(_))) {
             return Some(frame);
         }
     }
 }
 
 /// The outcome a `Result` frame carries, or a panic naming what came instead.
-pub fn expect_outcome(frame: Option<Frame>) -> omega_wire::omega::result::Outcome {
+pub fn expect_outcome(frame: Option<Frame>) -> omega_proto::omega::result::Outcome {
     let frame = frame.expect("expected a Result, got EOF");
     match frame.body {
-        Some(omega_wire::omega::frame::Body::Result(result)) => {
+        Some(omega_proto::omega::frame::Body::Result(result)) => {
             result.outcome.expect("a Result carries an outcome")
         }
         other => panic!("expected a Result, got {other:?}"),
@@ -180,15 +180,15 @@ pub fn expect_outcome(frame: Option<Frame>) -> omega_wire::omega::result::Outcom
 /// Asserts the op succeeded with nothing to return.
 pub fn expect_ok(frame: Option<Frame>) {
     match expect_outcome(frame) {
-        omega_wire::omega::result::Outcome::Ok(_) => {}
+        omega_proto::omega::result::Outcome::Ok(_) => {}
         other => panic!("expected Ok, got {other:?}"),
     }
 }
 
 /// The refusal a frame carries, or a panic naming what came instead.
-pub fn expect_refusal(frame: Option<Frame>) -> omega_wire::Refusal {
+pub fn expect_refusal(frame: Option<Frame>) -> omega_proto::Refusal {
     let frame = frame.expect("expected a refusal, got EOF");
-    omega_wire::Refusal::of(&frame).unwrap_or_else(|| panic!("expected a refusal, got {frame:?}"))
+    omega_proto::Refusal::of(&frame).unwrap_or_else(|| panic!("expected a refusal, got {frame:?}"))
 }
 
 /// A temp directory holding one test's three roots, removed when it drops.
@@ -209,8 +209,8 @@ impl TempDir {
         &self.0
     }
 
-    pub fn layout(&self) -> omega_core::Layout {
-        omega_core::Layout::at(
+    pub fn layout(&self) -> omega_proto::Layout {
+        omega_proto::Layout::at(
             self.0.join("config"),
             self.0.join("state"),
             self.0.join("cache"),

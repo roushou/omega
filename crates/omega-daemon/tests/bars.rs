@@ -8,20 +8,20 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use common::{Harness, widget_manifest};
-use omega_core::UnitName;
 use omega_daemon::hub::{Hub, SurfaceRef, ViewUpdate};
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::reconcile::{Action, BarProvider, Provider};
 use omega_daemon::units::UnitTable;
 use omega_document::{Bars, Document, Modules};
-use omega_wire::omega::{StateDocument, ViewNode, ViewTree};
+use omega_proto::UnitName;
+use omega_proto::omega::{StateDocument, ViewNode, ViewTree};
 
-fn surface(id: &str) -> omega_core::SurfaceId {
-    omega_core::SurfaceId::parse(id).unwrap()
+fn surface(id: &str) -> omega_proto::SurfaceId {
+    omega_proto::SurfaceId::parse(id).unwrap()
 }
 
-fn module(id: &str) -> omega_core::ModuleId {
-    omega_core::ModuleId::parse(id).unwrap()
+fn module(id: &str) -> omega_proto::ModuleId {
+    omega_proto::ModuleId::parse(id).unwrap()
 }
 
 fn unit(name: &str) -> UnitName {
@@ -165,10 +165,10 @@ async fn a_unit_renders_every_instance_the_document_gives_it() {
             .unwrap()
             .unwrap();
 
-        let Some(omega_wire::omega::frame::Body::Invoke(invoke)) = frame.body else {
+        let Some(omega_proto::omega::frame::Body::Invoke(invoke)) = frame.body else {
             continue;
         };
-        let Some(omega_wire::omega::invoke::Op::RenderWidget(render)) = invoke.op else {
+        let Some(omega_proto::omega::invoke::Op::RenderWidget(render)) = invoke.op else {
             continue;
         };
 
@@ -179,11 +179,11 @@ async fn a_unit_renders_every_instance_the_document_gives_it() {
         answered.push(render.module_id.clone());
 
         transport
-            .send(omega_wire::omega::Frame {
+            .send(omega_proto::omega::Frame {
                 stream_id: frame.stream_id,
-                body: Some(omega_wire::omega::frame::Body::Result(
-                    omega_wire::omega::Result {
-                        outcome: Some(omega_wire::omega::result::Outcome::View(view())),
+                body: Some(omega_proto::omega::frame::Body::Result(
+                    omega_proto::omega::Result {
+                        outcome: Some(omega_proto::omega::result::Outcome::View(view())),
                         done: true,
                     },
                 )),

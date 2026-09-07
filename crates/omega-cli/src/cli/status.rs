@@ -6,8 +6,8 @@ use anstyle::{AnsiColor, Effects, Style};
 use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use omega_wire::omega::{UnitPhase, UnitStatus, state_topic};
-use omega_wire::{Observation, Socket, SystemTopic};
+use omega_proto::omega::{UnitPhase, UnitStatus, state_topic};
+use omega_proto::{Observation, Socket, SystemTopic};
 
 use crate::ui::{Cell, Column, Paint, Table, Ui};
 

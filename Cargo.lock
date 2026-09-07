@@ -495,10 +495,8 @@ dependencies = [
 name = "omega"
 version = "0.1.0"
 dependencies = [
- "omega-core",
  "omega-derive",
- "omega-manifest",
- "omega-wire",
+ "omega-proto",
  "serde_json",
  "thiserror",
  "tokio",
@@ -512,30 +510,16 @@ dependencies = [
  "anstyle",
  "anyhow",
  "clap",
- "omega-core",
  "omega-daemon",
  "omega-document",
- "omega-manifest",
- "omega-wire",
+ "omega-proto",
  "serde_json",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "omega-core"
-version = "0.1.0"
-dependencies = [
- "notify",
- "serde",
  "thiserror",
  "tokio",
  "toml",
  "toml_edit",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -545,14 +529,14 @@ dependencies = [
  "async-trait",
  "getrandom",
  "libc",
- "omega-core",
+ "notify",
  "omega-document",
- "omega-manifest",
- "omega-wire",
+ "omega-proto",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "toml",
  "tracing",
 ]
 
@@ -569,30 +553,18 @@ dependencies = [
 name = "omega-document"
 version = "0.1.0"
 dependencies = [
- "omega-core",
- "omega-wire",
+ "omega-proto",
  "serde_json",
  "thiserror",
 ]
 
 [[package]]
-name = "omega-manifest"
-version = "0.1.0"
-dependencies = [
- "hex",
- "omega-core",
- "omega-wire",
- "serde",
- "sha2",
- "thiserror",
-]
-
-[[package]]
-name = "omega-wire"
+name = "omega-proto"
 version = "0.1.0"
 dependencies = [
  "bytes",
  "futures-util",
+ "hex",
  "pbjson",
  "pbjson-build",
  "prost",
@@ -600,9 +572,12 @@ dependencies = [
  "protoc-bin-vendored",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "tokio",
  "tokio-util",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]

@@ -1,0 +1,34 @@
+[package]
+name = "omega-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Omega's protocol: the protobuf ontology, frame codec, transport, and handshake."
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = "1"
+futures-util = { version = "0.3", features = ["sink"] }
+hex = "0.4"
+pbjson = "0.9"
+prost = "0.14"
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "time"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+toml = "1"
+toml_edit = { version = "0.25", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[build-dependencies]
+prost-build = "0.14"
+pbjson-build = "0.9"
+protoc-bin-vendored = "3"

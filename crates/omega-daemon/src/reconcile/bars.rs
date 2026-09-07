@@ -14,8 +14,8 @@ use std::collections::BTreeSet;
 
 use async_trait::async_trait;
 
-use omega_core::{ModuleId, SurfaceId, UnitName};
-use omega_wire::omega::{RenderWidget, StateDocument, SurfaceKind, invoke, module, result};
+use omega_proto::omega::{RenderWidget, StateDocument, SurfaceKind, invoke, module, result};
+use omega_proto::{ModuleId, SurfaceId, UnitName};
 
 use crate::hub::{Hub, SurfaceRef, ViewUpdate};
 use crate::manifest::ManifestStore;
@@ -144,7 +144,7 @@ impl BarProvider {
     fn config_of(
         document: &StateDocument,
         module_id: &ModuleId,
-    ) -> std::collections::HashMap<String, omega_wire::omega::Value> {
+    ) -> std::collections::HashMap<String, omega_proto::omega::Value> {
         document
             .bars
             .iter()

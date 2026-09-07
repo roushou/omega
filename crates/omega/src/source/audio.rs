@@ -1,6 +1,6 @@
 //! Sound output.
 
-use omega_wire::omega::AudioState;
+use omega_proto::omega::AudioState;
 
 use crate::context::Context;
 use crate::source::reads;

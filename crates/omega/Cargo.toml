@@ -11,14 +11,12 @@ description = "Write an Omega plugin: declare what you need by holding it, and d
 workspace = true
 
 [dependencies]
-omega-core.workspace = true
 omega-derive = { path = "../omega-derive", version = "0.1.0" }
-omega-manifest.workspace = true
-omega-wire.workspace = true
+omega-proto.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "time", "rt", "sync", "macros"] }
 
 [dev-dependencies]
-omega-wire.workspace = true
+omega-proto.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

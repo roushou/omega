@@ -9,8 +9,8 @@ use std::collections::BTreeSet;
 
 use async_trait::async_trait;
 
-use omega_core::{Layout, UnitName};
-use omega_wire::omega::StateDocument;
+use omega_proto::omega::StateDocument;
+use omega_proto::{Layout, UnitName};
 
 use crate::reconcile::{Change, Provider, ProviderError};
 use crate::supervisor::{Supervisor, UnitLog, UnitSpec};

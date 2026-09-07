@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use omega_daemon::source::StateSource;
 use omega_daemon::sources::Battery;
-use omega_wire::omega::state_topic;
+use omega_proto::omega::state_topic;
 
 struct Fixture(PathBuf);
 
@@ -33,7 +33,7 @@ impl Drop for Fixture {
     }
 }
 
-fn level(patch: &omega_wire::omega::StatePatch) -> f64 {
+fn level(patch: &omega_proto::omega::StatePatch) -> f64 {
     match patch.topics[0].value.as_ref().unwrap() {
         state_topic::Value::Battery(battery) => battery.level,
         other => panic!("expected a battery, got {other:?}"),

@@ -13,9 +13,9 @@ use std::time::Duration;
 
 use tokio::sync::oneshot;
 
-use omega_core::UnitName;
-use omega_wire::Refusal;
-use omega_wire::omega::{invoke, result};
+use omega_proto::Refusal;
+use omega_proto::UnitName;
+use omega_proto::omega::{invoke, result};
 
 /// One request to a unit, and where its answer goes.
 #[derive(Debug)]

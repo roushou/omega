@@ -5,11 +5,11 @@ mod common;
 use std::time::Duration;
 
 use common::{Harness, expect_ok, expect_refusal, next_result, widget_manifest};
-use omega_core::UnitName;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::supervisor::{UnitLog, UnitSpec};
-use omega_wire::omega::{ErrorCode, Frame, Invoke, RestartUnit, frame, invoke};
+use omega_proto::UnitName;
+use omega_proto::omega::{ErrorCode, Frame, Invoke, RestartUnit, frame, invoke};
 
 fn restart(stream_id: u64, unit: &str) -> Frame {
     Frame {
@@ -111,7 +111,7 @@ async fn an_operator_may_not_read_a_units_state() {
         .send(Frame {
             stream_id: 1,
             body: Some(frame::Body::Invoke(Invoke {
-                op: Some(invoke::Op::GetState(omega_wire::omega::GetState {
+                op: Some(invoke::Op::GetState(omega_proto::omega::GetState {
                     topics: vec!["battery".into()],
                 })),
             })),

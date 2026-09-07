@@ -1,7 +1,7 @@
 //! `omega run`: call a unit's command surface.
 
-use omega_core::UnitName;
-use omega_wire::omega::{Value, value};
+use omega_proto::UnitName;
+use omega_proto::omega::{Value, value};
 
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};

@@ -4,9 +4,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 
-use omega_core::{Changes, Layout, Profile, Recursion, StageDir, UnitName, Units};
+use omega_daemon::host::{BuiltUnit, StateConfig};
+use omega_daemon::host::{Changes, Recursion, StageDir, Units};
 use omega_document::{DocumentFile, StateDocument};
-use omega_manifest::{BuiltUnit, Manifest, StateConfig};
+use omega_proto::Manifest;
+use omega_proto::{Layout, Profile, UnitName};
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;

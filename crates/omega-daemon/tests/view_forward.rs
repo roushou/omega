@@ -6,14 +6,14 @@ use std::time::Duration;
 use common::{TempSocket, unit_name};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use omega_core::ModuleId;
 use omega_daemon::hub::{Hub, SurfaceRef, ViewUpdate};
 use omega_daemon::shell::ShellServer;
-use omega_wire::Observation;
-use omega_wire::omega::{Value, ViewNode, ViewTree, value};
+use omega_proto::ModuleId;
+use omega_proto::Observation;
+use omega_proto::omega::{Value, ViewNode, ViewTree, value};
 
-fn surface(id: &str) -> omega_core::SurfaceId {
-    omega_core::SurfaceId::parse(id).unwrap()
+fn surface(id: &str) -> omega_proto::SurfaceId {
+    omega_proto::SurfaceId::parse(id).unwrap()
 }
 
 fn view_with_text(text: &str) -> ViewTree {
@@ -180,7 +180,7 @@ async fn the_observation_socket_streams_state_as_it_changes() {
         assert_eq!(topic.topic, "battery");
         assert!(matches!(
             topic.value,
-            Some(omega_wire::omega::state_topic::Value::Battery(_))
+            Some(omega_proto::omega::state_topic::Value::Battery(_))
         ));
     }
 }
@@ -207,13 +207,13 @@ async fn a_view_line_is_not_mistaken_for_a_topic() {
     assert!(Observation::topic(&line).is_none(), "{line}");
 }
 
-fn battery_patch(level: f64) -> omega_wire::omega::StatePatch {
-    omega_wire::omega::StatePatch {
-        topics: vec![omega_wire::omega::StateTopic {
+fn battery_patch(level: f64) -> omega_proto::omega::StatePatch {
+    omega_proto::omega::StatePatch {
+        topics: vec![omega_proto::omega::StateTopic {
             topic: "battery".into(),
             revision: 0,
-            value: Some(omega_wire::omega::state_topic::Value::Battery(
-                omega_wire::omega::BatteryState {
+            value: Some(omega_proto::omega::state_topic::Value::Battery(
+                omega_proto::omega::BatteryState {
                     level,
                     charging: false,
                     seconds_to_empty: 0,

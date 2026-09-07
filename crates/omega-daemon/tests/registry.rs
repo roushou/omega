@@ -1,8 +1,8 @@
 //! The identity rules a session rests on.
 
-use omega_core::UnitName;
 use omega_daemon::hub::Hub;
 use omega_daemon::units::UnitTable;
+use omega_proto::UnitName;
 
 fn unit(name: &str) -> UnitName {
     UnitName::parse(name).unwrap()

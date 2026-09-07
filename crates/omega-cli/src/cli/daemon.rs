@@ -12,10 +12,10 @@
 
 use anyhow::Context;
 
-use omega_core::Layout;
 use omega_daemon::Daemon;
 use omega_daemon::sources::Battery;
-use omega_wire::Socket;
+use omega_proto::Layout;
+use omega_proto::Socket;
 
 use crate::service::{Installed, Service, ServiceManager};
 use crate::ui::{Paint, Step, Ui};

@@ -5,12 +5,12 @@
 //! refused as unimplemented, so a handler can never become reachable without
 //! a policy: authorization is not something a call site can forget.
 
-use omega_core::{ModuleId, SurfaceId, UnitName};
-use omega_wire::omega::{
+use omega_proto::omega::{
     Capability, Empty, Frame, Invoke, StatePatch, StateTopic, SurfaceKind, Value, frame, invoke,
     result, state_topic,
 };
-use omega_wire::{Refusal, Topic};
+use omega_proto::{ModuleId, SurfaceId, UnitName};
+use omega_proto::{Refusal, Topic};
 
 use crate::action::Actions;
 use crate::refusal::RefusableResult;
@@ -197,7 +197,7 @@ impl Response {
         };
         Frame {
             stream_id,
-            body: Some(frame::Body::Result(omega_wire::omega::Result {
+            body: Some(frame::Body::Result(omega_proto::omega::Result {
                 outcome: Some(outcome),
                 done: true,
             })),
@@ -445,7 +445,7 @@ impl Dispatcher {
                 tracing::info!(unit = %name, "adopted for development");
 
                 Ok(Response::Value(Value {
-                    kind: Some(omega_wire::omega::value::Kind::StringValue(
+                    kind: Some(omega_proto::omega::value::Kind::StringValue(
                         token.as_str().to_string(),
                     )),
                 }))

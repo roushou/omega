@@ -29,8 +29,8 @@
 
 use std::marker::PhantomData;
 
-use omega_wire::omega::{Capability, SetState, invoke};
-use omega_wire::{Fields, Topic as Address};
+use omega_proto::omega::{Capability, SetState, invoke};
+use omega_proto::{Fields, Topic as Address};
 
 use crate::context::Context;
 use crate::wiring::{Does, Reads, Wiring};
@@ -93,7 +93,7 @@ impl<T: Topic> Own<T> {
     pub fn set(&self, value: &T) {
         self.context.act(invoke::Op::SetState(SetState {
             topic: T::address(),
-            value: Some(omega_wire::IntoValue::into_value(value.write())),
+            value: Some(omega_proto::IntoValue::into_value(value.write())),
         }));
     }
 

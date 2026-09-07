@@ -11,8 +11,8 @@ use common::{
 };
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::state::StateStore;
-use omega_manifest::Manifest;
-use omega_wire::omega::{
+use omega_proto::Manifest;
+use omega_proto::omega::{
     AudioState, BatteryState, ErrorCode, Frame, GetState, Invoke, SetState, StatePatch, StateTopic,
     Subscribe, Unsubscribe, Value, frame, invoke, result, state_topic, value,
 };
@@ -42,7 +42,7 @@ fn op(stream_id: u64, op: invoke::Op) -> Frame {
 async fn connected(
     tag: &str,
     manifest: Manifest,
-) -> (Harness, omega_wire::Transport<tokio::net::UnixStream>) {
+) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
     let token = harness.register_unit(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;

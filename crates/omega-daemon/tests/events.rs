@@ -7,8 +7,8 @@ use std::time::Duration;
 use common::{Harness, expect_refusal, next_result, policy_manifest, widget_manifest};
 use omega_daemon::events::Transitions;
 use omega_daemon::manifest::ManifestStore;
-use omega_manifest::Manifest;
-use omega_wire::omega::{
+use omega_proto::Manifest;
+use omega_proto::omega::{
     BatteryState, CustomEvent, EmitEvent, ErrorCode, EventKind, Frame, Invoke, StatePatch,
     StateTopic, Subscribe, event, frame, invoke, state_topic,
 };
@@ -31,7 +31,7 @@ fn battery(level: f64, charging: bool) -> StatePatch {
 async fn connected(
     tag: &str,
     manifest: Manifest,
-) -> (Harness, omega_wire::Transport<tokio::net::UnixStream>) {
+) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
     let token = harness.register_unit(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
@@ -41,8 +41,8 @@ async fn connected(
 
 /// The next event frame, skipping the state patches that caused it.
 async fn next_event(
-    transport: &mut omega_wire::Transport<tokio::net::UnixStream>,
-) -> omega_wire::omega::Event {
+    transport: &mut omega_proto::Transport<tokio::net::UnixStream>,
+) -> omega_proto::omega::Event {
     loop {
         let frame = tokio::time::timeout(Duration::from_secs(2), transport.recv())
             .await

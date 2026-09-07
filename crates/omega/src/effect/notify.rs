@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use omega_wire::omega::{Notify as NotifyAction, action};
+use omega_proto::omega::{Notify as NotifyAction, action};
 
 use crate::context::Context;
 use crate::effect::does;

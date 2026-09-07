@@ -2,8 +2,9 @@
 //! generated workspace build.
 
 use omega_cli::scaffold::{Published, Scaffold, SourceTree};
-use omega_core::toml::cargo::CargoManifest;
-use omega_core::{Toml, UnitName};
+use omega_daemon::host::cargo::CargoManifest;
+use omega_proto::Toml;
+use omega_proto::UnitName;
 
 fn unit() -> UnitName {
     UnitName::parse("battery-widget").unwrap()

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use omega_core::{AtomicFile, Layout};
-use omega_wire::omega::StateDocument;
+use omega_proto::omega::StateDocument;
+use omega_proto::{AtomicFile, Layout};
 
 use crate::error::DocumentError;
 

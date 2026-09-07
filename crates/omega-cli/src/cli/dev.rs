@@ -14,8 +14,9 @@
 
 use anyhow::{Context, bail};
 
-use omega_core::{Changes, Layout, Profile, Recursion, UnitName};
-use omega_wire::{Handshake, Socket};
+use omega_daemon::host::{Changes, Recursion};
+use omega_proto::{Handshake, Socket};
+use omega_proto::{Layout, Profile, UnitName};
 
 use crate::cargo::Cargo;
 use crate::operator::Operator;

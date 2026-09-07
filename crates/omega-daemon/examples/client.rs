@@ -4,7 +4,7 @@
 //! `omega daemon --allow-debug-clients` for it to be admitted at all, and it
 //! is granted nothing beyond watching state.
 
-use omega_wire::{Handshake, Refusal, Socket};
+use omega_proto::{Handshake, Refusal, Socket};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

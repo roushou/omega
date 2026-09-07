@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use omega_core::{ModuleId, SurfaceId, UnitName};
-use omega_wire::omega::{Event, EventKind, StatePatch, StateSnapshot, StateTopic, ViewTree};
+use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot, StateTopic, ViewTree};
+use omega_proto::{ModuleId, SurfaceId, UnitName};
 
 use crate::events::{EventStamp, PowerDetail, Transitions};
 use crate::state::StateStore;
@@ -184,7 +184,7 @@ impl Hub {
         &self,
         unit: &str,
         name: &str,
-        payload: Option<omega_wire::omega::Value>,
+        payload: Option<omega_proto::omega::Value>,
     ) {
         self.publish_event(self.inner.stamp.custom(unit, name, payload));
     }

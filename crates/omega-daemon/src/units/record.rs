@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 
-use omega_core::UnitName;
-use omega_wire::omega::{UnitPhase, UnitStatus, Value};
+use omega_proto::UnitName;
+use omega_proto::omega::{UnitPhase, UnitStatus, Value};
 
 use crate::manifest::UnitManifest;
 use crate::shutdown::Shutdown;

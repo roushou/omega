@@ -4,7 +4,6 @@
 mod common;
 
 use common::{TempDir, widget_manifest};
-use omega_core::UnitName;
 use omega_daemon::Shutdown;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
@@ -12,7 +11,8 @@ use omega_daemon::reconcile::{Action, EnvironmentProvider, Provider, Reconciler,
 use omega_daemon::supervisor::Supervisor;
 use omega_daemon::units::UnitTable;
 use omega_document::{Document, Units};
-use omega_wire::Socket;
+use omega_proto::Socket;
+use omega_proto::UnitName;
 
 /// A table holding the manifests a test declares, which is what a supervisor
 /// now needs instead of a manifest store of its own.

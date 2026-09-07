@@ -10,8 +10,8 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 
-use omega_core::{AtomicFile, Layout};
-use omega_wire::omega::StateDocument;
+use omega_proto::omega::StateDocument;
+use omega_proto::{AtomicFile, Layout};
 
 use crate::reconcile::{Change, Provider, ProviderError};
 

@@ -1,9 +1,9 @@
 //! A unit's life, as a state machine rather than a series of reports.
 
-use omega_core::UnitName;
 use omega_daemon::hub::Hub;
 use omega_daemon::units::{Lifecycle, Transition, UnitTable};
-use omega_wire::omega::UnitPhase;
+use omega_proto::UnitName;
+use omega_proto::omega::UnitPhase;
 
 fn unit(name: &str) -> UnitName {
     UnitName::parse(name).unwrap()

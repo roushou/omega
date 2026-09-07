@@ -1,6 +1,6 @@
 //! The network.
 
-use omega_wire::omega::NetworkState;
+use omega_proto::omega::NetworkState;
 
 use crate::context::Context;
 use crate::source::reads;

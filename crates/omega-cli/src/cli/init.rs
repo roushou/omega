@@ -9,8 +9,8 @@
 //! Each step is the same code the standalone command runs, reported on its
 //! own line, so what this did stays visible and individually re-runnable.
 
-use omega_core::toml::cargo::{CargoManifest, CargoSlot};
-use omega_core::{AtomicFile, Layout};
+use omega_daemon::host::cargo::{CargoManifest, CargoSlot};
+use omega_proto::{AtomicFile, Layout};
 
 use crate::cli::link::LinkCmd;
 use crate::scaffold::Scaffold;

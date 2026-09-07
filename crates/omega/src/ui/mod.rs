@@ -25,7 +25,7 @@ mod nodes;
 pub use node::{Align, Node};
 pub use nodes::{Button, Column, Icon, Progress, Row, Stack, Text};
 
-use omega_wire::omega::ViewTree;
+use omega_proto::omega::ViewTree;
 
 /// A finished view: what `Widget::render` hands back.
 #[derive(Debug, Clone, PartialEq)]

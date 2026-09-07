@@ -1,6 +1,6 @@
 //! What can go wrong for a plugin.
 
-use omega_wire::{ClientError, CodecError, HandshakeError, Refusal};
+use omega_proto::{ClientError, CodecError, HandshakeError, Refusal};
 
 /// The result of running a plugin.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -22,7 +22,7 @@ pub enum Error {
     /// A plugin's own name, or one of its surfaces', is not a name the
     /// system can address.
     #[error("{0:?} is not a usable name: {1}")]
-    Name(String, #[source] omega_core::IdentError),
+    Name(String, #[source] omega_proto::IdentError),
     #[error("cannot start a runtime: {0}")]
     Runtime(#[source] std::io::Error),
 }

@@ -25,9 +25,9 @@ pub use network::Network;
 macro_rules! reads {
     ($handle:ident, $topic:ident, $value:ty) => {
         impl $crate::wiring::Wiring for $handle {
-            const TOPICS: &'static [omega_wire::SystemTopic] = &[omega_wire::SystemTopic::$topic];
-            const CAPABILITIES: &'static [omega_wire::omega::Capability] =
-                &[omega_wire::omega::Capability::StateRead];
+            const TOPICS: &'static [omega_proto::SystemTopic] = &[omega_proto::SystemTopic::$topic];
+            const CAPABILITIES: &'static [omega_proto::omega::Capability] =
+                &[omega_proto::omega::Capability::StateRead];
 
             fn build(context: &$crate::context::Context) -> Self {
                 Self {

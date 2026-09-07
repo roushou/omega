@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use omega_wire::omega::{BatteryState, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
 
 use crate::source::StateSource;
 

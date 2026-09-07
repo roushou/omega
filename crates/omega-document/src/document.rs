@@ -4,12 +4,12 @@
 //! reason: the typed path has to be shorter than the untyped one, or the
 //! config plane is just JSON with extra steps.
 
-use omega_wire::omega::{
+use omega_proto::omega::{
     Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting, Module,
     NightLightSetting, Setting, StateDocument, ThemeSetting, UnitRef, WidgetModule, idle_setting,
     module, setting,
 };
-use omega_wire::{Fields, Values};
+use omega_proto::{Fields, Values};
 
 /// The machine's desired state, built one declaration at a time.
 ///

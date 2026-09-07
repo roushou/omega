@@ -17,11 +17,11 @@ pub use document::{Bars, Document, Host, Modules, Settings, Units};
 pub use error::DocumentError;
 pub use file::DocumentFile;
 
-pub use omega_wire::omega::StateDocument;
+pub use omega_proto::omega::StateDocument;
 
 /// The vocabulary a document is written in.
 ///
 /// Re-exported so a `system/` crate declares one dependency and never names
 /// the protocol: a config says what the machine should be, and which wire
 /// types carry that is not its business.
-pub use omega_wire::omega::{Bar, Edge, Module, Setting, UnitRef, Value, value};
+pub use omega_proto::omega::{Bar, Edge, Module, Setting, UnitRef, Value, value};

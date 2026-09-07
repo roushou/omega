@@ -8,8 +8,8 @@
 
 use anyhow::{Context, bail};
 
-use omega_core::{Layout, Profile, UnitName};
 use omega_document::{DocumentFile, StateDocument};
+use omega_proto::{Layout, Profile, UnitName};
 
 #[derive(Debug)]
 pub struct System<'a> {

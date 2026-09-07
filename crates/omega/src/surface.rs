@@ -4,8 +4,8 @@
 //! it. The derive reads the struct's fields — this is where a plugin's
 //! manifest comes from — and hands back a value built out of the runtime.
 
-use omega_wire::omega::{Capability, Event, Value};
-use omega_wire::{FromValue, IntoValue, SystemTopic, Values};
+use omega_proto::omega::{Capability, Event, Value};
+use omega_proto::{FromValue, IntoValue, SystemTopic, Values};
 
 use crate::context::Context;
 use crate::ui::Ui;

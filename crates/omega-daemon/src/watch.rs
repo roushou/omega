@@ -8,8 +8,9 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use omega_core::{Changes, Layout, Recursion, WatchError};
+use crate::host::{Changes, Recursion, WatchError};
 use omega_document::DocumentFile;
+use omega_proto::Layout;
 
 /// A cheap stamp of the built state: the two files' modification times.
 #[derive(Debug, Clone, PartialEq, Eq)]

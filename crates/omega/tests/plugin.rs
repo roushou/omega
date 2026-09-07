@@ -5,7 +5,7 @@ use omega::{
     Answer, Args, Battery, Button, Command, Fields, Icon, Network, Notify, Own, Percent, Progress,
     Row, Session, Text, Topic, Ui, Values, Watch, Widget,
 };
-use omega_wire::omega::{Lock, action, value};
+use omega_proto::omega::{Lock, action, value};
 
 // ---- the shortest plugin anyone will write ----
 
@@ -374,14 +374,14 @@ async fn a_command_answers_over_the_wire() {
     let said = daemon
         .call(
             "say",
-            vec![omega_wire::omega::Value {
+            vec![omega_proto::omega::Value {
                 kind: Some(value::Kind::StringValue("hello".into())),
             }],
         )
         .await;
     assert_eq!(
         said,
-        Ok(Some(omega_wire::omega::Value {
+        Ok(Some(omega_proto::omega::Value {
             kind: Some(value::Kind::StringValue("hello".into()))
         }))
     );
@@ -474,7 +474,7 @@ fn publishing_state_is_an_effect_like_any_other() {
         .effects
         .iter()
         .find_map(|op| match op {
-            omega_wire::omega::invoke::Op::SetState(set) => Some(set),
+            omega_proto::omega::invoke::Op::SetState(set) => Some(set),
             _ => None,
         })
         .expect("focus publishes the mode");

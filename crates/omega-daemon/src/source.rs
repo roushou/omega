@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::time::MissedTickBehavior;
 
-use omega_wire::omega::StatePatch;
+use omega_proto::omega::StatePatch;
 
 use crate::hub::Hub;
 

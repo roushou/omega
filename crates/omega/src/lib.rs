@@ -63,10 +63,10 @@ pub use units::{Percent, Remaining};
 pub use omega_derive::{Command, Config, Reaction, Topic, Widget};
 
 /// A struct that is a map of values: what `#[derive(Config)]` implements.
-pub use omega_wire::{Fields, FromValue, IntoValue, Values};
+pub use omega_proto::{Fields, FromValue, IntoValue, Values};
 
 /// The events a reaction can answer.
-pub use omega_wire::omega::{Event, EventKind};
+pub use omega_proto::omega::{Event, EventKind};
 
 /// Internals the derives expand into. Not a stable surface: write
 /// `#[derive(Widget)]`, not this.
@@ -75,6 +75,6 @@ pub mod internal {
     pub use crate::context::Context;
     pub use crate::surface::Wired;
     pub use crate::wiring::{Does, Reads, Wiring};
-    pub use omega_wire::omega::Capability;
-    pub use omega_wire::{Fields, FromValue, IntoValue, SystemTopic, Values};
+    pub use omega_proto::omega::Capability;
+    pub use omega_proto::{Fields, FromValue, IntoValue, SystemTopic, Values};
 }

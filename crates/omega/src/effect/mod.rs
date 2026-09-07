@@ -29,8 +29,8 @@ pub use volume::Volume;
 macro_rules! does {
     ($handle:ident, $capability:ident) => {
         impl $crate::wiring::Wiring for $handle {
-            const CAPABILITIES: &'static [omega_wire::omega::Capability] =
-                &[omega_wire::omega::Capability::$capability];
+            const CAPABILITIES: &'static [omega_proto::omega::Capability] =
+                &[omega_proto::omega::Capability::$capability];
 
             fn build(context: &$crate::context::Context) -> Self {
                 Self {
@@ -43,11 +43,12 @@ macro_rules! does {
 
         impl $handle {
             /// Queue one action for the daemon.
-            fn act(&self, kind: omega_wire::omega::action::Kind) {
-                self.context
-                    .act(omega_wire::omega::invoke::Op::Act(omega_wire::omega::Act {
-                        action: Some(omega_wire::omega::Action { kind: Some(kind) }),
-                    }));
+            fn act(&self, kind: omega_proto::omega::action::Kind) {
+                self.context.act(omega_proto::omega::invoke::Op::Act(
+                    omega_proto::omega::Act {
+                        action: Some(omega_proto::omega::Action { kind: Some(kind) }),
+                    },
+                ));
             }
         }
     };

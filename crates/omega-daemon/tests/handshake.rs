@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use common::{Harness, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
-use omega_wire::omega::{BatteryState, Capability, StatePatch, StateTopic, frame, state_topic};
+use omega_proto::omega::{BatteryState, Capability, StatePatch, StateTopic, frame, state_topic};
 
 fn store() -> ManifestStore {
     ManifestStore::from_manifests([widget_manifest("test-unit", "battery")])
@@ -23,7 +23,7 @@ async fn a_spawned_unit_is_admitted_and_mirrors_state() {
     let welcome = transport.recv().await.unwrap().unwrap();
     match welcome.body {
         Some(frame::Body::Welcome(w)) => {
-            assert_eq!(w.protocol_version, omega_wire::PROTOCOL_VERSION);
+            assert_eq!(w.protocol_version, omega_proto::PROTOCOL_VERSION);
             assert_eq!(w.unit_id, "test-unit");
             // Grants come from the daemon's manifest, never from the peer.
             assert_eq!(w.capabilities, vec![Capability::StateRead as i32]);

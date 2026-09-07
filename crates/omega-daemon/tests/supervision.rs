@@ -5,14 +5,14 @@ mod common;
 use std::time::Duration;
 
 use common::widget_manifest;
-use omega_core::UnitName;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::supervisor::{Backoff, Supervisor, UnitSpec};
 use omega_daemon::units::{Transition, UnitTable};
 use omega_daemon::{Shutdown, UnitToken};
-use omega_wire::omega::UnitPhase;
-use omega_wire::{Socket, SystemTopic};
+use omega_proto::UnitName;
+use omega_proto::omega::UnitPhase;
+use omega_proto::{Socket, SystemTopic};
 
 /// A table holding the manifests a test declares, which is what a supervisor
 /// now needs instead of a manifest store of its own.
@@ -67,7 +67,7 @@ fn a_status_change_is_published_as_a_state_topic() {
     assert_eq!(topic.topic, "units");
 
     match topic.value.as_ref().unwrap() {
-        omega_wire::omega::state_topic::Value::Units(units) => {
+        omega_proto::omega::state_topic::Value::Units(units) => {
             assert_eq!(units.units.len(), 1);
             assert_eq!(units.units[0].unit, "battery-widget");
             // Spawned is not yet running: the unit has not checked in.
@@ -102,11 +102,11 @@ fn a_repeated_status_is_not_a_new_revision() {
 
 /// Whether this patch is the table reporting a unit as failed — one arrives
 /// per spawn the supervisor could not make.
-fn is_failure(patch: &omega_wire::omega::StatePatch) -> bool {
+fn is_failure(patch: &omega_proto::omega::StatePatch) -> bool {
     patch.topics.iter().any(|topic| {
         matches!(
             topic.value.as_ref(),
-            Some(omega_wire::omega::state_topic::Value::Units(units))
+            Some(omega_proto::omega::state_topic::Value::Units(units))
                 if units.units.iter().any(|s| s.phase == UnitPhase::Failed as i32)
         )
     })

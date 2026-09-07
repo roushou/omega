@@ -9,7 +9,7 @@
 //! Here the state is the state, transitions are the only way to change it,
 //! and what the `units` topic says is a projection of it.
 
-use omega_wire::omega::UnitPhase;
+use omega_proto::omega::UnitPhase;
 
 /// What is true of a unit's process.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

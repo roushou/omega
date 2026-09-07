@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use omega_core::{Layout, UnitName};
+use omega_daemon::host::StateConfig;
 use omega_daemon::watch::StateStamp;
 use omega_document::{Document, DocumentFile, Units};
-use omega_manifest::StateConfig;
+use omega_proto::{Layout, UnitName};
 
 struct TempDir(PathBuf);
 

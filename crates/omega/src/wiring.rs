@@ -10,8 +10,8 @@
 //! collected by `#[derive(Widget)]` and friends. There is nothing to keep in
 //! sync, because using a thing and declaring it are the same act.
 
-use omega_wire::SystemTopic;
-use omega_wire::omega::Capability;
+use omega_proto::SystemTopic;
+use omega_proto::omega::Capability;
 
 use crate::context::Context;
 

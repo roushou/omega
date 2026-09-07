@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use tokio::net::UnixStream;
 use tokio::sync::{broadcast, oneshot};
 
-use omega_wire::omega::{Event, Frame, Hello, Ping, Pong, StatePatch, Welcome, frame, result};
-use omega_wire::{
+use omega_proto::omega::{Event, Frame, Hello, Ping, Pong, StatePatch, Welcome, frame, result};
+use omega_proto::{
     Handshake, HandshakeError, PROTOCOL_VERSION, ReadHalf, Refusal, Transport, WriteHalf,
 };
 
@@ -200,7 +200,7 @@ impl Session {
                     pending.insert(stream_id, request.answer);
                     writer.send(Frame {
                         stream_id,
-                        body: Some(frame::Body::Invoke(omega_wire::omega::Invoke {
+                        body: Some(frame::Body::Invoke(omega_proto::omega::Invoke {
                             op: Some(request.op),
                         })),
                     }).await?;

@@ -7,10 +7,10 @@
 
 use std::collections::HashSet;
 
-use omega_core::UnitName;
-use omega_manifest::Manifest;
-use omega_wire::omega::{Event, EventKind, StatePatch, StateSnapshot};
-use omega_wire::{Refusal, Topic};
+use omega_proto::Manifest;
+use omega_proto::UnitName;
+use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot};
+use omega_proto::{Refusal, Topic};
 
 #[derive(Debug)]
 pub struct Subscriptions {

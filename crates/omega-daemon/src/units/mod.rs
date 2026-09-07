@@ -17,9 +17,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tokio::sync::{mpsc, oneshot};
 
-use omega_core::UnitName;
-use omega_wire::SystemTopic;
-use omega_wire::omega::{
+use omega_proto::SystemTopic;
+use omega_proto::UnitName;
+use omega_proto::omega::{
     StatePatch, StateTopic, UnitStatus, UnitsState, Value, invoke, result, state_topic,
 };
 
@@ -27,7 +27,7 @@ use crate::hub::Hub;
 use crate::manifest::{ManifestStore, UnitManifest};
 
 pub use lifecycle::{Lifecycle, Transition};
-pub use omega_wire::DaemonStreams;
+pub use omega_proto::DaemonStreams;
 pub use record::{UnitControl, UnitRecord};
 pub use session::{Request, RequestError, SessionGuard};
 pub use token::UnitToken;

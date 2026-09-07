@@ -12,8 +12,8 @@
 
 use anyhow::{Context, bail};
 
-use omega_core::toml::cargo::{CargoConfig, CargoManifest, CargoSlot, Dependencies, Dependency};
-use omega_core::{AtomicFile, Layout};
+use omega_daemon::host::cargo::{CargoConfig, CargoManifest, CargoSlot, Dependencies, Dependency};
+use omega_proto::{AtomicFile, Layout};
 
 use crate::scaffold::SourceTree;
 use crate::ui::{Paint, Step, Ui};

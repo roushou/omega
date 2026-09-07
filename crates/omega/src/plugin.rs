@@ -19,9 +19,9 @@
 
 use std::collections::BTreeSet;
 
-use omega_manifest::{Manifest, Surface};
-use omega_wire::omega::{Capability, EventKind, SurfaceKind};
-use omega_wire::{SystemTopic, Topic};
+use omega_proto::omega::{Capability, EventKind, SurfaceKind};
+use omega_proto::{Manifest, Surface};
+use omega_proto::{SystemTopic, Topic};
 
 use crate::error::Error;
 use crate::registry::{CommandEntry, ReactionEntry, WidgetEntry};
@@ -103,7 +103,7 @@ impl Plugin {
     /// typed: topics come from the state a plugin holds, capabilities from
     /// the effects it holds, surfaces from what it registered.
     pub fn manifest(&self) -> Result<Manifest, Error> {
-        let name = omega_manifest::UnitName::parse(&self.name)
+        let name = omega_proto::UnitName::parse(&self.name)
             .map_err(|source| Error::Name(self.name.clone(), source))?;
 
         let mut capabilities = BTreeSet::new();
@@ -114,7 +114,7 @@ impl Plugin {
         for widget in &self.widgets {
             widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
-                omega_core::SurfaceId::parse(widget.surface.clone())
+                omega_proto::SurfaceId::parse(widget.surface.clone())
                     .map_err(|source| Error::Name(widget.surface.clone(), source))?,
                 SurfaceKind::Widget,
             ));
@@ -122,7 +122,7 @@ impl Plugin {
         for command in &self.commands {
             command.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
-                omega_core::SurfaceId::parse(command.name.clone())
+                omega_proto::SurfaceId::parse(command.name.clone())
                     .map_err(|source| Error::Name(command.name.clone(), source))?,
                 SurfaceKind::Command,
             ));

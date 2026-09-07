@@ -13,7 +13,7 @@ pub mod units;
 
 use async_trait::async_trait;
 
-use omega_wire::omega::StateDocument;
+use omega_proto::omega::StateDocument;
 
 pub use bars::BarProvider;
 pub use config::ConfigProvider;

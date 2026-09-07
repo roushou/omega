@@ -10,9 +10,9 @@
 //! a unit can never be granted something by the accident of a missing
 //! handler.
 
-use omega_core::UnitName;
-use omega_wire::Refusal;
-use omega_wire::omega::{CallCommand, Capability, InvokeUnit, RunCommand, action, invoke, result};
+use omega_proto::Refusal;
+use omega_proto::UnitName;
+use omega_proto::omega::{CallCommand, Capability, InvokeUnit, RunCommand, action, invoke, result};
 
 use crate::refusal::RefusableResult;
 use crate::session::admission::Grants;
@@ -207,7 +207,9 @@ impl Actions {
             .manifest
             .surfaces
             .iter()
-            .filter(|surface| matches!(surface.kind(), Ok(omega_wire::omega::SurfaceKind::Command)))
+            .filter(|surface| {
+                matches!(surface.kind(), Ok(omega_proto::omega::SurfaceKind::Command))
+            })
             .map(|surface| surface.id.as_str())
             .collect();
 

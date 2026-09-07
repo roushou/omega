@@ -30,12 +30,12 @@
 
 use std::collections::HashMap;
 
-use omega_manifest::Manifest;
-use omega_wire::omega::{
+use omega_proto::Manifest;
+use omega_proto::omega::{
     BatteryState, CallCommand, Frame, Hello, Invoke, NetworkState, PublishView, RenderWidget,
     StatePatch, StateSnapshot, StateTopic, Value, ViewNode, Welcome, frame, invoke, result, value,
 };
-use omega_wire::{PROTOCOL_VERSION, TopicValue, Transport, Values};
+use omega_proto::{PROTOCOL_VERSION, TopicValue, Transport, Values};
 use tokio::net::UnixStream;
 
 use crate::context::Context;
@@ -85,8 +85,8 @@ impl State {
         self.topics.push(StateTopic {
             topic: address.to_string(),
             revision: self.topics.len() as u64 + 1,
-            value: Some(omega_wire::omega::state_topic::Value::Generic(
-                omega_wire::IntoValue::into_value(values),
+            value: Some(omega_proto::omega::state_topic::Value::Generic(
+                omega_proto::IntoValue::into_value(values),
             )),
         });
         self
@@ -125,7 +125,7 @@ impl State {
 /// What a widget drew, asked questions rather than destructured.
 #[derive(Debug, Clone)]
 pub struct Drawn {
-    tree: omega_wire::omega::ViewTree,
+    tree: omega_proto::omega::ViewTree,
 }
 
 impl Drawn {
@@ -257,7 +257,7 @@ impl Called {
     }
 
     /// Whether it asked for exactly this action.
-    pub fn did(&self, action: &omega_wire::omega::action::Kind) -> bool {
+    pub fn did(&self, action: &omega_proto::omega::action::Kind) -> bool {
         self.effects.iter().any(|op| match op {
             invoke::Op::Act(act) => {
                 act.action.as_ref().and_then(|action| action.kind.as_ref()) == Some(action)
@@ -280,7 +280,7 @@ impl Called {
 #[derive(Debug)]
 pub struct TestDaemon {
     transport: Transport<UnixStream>,
-    streams: omega_wire::DaemonStreams,
+    streams: omega_proto::DaemonStreams,
 }
 
 impl TestDaemon {
@@ -298,7 +298,7 @@ impl TestDaemon {
 
         Self {
             transport: Transport::new(daemon),
-            streams: omega_wire::DaemonStreams::new(),
+            streams: omega_proto::DaemonStreams::new(),
         }
     }
 

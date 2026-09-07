@@ -14,10 +14,10 @@
 
 use std::collections::HashMap;
 
-use omega_core::{SurfaceId, UnitName};
-use omega_manifest::Manifest;
-use omega_wire::Refusal;
-use omega_wire::omega::{Capability, SurfaceKind};
+use omega_proto::Manifest;
+use omega_proto::Refusal;
+use omega_proto::omega::{Capability, SurfaceKind};
+use omega_proto::{SurfaceId, UnitName};
 
 use crate::process::Identity;
 use crate::refusal::Refusable;

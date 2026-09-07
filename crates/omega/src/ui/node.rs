@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use omega_wire::omega::{Value, ViewNode, value};
+use omega_proto::omega::{Value, ViewNode, value};
 
 /// A node in a view tree.
 ///

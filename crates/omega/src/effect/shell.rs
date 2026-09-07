@@ -1,6 +1,6 @@
 //! The escape hatch.
 
-use omega_wire::omega::{LaunchApp, RunCommand, action};
+use omega_proto::omega::{LaunchApp, RunCommand, action};
 
 use crate::context::Context;
 use crate::effect::does;

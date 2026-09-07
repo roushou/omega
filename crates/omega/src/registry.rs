@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use omega_wire::omega::{Capability, Event, EventKind};
-use omega_wire::{SystemTopic, Values};
+use omega_proto::omega::{Capability, Event, EventKind};
+use omega_proto::{SystemTopic, Values};
 
 use crate::context::Context;
 use crate::surface::{Answer, Args, Command, Reaction, Widget, Wired};

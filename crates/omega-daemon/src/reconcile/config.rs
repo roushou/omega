@@ -13,8 +13,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 
-use omega_core::UnitName;
-use omega_wire::omega::{StateDocument, Value};
+use omega_proto::UnitName;
+use omega_proto::omega::{StateDocument, Value};
 
 use crate::reconcile::{Change, Provider, ProviderError};
 use crate::supervisor::Supervisor;

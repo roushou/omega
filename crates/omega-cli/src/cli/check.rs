@@ -8,7 +8,8 @@
 
 use anyhow::bail;
 
-use omega_core::{Layout, Profile, Units};
+use omega_daemon::host::Units;
+use omega_proto::{Layout, Profile};
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;
@@ -113,7 +114,7 @@ impl CheckCmd {
     ///
     /// The point of a derived manifest is that nobody typed it, so this is
     /// where a person finds out what their code added up to.
-    fn asks(manifest: &omega_manifest::Manifest) -> String {
+    fn asks(manifest: &omega_proto::Manifest) -> String {
         let mut asks = Vec::new();
 
         if !manifest.state_topics.is_empty() {

@@ -7,7 +7,7 @@ use std::time::Duration;
 use common::{Harness, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::session::{Health, Liveness};
-use omega_wire::omega::{Frame, Ping, frame};
+use omega_proto::omega::{Frame, Ping, frame};
 
 #[tokio::test(start_paused = true)]
 async fn a_peer_is_declared_unresponsive_only_after_the_timeout() {

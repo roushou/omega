@@ -7,9 +7,9 @@ use std::time::Duration;
 use tokio::net::UnixListener;
 use tokio::signal::unix::SignalKind;
 
-use omega_core::Layout;
-use omega_manifest::StateConfig;
-use omega_wire::{Observation, Socket};
+use crate::host::StateConfig;
+use omega_proto::Layout;
+use omega_proto::{Observation, Socket};
 
 use crate::error::DaemonError;
 use crate::hub::Hub;
@@ -35,7 +35,7 @@ pub struct Daemon {
     /// Everything known about the units, including how to reach them.
     units: UnitTable,
     /// Units announcing themselves. Taken by `run`.
-    arrivals: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<omega_core::UnitName>>>,
+    arrivals: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<omega_proto::UnitName>>>,
     /// Where the built state lives, so a rebuild can be picked up without a
     /// restart.
     layout: Layout,
@@ -157,7 +157,7 @@ impl Daemon {
 
     /// The next settled change to the state dir, or never when it could not
     /// be watched.
-    async fn rebuilt(changes: Option<&mut omega_core::Changes>) -> Option<()> {
+    async fn rebuilt(changes: Option<&mut crate::host::Changes>) -> Option<()> {
         match changes {
             Some(changes) => changes.next().await,
             None => std::future::pending().await,
@@ -167,8 +167,8 @@ impl Daemon {
     /// The next unit to connect, or never when the daemon is not tracking
     /// arrivals (a test's in-process core, say).
     async fn arrived(
-        arrivals: Option<&mut tokio::sync::mpsc::Receiver<omega_core::UnitName>>,
-    ) -> Option<omega_core::UnitName> {
+        arrivals: Option<&mut tokio::sync::mpsc::Receiver<omega_proto::UnitName>>,
+    ) -> Option<omega_proto::UnitName> {
         match arrivals {
             Some(arrivals) => arrivals.recv().await,
             None => std::future::pending().await,

@@ -17,7 +17,7 @@ use std::process::Output;
 
 use anyhow::{Context, bail};
 
-use omega_core::StageDir;
+use omega_daemon::host::StageDir;
 
 /// One file of a renderer, carried in the binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

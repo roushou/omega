@@ -8,7 +8,6 @@
 mod common;
 
 use common::{Harness, TempDir, widget_manifest};
-use omega_core::UnitName;
 use omega_daemon::Shutdown;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
@@ -16,8 +15,9 @@ use omega_daemon::reconcile::{Action, ConfigProvider, Provider};
 use omega_daemon::supervisor::Supervisor;
 use omega_daemon::units::{UnitControl, UnitTable};
 use omega_document::{Document, Units};
-use omega_wire::omega::frame;
-use omega_wire::{Socket, Values};
+use omega_proto::UnitName;
+use omega_proto::omega::frame;
+use omega_proto::{Socket, Values};
 
 fn unit(name: &str) -> UnitName {
     UnitName::parse(name).unwrap()

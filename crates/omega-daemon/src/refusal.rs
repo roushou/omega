@@ -5,10 +5,11 @@
 //! decision worth making once per error type, in one place where the choices
 //! can be compared, rather than at each call site by whoever was writing it.
 
-use omega_core::{IdentError, TomlError};
 use omega_document::DocumentError;
-use omega_manifest::ManifestError;
-use omega_wire::{Refusal, TopicError};
+use omega_proto::IdentError;
+use omega_proto::ManifestError;
+use omega_proto::TomlError;
+use omega_proto::{Refusal, TopicError};
 
 use crate::units::RequestError;
 

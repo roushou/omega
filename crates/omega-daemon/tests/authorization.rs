@@ -8,12 +8,12 @@ use std::time::Duration;
 use common::{Harness, expect_refusal, unit_name, widget_manifest};
 use omega_daemon::hub::SurfaceRef;
 use omega_daemon::manifest::ManifestStore;
-use omega_wire::omega::{
+use omega_proto::omega::{
     CallAgentTool, ErrorCode, Frame, Invoke, PublishView, ViewNode, ViewTree, frame, invoke,
 };
 
-fn surface(id: &str) -> omega_core::SurfaceId {
-    omega_core::SurfaceId::parse(id).unwrap()
+fn surface(id: &str) -> omega_proto::SurfaceId {
+    omega_proto::SurfaceId::parse(id).unwrap()
 }
 
 fn view() -> ViewTree {

@@ -7,7 +7,8 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
-use omega_core::{Layout, UnitName, Units};
+use omega_daemon::host::Units;
+use omega_proto::{Layout, UnitName};
 
 use crate::ui::{Paint, Step, Ui};
 

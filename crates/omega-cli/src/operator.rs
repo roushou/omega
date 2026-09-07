@@ -5,8 +5,10 @@
 //! daemon decides that from the connection's uid, not from anything said
 //! here.
 
-use omega_wire::omega::{Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value};
-use omega_wire::{Client, ClientError, Socket};
+use omega_proto::omega::{
+    Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value,
+};
+use omega_proto::{Client, ClientError, Socket};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
@@ -37,7 +39,7 @@ impl Operator {
 
     /// Ask the daemon to cycle a unit's process.
     pub async fn restart(&self, unit: &str) -> Result<(), OperatorError> {
-        self.invoke(invoke::Op::RestartUnit(omega_wire::omega::RestartUnit {
+        self.invoke(invoke::Op::RestartUnit(omega_proto::omega::RestartUnit {
             unit: unit.to_string(),
         }))
         .await

@@ -11,10 +11,10 @@ use omega_daemon::manifest::ManifestStore;
 use omega_daemon::shell::ShellServer;
 use omega_daemon::supervisor::{Supervisor, UnitSpec};
 use omega_daemon::units::UnitTable;
-use omega_wire::omega::{
+use omega_proto::omega::{
     Act, Action, ErrorCode, InvokeUnit, RestartUnit, action, frame, invoke, result,
 };
-use omega_wire::{Observation, Refusal, Socket};
+use omega_proto::{Observation, Refusal, Socket};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
@@ -193,7 +193,7 @@ async fn a_request_the_policy_does_not_serve_an_operator_is_refused() {
     // Publishing a view is a unit's business. The observation socket does not
     // become a way to be one.
     let refusal = observer
-        .refusal(invoke::Op::PublishView(omega_wire::omega::PublishView {
+        .refusal(invoke::Op::PublishView(omega_proto::omega::PublishView {
             surface_id: "battery".into(),
             module_id: String::new(),
             view: Some(Default::default()),

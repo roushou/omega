@@ -14,7 +14,7 @@ use std::process::{Command, Output};
 
 use anyhow::Context;
 
-use omega_core::AtomicFile;
+use omega_proto::AtomicFile;
 
 /// The service that runs the daemon.
 #[derive(Debug, Clone, Copy)]

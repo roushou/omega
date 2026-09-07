@@ -8,11 +8,12 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use omega_core::toml::cargo::{
+use omega_daemon::host::cargo::{
     CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Package, Profile,
     ReleaseProfile, Workspace,
 };
-use omega_core::{Layout, Toml, TomlError, UnitName};
+use omega_proto::{Layout, UnitName};
+use omega_proto::{Toml, TomlError};
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.

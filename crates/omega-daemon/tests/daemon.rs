@@ -11,12 +11,13 @@ use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
 use common::{TempDir, widget_manifest};
-use omega_core::{Layout, UnitName};
+use omega_daemon::host::StateConfig;
 use omega_daemon::{Daemon, DaemonHandle};
 use omega_document::{Document, DocumentFile, Units};
-use omega_manifest::{Manifest, StateConfig};
-use omega_wire::omega::{RestartUnit, StateDocument, invoke, result};
-use omega_wire::{Client, Socket};
+use omega_proto::Manifest;
+use omega_proto::omega::{RestartUnit, StateDocument, invoke, result};
+use omega_proto::{Client, Socket};
+use omega_proto::{Layout, UnitName};
 
 /// A machine as `omega build` leaves it: a state dir holding a document, the
 /// config of what was built, and one directory per unit.

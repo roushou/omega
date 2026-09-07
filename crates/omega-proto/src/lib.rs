@@ -1,0 +1,38 @@
+pub mod client;
+pub mod codec;
+pub mod error;
+pub mod fs;
+pub mod handshake;
+pub mod ident;
+pub mod layout;
+pub mod manifest;
+mod manifest_error;
+pub mod observation;
+pub mod protocol;
+pub mod refusal;
+pub mod stream;
+pub mod toml;
+pub mod topic;
+mod transport;
+pub mod values;
+
+pub use client::{Client, ClientError};
+pub use codec::{FrameCodec, MAX_FRAME_LEN};
+pub use error::{CodecError, HandshakeError};
+pub use error::{IdentError, ReadError, TomlError};
+pub use fs::{AtomicFile, TempPath};
+pub use handshake::Handshake;
+pub use ident::{ModuleId, SurfaceId, UnitName};
+pub use layout::{Layout, Profile};
+pub use manifest::{Manifest, Surface};
+pub use manifest_error::ManifestError;
+pub use observation::Observation;
+pub use protocol::{PROTOCOL_VERSION, omega};
+pub use refusal::Refusal;
+pub use stream::{DaemonStreams, PeerStreams};
+pub use toml::{Table, Toml, TomlDoc, TomlFile, TomlSchema, Validated};
+pub use topic::{SystemTopic, Topic, TopicError, TopicValue};
+pub use transport::{ReadHalf, Socket, Transport, WriteHalf};
+pub use values::{Fields, FromValue, IntoValue, Values};
+
+pub use omega::Frame;
