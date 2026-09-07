@@ -115,11 +115,13 @@ impl LinkCmd {
             let Some(workspace) = manifest.workspace.as_mut() else {
                 return;
             };
-            for name in crate::scaffold::Scaffold::omega_crates() {
-                if workspace.dependencies.contains(name) {
-                    workspace
-                        .dependencies
-                        .insert(name, Dependency::registry(version, &[]));
+            for spec in crate::scaffold::Scaffold::omega_crates() {
+                if workspace.dependencies.contains(spec.name) {
+                    let updated = match spec.package {
+                        None => Dependency::registry(version, &[]),
+                        Some(package) => Dependency::renamed(package, version, &[]),
+                    };
+                    workspace.dependencies.insert(spec.name, updated);
                 }
             }
         })?;

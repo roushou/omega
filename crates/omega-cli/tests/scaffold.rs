@@ -240,6 +240,18 @@ fn a_config_names_the_published_crates_whoever_scaffolded_it() {
         );
     }
 
+    // The SDK is published as `omega-rs`, because `omega` on crates.io is an
+    // unrelated crate — but a config says `omega`, and every template, doc
+    // and `use` in the world says `omega`. Cargo's `package` key is what
+    // holds those apart, and it has to be in the manifest omega writes or the
+    // config resolves to somebody else's crate.
+    let sdk = dependencies.get("omega").unwrap();
+    assert_eq!(sdk.package(), Some("omega-rs"));
+    assert!(
+        dependencies.get("omega-rs").is_none(),
+        "the table is keyed by what a config calls it, not what the registry does"
+    );
+
     // Registry dependencies do not care where omega comes from.
     assert_eq!(dependencies.get("anyhow").unwrap().version(), Some("1"));
 
@@ -256,7 +268,11 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
     // scaffold tells git to ignore — so the committed manifest stays the
     // same on the machine that develops omega and the machine that only
     // runs it.
-    for name in ["omega", "omega-document"] {
+    // Keyed by what the registry calls a crate, not what the manifest does:
+    // `[patch.crates-io]` replaces a *source*, so `omega-rs` is the entry
+    // even though the dependency above it reads `omega`. Getting this wrong
+    // yields a patch cargo silently ignores.
+    for name in ["omega-rs", "omega-document"] {
         let path = patched.get(name).unwrap().path().unwrap();
         assert!(std::path::Path::new(path).is_absolute(), "{name}: {path}");
         assert!(
@@ -264,6 +280,10 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
             "{name}: {path}"
         );
     }
+    assert!(
+        patched.get("omega").is_none(),
+        "a patch keyed by the manifest's name would not match the registry"
+    );
 
     assert_eq!(tree.version().unwrap(), env!("CARGO_PKG_VERSION"));
     assert!(Scaffold::new().gitignore().contains("/.cargo/"));

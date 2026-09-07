@@ -226,6 +226,22 @@ impl Dependency {
         }
     }
 
+    /// `{ package = "...", version = "..." }` — a registry crate the manifest
+    /// calls by a different name, which is how a config writes `omega` for a
+    /// crate published as `omega-rs`.
+    pub fn renamed(
+        package: impl Into<String>,
+        version: impl Into<String>,
+        features: &[&str],
+    ) -> Self {
+        Self::Detailed(DependencyDetail {
+            version: Some(version.into()),
+            package: Some(package.into()),
+            features: DependencyDetail::features(features),
+            ..Default::default()
+        })
+    }
+
     /// `{ path = "..." }` — a local path dependency.
     pub fn local(path: impl Into<String>, features: &[&str]) -> Self {
         Self::Detailed(DependencyDetail {
@@ -253,6 +269,14 @@ impl Dependency {
         }
     }
 
+    /// The registry name, when the table calls it something else.
+    pub fn package(&self) -> Option<&str> {
+        match self {
+            Self::Version(_) => None,
+            Self::Detailed(d) => d.package.as_deref(),
+        }
+    }
+
     pub fn path(&self) -> Option<&str> {
         match self {
             Self::Version(_) => None,
@@ -277,6 +301,9 @@ impl Dependency {
 pub struct DependencyDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// The name on the registry, when it differs from the name in the table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -312,6 +339,8 @@ pub enum DependencySource {
 #[derive(Debug, Clone, Copy)]
 pub struct DependencySpec {
     pub name: &'static str,
+    /// What the registry calls it, when that is not `name`.
+    pub package: Option<&'static str>,
     pub source: DependencySource,
     pub features: &'static [&'static str],
 }
@@ -320,6 +349,7 @@ impl DependencySpec {
     pub const fn registry(name: &'static str, version: &'static str) -> Self {
         Self {
             name,
+            package: None,
             source: DependencySource::Registry(version),
             features: &[],
         }
@@ -328,8 +358,23 @@ impl DependencySpec {
     pub const fn omega(name: &'static str) -> Self {
         Self {
             name,
+            package: None,
             source: DependencySource::OmegaCrate,
             features: &[],
+        }
+    }
+
+    /// Called one thing in a manifest, published as another.
+    pub const fn published_as(mut self, package: &'static str) -> Self {
+        self.package = Some(package);
+        self
+    }
+
+    /// What the registry — and so a `[patch]` table — calls this crate.
+    pub const fn package(&self) -> &'static str {
+        match self.package {
+            Some(package) => package,
+            None => self.name,
         }
     }
 

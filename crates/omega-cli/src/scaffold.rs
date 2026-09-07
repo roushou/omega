@@ -89,7 +89,7 @@ impl Scaffold {
     /// `omega::Result` — the protocol, the runtime and the manifest are all
     /// behind that one name, and none of them is a plugin author's problem.
     pub(crate) const UNIT_DEPENDENCIES: &'static [DependencySpec] =
-        &[DependencySpec::omega("omega")];
+        &[DependencySpec::omega("omega").published_as("omega-rs")];
 
     /// What the config plane depends on: the document, and nothing else.
     ///
@@ -113,12 +113,15 @@ impl Scaffold {
 
     /// The omega crates a generated config depends on, and so the ones a
     /// checkout patches.
-    pub fn omega_crates() -> impl Iterator<Item = &'static str> {
+    ///
+    /// The specs, not their names: a `[patch]` is keyed by what the registry
+    /// calls a crate and a dependency table by what the config calls it, and
+    /// for the SDK those differ.
+    pub fn omega_crates() -> impl Iterator<Item = &'static DependencySpec> {
         Self::UNIT_DEPENDENCIES
             .iter()
             .chain(Self::SYSTEM_DEPENDENCIES)
             .filter(|spec| matches!(spec.source, DependencySource::OmegaCrate))
-            .map(|spec| spec.name)
     }
 
     /// What git should not carry: the build output, and the file that says
@@ -254,9 +257,12 @@ impl Scaffold {
     fn resolve(&self, spec: &DependencySpec) -> Dependency {
         match spec.source {
             DependencySource::Registry(version) => Dependency::registry(version, spec.features),
-            DependencySource::OmegaCrate => {
-                Dependency::registry(self.published.version(), spec.features)
-            }
+            DependencySource::OmegaCrate => match spec.package {
+                None => Dependency::registry(self.published.version(), spec.features),
+                Some(package) => {
+                    Dependency::renamed(package, self.published.version(), spec.features)
+                }
+            },
         }
     }
 }
@@ -357,8 +363,9 @@ impl SourceTree {
     /// The patch that points a config's dependencies at this checkout.
     pub fn patch(&self) -> Result<Dependencies, ScaffoldError> {
         let mut patched = Dependencies::new();
-        for name in Scaffold::omega_crates() {
-            patched.insert(name, Dependency::local(self.crate_path(name)?, &[]));
+        for spec in Scaffold::omega_crates() {
+            let path = self.crate_path(spec.name)?;
+            patched.insert(spec.package(), Dependency::local(path, &[]));
         }
         Ok(patched)
     }

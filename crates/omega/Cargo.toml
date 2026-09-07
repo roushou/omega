@@ -1,5 +1,5 @@
 [package]
-name = "omega"
+name = "omega-rs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,12 @@ description = "Write an Omega plugin: declare what you need by holding it, and d
 
 [lints]
 workspace = true
+
+# `omega` is taken on crates.io by an unrelated crate, so the package is
+# `omega-rs` and the library keeps the name everything reads and writes:
+# `use omega::…`, unchanged in every config, template and doc.
+[lib]
+name = "omega"
 
 [dependencies]
 omega-derive = { path = "../omega-derive", version = "0.1.0" }

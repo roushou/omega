@@ -492,17 +492,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "omega"
-version = "0.1.0"
-dependencies = [
- "omega-derive",
- "omega-proto",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "omega-cli"
 version = "0.1.0"
 dependencies = [
@@ -576,6 +565,17 @@ dependencies = [
  "tokio-util",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "omega-rs"
+version = "0.1.0"
+dependencies = [
+ "omega-derive",
+ "omega-proto",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

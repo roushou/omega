@@ -434,10 +434,12 @@ impl Widget for Showing {
 #[test]
 fn a_topics_address_comes_from_where_it_is_defined() {
     // The crate that defines the type owns the keyspace, and the type names
-    // the key. Neither is a string anybody typed.
-    assert_eq!(Mode::UNIT, "omega");
+    // the key. Neither is a string anybody typed — including here: asserting
+    // the literal would pin this crate's own package name, which is not what
+    // the rule is about.
+    assert_eq!(Mode::UNIT, env!("CARGO_PKG_NAME"));
     assert_eq!(Mode::KEY, "mode");
-    assert_eq!(Mode::address(), "unit.omega.mode");
+    assert_eq!(Mode::address(), format!("unit.{}.mode", Mode::UNIT));
 }
 
 #[test]
@@ -454,7 +456,7 @@ fn owning_state_declares_the_right_to_publish_it() {
         manifest.capabilities,
         vec!["CAPABILITY_STATE_READ", "CAPABILITY_STATE_WRITE"]
     );
-    assert_eq!(manifest.state_topics, vec!["unit.omega.mode"]);
+    assert_eq!(manifest.state_topics, vec![Mode::address()]);
 }
 
 #[test]
@@ -479,7 +481,7 @@ fn publishing_state_is_an_effect_like_any_other() {
         })
         .expect("focus publishes the mode");
 
-    assert_eq!(published.topic, "unit.omega.mode");
+    assert_eq!(published.topic, Mode::address());
     assert_eq!(
         Mode::read(
             &<omega::Values as omega::FromValue>::from_value(published.value.as_ref().unwrap())
@@ -502,7 +504,7 @@ async fn one_plugin_draws_what_another_published() {
     // The daemon replicates a keyspace like any other topic, so a widget
     // watching one re-renders when it moves — whoever moved it.
     daemon
-        .publish(&State::new().keyspace("unit.omega.mode", Mode { focus: true }.write()))
+        .publish(&State::new().keyspace(&Mode::address(), Mode { focus: true }.write()))
         .await;
     assert_eq!(daemon.next_view().await.view.text(), "focus");
 }
