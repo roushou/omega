@@ -1,5 +1,6 @@
 mod build;
 mod check;
+mod clean;
 pub(crate) mod daemon;
 mod dev;
 mod init;
@@ -76,6 +77,7 @@ impl Cli {
 pub enum Command {
     Build(build::BuildCmd),
     Check(check::CheckCmd),
+    Clean(clean::CleanCmd),
     Daemon(daemon::DaemonCmd),
     Dev(dev::DevCmd),
     Init(init::InitCmd),
@@ -93,6 +95,7 @@ impl Command {
         match self {
             Self::Build(cmd) => cmd.run(ui).await,
             Self::Check(cmd) => cmd.run(ui).await,
+            Self::Clean(cmd) => cmd.run(ui),
             Self::Daemon(cmd) => cmd.run(ui).await,
             Self::Dev(cmd) => cmd.run(ui).await,
             Self::Init(cmd) => cmd.run(ui),

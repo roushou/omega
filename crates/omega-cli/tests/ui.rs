@@ -199,3 +199,23 @@ fn a_table_row_carries_no_trailing_whitespace() {
         assert_eq!(line, line.trim_end(), "{line:?}");
     }
 }
+
+#[test]
+fn a_size_reads_as_a_disk_is_sold() {
+    // Bytes stay bytes: `1.0 kB` for a file you could read is worse than the
+    // number, and rounding hides that a directory is nearly empty.
+    assert_eq!(Paint::size(0), "0 B");
+    assert_eq!(Paint::size(999), "999 B");
+
+    // Decimal, not binary: `du -h` says GiB and disks are sold in GB. The
+    // one a person compares this against is the vendor's.
+    assert_eq!(Paint::size(1_000), "1.0 kB");
+    assert_eq!(Paint::size(999_999_999_999_999), "1000 TB");
+
+    // One decimal below ten, none above, so a column of sizes stays narrow
+    // without losing the difference between 1.0 and 9.9 GB.
+    assert_eq!(Paint::size(1_013_000_000), "1.0 GB");
+    assert_eq!(Paint::size(894_000_000), "894 MB");
+    assert_eq!(Paint::size(9_900_000_000), "9.9 GB");
+    assert_eq!(Paint::size(12_000_000_000), "12 GB");
+}

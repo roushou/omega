@@ -52,6 +52,7 @@ omega build
 | `omega logs <unit>`          | a unit's own output (`~/.cache/omega/logs/`)             |
 | `omega dev <unit>`           | take over a supervised unit in your terminal             |
 | `omega run <unit> <command>` | invoke a command surface                                 |
+| `omega clean`                | remove the build cache (`--logs` for the logs too)       |
 | `omega link [path]`          | build against an omega checkout instead of the registry  |
 
 ## Documentation

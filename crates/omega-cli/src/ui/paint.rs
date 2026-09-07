@@ -66,6 +66,23 @@ impl Paint {
         }
     }
 
+    /// `1.0 GB`, `894 MB`, `12 kB`: what a directory was costing, in the
+    /// units a disk is sold in.
+    pub fn size(bytes: u64) -> String {
+        const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+        let mut size = bytes as f64;
+        let mut unit = 0;
+        while size >= 1000.0 && unit < UNITS.len() - 1 {
+            size /= 1000.0;
+            unit += 1;
+        }
+        match unit {
+            0 => format!("{bytes} B"),
+            _ if size < 10.0 => format!("{size:.1} {}", UNITS[unit]),
+            _ => format!("{size:.0} {}", UNITS[unit]),
+        }
+    }
+
     /// English, as far as the nouns this program uses go: `capability` is
     /// `capabilities`, and everything else takes an `s`.
     fn plural(noun: &str) -> String {
