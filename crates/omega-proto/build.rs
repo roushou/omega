@@ -8,6 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "omega/state/network.proto",
         "omega/state/power.proto",
         "omega/state/session.proto",
+        "omega/state/system.proto",
         "omega/state/time.proto",
         "omega/state/units.proto",
         "omega/state.proto",

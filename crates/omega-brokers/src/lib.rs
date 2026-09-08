@@ -29,6 +29,7 @@ pub mod mpris;
 pub mod network_manager;
 pub mod notifications;
 pub mod pipewire;
+pub mod procfs;
 pub mod upower;
 
 pub use backlight::Backlight;
@@ -41,6 +42,7 @@ pub use mpris::Mpris;
 pub use network_manager::NetworkManager;
 pub use notifications::Notifications;
 pub use pipewire::PipeWire;
+pub use procfs::Procfs;
 pub use upower::UPower;
 
 /// The brokers a daemon runs.
@@ -64,6 +66,7 @@ impl Brokers {
             Box::new(PipeWire::new()),
             Box::new(Mpris::new()),
             Box::new(BlueZ::new()),
+            Box::new(Procfs::new()),
         ]
     }
 }

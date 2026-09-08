@@ -7,6 +7,7 @@ import "omega/state/media.proto";
 import "omega/state/network.proto";
 import "omega/state/power.proto";
 import "omega/state/session.proto";
+import "omega/state/system.proto";
 import "omega/state/time.proto";
 import "omega/state/units.proto";
 import "omega/value.proto";
@@ -21,7 +22,7 @@ import "omega/value.proto";
 
 // One topic value. "topic" is the address: "battery", "network", "audio",
 // "backlight", "power", "display", "units", "time", "wifi", "workspaces",
-// "window", "media", "bluetooth", or
+// "window", "media", "bluetooth", "system", or
 // "unit.<name>.<key>" for
 // unit-owned data.
 //
@@ -52,6 +53,7 @@ message StateTopic {
     WindowState window = 21;
     MediaState media = 22;
     BluetoothState bluetooth = 23;
+    SystemState system = 24;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

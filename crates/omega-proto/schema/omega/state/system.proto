@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package omega;
+
+// What the machine is doing with itself.
+
+message SystemState {
+  // Whole percent, across every core. Whole because that is the resolution
+  // anything draws it at, and because a value carrying four decimal places
+  // would be a new revision on every reading — last-value-wins only helps
+  // when the value is actually the same.
+  uint32 cpu_percent = 1;
+  repeated uint32 core_percent = 2;
+
+  uint64 memory_total_bytes = 3;
+  // The kernel's own estimate of what a new process could have. Reported
+  // rather than a "used" figure, because used is derived and every tool
+  // derives it differently — the SDK subtracts, and the arithmetic is in one
+  // place.
+  uint64 memory_available_bytes = 4;
+
+  uint64 swap_total_bytes = 5;
+  uint64 swap_free_bytes = 6;
+
+  double load_1 = 7;
+  double load_5 = 8;
+  double load_15 = 9;
+
+  uint64 uptime_seconds = 10;
+}
