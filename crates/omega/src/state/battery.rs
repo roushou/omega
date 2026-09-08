@@ -1,9 +1,6 @@
 //! The battery.
 
-use omega_proto::omega::BatteryState;
-
-use crate::context::Context;
-use crate::source::reads;
+use crate::state::Battery;
 use crate::units::{Percent, Remaining};
 
 /// The machine's battery, as a widget sees it.
@@ -21,13 +18,6 @@ use crate::units::{Percent, Remaining};
 ///     }
 /// }
 /// ```
-#[derive(Debug)]
-pub struct Battery {
-    context: Context,
-}
-
-reads!(Battery, BatteryState);
-
 impl Battery {
     /// How full it is. Prints itself as `80%`.
     pub fn charge(&self) -> Percent {

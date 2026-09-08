@@ -1,9 +1,6 @@
 //! The screen's brightness.
 
-use omega_proto::omega::BacklightState;
-
-use crate::context::Context;
-use crate::source::reads;
+use crate::state::Backlight;
 use crate::units::Percent;
 
 /// The screen's backlight, as a widget sees it.
@@ -25,13 +22,6 @@ use crate::units::Percent;
 ///     }
 /// }
 /// ```
-#[derive(Debug)]
-pub struct Backlight {
-    context: Context,
-}
-
-reads!(Backlight, BacklightState);
-
 impl Backlight {
     /// How bright it is. Prints itself as `60%`.
     pub fn level(&self) -> Percent {

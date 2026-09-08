@@ -1,19 +1,9 @@
 //! The network.
 
-use omega_proto::omega::NetworkState;
-
-use crate::context::Context;
-use crate::source::reads;
+use crate::state::Network;
 use crate::units::Percent;
 
 /// The machine's network connection.
-#[derive(Debug)]
-pub struct Network {
-    context: Context,
-}
-
-reads!(Network, NetworkState);
-
 impl Network {
     pub fn is_connected(&self) -> bool {
         self.read().is_some_and(|network| network.connected)

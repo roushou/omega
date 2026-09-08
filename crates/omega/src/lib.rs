@@ -42,7 +42,6 @@ mod mirror;
 mod plugin;
 mod registry;
 mod runtime;
-mod source;
 mod state;
 mod surface;
 mod ui;
@@ -54,8 +53,11 @@ pub mod wiring;
 pub use effect::{Brightness, Notification, Notify, Session, Shell, Volume};
 pub use error::{Error, Result};
 pub use plugin::Plugin;
-pub use source::{AccessPoint, Audio, Backlight, Battery, Clock, Network, Weekday, Wifi};
-pub use state::{Own, Topic, Watch};
+pub use state::{
+    AccessPoint, Audio, Backlight, Battery, Bluetooth, Clock, Disk, Idle, Input, Media, Monitors,
+    Network, Own, Peripherals, Power, System, Topic, Units, Vpn, Watch, Weekday, Wifi, Window,
+    Workspaces,
+};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{
     Align, Bind, Button, Column, Field, Graph, Grid, Group, Header, Icon, Image, List, Node,

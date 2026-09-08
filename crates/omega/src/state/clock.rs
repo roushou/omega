@@ -2,10 +2,7 @@
 
 use std::fmt;
 
-use omega_proto::omega::TimeState;
-
-use crate::context::Context;
-use crate::source::reads;
+use crate::state::Clock;
 
 /// The wall clock, in the machine's own zone.
 ///
@@ -30,13 +27,6 @@ use crate::source::reads;
 /// holding this is asked to draw once a minute rather than sixty times to
 /// redraw the same two digits. A seconds display needs a granularity a unit
 /// can ask for, which the manifest cannot yet carry.
-#[derive(Debug)]
-pub struct Clock {
-    context: Context,
-}
-
-reads!(Clock, TimeState);
-
 impl Clock {
     /// The hour, 0..23.
     pub fn hour(&self) -> u32 {

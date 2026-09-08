@@ -1,9 +1,6 @@
 //! What the machine could connect to.
 
-use omega_proto::omega::WifiState;
-
-use crate::context::Context;
-use crate::source::reads;
+use crate::state::Wifi;
 use crate::units::Percent;
 
 /// The networks on the air, as the last scan found them.
@@ -14,13 +11,6 @@ use crate::units::Percent;
 /// three rooms away.
 ///
 /// [`Network`]: crate::Network
-#[derive(Debug)]
-pub struct Wifi {
-    context: Context,
-}
-
-reads!(Wifi, WifiState);
-
 impl Wifi {
     /// Every network, strongest first. One entry per name: a network is often
     /// several radios, and the daemon has already folded them.

@@ -855,3 +855,53 @@ fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
     // draws something wrong rather than taking the unit down.
     assert_eq!(Drawn::of::<BarClock>(&State::new()).text(), "Sun 00:00");
 }
+
+// ---- a topic nobody wrote accessors for ----
+
+/// Reading a topic that has no typed accessors, only the floor `get()` gives.
+#[derive(omega::Widget)]
+struct Devices {
+    bluetooth: omega::Bluetooth,
+}
+
+impl Widget for Devices {
+    fn render(&self) -> Ui {
+        let Some(state) = self.bluetooth.get() else {
+            return Ui::empty();
+        };
+        Text::new(format!("{} paired", state.devices.len())).into()
+    }
+}
+
+#[test]
+fn a_topic_with_no_accessors_is_still_readable() {
+    // The point of generating a handle for every topic: `bluetooth` was
+    // brokered, coalesced and replicated for a dozen commits with no way for
+    // a unit to name it. Nobody has written `paired()` or `is_connected()`
+    // yet, and it is readable anyway.
+    let state = State::new().with(omega_proto::omega::BluetoothState {
+        available: true,
+        powered: true,
+        discovering: false,
+        devices: vec![omega_proto::omega::BluetoothDevice {
+            address: "60:AB:D2:25:8C:49".into(),
+            name: "Bose NC 700".into(),
+            connected: true,
+            paired: true,
+            icon: "audio-headphones".into(),
+            battery_percent: 72,
+        }],
+    });
+
+    assert_eq!(Drawn::of::<Devices>(&state).text(), "1 paired");
+    assert!(Drawn::of::<Devices>(&State::new()).is_empty());
+}
+
+#[test]
+fn a_handle_declares_the_topic_its_type_names() {
+    // The manifest comes from the fields, so holding `Bluetooth` is what asks
+    // for the topic — there is no string anywhere to get wrong.
+    let manifest =
+        omega::testing::manifest_of(&omega::Plugin::named("devices", "0.1.0").widget::<Devices>());
+    assert_eq!(manifest.state_topics, vec!["bluetooth"]);
+}
