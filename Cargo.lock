@@ -619,6 +619,8 @@ dependencies = [
  "async-trait",
  "futures-util",
  "omega-proto",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

@@ -17,9 +17,8 @@ use omega_proto::{ActionKind, SystemTopic};
 
 /// Topics no broker projects yet.
 const UNSERVED_TOPICS: &[SystemTopic] = &[
-    SystemTopic::Audio,   // PipeWire
-    SystemTopic::Power,   // sysfs and /proc/loadavg
-    SystemTopic::Display, // Hyprland
+    SystemTopic::Audio, // PipeWire
+    SystemTopic::Power, // sysfs and /proc/loadavg
     // Not a broker's: the supervisor's own projection of the unit table.
     SystemTopic::Units,
 ];

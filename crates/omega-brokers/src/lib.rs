@@ -21,11 +21,13 @@
 
 pub mod backlight;
 mod broker;
+pub mod hyprland;
 pub mod network_manager;
 pub mod upower;
 
 pub use backlight::Backlight;
 pub use broker::{Broker, BrokerError};
+pub use hyprland::Hyprland;
 pub use network_manager::NetworkManager;
 pub use upower::UPower;
 
@@ -42,6 +44,7 @@ impl Brokers {
         vec![
             Box::new(UPower::new()),
             Box::new(NetworkManager::new()),
+            Box::new(Hyprland::new()),
             Box::new(Backlight::new()),
         ]
     }
