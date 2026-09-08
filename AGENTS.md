@@ -240,5 +240,6 @@ omega-cli      the binary
 ## Docs
 
 - `docs/architecture.md` — design and rationale
+- `docs/design.md` — the abstractions being built next, and the roads not taken
 - `crates/omega-proto/schema/README.md` — schema rules
 - `crates/omega-cli/shell/README.md` — the renderer and the shell socket

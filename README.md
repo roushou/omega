@@ -58,6 +58,7 @@ omega build
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Design](docs/design.md)
 - [Contributing](AGENTS.md)
 
 ## License
