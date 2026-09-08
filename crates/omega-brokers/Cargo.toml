@@ -22,7 +22,7 @@ omega-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time", "rt", "macros", "net", "io-util"] }
+tokio = { workspace = true, features = ["time", "rt", "macros", "net", "io-util", "process"] }
 tracing.workspace = true
 zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 

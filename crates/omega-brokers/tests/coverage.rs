@@ -16,9 +16,7 @@ use omega_brokers::Brokers;
 use omega_proto::{ActionKind, SystemTopic};
 
 /// Topics no broker projects yet.
-const UNSERVED_TOPICS: &[SystemTopic] = &[
-    SystemTopic::Audio, // PipeWire
-];
+const UNSERVED_TOPICS: &[SystemTopic] = &[];
 
 /// Topics the daemon fills itself rather than through a broker.
 ///
@@ -43,7 +41,6 @@ const UNSERVED_ACTIONS: &[ActionKind] = &[
     ActionKind::ToggleSetting,
     ActionKind::Screenshot,
     ActionKind::MediaKey,
-    ActionKind::SetVolume,
 ];
 
 /// Actions the daemon performs itself rather than through a broker.
