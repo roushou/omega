@@ -100,3 +100,119 @@ async fn it_reads_the_session_it_is_running_in() {
     let again = tokio::time::timeout(Duration::from_millis(500), hyprland.next()).await;
     assert!(again.is_err(), "a second reading should wait for an event");
 }
+
+// ---- dispatching ----
+
+use omega_brokers::hyprland::Dispatch;
+use omega_proto::omega::{
+    CloseWindow, Direction, MoveToMonitor, MoveToWorkspace, SwitchWorkspace, ToggleFloating,
+    ToggleFullscreen, WindowSelector, action, move_to_workspace, switch_workspace, window_selector,
+};
+
+fn focused() -> Option<WindowSelector> {
+    Some(WindowSelector {
+        target: Some(window_selector::Target::Focused(true)),
+    })
+}
+
+fn named(app_id: &str) -> Option<WindowSelector> {
+    Some(WindowSelector {
+        target: Some(window_selector::Target::AppId(app_id.into())),
+    })
+}
+
+#[test]
+fn a_workspace_is_switched_to_by_number_name_or_direction() {
+    let switch = |target| {
+        Dispatch::of(&action::Kind::SwitchWorkspace(SwitchWorkspace {
+            target: Some(target),
+        }))
+    };
+
+    assert_eq!(
+        switch(switch_workspace::Target::Index(3)).unwrap(),
+        "workspace 3"
+    );
+    assert_eq!(
+        switch(switch_workspace::Target::Name("mail".into())).unwrap(),
+        "workspace name:mail"
+    );
+    // Hyprland's relative form, which wraps within the monitor.
+    assert_eq!(
+        switch(switch_workspace::Target::Direction(Direction::Next as i32)).unwrap(),
+        "workspace e+1"
+    );
+    assert_eq!(
+        switch(switch_workspace::Target::Direction(
+            Direction::Previous as i32
+        ))
+        .unwrap(),
+        "workspace e-1"
+    );
+}
+
+#[test]
+fn the_focused_window_has_its_own_dispatcher() {
+    // `closewindow activewindow` is not what Hyprland wants for the focused
+    // one, and `killactive` is the form that works when no selector matches.
+    let close = |window| Dispatch::of(&action::Kind::CloseWindow(CloseWindow { window }));
+
+    assert_eq!(close(focused()).unwrap(), "killactive");
+    assert_eq!(close(None).unwrap(), "killactive", "unset means focused");
+    assert_eq!(
+        close(named("firefox")).unwrap(),
+        "closewindow class:firefox"
+    );
+}
+
+#[test]
+fn a_window_moves_with_the_workspace_it_is_sent_to() {
+    let moved = Dispatch::of(&action::Kind::MoveToWorkspace(MoveToWorkspace {
+        target: Some(move_to_workspace::Target::Index(2)),
+        window: named("kitty"),
+    }));
+    assert_eq!(moved.unwrap(), "movetoworkspace 2,class:kitty");
+
+    let monitor = Dispatch::of(&action::Kind::MoveToMonitor(MoveToMonitor {
+        monitor_id: "eDP-1".into(),
+        window: focused(),
+    }));
+    assert_eq!(monitor.unwrap(), "movewindow mon:eDP-1");
+}
+
+#[test]
+fn fullscreen_is_refused_for_a_window_that_is_not_focused() {
+    // Hyprland fullscreens the focused window and takes no selector. Doing it
+    // to whichever window happens to be focused instead would be doing
+    // something the caller did not ask for.
+    let focused_one = Dispatch::of(&action::Kind::ToggleFullscreen(ToggleFullscreen {
+        window: focused(),
+    }));
+    assert_eq!(focused_one.unwrap(), "fullscreen 1");
+
+    let other = Dispatch::of(&action::Kind::ToggleFullscreen(ToggleFullscreen {
+        window: named("firefox"),
+    }));
+    assert!(other.is_none(), "refused, not done to the wrong window");
+}
+
+#[test]
+fn a_name_that_would_end_the_line_is_refused() {
+    // A dispatch is one line on a socket. A newline in a window class would
+    // make the rest of it a second dispatch, and a semicolon chains them —
+    // so a name carrying either is not sent at all.
+    for hostile in ["", "firefox\nkillactive", "firefox;killactive", "a\rb"] {
+        let close = Dispatch::of(&action::Kind::ToggleFloating(ToggleFloating {
+            window: named(hostile),
+        }));
+        assert!(close.is_none(), "{hostile:?} should not be dispatched");
+    }
+
+    assert_eq!(
+        Dispatch::of(&action::Kind::ToggleFloating(ToggleFloating {
+            window: named("kitty")
+        }))
+        .unwrap(),
+        "togglefloating class:kitty"
+    );
+}

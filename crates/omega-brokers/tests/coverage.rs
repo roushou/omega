@@ -32,16 +32,10 @@ const UNSERVED_ACTIONS: &[ActionKind] = &[
     ActionKind::LaunchApp,
     ActionKind::SetSetting,
     ActionKind::ToggleSetting,
-    ActionKind::SwitchWorkspace,
-    ActionKind::MoveToWorkspace,
-    ActionKind::MoveToMonitor,
-    ActionKind::CloseWindow,
     ActionKind::Screenshot,
     ActionKind::MediaKey,
     ActionKind::SetVolume,
     ActionKind::Notify,
-    ActionKind::ToggleFloating,
-    ActionKind::ToggleFullscreen,
 ];
 
 /// Actions the daemon performs itself rather than through a broker.
