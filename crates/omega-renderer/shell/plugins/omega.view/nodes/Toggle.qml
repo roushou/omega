@@ -45,7 +45,7 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        enabled: swtch.bound !== null
+        enabled: swtch.bound !== null && swtch.host.interactive
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             var next = !swtch.checked

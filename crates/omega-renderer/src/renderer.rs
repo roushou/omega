@@ -76,7 +76,10 @@ impl Renderer {
             "nodes/Toggle.qml",
             "nodes/Field.qml",
             "nodes/List.qml",
-            "nodes/Stack.qml"
+            "nodes/Stack.qml",
+            "nodes/Separator.qml",
+            "nodes/Spacer.qml",
+            "nodes/Header.qml"
         ]
     );
 

@@ -19,7 +19,7 @@ Text {
 
     MouseArea {
         anchors.fill: parent
-        enabled: label.bound !== null
+        enabled: label.bound !== null && label.host.interactive
         cursorShape: Qt.PointingHandCursor
         // A press carries nothing of its own: the binding is the whole
         // message.

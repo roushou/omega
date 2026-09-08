@@ -103,6 +103,13 @@ delegate is handed one property — `host`, the `ViewNode` — and reads
 arrives through bindings instead of rebuilding the item and losing whatever
 state it held.
 
+The properties every node shares are resolved on the host, not in each
+delegate: `host.ink` is the colour, `host.interactive` is whether it may be
+used, and the size a node asked for is already applied. A new delegate gets
+all of it by reading `host`, and the two reasons a node is unusable —
+`disabled` and `busy` — are drawn the same way in one place. A shell with a
+spinner would tell them apart there and nothing above would change.
+
 Children are held by **key**, not by position. A `Repeater` over a plain
 array rebuilds every delegate whenever the array changes, which is fine for
 text and wrong for anything holding state: a row of sliders that reorders

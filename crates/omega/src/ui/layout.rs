@@ -71,3 +71,56 @@ impl Column {
         Stack::along(Align::Column)
     }
 }
+
+/// A line between things.
+///
+/// Draws itself across whichever way its parent runs, so the same separator
+/// is a rule in a column and a divider in a row.
+#[derive(Debug, Clone)]
+pub struct Separator {
+    node: Node,
+}
+
+impl Separator {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("separator"),
+        }
+    }
+}
+
+impl Default for Separator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(Separator);
+
+/// Nothing, taking up room.
+///
+/// Fixed with [`width`] or [`height`]; given neither, it takes whatever room
+/// is going, which is how one thing is pushed to the far end of a row.
+///
+/// [`width`]: Spacer::width
+/// [`height`]: Spacer::height
+#[derive(Debug, Clone)]
+pub struct Spacer {
+    node: Node,
+}
+
+impl Spacer {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("spacer"),
+        }
+    }
+}
+
+impl Default for Spacer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(Spacer);

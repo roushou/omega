@@ -58,3 +58,23 @@ impl Icon {
 }
 
 styled!(Icon);
+
+/// What a section of a panel is called.
+///
+/// A [`Text`] with the weight and spacing a shell gives its section titles,
+/// so a panel written here looks like the panels beside it without an author
+/// choosing a size.
+#[derive(Debug, Clone)]
+pub struct Header {
+    node: Node,
+}
+
+impl Header {
+    pub fn new(text: impl Display) -> Self {
+        Self {
+            node: Node::new("header").text_prop("text", text.to_string()),
+        }
+    }
+}
+
+styled!(Header);

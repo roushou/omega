@@ -31,10 +31,26 @@ Item {
     // The colour this node draws in: what it asked for, or what it inherited.
     readonly property color ink: node.colorOf()
 
+    // Whether this node may be used. Resolved here rather than in each
+    // delegate so a new one gets it by reading `host.interactive`, and so the
+    // two reasons a node is unusable are drawn the same way.
+    readonly property bool disabled: Props.flag(node.model, "disabled", false)
+    readonly property bool busy: Props.flag(node.model, "busy", false)
+    readonly property bool interactive: !node.disabled && !node.busy
+
     signal invoke(var bound, var value)
 
-    implicitWidth: content.implicitWidth
-    implicitHeight: content.implicitHeight
+    // What a node asked to be, or what it draws. A panel that has to line
+    // two columns up says so; everything else is its own size.
+    readonly property int fixedWidth: Props.number(node.model, "width", 0)
+    readonly property int fixedHeight: Props.number(node.model, "height", 0)
+
+    implicitWidth: node.fixedWidth > 0 ? node.fixedWidth : content.implicitWidth
+    implicitHeight: node.fixedHeight > 0 ? node.fixedHeight : content.implicitHeight
+
+    // One reason to be unusable looks like the other. A shell with a spinner
+    // would tell them apart here, and nothing above would change.
+    opacity: node.interactive ? 1.0 : 0.5
 
     // Which file draws this node. Empty for a type this shell does not know.
     function delegateFor(type) {
@@ -48,6 +64,9 @@ Item {
             case "field": return "nodes/Field.qml"
             case "list": return "nodes/List.qml"
             case "stack": return "nodes/Stack.qml"
+            case "separator": return "nodes/Separator.qml"
+            case "spacer": return "nodes/Spacer.qml"
+            case "header": return "nodes/Header.qml"
             default: return ""
         }
     }

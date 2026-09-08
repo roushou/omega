@@ -188,6 +188,10 @@ styled!(Field);
 /// against and the one handed back on activation, so a list of networks
 /// should key by SSID rather than let position decide.
 ///
+/// [`height`] is what it scrolls at. Unset, it is as tall as its rows.
+///
+/// [`height`]: List::height
+///
 /// [`Stack`]: crate::ui::Stack
 /// [`key`]: crate::ui::Text::key
 #[derive(Debug, Clone)]
@@ -205,13 +209,6 @@ impl List {
     /// Space between rows.
     pub fn gap(mut self, gap: u32) -> Self {
         self.node = self.node.number("gap", gap);
-        self
-    }
-
-    /// How tall the list is before it scrolls, in the shell's units. Unset,
-    /// it is as tall as its rows.
-    pub fn height(mut self, height: u32) -> Self {
-        self.node = self.node.number("height", height);
         self
     }
 

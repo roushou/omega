@@ -42,6 +42,39 @@ macro_rules! styled {
                 self
             }
 
+            /// Draw it, but do not let it be used.
+            ///
+            /// A control the unit cannot serve right now — a Wi-Fi row while
+            /// something else is connecting. Removing it instead would make
+            /// the list jump under the cursor.
+            pub fn disabled(mut self) -> Self {
+                self.node = self.node.flag("disabled", true);
+                self
+            }
+
+            /// Something is happening to it.
+            ///
+            /// Also not usable, but for a different reason, and a shell may
+            /// say so differently — a spinner rather than a grey. The unit
+            /// knows which of the two it means; both would be `disabled` and
+            /// only one is waiting on an answer.
+            pub fn busy(mut self) -> Self {
+                self.node = self.node.flag("busy", true);
+                self
+            }
+
+            /// How wide it is, in the shell's units. Unset, it is as wide as
+            /// what it draws.
+            pub fn width(mut self, width: u32) -> Self {
+                self.node = self.node.number("width", width);
+                self
+            }
+
+            pub fn height(mut self, height: u32) -> Self {
+                self.node = self.node.number("height", height);
+                self
+            }
+
             /// Name it, for a list whose items move.
             ///
             /// Positional keys are right until two renders disagree about

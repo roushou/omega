@@ -2,9 +2,9 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Icon, List, Network,
-    Notify, Own, Percent, Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch,
-    Widget,
+    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Header, Icon, List,
+    Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider, Spacer, Text, Toggle,
+    Topic, Ui, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
@@ -575,6 +575,11 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
                     .child(Text::new("home").key("home"))
                     .on_activate("select"),
             )
+            .child(Header::new("Networks"))
+            .child(Separator::new())
+            .child(Spacer::new().width(8))
+            .child(Button::new("Forget").on_press("forget").disabled())
+            .child(Button::new("Connecting").on_press("cancel").busy())
             .into(),
     );
 
@@ -646,6 +651,17 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[8]["type"], "list");
     assert_eq!(children[8]["events"]["activate"]["command"], "select");
     assert_eq!(children[8]["children"][0]["key"], "home");
+
+    assert_eq!(children[9]["type"], "header");
+    assert_eq!(children[9]["props"]["text"]["stringValue"], "Networks");
+    assert_eq!(children[10]["type"], "separator");
+    assert_eq!(children[11]["type"], "spacer");
+    assert_eq!(children[11]["props"]["width"]["intValue"], "8");
+
+    // Two reasons a control cannot be used, and the shell is told which:
+    // one is waiting on an answer and the other is simply not available.
+    assert_eq!(children[12]["props"]["disabled"]["boolValue"], true);
+    assert_eq!(children[13]["props"]["busy"]["boolValue"], true);
 
     // Keys are the path to a node, and the renderer keeps a node whose key it
     // already has rather than rebuilding it.

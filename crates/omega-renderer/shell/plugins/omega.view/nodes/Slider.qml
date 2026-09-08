@@ -33,7 +33,7 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        enabled: track.bound !== null
+        enabled: track.bound !== null && track.host.interactive
         cursorShape: Qt.PointingHandCursor
 
         function at(x) {

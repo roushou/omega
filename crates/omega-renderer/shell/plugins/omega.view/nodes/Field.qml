@@ -36,6 +36,7 @@ Rectangle {
         clip: true
         color: field.host.ink
         selectByMouse: true
+        enabled: field.host.interactive
         echoMode: field.secret ? TextInput.Password : TextInput.Normal
 
         onAccepted: {

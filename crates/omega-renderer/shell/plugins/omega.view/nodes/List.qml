@@ -94,7 +94,7 @@ Rectangle {
         clip: true
         // Only take keys when there is something to do with them; a list
         // nothing is bound to should not swallow the panel's navigation.
-        focus: list.bound !== null
+        focus: list.bound !== null && list.host.interactive
 
         Keys.onUpPressed: list.selected = Math.max(0, list.selected - 1)
         Keys.onDownPressed: list.selected = Math.min(held.count - 1, list.selected + 1)

@@ -30,9 +30,9 @@ mod text;
 pub use bind::Bind;
 pub use control::{Button, Field, List, Slider, Toggle};
 pub use display::Progress;
-pub use layout::{Column, Row, Stack};
+pub use layout::{Column, Row, Separator, Spacer, Stack};
 pub use node::{Align, Node};
-pub use text::{Icon, Text};
+pub use text::{Header, Icon, Text};
 
 use omega_proto::omega::ViewTree;
 
