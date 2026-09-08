@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 async-trait = "0.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 futures-util = { version = "0.3.34", default-features = false }
 omega-proto.workspace = true
 serde.workspace = true
@@ -26,4 +27,5 @@ tracing.workspace = true
 zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }

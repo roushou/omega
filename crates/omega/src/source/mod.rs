@@ -11,11 +11,13 @@
 mod audio;
 mod backlight;
 mod battery;
+mod clock;
 mod network;
 
 pub use audio::Audio;
 pub use backlight::Backlight;
 pub use battery::Battery;
+pub use clock::{Clock, Weekday};
 pub use network::Network;
 
 /// Declares a state handle: its capability, and the accessor that reads the

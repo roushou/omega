@@ -2,8 +2,9 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Command, Field, Fields, Icon, List, Network, Notify, Own,
-    Percent, Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch, Widget,
+    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Icon, List, Network,
+    Notify, Own, Percent, Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch,
+    Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
@@ -748,4 +749,49 @@ fn one_unreadable_element_is_not_a_shorter_list() {
     let read: Option<Vec<String>> =
         omega::internal::FromValue::from_value(&omega::internal::IntoValue::into_value(mixed));
     assert!(read.is_none());
+}
+
+// ---- the clock ----
+
+#[derive(omega::Widget)]
+struct BarClock {
+    clock: Clock,
+}
+
+impl Widget for BarClock {
+    fn render(&self) -> Ui {
+        Text::new(format!(
+            "{} {}",
+            self.clock.weekday().short(),
+            self.clock.time()
+        ))
+        .into()
+    }
+}
+
+#[test]
+fn a_clock_draws_the_time_without_carrying_a_calendar() {
+    // The daemon applies the zone rules and hands over the parts. A unit that
+    // had to convert a timestamp would need the whole tz database to draw two
+    // digits.
+    let state = State::new().with(omega_proto::omega::TimeState {
+        year: 2026,
+        month: 9,
+        day: 8,
+        hour: 14,
+        minute: 32,
+        weekday: 2,
+        zone: "CEST".into(),
+        utc_offset_seconds: 7200,
+        unix_seconds: 1_788_957_120,
+    });
+
+    assert_eq!(Drawn::of::<BarClock>(&state).text(), "Tue 14:32");
+}
+
+#[test]
+fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
+    // Every accessor falls back, so a widget built before the first tick
+    // draws something wrong rather than taking the unit down.
+    assert_eq!(Drawn::of::<BarClock>(&State::new()).text(), "Sun 00:00");
 }

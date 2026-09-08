@@ -21,6 +21,7 @@
 
 pub mod backlight;
 mod broker;
+pub mod clock;
 pub mod hyprland;
 pub mod logind;
 pub mod network_manager;
@@ -28,6 +29,7 @@ pub mod upower;
 
 pub use backlight::Backlight;
 pub use broker::{Broker, BrokerError};
+pub use clock::Clock;
 pub use hyprland::Hyprland;
 pub use logind::Logind;
 pub use network_manager::NetworkManager;
@@ -49,6 +51,7 @@ impl Brokers {
             Box::new(Hyprland::new()),
             Box::new(Backlight::new()),
             Box::new(Logind::new()),
+            Box::new(Clock::new()),
         ]
     }
 }

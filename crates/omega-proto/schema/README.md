@@ -38,6 +38,10 @@ config.
    first render.
 6. **A field whose value is a constant is a field two readers will disagree
    about.** `BacklightState.max_percent` was always 100; it is `reserved`.
+7. **A topic's resolution is part of its design.** `TimeState` is truncated to
+   the minute, timestamp included, because last-value-wins only coalesces a
+   value that is actually the same — a field moving every second would wake
+   every clock on the bar sixty times an hour to redraw two digits.
 
 ## The minimal slice
 

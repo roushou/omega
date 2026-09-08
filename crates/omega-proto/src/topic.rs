@@ -13,8 +13,8 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, DisplayState, NetworkState, PowerState, UnitsState,
-    state_topic,
+    AudioState, BacklightState, BatteryState, DisplayState, NetworkState, PowerState, TimeState,
+    UnitsState, state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -75,6 +75,7 @@ topics! {
     Display => "display": DisplayState,
     /// The supervisor's report on every unit it runs.
     Units => "units": UnitsState,
+    Time => "time": TimeState,
 }
 
 impl SystemTopic {

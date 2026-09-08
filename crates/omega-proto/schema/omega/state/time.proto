@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package omega;
+
+// What time it is, where this machine is.
+
+// The wall clock, broken down in the machine's own zone.
+//
+// Broken down here rather than as a timestamp a unit converts: the zone rules
+// are the daemon's to apply once, and a unit that had to do it would need a
+// calendar and the whole tz database to draw "14:32".
+//
+// **Minute resolution.** Every field is truncated to the minute, including
+// `unix_seconds`. A value that moved every second would wake every clock on
+// the bar sixty times an hour to redraw the same two digits — last-value-wins
+// only helps when the value is actually the same. Seconds need a granularity
+// a unit can ask for, which the manifest cannot yet carry.
+message TimeState {
+  int64 unix_seconds = 1;       // truncated to the minute
+  string zone = 2;              // "Europe/Paris", or "UTC" where unknown
+  int32 utc_offset_seconds = 3;
+
+  int32 year = 4;
+  uint32 month = 5;             // 1..12
+  uint32 day = 6;               // 1..31
+  uint32 hour = 7;              // 0..23
+  uint32 minute = 8;            // 0..59
+  uint32 weekday = 9;           // 0 = Sunday
+}
