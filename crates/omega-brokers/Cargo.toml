@@ -16,10 +16,12 @@ workspace = true
 
 [dependencies]
 async-trait = "0.1"
+futures-util = { version = "0.3.34", default-features = false }
 omega-proto.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["time", "rt", "macros"] }
 tracing.workspace = true
+zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }

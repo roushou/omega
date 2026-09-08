@@ -6,17 +6,26 @@
 //! else — the daemon is the crate that has to be readable end to end, and
 //! D-Bus marshalling does not belong in it.
 //!
+//! Cadence is the broker's own. A subsystem with signals is woken by them
+//! (`upower`); one without is polled (`backlight`). Both are the same shape
+//! to the daemon, which is what lets it have one driver.
+//!
+//! Where a subsystem's numbers and the ontology's disagree — percent
+//! against fraction, a state enum against a boolean — the translation is
+//! split out as a plain function over a plain struct. The connection needs
+//! a bus to test; the arithmetic is where the bugs are.
+//!
 //! Which broker covers what is the whole map: `tests/coverage.rs` compares
 //! it against the ontology, so a topic or an action nothing serves is listed
 //! there rather than discovered by a unit that hangs.
 
 mod backlight;
-mod battery;
 mod broker;
+mod upower;
 
 pub use backlight::Backlight;
-pub use battery::Battery;
 pub use broker::{Broker, BrokerError};
+pub use upower::{Reading, UPower};
 
 /// The brokers a daemon runs.
 ///
@@ -28,7 +37,7 @@ pub struct Brokers;
 impl Brokers {
     /// Every broker, in the order they start.
     pub fn all() -> Vec<Box<dyn Broker>> {
-        vec![Box::new(Battery::new()), Box::new(Backlight::new())]
+        vec![Box::new(UPower::new()), Box::new(Backlight::new())]
     }
 }
 

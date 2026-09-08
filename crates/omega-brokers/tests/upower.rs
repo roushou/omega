@@ -1,0 +1,142 @@
+//! Turning UPower's numbers into the ontology.
+//!
+//! The connection is not testable without a bus; this is. What UPower reports
+//! and what a widget draws are different vocabularies — percent against
+//! fraction, a state enum against a boolean, and two time fields of which
+//! only one ever applies — and every one of those is somewhere to be wrong.
+
+use omega_brokers::Reading;
+
+/// A laptop battery, discharging with two hours left.
+fn discharging() -> Reading {
+    Reading {
+        is_present: true,
+        kind: 2,
+        state: 2,
+        percentage: 80.0,
+        time_to_empty: 7200,
+        time_to_full: 0,
+    }
+}
+
+#[test]
+fn a_percentage_becomes_a_fraction() {
+    // The wire carries 0.0 .. 1.0 and UPower speaks percent. A broker that
+    // passed the number through would report a battery at 8000%.
+    let state = discharging().state().expect("a battery is present");
+    assert_eq!(state.level, 0.8);
+    assert!(!state.charging);
+    assert_eq!(state.seconds_to_empty, 7200);
+}
+
+#[test]
+fn only_the_time_that_applies_is_reported() {
+    let charging = Reading {
+        state: 1,
+        time_to_empty: 0,
+        time_to_full: 1800,
+        ..discharging()
+    };
+    let state = charging.state().expect("a battery is present");
+    assert!(state.charging);
+    assert_eq!(state.seconds_to_full, 1800);
+    assert_eq!(
+        state.seconds_to_empty, 0,
+        "a battery being charged is not also emptying"
+    );
+
+    // And the other way: UPower leaves the inapplicable one at whatever it
+    // last was, so passing both through would show a full-in-30-minutes on a
+    // battery nothing is charging.
+    let stale = Reading {
+        time_to_full: 1800,
+        ..discharging()
+    };
+    assert_eq!(stale.state().unwrap().seconds_to_full, 0);
+}
+
+#[test]
+fn a_full_battery_on_ac_is_not_charging() {
+    // UpDeviceState::FullyCharged. A widget told this was "charging" would
+    // say so for as long as the machine stayed plugged in.
+    let full = Reading {
+        state: 4,
+        percentage: 100.0,
+        ..discharging()
+    };
+    let state = full.state().expect("a battery is present");
+    assert_eq!(state.level, 1.0);
+    assert!(!state.charging);
+}
+
+#[test]
+fn a_machine_with_no_battery_has_no_reading() {
+    // Two ways UPower says it, and neither is an error: a desktop reports a
+    // display device that is not a battery, and a laptop with the pack out
+    // reports a battery that is not present.
+    assert!(
+        Reading {
+            kind: 0,
+            ..discharging()
+        }
+        .state()
+        .is_none()
+    );
+    assert!(
+        Reading {
+            is_present: false,
+            ..discharging()
+        }
+        .state()
+        .is_none()
+    );
+}
+
+#[test]
+fn an_estimate_still_being_worked_out_is_not_a_negative_duration() {
+    // UPower's seconds are signed and briefly negative after a state change.
+    // The ontology's are unsigned, and casting would report seventy years.
+    let settling = Reading {
+        time_to_empty: -1,
+        ..discharging()
+    };
+    assert_eq!(settling.state().unwrap().seconds_to_empty, 0);
+}
+
+// ---- against the machine this is running on ----
+
+use std::time::Duration;
+
+use omega_brokers::{Broker, UPower};
+use omega_proto::omega::state_topic;
+
+#[tokio::test]
+#[ignore = "needs a system bus with UPower; run with --ignored"]
+async fn it_reads_the_machine_it_is_running_on() {
+    let mut upower = UPower::new();
+
+    // A fresh connection reports what is true now. Waiting for the next
+    // change instead would leave a widget blank until the battery moved,
+    // which on a machine sitting on AC is never.
+    let patch = upower.next().await.expect("UPower answered");
+    assert_eq!(patch.topics.len(), 1);
+    assert_eq!(patch.topics[0].topic, "battery");
+
+    match patch.topics[0].value.as_ref() {
+        Some(state_topic::Value::Battery(battery)) => {
+            assert!((0.0..=1.0).contains(&battery.level), "{battery:?}");
+        }
+        // A desktop. The topic is still published, which is the point.
+        None => {}
+        other => panic!("expected a battery, got {other:?}"),
+    }
+
+    // The second reading waits for UPower to say something changed. A broker
+    // that answered again straight away would be a hot loop pretending to be
+    // signal-driven.
+    let again = tokio::time::timeout(Duration::from_millis(500), upower.next()).await;
+    assert!(
+        again.is_err(),
+        "a second reading should wait on a signal, not poll"
+    );
+}
