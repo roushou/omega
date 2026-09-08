@@ -25,6 +25,7 @@ pub mod clock;
 pub mod hyprland;
 pub mod logind;
 pub mod network_manager;
+pub mod notifications;
 pub mod upower;
 
 pub use backlight::Backlight;
@@ -33,6 +34,7 @@ pub use clock::Clock;
 pub use hyprland::Hyprland;
 pub use logind::Logind;
 pub use network_manager::NetworkManager;
+pub use notifications::Notifications;
 pub use upower::UPower;
 
 /// The brokers a daemon runs.
@@ -52,6 +54,7 @@ impl Brokers {
             Box::new(Backlight::new()),
             Box::new(Logind::new()),
             Box::new(Clock::new()),
+            Box::new(Notifications::new()),
         ]
     }
 }

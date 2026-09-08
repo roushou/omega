@@ -35,7 +35,6 @@ const UNSERVED_ACTIONS: &[ActionKind] = &[
     ActionKind::Screenshot,
     ActionKind::MediaKey,
     ActionKind::SetVolume,
-    ActionKind::Notify,
 ];
 
 /// Actions the daemon performs itself rather than through a broker.
