@@ -45,6 +45,9 @@ impl Stack {
 styled!(Stack);
 
 /// Children left to right.
+///
+/// A direction, not a type: `Row::new()` builds a [`Stack`], so a helper that
+/// returns one is written `fn header() -> Stack`.
 #[derive(Debug)]
 pub struct Row;
 
@@ -56,6 +59,9 @@ impl Row {
 }
 
 /// Children top to bottom.
+///
+/// A direction, not a type: `Column::new()` builds a [`Stack`], so a helper
+/// that returns one is written `fn details() -> Stack`.
 #[derive(Debug)]
 pub struct Column;
 

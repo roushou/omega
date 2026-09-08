@@ -434,18 +434,28 @@ matters:
    scalars and `Values` only. So a unit cannot hold a list of anything.
 
 The second is the real defect. The first is one topic that has not been
-written yet; the second means _no_ unit can publish a collection, which
-quietly closes the escape hatch the whole composition story rests on — "a
-plugin can publish a fact and another can draw it" only holds for facts that
-are one scalar deep. Closing it is `IntoValue for Vec<T>` and a `Fields`
-derive that handles a repeated field, not a new concept.
+written yet; the second meant _no_ unit could publish a collection, which
+quietly closed the escape hatch the whole composition story rests on — "a
+plugin can publish a fact and another can draw it" only held for facts that
+are one scalar deep.
+
+**Closed.** `Vec<T>` is a value where `T` is, and `#[derive(Config)]` makes a
+struct a value in its own right, so a struct can be an element of a list or a
+field of another struct. Reading a list is all-or-nothing — an element nobody
+can read makes the list unreadable rather than making it shorter, because a
+list that looks complete and is not is the worse answer. Reading a _field_
+stays total, so a malformed list takes the type's default and one bad
+document does not fail the rest.
+
+What remains of the first gap is a `wifi` topic and a broker to fill it.
 
 ### What it cost to write
 
-Two papercuts worth fixing while they are cheap:
+Two papercuts, both fixed:
 
-- `Column::new()` returns a `Stack`, so a helper that builds one cannot be
-  written `fn join() -> Column`. `Column` names a direction, not a type, and
-  the compiler error says something else.
-- `Answer` has `value`, `done` and `refused` but no `From<&str>`, so the
-  obvious `Answer::from("connecting")` does not compile.
+- `Column::new()` returns a `Stack`, so a helper that builds one is written
+  `fn join() -> Stack`. `Column` names a direction, not a type, and the
+  compiler error says something else — so the rustdoc on both directions now
+  says it instead.
+- `Answer` had `value`, `done` and `refused` but no `From<&str>`, so the
+  obvious `Answer::from("connecting")` did not compile. It does now.

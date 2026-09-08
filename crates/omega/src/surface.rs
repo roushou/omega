@@ -113,3 +113,16 @@ impl From<()> for Answer {
         Self::Done
     }
 }
+
+/// A command that hands back a word writes the word.
+impl From<&str> for Answer {
+    fn from(value: &str) -> Self {
+        Self::value(value)
+    }
+}
+
+impl From<String> for Answer {
+    fn from(value: String) -> Self {
+        Self::value(value)
+    }
+}

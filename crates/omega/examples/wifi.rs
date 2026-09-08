@@ -147,7 +147,7 @@ impl Command for Connect {
         // and Omega has no action for it yet.
         self.shell
             .run(format!("nmcli device wifi connect --ask password {secret}"));
-        Answer::value("connecting")
+        Answer::from("connecting")
     }
 }
 
@@ -163,7 +163,7 @@ impl Command for Disconnect {
             return Answer::refused("no network");
         };
         self.shell.run(format!("nmcli connection down id {name}"));
-        Answer::value("disconnecting")
+        Answer::from("disconnecting")
     }
 }
 

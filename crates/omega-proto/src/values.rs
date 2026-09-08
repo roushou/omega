@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use crate::omega::{MapValue, Value, value};
+use crate::omega::{ListValue, MapValue, Value, value};
 
 /// A map of named values: settings, props, a unit's own state.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -125,6 +125,34 @@ scalar!(i32, IntValue, i64::from, |held: &i64| i32::try_from(*held)
 scalar!(u64, IntValue, |number: u64| number as i64, |held: &i64| {
     u64::try_from(*held).ok()
 });
+
+/// A list of anything that is itself a value.
+///
+/// Without this a unit can hold a scalar in its keyspace and nothing else,
+/// which closes the escape hatch composition rests on: a workspace unit could
+/// not publish its workspaces, and a media unit could not publish a queue.
+///
+/// All or nothing on the way back. A list with one element the reader cannot
+/// make sense of is a list it does not understand, and quietly dropping the
+/// element would hand back a shorter list that looks complete.
+impl<T: IntoValue> IntoValue for Vec<T> {
+    fn into_value(self) -> Value {
+        Value {
+            kind: Some(value::Kind::List(ListValue {
+                values: self.into_iter().map(IntoValue::into_value).collect(),
+            })),
+        }
+    }
+}
+
+impl<T: FromValue> FromValue for Vec<T> {
+    fn from_value(value: &Value) -> Option<Self> {
+        match value.kind.as_ref()? {
+            value::Kind::List(list) => list.values.iter().map(T::from_value).collect(),
+            _ => None,
+        }
+    }
+}
 
 impl IntoValue for &str {
     fn into_value(self) -> Value {

@@ -684,3 +684,68 @@ async fn an_instantiated_surface_stops_publishing_anonymously() {
     assert_eq!(after.module, "top-bar-1", "published to the wrong instance");
     assert_eq!(after.view.text(), "20%");
 }
+
+// ---- publishing a collection ----
+
+/// One access point, as a unit that scanned for them would report it.
+#[derive(omega::Config, Debug, Clone, Default, PartialEq)]
+struct AccessPoint {
+    ssid: String,
+    signal: u32,
+    secured: bool,
+}
+
+/// A unit's own state, which is a list — the shape most units actually have
+/// to publish, and the one that did not compile until `Vec<T>` was a value.
+#[derive(omega::Topic, Debug, Clone, Default, PartialEq)]
+struct Scan {
+    found: Vec<AccessPoint>,
+    names: Vec<String>,
+}
+
+#[test]
+fn a_unit_can_publish_a_list() {
+    let scan = Scan {
+        found: vec![
+            AccessPoint {
+                ssid: "home".into(),
+                signal: 70,
+                secured: true,
+            },
+            AccessPoint {
+                ssid: "cafe".into(),
+                signal: 30,
+                secured: false,
+            },
+        ],
+        names: vec!["home".into(), "cafe".into()],
+    };
+
+    // Through the same map a keyspace value travels as. A struct in the list
+    // is a value in its own right, which is what lets it be in one.
+    let round_tripped = Scan::read(&scan.write());
+    assert_eq!(round_tripped, scan);
+}
+
+#[test]
+fn a_list_that_cannot_be_read_takes_the_default() {
+    // Reading a *field* is total, so a list of the wrong shape reads as the
+    // type's default rather than failing the whole document — the same rule
+    // that lets a field be added without breaking a writer that predates it.
+    let wrong = Values::new().with("names", 7_i64);
+    assert_eq!(Scan::read(&wrong).names, Vec::<String>::new());
+}
+
+#[test]
+fn one_unreadable_element_is_not_a_shorter_list() {
+    // All or nothing on the way back. Dropping the element nobody could read
+    // would hand back a list that looks complete and is not — which is worse
+    // than saying the list was not understood.
+    let mixed: Vec<omega::internal::Value> = vec![
+        omega::internal::IntoValue::into_value("home"),
+        omega::internal::IntoValue::into_value(7_i64),
+    ];
+    let read: Option<Vec<String>> =
+        omega::internal::FromValue::from_value(&omega::internal::IntoValue::into_value(mixed));
+    assert!(read.is_none());
+}

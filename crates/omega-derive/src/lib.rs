@@ -94,6 +94,26 @@ fn fields_impl(input: TokenStream) -> TokenStream {
                 values
             }
         }
+
+        // A struct that is a map is also a value, so one can be a field of
+        // another or an element of a list. Without this a type could be
+        // written to a keyspace only at the top level, and `Vec<Self>` would
+        // not compile — which is most of what a unit has to publish.
+        impl ::omega::internal::IntoValue for #name {
+            fn into_value(self) -> ::omega::internal::Value {
+                ::omega::internal::IntoValue::into_value(
+                    <Self as ::omega::Fields>::write(&self),
+                )
+            }
+        }
+
+        impl ::omega::internal::FromValue for #name {
+            fn from_value(value: &::omega::internal::Value) -> ::core::option::Option<Self> {
+                let values: ::omega::Values =
+                    ::omega::internal::FromValue::from_value(value)?;
+                ::core::option::Option::Some(<Self as ::omega::Fields>::read(&values))
+            }
+        }
     }
     .into()
 }

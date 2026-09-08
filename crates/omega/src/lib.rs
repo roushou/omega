@@ -83,5 +83,6 @@ pub mod internal {
     pub use crate::surface::Wired;
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use omega_proto::omega::Capability;
+    pub use omega_proto::omega::Value;
     pub use omega_proto::{Fields, FromValue, IntoValue, SystemTopic, Values};
 }
