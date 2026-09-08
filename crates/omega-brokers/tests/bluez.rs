@@ -1,9 +1,9 @@
 //! Which Bluetooth devices are the machine's, and in what order.
 
-use std::time::Duration;
+mod common;
 
+use omega_brokers::BlueZ;
 use omega_brokers::bluez::{Adapter, Device, Objects};
-use omega_brokers::{BlueZ, Broker};
 use omega_proto::omega::state_topic;
 
 fn device(alias: &str, paired: bool, connected: bool) -> Device {
@@ -87,7 +87,7 @@ fn a_battery_only_exists_on_a_device_that_reports_one() {
 async fn it_reads_the_machine_it_is_running_on() {
     let mut bluez = BlueZ::new();
 
-    let patch = bluez.next().await.expect("BlueZ answered");
+    let patch = common::first(&mut bluez).await.expect("BlueZ answered");
     assert_eq!(patch.topics[0].topic, "bluetooth");
 
     let Some(state_topic::Value::Bluetooth(bluetooth)) = patch.topics[0].value.as_ref() else {
@@ -102,6 +102,8 @@ async fn it_reads_the_machine_it_is_running_on() {
             .all(|device| device.paired || device.connected)
     );
 
-    let again = tokio::time::timeout(Duration::from_millis(500), bluez.next()).await;
-    assert!(again.is_err(), "a second reading should wait");
+    assert!(
+        common::waits(&mut bluez).await,
+        "a second reading should wait"
+    );
 }

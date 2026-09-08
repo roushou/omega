@@ -1,9 +1,9 @@
 //! Deciding which player a media key reaches, and what a bar draws.
 
-use std::time::Duration;
+mod common;
 
+use omega_brokers::Mpris;
 use omega_brokers::mpris::{Player, Players};
-use omega_brokers::{Broker, Mpris};
 use omega_proto::omega::{MediaKey, Playback, media_key, state_topic};
 
 fn player(id: &str, status: &str) -> Player {
@@ -108,7 +108,7 @@ fn every_media_key_has_a_method() {
 async fn it_reads_the_desktop_it_is_running_on() {
     let mut mpris = Mpris::new();
 
-    let patch = mpris.next().await.expect("the bus answered");
+    let patch = common::first(&mut mpris).await.expect("the bus answered");
     assert_eq!(patch.topics[0].topic, "media");
 
     let Some(state_topic::Value::Media(media)) = patch.topics[0].value.as_ref() else {
@@ -120,6 +120,8 @@ async fn it_reads_the_desktop_it_is_running_on() {
 
     // The second reading waits: for a player to say something, or for the
     // refresh that notices one starting.
-    let again = tokio::time::timeout(Duration::from_millis(500), mpris.next()).await;
-    assert!(again.is_err(), "a second reading should wait");
+    assert!(
+        common::waits(&mut mpris).await,
+        "a second reading should wait"
+    );
 }

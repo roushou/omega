@@ -1,5 +1,7 @@
 //! Sending a notification.
 
+mod common;
+
 use omega_brokers::notifications::Sent;
 use omega_brokers::{Broker, Notifications};
 use omega_proto::ActionKind;
@@ -41,9 +43,8 @@ fn it_claims_only_notifying() {
 #[tokio::test]
 #[ignore = "puts a notification on screen; run with --ignored"]
 async fn it_reaches_the_desktop_it_is_running_on() {
-    let sent = Notifications::new()
-        .act(&action::Kind::Notify(notify(2_000)))
-        .await;
+    let mut broker = Notifications::new();
+    let sent = common::serve(&mut broker, &action::Kind::Notify(notify(2_000))).await;
 
     assert!(sent.is_ok(), "{sent:?}");
     // Nothing observable changed that this broker reports: it has no topics.

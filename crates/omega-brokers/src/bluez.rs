@@ -19,7 +19,8 @@ use zbus::{Connection, MatchRule, MessageStream, Proxy};
 use omega_proto::SystemTopic;
 use omega_proto::omega::{BluetoothDevice, BluetoothState, StatePatch, StateTopic, state_topic};
 
-use crate::broker::{Broker, BrokerError, Cadence};
+use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
+use crate::dbus;
 
 /// The adapter, as `org.bluez.Adapter1` describes it.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -100,23 +101,25 @@ impl Link {
     const BATTERY: &'static str = "org.bluez.Battery1";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::system().await.map_err(Self::unreadable)?;
+        let connection = Connection::system()
+            .await
+            .map_err(BrokerError::unreadable)?;
 
         // Everything BlueZ says, rather than a rule per interface: an adapter
         // powering on and a headset connecting are the same kind of news.
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .sender(Self::SERVICE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .interface("org.freedesktop.DBus.Properties")
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .member("PropertiesChanged")
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .build();
 
         let changes = MessageStream::for_match_rule(rule, &connection, None)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         Ok(Self {
             connection,
@@ -133,13 +136,13 @@ impl Link {
             "org.freedesktop.DBus.ObjectManager",
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
 
         type Managed = HashMap<OwnedObjectPath, HashMap<String, HashMap<String, OwnedValue>>>;
         let objects: Managed = manager
             .call("GetManagedObjects", &())
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         let mut adapter = None;
         let mut devices = Vec::new();
@@ -149,56 +152,37 @@ impl Link {
                 // The first adapter. A machine with two is rare enough that
                 // picking one is better than inventing a way to choose.
                 adapter.get_or_insert(Adapter {
-                    powered: Self::get(properties, "Powered").unwrap_or(false),
-                    discovering: Self::get(properties, "Discovering").unwrap_or(false),
+                    powered: dbus::field(properties, "Powered").unwrap_or(false),
+                    discovering: dbus::field(properties, "Discovering").unwrap_or(false),
                 });
             }
 
             if let Some(properties) = interfaces.get(Self::DEVICE) {
                 devices.push(Device {
-                    address: Self::get(properties, "Address").unwrap_or_default(),
-                    alias: Self::get(properties, "Alias").unwrap_or_default(),
-                    connected: Self::get(properties, "Connected").unwrap_or(false),
-                    paired: Self::get(properties, "Paired").unwrap_or(false),
-                    icon: Self::get(properties, "Icon").unwrap_or_default(),
+                    address: dbus::field(properties, "Address").unwrap_or_default(),
+                    alias: dbus::field(properties, "Alias").unwrap_or_default(),
+                    connected: dbus::field(properties, "Connected").unwrap_or(false),
+                    paired: dbus::field(properties, "Paired").unwrap_or(false),
+                    icon: dbus::field(properties, "Icon").unwrap_or_default(),
                     // On the same object, so no second call: BlueZ puts the
                     // battery interface on a device that has one.
                     battery: interfaces
                         .get(Self::BATTERY)
-                        .and_then(|battery| Self::get(battery, "Percentage")),
+                        .and_then(|battery| dbus::field(battery, "Percentage")),
                 });
             }
         }
 
         Ok((adapter, devices))
     }
-
-    fn get<T>(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<T>
-    where
-        T: TryFrom<OwnedValue>,
-    {
-        T::try_from(properties.get(name)?.try_clone().ok()?).ok()
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "bluez",
-            detail: error.to_string(),
-        }
-    }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug)]
 pub struct BlueZ {
     link: Option<Link>,
     tick: Cadence,
-    primed: bool,
 }
 
 impl Default for BlueZ {
@@ -216,7 +200,6 @@ impl BlueZ {
         Self {
             link: None,
             tick: Cadence::after(Self::REFRESH),
-            primed: false,
         }
     }
 
@@ -241,33 +224,28 @@ impl Broker for BlueZ {
         &[SystemTopic::Bluetooth]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            let closed = {
-                let Self { link, tick, .. } = self;
-                let link = link.as_mut().expect("opened above");
-                tokio::select! {
-                    change = link.changes.next() => change.is_none(),
-                    _ = tick.wait() => false,
-                }
-            };
-            if closed {
-                self.link = None;
-                self.primed = false;
-                return Err(BrokerError::Unreadable {
-                    subsystem: "bluez",
-                    detail: "the bus closed".into(),
-                });
-            }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let Self { link, tick, .. } = self;
+        let link = link.as_mut().ok_or_else(BrokerError::gone)?;
+        // Both arms are cancel-safe: a signal stream is a receiver, and an
+        // interval keeps its own deadline.
+        tokio::select! {
+            change = link.changes.next() => match change {
+                Some(_) => Ok(()),
+                None => Err(BrokerError::gone()),
+            },
+            _ = tick.wait() => Ok(()),
         }
+    }
 
-        let (adapter, devices) = self.link.as_ref().expect("opened above").read().await?;
-        self.primed = true;
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        let (adapter, devices) = link.read().await?;
         Ok(Self::patch(Objects::state(adapter.as_ref(), &devices)))
     }
 }

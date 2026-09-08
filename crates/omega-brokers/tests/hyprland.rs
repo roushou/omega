@@ -3,10 +3,10 @@
 //! The answer is JSON, so the whole translation is testable with no
 //! compositor in the room — which is the point of parsing being its own step.
 
-use std::time::Duration;
+mod common;
 
+use omega_brokers::Hyprland;
 use omega_brokers::hyprland::Monitors;
-use omega_brokers::{Broker, Hyprland};
 use omega_proto::omega::state_topic;
 
 /// Captured from `hyprctl -j monitors`, trimmed to the fields read.
@@ -85,7 +85,9 @@ async fn it_reads_the_session_it_is_running_in() {
 
     // A fresh connection reports everything it covers; after that, only what
     // the event that woke it can have changed.
-    let patch = hyprland.next().await.expect("Hyprland answered");
+    let patch = common::first(&mut hyprland)
+        .await
+        .expect("Hyprland answered");
     let topics: Vec<&str> = patch
         .topics
         .iter()
@@ -112,8 +114,10 @@ async fn it_reads_the_session_it_is_running_in() {
     // The second reading waits on the event socket. Hyprland streams every
     // window focus down it, so a broker that woke on all of them would re-read
     // the monitors on each keystroke.
-    let again = tokio::time::timeout(Duration::from_millis(500), hyprland.next()).await;
-    assert!(again.is_err(), "a second reading should wait for an event");
+    assert!(
+        common::waits(&mut hyprland).await,
+        "a second reading should wait"
+    );
 }
 
 // ---- workspaces and focus ----

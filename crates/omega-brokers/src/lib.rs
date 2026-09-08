@@ -15,6 +15,14 @@
 //! split out as a plain function over a plain struct. The connection needs
 //! a bus to test; the arithmetic is where the bugs are.
 //!
+//! A broker says how to [`connect`], [`wake`] and [`read`]; the daemon's
+//! driver says when. The rules about holding a connection live there once
+//! rather than in twelve loops — see [`Broker`].
+//!
+//! [`connect`]: Broker::connect
+//! [`wake`]: Broker::wake
+//! [`read`]: Broker::read
+//!
 //! Which broker covers what is the whole map: `tests/coverage.rs` compares
 //! it against the ontology, so a topic or an action nothing serves is listed
 //! there rather than discovered by a unit that hangs.
@@ -23,6 +31,7 @@ pub mod backlight;
 pub mod bluez;
 mod broker;
 pub mod clock;
+mod dbus;
 pub mod desktop;
 pub mod hyprland;
 pub mod logind;
@@ -31,6 +40,7 @@ pub mod network_manager;
 pub mod notifications;
 pub mod pipewire;
 pub mod procfs;
+mod registry;
 pub mod upower;
 
 pub use backlight::Backlight;
@@ -45,37 +55,5 @@ pub use network_manager::NetworkManager;
 pub use notifications::Notifications;
 pub use pipewire::PipeWire;
 pub use procfs::Procfs;
+pub use registry::Brokers;
 pub use upower::UPower;
-
-/// The brokers a daemon runs.
-///
-/// Boxed because the daemon holds them as one collection: it routes an
-/// action to whichever broker claims the kind, and that lookup cannot be
-/// monomorphised over a list that grows at the bottom of this file.
-pub struct Brokers;
-
-impl Brokers {
-    /// Every broker, in the order they start.
-    pub fn all() -> Vec<Box<dyn Broker>> {
-        vec![
-            Box::new(UPower::new()),
-            Box::new(NetworkManager::new()),
-            Box::new(Hyprland::new()),
-            Box::new(Backlight::new()),
-            Box::new(Logind::new()),
-            Box::new(Clock::new()),
-            Box::new(Notifications::new()),
-            Box::new(PipeWire::new()),
-            Box::new(Mpris::new()),
-            Box::new(BlueZ::new()),
-            Box::new(Procfs::new()),
-            Box::new(Desktop::new()),
-        ]
-    }
-}
-
-impl std::fmt::Debug for Brokers {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Brokers")
-    }
-}

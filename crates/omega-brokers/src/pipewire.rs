@@ -18,7 +18,7 @@ use tokio::process::{Child, Command};
 use omega_proto::omega::{AudioState, StatePatch, StateTopic, action, set_volume, state_topic};
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError};
+use crate::broker::{Broker, BrokerError, opaque_debug};
 
 /// One sink, as `pactl --format=json list sinks` describes it.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -49,11 +49,8 @@ impl Sinks {
     const NORM: f64 = 65536.0;
 
     pub fn parse(json: &str, default: &str) -> Result<AudioState, BrokerError> {
-        let sinks: Vec<Sink> =
-            serde_json::from_str(json).map_err(|error| BrokerError::Unreadable {
-                subsystem: "pipewire",
-                detail: error.to_string(),
-            })?;
+        let sinks: Vec<Sink> = serde_json::from_str(json)
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
         Ok(Self::of(&sinks, default))
     }
 
@@ -114,12 +111,11 @@ impl Link {
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
-        let stdout = child.stdout.take().ok_or(BrokerError::Unreadable {
-            subsystem: "pipewire",
-            detail: "pactl gave no output to read".into(),
-        })?;
+        let stdout = child.stdout.take().ok_or(BrokerError::Unreadable(
+            "pactl gave no output to read".into(),
+        ))?;
 
         Ok(Self {
             events: BufReader::new(stdout),
@@ -133,17 +129,14 @@ impl Link {
             let mut line = String::new();
             match self.events.read_line(&mut line).await {
                 Ok(0) => {
-                    return Err(BrokerError::Unreadable {
-                        subsystem: "pipewire",
-                        detail: "pactl stopped subscribing".into(),
-                    });
+                    return Err(BrokerError::Unreadable("pactl stopped subscribing".into()));
                 }
                 Ok(_) => {
                     if Self::WATCHED.iter().any(|watched| line.contains(watched)) {
                         return Ok(());
                     }
                 }
-                Err(error) => return Err(Self::unreadable(error)),
+                Err(error) => return Err(BrokerError::unreadable(error)),
             }
         }
     }
@@ -160,40 +153,25 @@ impl Link {
             .args(args)
             .output()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         match output.status.success() {
             true => Ok(String::from_utf8_lossy(&output.stdout).into_owned()),
             // Loud: a `pactl` that refused is not a machine with no sound.
-            false => Err(BrokerError::Unreadable {
-                subsystem: "pipewire",
-                detail: format!(
-                    "pactl {}: {}",
-                    args.join(" "),
-                    String::from_utf8_lossy(&output.stderr).trim()
-                ),
-            }),
-        }
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "pipewire",
-            detail: error.to_string(),
+            false => Err(BrokerError::Unreadable(format!(
+                "pactl {}: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ))),
         }
     }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug, Default)]
 pub struct PipeWire {
     link: Option<Link>,
-    primed: bool,
 }
 
 impl PipeWire {
@@ -260,24 +238,21 @@ impl Broker for PipeWire {
         &[ActionKind::SetVolume]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            let link = self.link.as_mut().expect("opened above");
-            if let Err(error) = link.wait().await {
-                self.link = None;
-                self.primed = false;
-                return Err(error);
-            }
-        }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        self.link
+            .as_mut()
+            .ok_or_else(BrokerError::gone)?
+            .wait()
+            .await
+    }
 
-        let state = Link::read().await?;
-        self.primed = true;
-        Ok(Self::patch(state))
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        Ok(Self::patch(Link::read().await?))
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
@@ -285,10 +260,9 @@ impl Broker for PipeWire {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
         let Some(change) = set.change.as_ref() else {
-            return Err(BrokerError::Unreadable {
-                subsystem: "pipewire",
-                detail: "SetVolume carries no change".into(),
-            });
+            return Err(BrokerError::Unreadable(
+                "SetVolume carries no change".into(),
+            ));
         };
 
         let arguments = Self::arguments(change);

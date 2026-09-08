@@ -276,9 +276,9 @@ impl Procfs {
     /// kernel without `/proc/loadavg` is unusual, and losing the memory
     /// figures over it would be worse.
     pub fn reading(&mut self) -> SystemState {
-        let samples = Cpu::parse(&self.read("stat"));
-        let memory = Memory::parse(&self.read("meminfo"));
-        let (load_1, load_5, load_15) = Load::parse(&self.read("loadavg"));
+        let samples = Cpu::parse(&self.file("stat"));
+        let memory = Memory::parse(&self.file("meminfo"));
+        let (load_1, load_5, load_15) = Load::parse(&self.file("loadavg"));
 
         let percents = match self.last.take() {
             Some(before) => before
@@ -301,7 +301,7 @@ impl Procfs {
             load_1,
             load_5,
             load_15,
-            uptime_seconds: Load::uptime(&self.read("uptime")),
+            uptime_seconds: Load::uptime(&self.file("uptime")),
         }
     }
 
@@ -316,7 +316,7 @@ impl Procfs {
         }
         self.since_disks = 0;
 
-        let measured: Vec<Mount> = Mounts::parse(&self.read("mounts"))
+        let measured: Vec<Mount> = Mounts::parse(&self.file("mounts"))
             .into_iter()
             .filter_map(|mounted| Self::room(&mounted))
             .collect();
@@ -363,7 +363,8 @@ impl Procfs {
         })
     }
 
-    fn read(&self, file: &str) -> String {
+    /// One file of `/proc`, or nothing where the kernel does not carry it.
+    fn file(&self, file: &str) -> String {
         std::fs::read_to_string(self.root.join(file)).unwrap_or_default()
     }
 }
@@ -378,9 +379,12 @@ impl Broker for Procfs {
         &[SystemTopic::System, SystemTopic::Disk]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
+    async fn wake(&mut self) -> Result<(), BrokerError> {
         self.tick.wait().await;
+        Ok(())
+    }
 
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
         let mut topics = vec![StateTopic {
             topic: SystemTopic::System.as_str().into(),
             revision: 0, // the Hub assigns the real revision

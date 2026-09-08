@@ -5,10 +5,10 @@
 //! against an enum, and two different names for the network. The walk that
 //! gathers the answers needs a bus; deciding what they mean does not.
 
-use std::time::Duration;
+mod common;
 
+use omega_brokers::NetworkManager;
 use omega_brokers::network_manager::{Active, Point, Reading, Scan, Tunnels};
-use omega_brokers::{Broker, NetworkManager};
 use omega_proto::omega::{NetworkType, state_topic};
 
 /// Associated with a Wi-Fi network, with internet.
@@ -274,7 +274,9 @@ fn on_wifi_and_a_vpn_is_two_readings_not_one() {
 async fn it_reads_the_machine_it_is_running_on() {
     let mut network = NetworkManager::new();
 
-    let patch = network.next().await.expect("NetworkManager answered");
+    let patch = common::first(&mut network)
+        .await
+        .expect("NetworkManager answered");
     // One connection, one broker, two topics: what the machine is on, and
     // what it could be on. The hub coalesces them apart, so an indicator
     // holding one is not woken by the other.
@@ -300,6 +302,8 @@ async fn it_reads_the_machine_it_is_running_on() {
     // The second reading waits — for a signal, or for the refresh that puts a
     // floor under them. It must not come back instantly, or the broker is a
     // hot loop wearing a signal stream.
-    let again = tokio::time::timeout(Duration::from_millis(500), network.next()).await;
-    assert!(again.is_err(), "a second reading should wait");
+    assert!(
+        common::waits(&mut network).await,
+        "a second reading should wait"
+    );
 }

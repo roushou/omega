@@ -5,6 +5,8 @@
 //! is testable is the part that decides: which actions this broker says it
 //! serves, and that it refuses anything routed to it by mistake.
 
+mod common;
+
 use omega_brokers::{Broker, Logind};
 use omega_proto::ActionKind;
 use omega_proto::omega::{RunCommand, action};
@@ -50,14 +52,13 @@ async fn an_action_it_never_claimed_is_refused() {
 // ---- against the machine this is running on ----
 
 use omega_proto::omega::state_topic;
-use std::time::Duration;
 
 #[tokio::test]
 #[ignore = "needs a system bus with logind; run with --ignored"]
 async fn it_reads_the_session_it_is_running_in() {
     let mut logind = Logind::new();
 
-    let patch = logind.next().await.expect("logind answered");
+    let patch = common::first(&mut logind).await.expect("logind answered");
     assert_eq!(patch.topics[0].topic, "idle");
 
     let Some(state_topic::Value::Idle(idle)) = patch.topics[0].value.as_ref() else {
@@ -68,6 +69,8 @@ async fn it_reads_the_session_it_is_running_in() {
     assert!(!idle.idle);
     assert_eq!(idle.idle_since, 0);
 
-    let again = tokio::time::timeout(Duration::from_millis(500), logind.next()).await;
-    assert!(again.is_err(), "a second reading should wait");
+    assert!(
+        common::waits(&mut logind).await,
+        "a second reading should wait"
+    );
 }

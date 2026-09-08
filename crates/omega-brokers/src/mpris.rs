@@ -15,7 +15,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use zbus::fdo::PropertiesProxy;
-use zbus::names::InterfaceName;
 use zbus::zvariant::OwnedValue;
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
@@ -25,7 +24,8 @@ use omega_proto::omega::{
 };
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError, Cadence};
+use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
+use crate::dbus;
 
 /// One player, as MPRIS describes it.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -137,23 +137,25 @@ impl Link {
     const PLAYER_IFACE: &'static str = "org.mpris.MediaPlayer2.Player";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::session().await.map_err(Self::unreadable)?;
+        let connection = Connection::session()
+            .await
+            .map_err(BrokerError::unreadable)?;
 
         // One rule for every player, rather than a subscription per player
         // that would have to be torn down and rebuilt as they come and go.
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .interface("org.freedesktop.DBus.Properties")
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .member("PropertiesChanged")
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .add_arg(Self::PLAYER_IFACE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .build();
 
         let changes = MessageStream::for_match_rule(rule, &connection, None)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         Ok(Self {
             connection,
@@ -165,8 +167,8 @@ impl Link {
     async fn read(&self) -> Result<Vec<Player>, BrokerError> {
         let bus = zbus::fdo::DBusProxy::new(&self.connection)
             .await
-            .map_err(Self::unreadable)?;
-        let names = bus.list_names().await.map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
+        let names = bus.list_names().await.map_err(BrokerError::unreadable)?;
 
         let mut players = Vec::new();
         for name in names {
@@ -192,24 +194,20 @@ impl Link {
             .await
             .ok()?;
 
-        let root = properties
-            .get_all(InterfaceName::try_from(Self::ROOT_IFACE).ok()?)
+        let root = dbus::properties(&properties, Self::ROOT_IFACE).await.ok()?;
+        let player = dbus::properties(&properties, Self::PLAYER_IFACE)
             .await
             .ok()?;
-        let player = properties
-            .get_all(InterfaceName::try_from(Self::PLAYER_IFACE).ok()?)
-            .await
-            .ok()?;
-        let metadata: HashMap<String, OwnedValue> = Self::get(&player, "Metadata")?;
+        let metadata: HashMap<String, OwnedValue> = dbus::field(&player, "Metadata")?;
 
         Some(Player {
             id: id.to_string(),
-            identity: Self::get(&root, "Identity").unwrap_or_default(),
-            status: Self::get(&player, "PlaybackStatus").unwrap_or_default(),
-            title: Self::get(&metadata, "xesam:title").unwrap_or_default(),
-            artists: Self::get(&metadata, "xesam:artist").unwrap_or_default(),
-            album: Self::get(&metadata, "xesam:album").unwrap_or_default(),
-            length_us: Self::get(&metadata, "mpris:length").unwrap_or(0),
+            identity: dbus::field(&root, "Identity").unwrap_or_default(),
+            status: dbus::field(&player, "PlaybackStatus").unwrap_or_default(),
+            title: dbus::field(&metadata, "xesam:title").unwrap_or_default(),
+            artists: dbus::field(&metadata, "xesam:artist").unwrap_or_default(),
+            album: dbus::field(&metadata, "xesam:album").unwrap_or_default(),
+            length_us: dbus::field(&metadata, "mpris:length").unwrap_or(0),
         })
     }
 
@@ -222,40 +220,21 @@ impl Link {
             Self::PLAYER_IFACE,
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
         player
             .call_method(method, &())
             .await
             .map(|_| ())
-            .map_err(Self::unreadable)
-    }
-
-    fn get<T>(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<T>
-    where
-        T: TryFrom<OwnedValue>,
-    {
-        T::try_from(properties.get(name)?.try_clone().ok()?).ok()
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "mpris",
-            detail: error.to_string(),
-        }
+            .map_err(BrokerError::unreadable)
     }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug)]
 pub struct Mpris {
     link: Option<Link>,
     tick: Cadence,
-    primed: bool,
 }
 
 impl Default for Mpris {
@@ -273,7 +252,6 @@ impl Mpris {
         Self {
             link: None,
             tick: Cadence::after(Self::REFRESH),
-            primed: false,
         }
     }
 
@@ -302,34 +280,28 @@ impl Broker for Mpris {
         &[ActionKind::MediaKey]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            let closed = {
-                let Self { link, tick, .. } = self;
-                let link = link.as_mut().expect("opened above");
-                tokio::select! {
-                    change = link.changes.next() => change.is_none(),
-                    _ = tick.wait() => false,
-                }
-            };
-            if closed {
-                self.link = None;
-                self.primed = false;
-                return Err(BrokerError::Unreadable {
-                    subsystem: "mpris",
-                    detail: "the bus closed".into(),
-                });
-            }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let Self { link, tick, .. } = self;
+        let link = link.as_mut().ok_or_else(BrokerError::gone)?;
+        // Both arms are cancel-safe: a signal stream is a receiver, and an
+        // interval keeps its own deadline.
+        tokio::select! {
+            change = link.changes.next() => match change {
+                Some(_) => Ok(()),
+                None => Err(BrokerError::gone()),
+            },
+            _ = tick.wait() => Ok(()),
         }
+    }
 
-        let players = self.link.as_ref().expect("opened above").read().await?;
-        self.primed = true;
-        Ok(Self::patch(Players::state(&players)))
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        Ok(Self::patch(Players::state(&link.read().await?)))
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
@@ -337,24 +309,14 @@ impl Broker for Mpris {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
         let Some(method) = Players::method(key) else {
-            return Err(BrokerError::Unreadable {
-                subsystem: "mpris",
-                detail: "MediaKey names no key".into(),
-            });
+            return Err(BrokerError::Unreadable("MediaKey names no key".into()));
         };
 
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
-        let link = self.link.as_ref().expect("opened above");
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
 
         let players = link.read().await?;
         let Some(target) = Players::active(&players) else {
-            return Err(BrokerError::Unreadable {
-                subsystem: "mpris",
-                detail: "nothing is playing".into(),
-            });
+            return Err(BrokerError::Unreadable("nothing is playing".into()));
         };
         link.call(&target, method).await?;
 

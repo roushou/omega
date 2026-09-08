@@ -284,7 +284,8 @@ omega-proto ──┬── omega-derive ──┐
 ```
 
 **`omega-brokers`** — one file per subsystem, which is also the list of what
-serves each action:
+serves each action. A broker says how to connect, wake and read; the driver
+says when, so the rules about holding a connection are written once:
 
 ```
 broker.rs           the trait; Brokers::all()

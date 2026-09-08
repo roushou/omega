@@ -16,7 +16,7 @@ use zbus::{Connection, Proxy};
 use omega_proto::omega::{StatePatch, action};
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError};
+use crate::broker::{Broker, BrokerError, opaque_debug};
 
 /// One notification, as `org.freedesktop.Notifications` takes it.
 ///
@@ -60,10 +60,12 @@ impl Link {
     const PATH: &'static str = "/org/freedesktop/Notifications";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::session().await.map_err(Self::unreadable)?;
+        let connection = Connection::session()
+            .await
+            .map_err(BrokerError::unreadable)?;
         let notifications = Proxy::new(&connection, Self::SERVICE, Self::PATH, Self::SERVICE)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         Ok(Self { notifications })
     }
 
@@ -93,22 +95,11 @@ impl Link {
             )
             .await
             .map(|_| ())
-            .map_err(Self::unreadable)
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "notifications",
-            detail: error.to_string(),
-        }
+            .map_err(BrokerError::unreadable)
     }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug, Default)]
 pub struct Notifications {
@@ -137,8 +128,9 @@ impl Broker for Notifications {
         &[ActionKind::Notify]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        std::future::pending().await
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
@@ -146,12 +138,9 @@ impl Broker for Notifications {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
 
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-        }
         self.link
             .as_ref()
-            .expect("opened above")
+            .ok_or_else(BrokerError::gone)?
             .send(&Sent::of(notify))
             .await?;
         Ok(None)

@@ -170,23 +170,20 @@ impl Backlight {
 
     fn set(&mut self, set: &SetBacklight) -> Result<Option<StatePatch>, BrokerError> {
         let Some(change) = set.change.as_ref() else {
-            return Err(BrokerError::Unreadable {
-                subsystem: "backlight",
-                detail: "SetBacklight carries no change".into(),
-            });
+            return Err(BrokerError::Unreadable(
+                "SetBacklight carries no change".into(),
+            ));
         };
 
         let Some(sysfs) = self.sysfs() else {
-            return Err(BrokerError::Unreadable {
-                subsystem: "backlight",
-                detail: "this machine has no backlight".into(),
-            });
+            return Err(BrokerError::Unreadable(
+                "this machine has no backlight".into(),
+            ));
         };
 
-        let max = sysfs.max().ok_or(BrokerError::Unreadable {
-            subsystem: "backlight",
-            detail: "the device reports no scale".into(),
-        })?;
+        let max = sysfs.max().ok_or(BrokerError::Unreadable(
+            "the device reports no scale".into(),
+        ))?;
         let current = sysfs
             .raw()
             .map(|raw| Self::to_percent(raw, max))
@@ -218,8 +215,12 @@ impl Broker for Backlight {
         &[ActionKind::SetBacklight]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
+    async fn wake(&mut self) -> Result<(), BrokerError> {
         self.tick.wait().await;
+        Ok(())
+    }
+
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
         Ok(self.patch())
     }
 

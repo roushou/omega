@@ -21,7 +21,8 @@ use zbus::{Connection, Proxy};
 use omega_proto::omega::{IdleState, StatePatch, StateTopic, action, state_topic};
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError, Cadence};
+use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
+use crate::dbus;
 
 /// The system bus, the login manager, and this session on it.
 struct Link {
@@ -41,7 +42,9 @@ impl Link {
     const OURS: &'static str = "auto";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::system().await.map_err(Self::unreadable)?;
+        let connection = Connection::system()
+            .await
+            .map_err(BrokerError::unreadable)?;
         let manager = Proxy::new(
             &connection,
             Self::SERVICE,
@@ -49,12 +52,12 @@ impl Link {
             Self::MANAGER_IFACE,
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
 
         let path: OwnedObjectPath = manager
             .call("GetSession", &(Self::OURS))
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         let session = Proxy::new(
             &connection,
             Self::SERVICE,
@@ -62,20 +65,20 @@ impl Link {
             Self::SESSION_IFACE,
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
 
         let properties = PropertiesProxy::builder(&connection)
             .destination(Self::SERVICE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .path(path)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .build()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         let changes = properties
             .receive_properties_changed()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         Ok(Self {
             manager,
@@ -90,18 +93,16 @@ impl Link {
     /// and an idle one is not necessarily locked.
     async fn idle(&self) -> IdleState {
         IdleState {
-            idle: self.property("IdleHint").await.unwrap_or(false),
-            idle_since: self.property("IdleSinceHint").await.unwrap_or(0),
-            locked: self.property("LockedHint").await.unwrap_or(false),
+            idle: dbus::property(&self.session, "IdleHint")
+                .await
+                .unwrap_or(false),
+            idle_since: dbus::property(&self.session, "IdleSinceHint")
+                .await
+                .unwrap_or(0),
+            locked: dbus::property(&self.session, "LockedHint")
+                .await
+                .unwrap_or(false),
         }
-    }
-
-    async fn property<T>(&self, name: &str) -> Option<T>
-    where
-        T: TryFrom<zbus::zvariant::OwnedValue>,
-        <T as TryFrom<zbus::zvariant::OwnedValue>>::Error: Into<zbus::Error>,
-    {
-        self.session.get_property(name).await.ok()
     }
 
     /// Ask the manager for something, without letting it prompt.
@@ -110,7 +111,7 @@ impl Link {
             .call_method(method, &(false))
             .await
             .map(|_| ())
-            .map_err(Self::unreadable)
+            .map_err(BrokerError::unreadable)
     }
 
     async fn lock(&self) -> Result<(), BrokerError> {
@@ -118,28 +119,16 @@ impl Link {
             .call_method("Lock", &())
             .await
             .map(|_| ())
-            .map_err(Self::unreadable)
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "logind",
-            detail: error.to_string(),
-        }
+            .map_err(BrokerError::unreadable)
     }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug)]
 pub struct Logind {
     link: Option<Link>,
     tick: Cadence,
-    primed: bool,
 }
 
 impl Default for Logind {
@@ -157,7 +146,6 @@ impl Logind {
         Self {
             link: None,
             tick: Cadence::after(Self::REFRESH),
-            primed: false,
         }
     }
 
@@ -197,54 +185,52 @@ impl Broker for Logind {
         ]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            let closed = {
-                let Self { link, tick, .. } = self;
-                let link = link.as_mut().expect("opened above");
-                tokio::select! {
-                    change = link.changes.next() => change.is_none(),
-                    _ = tick.wait() => false,
-                }
-            };
-            if closed {
-                self.link = None;
-                self.primed = false;
-                return Err(BrokerError::Unreadable {
-                    subsystem: "logind",
-                    detail: "the bus closed".into(),
-                });
-            }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let Self { link, tick, .. } = self;
+        let link = link.as_mut().ok_or_else(BrokerError::gone)?;
+        // Both arms are cancel-safe: a signal stream is a receiver, and an
+        // interval keeps its own deadline.
+        tokio::select! {
+            change = link.changes.next() => match change {
+                Some(_) => Ok(()),
+                None => Err(BrokerError::gone()),
+            },
+            _ = tick.wait() => Ok(()),
         }
+    }
 
-        let idle = self.link.as_ref().expect("opened above").idle().await;
-        self.primed = true;
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
         Ok(StatePatch {
             topics: vec![StateTopic {
                 topic: SystemTopic::Idle.as_str().into(),
                 revision: 0, // the Hub assigns the real revision
-                value: Some(state_topic::Value::Idle(idle)),
+                value: Some(state_topic::Value::Idle(link.idle().await)),
             }],
         })
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-        }
-        let link = self.link.as_ref().expect("opened above");
-
-        match action {
-            action::Kind::Lock(_) => link.lock().await?,
+        // What it does not serve is refused before the connection is touched.
+        // Otherwise an action routed here by mistake reports the bus being
+        // down, which is a true statement about the wrong thing.
+        let method = match action {
+            action::Kind::Lock(_) => None,
             other => match Self::method(other) {
-                Some(method) => link.manage(method).await?,
+                Some(method) => Some(method),
                 None => return Err(BrokerError::Unserved(ActionKind::of(other))),
             },
+        };
+
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        match method {
+            Some(method) => link.manage(method).await?,
+            None => link.lock().await?,
         }
 
         // Nothing observable changed that this broker reports: it has no

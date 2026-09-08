@@ -169,10 +169,10 @@ impl Desktop {
             }
         }
 
-        Err(BrokerError::Unreadable {
-            subsystem: "desktop",
-            detail: format!("no desktop entry named {:?}", app.desktop_id),
-        })
+        Err(BrokerError::unreadable(format!(
+            "no desktop entry named {:?}",
+            app.desktop_id
+        )))
     }
 
     /// Run a command line, and wait long enough to know it started.
@@ -182,18 +182,14 @@ impl Desktop {
             .arg(command)
             .status()
             .await
-            .map_err(|error| BrokerError::Unreadable {
-                subsystem: "desktop",
-                detail: error.to_string(),
-            })?;
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
 
         match status.success() {
             true => Ok(()),
             // Loud: a screenshot nobody took is not a screenshot.
-            false => Err(BrokerError::Unreadable {
-                subsystem: "desktop",
-                detail: format!("{command:?} exited {status}"),
-            }),
+            false => Err(BrokerError::unreadable(format!(
+                "{command:?} exited {status}"
+            ))),
         }
     }
 }
@@ -212,19 +208,12 @@ impl Broker for Desktop {
         &[ActionKind::LaunchApp, ActionKind::Screenshot]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        std::future::pending().await
-    }
-
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
         let command = match action {
             action::Kind::LaunchApp(app) => Self::launch(app)?,
-            action::Kind::Screenshot(shot) => {
-                Capture::command(shot).ok_or(BrokerError::Unreadable {
-                    subsystem: "desktop",
-                    detail: "a screenshot needs somewhere to go".into(),
-                })?
-            }
+            action::Kind::Screenshot(shot) => Capture::command(shot).ok_or(
+                BrokerError::Unreadable("a screenshot needs somewhere to go".into()),
+            )?,
             other => return Err(BrokerError::Unserved(ActionKind::of(other))),
         };
 

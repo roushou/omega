@@ -5,6 +5,8 @@
 //! fraction, a state enum against a boolean, and two time fields of which
 //! only one ever applies — and every one of those is somewhere to be wrong.
 
+mod common;
+
 use omega_brokers::upower::{Attached, Peripherals, Reading};
 
 /// A laptop battery, discharging with two hours left.
@@ -169,9 +171,7 @@ fn the_id_is_the_path_because_a_model_is_not_unique() {
 
 // ---- against the machine this is running on ----
 
-use std::time::Duration;
-
-use omega_brokers::{Broker, UPower};
+use omega_brokers::UPower;
 use omega_proto::omega::state_topic;
 
 #[tokio::test]
@@ -182,7 +182,7 @@ async fn it_reads_the_machine_it_is_running_on() {
     // A fresh connection reports what is true now. Waiting for the next
     // change instead would leave a widget blank until the battery moved,
     // which on a machine sitting on AC is never.
-    let patch = upower.next().await.expect("UPower answered");
+    let patch = common::first(&mut upower).await.expect("UPower answered");
     // One power supply subsystem, one broker, two topics: the battery and
     // whether the machine is on mains.
     let topics: Vec<&str> = patch
@@ -208,9 +208,8 @@ async fn it_reads_the_machine_it_is_running_on() {
     // The second reading waits for UPower to say something changed. A broker
     // that answered again straight away would be a hot loop pretending to be
     // signal-driven.
-    let again = tokio::time::timeout(Duration::from_millis(500), upower.next()).await;
     assert!(
-        again.is_err(),
-        "a second reading should wait on a signal, not poll"
+        common::waits(&mut upower).await,
+        "a second reading should wait"
     );
 }

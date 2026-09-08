@@ -23,7 +23,7 @@ use omega_proto::omega::{
 };
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError};
+use crate::broker::{Broker, BrokerError, opaque_debug};
 
 /// One monitor, as `hyprctl -j monitors` describes it.
 ///
@@ -77,11 +77,8 @@ pub struct Monitors;
 
 impl Monitors {
     pub fn parse(json: &str) -> Result<DisplayState, BrokerError> {
-        let monitors: Vec<Monitor> =
-            serde_json::from_str(json).map_err(|error| BrokerError::Unreadable {
-                subsystem: "hyprland",
-                detail: error.to_string(),
-            })?;
+        let monitors: Vec<Monitor> = serde_json::from_str(json)
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
         Ok(DisplayState {
             monitors: monitors.iter().map(Monitor::info).collect(),
         })
@@ -180,10 +177,7 @@ impl Session {
     }
 
     fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, BrokerError> {
-        serde_json::from_str(json).map_err(|error| BrokerError::Unreadable {
-            subsystem: "hyprland",
-            detail: error.to_string(),
-        })
+        serde_json::from_str(json).map_err(|error| BrokerError::Unreadable(error.to_string()))
     }
 }
 
@@ -395,7 +389,7 @@ impl Link {
         let dir = Self::dir()?;
         let events = UnixStream::connect(dir.join(".socket2.sock"))
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         Ok(Self {
             dir,
             events: BufReader::new(events),
@@ -446,18 +440,18 @@ impl Link {
     async fn ask(&self, request: &str) -> Result<String, BrokerError> {
         let mut socket = UnixStream::connect(self.dir.join(".socket.sock"))
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         socket
             .write_all(request.as_bytes())
             .await
-            .map_err(Self::unreadable)?;
-        socket.shutdown().await.map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
+        socket.shutdown().await.map_err(BrokerError::unreadable)?;
 
         let mut answer = String::new();
         socket
             .read_to_string(&mut answer)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         Ok(answer)
     }
 
@@ -469,25 +463,25 @@ impl Link {
     async fn dispatch(&self, command: &str) -> Result<(), BrokerError> {
         let mut socket = UnixStream::connect(self.dir.join(".socket.sock"))
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         socket
             .write_all(format!("dispatch {command}").as_bytes())
             .await
-            .map_err(Self::unreadable)?;
-        socket.shutdown().await.map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
+        socket.shutdown().await.map_err(BrokerError::unreadable)?;
 
         let mut answer = String::new();
         socket
             .read_to_string(&mut answer)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         match answer.trim() == "ok" {
             true => Ok(()),
-            false => Err(BrokerError::Unreadable {
-                subsystem: "hyprland",
-                detail: format!("refused {command:?}: {}", answer.trim()),
-            }),
+            false => Err(BrokerError::unreadable(format!(
+                "refused {command:?}: {}",
+                answer.trim()
+            ))),
         }
     }
 
@@ -502,10 +496,9 @@ impl Link {
             let mut line = String::new();
             match self.events.read_line(&mut line).await {
                 Ok(0) => {
-                    return Err(BrokerError::Unreadable {
-                        subsystem: "hyprland",
-                        detail: "the compositor closed the event socket".into(),
-                    });
+                    return Err(BrokerError::Unreadable(
+                        "the compositor closed the event socket".into(),
+                    ));
                 }
                 Ok(_) => {
                     let name = line.split(">>").next().unwrap_or("").trim();
@@ -514,41 +507,54 @@ impl Link {
                         return Ok(affected);
                     }
                 }
-                Err(error) => return Err(Self::unreadable(error)),
+                Err(error) => return Err(BrokerError::unreadable(error)),
             }
         }
     }
 
     fn missing(variable: &'static str) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "hyprland",
-            detail: format!("{variable} is not set; this is not a Hyprland session"),
-        }
-    }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "hyprland",
-            detail: error.to_string(),
-        }
+        BrokerError::unreadable(format!(
+            "{variable} is not set; this is not a Hyprland session"
+        ))
     }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Hyprland {
     link: Option<Link>,
-    /// Set only after a reading succeeds, so a `next` cancelled mid-read asks
-    /// again rather than waiting on an event whose state it already missed.
-    primed: bool,
+    /// Which topics the event that last woke this broker can have changed.
+    ///
+    /// Carried from `wake` to `read` because they are two calls now and the
+    /// answer belongs to the first: Hyprland streams every window focus down
+    /// one socket, and re-reading all four topics on each would be four
+    /// requests per keystroke.
+    ///
+    /// Everything, before any event has been seen — a fresh connection has
+    /// said nothing about what changed, so all of it has.
+    affected: &'static [SystemTopic],
+}
+
+impl Default for Hyprland {
+    fn default() -> Self {
+        Self {
+            link: None,
+            affected: Self::EVERYTHING,
+        }
+    }
 }
 
 impl Hyprland {
+    /// Every topic this broker reports, which is what a fresh connection
+    /// answers with.
+    const EVERYTHING: &'static [SystemTopic] = &[
+        SystemTopic::Display,
+        SystemTopic::Workspaces,
+        SystemTopic::Window,
+        SystemTopic::Input,
+    ];
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -561,12 +567,7 @@ impl Broker for Hyprland {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[
-            SystemTopic::Display,
-            SystemTopic::Workspaces,
-            SystemTopic::Window,
-            SystemTopic::Input,
-        ]
+        Self::EVERYTHING
     }
 
     fn actions(&self) -> &'static [ActionKind] {
@@ -580,37 +581,25 @@ impl Broker for Hyprland {
         ]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        self.affected = Self::EVERYTHING;
+        Ok(())
+    }
 
-        // A fresh connection reports everything; after that, only what the
-        // event that woke us can have changed.
-        let wanted = match self.primed {
-            false => self.topics(),
-            true => {
-                let link = self.link.as_mut().expect("opened above");
-                match link.wait().await {
-                    Ok(affected) => affected,
-                    Err(error) => {
-                        self.link = None;
-                        self.primed = false;
-                        return Err(error);
-                    }
-                }
-            }
-        };
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let link = self.link.as_mut().ok_or_else(BrokerError::gone)?;
+        self.affected = link.wait().await?;
+        Ok(())
+    }
 
-        let patch = self
-            .link
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let wanted = self.affected;
+        self.link
             .as_ref()
-            .expect("opened above")
+            .ok_or_else(BrokerError::gone)?
             .read(wanted)
-            .await?;
-        self.primed = true;
-        Ok(patch)
+            .await
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
@@ -618,13 +607,9 @@ impl Broker for Hyprland {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
 
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
         self.link
             .as_ref()
-            .expect("opened above")
+            .ok_or_else(BrokerError::gone)?
             .dispatch(&command)
             .await?;
 

@@ -4,6 +4,8 @@
 //! their spellings of a change. Both conversions are pure, so both are here
 //! without a sound server in the room.
 
+mod common;
+
 use omega_brokers::pipewire::{PipeWire, Sinks};
 use omega_proto::omega::set_volume;
 
@@ -79,16 +81,14 @@ fn muting_names_the_default_sink_like_everything_else() {
 
 // ---- against the machine this is running on ----
 
-use omega_brokers::Broker;
 use omega_proto::omega::state_topic;
-use std::time::Duration;
 
 #[tokio::test]
 #[ignore = "needs pactl and a running sound server; run with --ignored"]
 async fn it_reads_the_machine_it_is_running_on() {
     let mut pipewire = PipeWire::new();
 
-    let patch = pipewire.next().await.expect("pactl answered");
+    let patch = common::first(&mut pipewire).await.expect("pactl answered");
     assert_eq!(patch.topics[0].topic, "audio");
 
     let Some(state_topic::Value::Audio(audio)) = patch.topics[0].value.as_ref() else {
@@ -99,6 +99,8 @@ async fn it_reads_the_machine_it_is_running_on() {
     // The second reading waits on the subscription. `pactl subscribe` reports
     // every stream a browser opens, so a broker that woke on all of them
     // would run two processes per notification sound.
-    let again = tokio::time::timeout(Duration::from_millis(500), pipewire.next()).await;
-    assert!(again.is_err(), "a second reading should wait for an event");
+    assert!(
+        common::waits(&mut pipewire).await,
+        "a second reading should wait"
+    );
 }

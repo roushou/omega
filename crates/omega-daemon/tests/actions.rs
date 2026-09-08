@@ -43,17 +43,14 @@ impl omega_brokers::Broker for Recorder {
         "recorder"
     }
 
+    // Reports nothing, ever: a broker may exist only to be asked, and the
+    // trait's defaults are what say so.
     fn topics(&self) -> &'static [omega_proto::SystemTopic] {
         &[]
     }
 
     fn actions(&self) -> &'static [ActionKind] {
         &[ActionKind::SetBacklight]
-    }
-
-    async fn next(&mut self) -> Result<StatePatch, omega_brokers::BrokerError> {
-        // Reports nothing, ever: a broker may exist only to be asked.
-        std::future::pending().await
     }
 
     async fn act(

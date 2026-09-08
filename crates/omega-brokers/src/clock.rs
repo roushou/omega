@@ -21,9 +21,7 @@ use omega_proto::omega::{StatePatch, StateTopic, TimeState, state_topic};
 use crate::broker::{Broker, BrokerError};
 
 #[derive(Debug, Default)]
-pub struct Clock {
-    primed: bool,
-}
+pub struct Clock {}
 
 impl Clock {
     pub fn new() -> Self {
@@ -89,16 +87,15 @@ impl Broker for Clock {
         &[SystemTopic::Time]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        // The first reading is now: a bar that started blank until the minute
-        // turned would be blank for up to a minute.
-        if self.primed {
-            // `sleep` is cancel-safe, and losing one costs a recomputed
-            // deadline rather than a missed minute — the next call sleeps to
-            // whatever boundary is next from wherever the clock is then.
-            tokio::time::sleep(Self::until_next_minute(&Local::now())).await;
-        }
-        self.primed = true;
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        // `sleep` is cancel-safe, and losing one costs a recomputed deadline
+        // rather than a missed minute — the next call sleeps to whatever
+        // boundary is next from wherever the clock is then.
+        tokio::time::sleep(Self::until_next_minute(&Local::now())).await;
+        Ok(())
+    }
+
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
         Ok(Self::patch(Self::now()))
     }
 }

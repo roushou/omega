@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use zbus::fdo::PropertiesProxy;
-use zbus::names::InterfaceName;
 use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
@@ -25,7 +24,8 @@ use omega_proto::omega::{
     state_topic,
 };
 
-use crate::broker::{Broker, BrokerError};
+use crate::broker::{Broker, BrokerError, opaque_debug};
+use crate::dbus;
 
 /// What UPower reports, as it reports it.
 ///
@@ -90,22 +90,13 @@ impl Reading {
 
     fn from_properties(properties: &HashMap<String, OwnedValue>) -> Self {
         Self {
-            is_present: Self::get(properties, "IsPresent").unwrap_or(false),
-            kind: Self::get(properties, "Type").unwrap_or(0),
-            state: Self::get(properties, "State").unwrap_or(0),
-            percentage: Self::get(properties, "Percentage").unwrap_or(0.0),
-            time_to_empty: Self::get(properties, "TimeToEmpty").unwrap_or(0),
-            time_to_full: Self::get(properties, "TimeToFull").unwrap_or(0),
+            is_present: dbus::field(properties, "IsPresent").unwrap_or(false),
+            kind: dbus::field(properties, "Type").unwrap_or(0),
+            state: dbus::field(properties, "State").unwrap_or(0),
+            percentage: dbus::field(properties, "Percentage").unwrap_or(0.0),
+            time_to_empty: dbus::field(properties, "TimeToEmpty").unwrap_or(0),
+            time_to_full: dbus::field(properties, "TimeToFull").unwrap_or(0),
         }
-    }
-
-    /// A property UPower may not have. Missing reads as its default rather
-    /// than as a failure: a device that omits `TimeToFull` is still a battery.
-    fn get<T>(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<T>
-    where
-        T: TryFrom<OwnedValue>,
-    {
-        T::try_from(properties.get(name)?.try_clone().ok()?).ok()
     }
 }
 
@@ -201,14 +192,16 @@ impl Link {
     const INTERFACE: &'static str = "org.freedesktop.UPower.Device";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::system().await.map_err(Self::unreadable)?;
+        let connection = Connection::system()
+            .await
+            .map_err(BrokerError::unreadable)?;
 
         // Named to be sure the service is there: a proxy is built lazily, so
         // without this a machine with no UPower would look connected and then
         // fail on every read.
         Proxy::new(&connection, Self::SERVICE, Self::DEVICE, Self::INTERFACE)
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         let manager = Proxy::new(
             &connection,
@@ -217,21 +210,21 @@ impl Link {
             Self::MANAGER_IFACE,
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
 
         let device = PropertiesProxy::builder(&connection)
             .destination(Self::SERVICE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .path(Self::DEVICE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .build()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         let changes = device
             .receive_properties_changed()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         Ok(Self {
             device,
@@ -240,15 +233,8 @@ impl Link {
         })
     }
 
-    /// Every property in one call. Six round trips for one reading would be
-    /// six chances for the answers to disagree with each other.
     async fn read(&self) -> Result<Reading, BrokerError> {
-        let interface = InterfaceName::try_from(Self::INTERFACE).map_err(Self::unreadable)?;
-        let properties = self
-            .device
-            .get_all(interface)
-            .await
-            .map_err(Self::unreadable)?;
+        let properties = dbus::properties(&self.device, Self::INTERFACE).await?;
         Ok(Reading::from_properties(&properties))
     }
 
@@ -299,32 +285,13 @@ impl Link {
             .await
             .unwrap_or(false)
     }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "upower",
-            detail: error.to_string(),
-        }
-    }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug, Default)]
 pub struct UPower {
     link: Option<Link>,
-    /// Whether a reading has been taken on this connection. A fresh one
-    /// reports what is true now rather than waiting for the next change,
-    /// which on a full battery could be hours.
-    ///
-    /// Set only *after* a reading succeeds, so a `next` cancelled mid-read
-    /// leaves the broker asking again rather than waiting on a change it has
-    /// already missed the state of.
-    primed: bool,
 }
 
 impl UPower {
@@ -375,34 +342,26 @@ impl Broker for UPower {
         ]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            // `StreamExt::next` on a signal stream is cancel-safe: it is a
-            // receiver, and dropping the future leaves what it had not taken.
-            let alive = {
-                let link = self.link.as_mut().expect("opened above");
-                link.changes.next().await.is_some()
-            };
-            if !alive {
-                self.link = None;
-                self.primed = false;
-                return Err(BrokerError::Unreadable {
-                    subsystem: "upower",
-                    detail: "the bus closed".into(),
-                });
-            }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let link = self.link.as_mut().ok_or_else(BrokerError::gone)?;
+        // `StreamExt::next` on a signal stream is cancel-safe: it is a
+        // receiver, and dropping the future leaves what it had not taken.
+        match link.changes.next().await {
+            Some(_) => Ok(()),
+            None => Err(BrokerError::gone()),
         }
+    }
 
-        let link = self.link.as_ref().expect("opened above");
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
         let reading = link.read().await?;
         let on_ac = link.on_ac().await;
         let attached = link.attached().await;
-        self.primed = true;
         Ok(Self::patch(
             reading.state(),
             on_ac,

@@ -23,7 +23,8 @@ use omega_proto::omega::{
     state_topic,
 };
 
-use crate::broker::{Broker, BrokerError, Cadence};
+use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
+use crate::dbus;
 
 /// What NetworkManager reports, as it reports it.
 ///
@@ -241,7 +242,9 @@ impl Link {
     const NONE: &'static str = "/";
 
     async fn open() -> Result<Self, BrokerError> {
-        let connection = Connection::system().await.map_err(Self::unreadable)?;
+        let connection = Connection::system()
+            .await
+            .map_err(BrokerError::unreadable)?;
         let manager = Proxy::new(
             &connection,
             Self::SERVICE,
@@ -249,20 +252,20 @@ impl Link {
             Self::MANAGER_IFACE,
         )
         .await
-        .map_err(Self::unreadable)?;
+        .map_err(BrokerError::unreadable)?;
 
         let properties = PropertiesProxy::builder(&connection)
             .destination(Self::SERVICE)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .path(Self::MANAGER)
-            .map_err(Self::unreadable)?
+            .map_err(BrokerError::unreadable)?
             .build()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
         let changes = properties
             .receive_properties_changed()
             .await
-            .map_err(Self::unreadable)?;
+            .map_err(BrokerError::unreadable)?;
 
         Ok(Self {
             connection,
@@ -278,7 +281,7 @@ impl Link {
     /// answers, so the walk stops and reports what it has rather than failing.
     async fn read(&self) -> Result<Reading, BrokerError> {
         let mut reading = Reading {
-            manager_state: self.property(&self.manager, "State").await.unwrap_or(0),
+            manager_state: dbus::property(&self.manager, "State").await.unwrap_or(0),
             ..Reading::default()
         };
 
@@ -287,18 +290,17 @@ impl Link {
         };
         let active = self.proxy(&active, Self::ACTIVE_IFACE).await?;
 
-        reading.kind = self.property(&active, "Type").await.unwrap_or_default();
-        reading.id = self.property(&active, "Id").await.unwrap_or_default();
-        reading.is_vpn = self.property(&active, "Vpn").await.unwrap_or(false);
+        reading.kind = dbus::property(&active, "Type").await.unwrap_or_default();
+        reading.id = dbus::property(&active, "Id").await.unwrap_or_default();
+        reading.is_vpn = dbus::property(&active, "Vpn").await.unwrap_or(false);
 
         let devices: Vec<OwnedObjectPath> =
-            self.property(&active, "Devices").await.unwrap_or_default();
+            dbus::property(&active, "Devices").await.unwrap_or_default();
         let Some(device) = devices.first() else {
             return Ok(reading);
         };
         let device = self.proxy(device, Self::DEVICE_IFACE).await?;
-        reading.interface = self
-            .property(&device, "Interface")
+        reading.interface = dbus::property(&device, "Interface")
             .await
             .unwrap_or_default();
 
@@ -310,10 +312,10 @@ impl Link {
         };
         let point = self.proxy(&point, Self::AP_IFACE).await?;
 
-        reading.strength = self.property(&point, "Strength").await.unwrap_or(0);
+        reading.strength = dbus::property(&point, "Strength").await.unwrap_or(0);
         // An SSID is bytes, not a string: it is whatever the network was named
         // with, which is not required to be UTF-8.
-        let ssid: Vec<u8> = self.property(&point, "Ssid").await.unwrap_or_default();
+        let ssid: Vec<u8> = dbus::property(&point, "Ssid").await.unwrap_or_default();
         reading.ssid = String::from_utf8_lossy(&ssid).into_owned();
 
         Ok(reading)
@@ -333,8 +335,7 @@ impl Link {
         let Some(device) = self.wireless().await else {
             return scan;
         };
-        let paths: Vec<OwnedObjectPath> = self
-            .property(&device, "AccessPoints")
+        let paths: Vec<OwnedObjectPath> = dbus::property(&device, "AccessPoints")
             .await
             .unwrap_or_default();
 
@@ -342,13 +343,13 @@ impl Link {
             let Ok(point) = self.proxy(&path, Self::AP_IFACE).await else {
                 continue;
             };
-            let ssid: Vec<u8> = self.property(&point, "Ssid").await.unwrap_or_default();
+            let ssid: Vec<u8> = dbus::property(&point, "Ssid").await.unwrap_or_default();
             scan.points.push(Point {
                 ssid: String::from_utf8_lossy(&ssid).into_owned(),
-                strength: self.property(&point, "Strength").await.unwrap_or(0),
-                flags: self.property(&point, "Flags").await.unwrap_or(0),
-                wpa: self.property(&point, "WpaFlags").await.unwrap_or(0),
-                rsn: self.property(&point, "RsnFlags").await.unwrap_or(0),
+                strength: dbus::property(&point, "Strength").await.unwrap_or(0),
+                flags: dbus::property(&point, "Flags").await.unwrap_or(0),
+                wpa: dbus::property(&point, "WpaFlags").await.unwrap_or(0),
+                rsn: dbus::property(&point, "RsnFlags").await.unwrap_or(0),
             });
         }
         scan
@@ -359,8 +360,7 @@ impl Link {
     /// From `ActiveConnections` rather than `PrimaryConnection`: a VPN over
     /// Wi-Fi has both up at once, and the primary one is only ever the tunnel.
     async fn active(&self) -> Vec<Active> {
-        let paths: Vec<OwnedObjectPath> = self
-            .property(&self.manager, "ActiveConnections")
+        let paths: Vec<OwnedObjectPath> = dbus::property(&self.manager, "ActiveConnections")
             .await
             .unwrap_or_default();
 
@@ -370,14 +370,12 @@ impl Link {
                 continue;
             };
 
-            let devices: Vec<OwnedObjectPath> = self
-                .property(&connection, "Devices")
+            let devices: Vec<OwnedObjectPath> = dbus::property(&connection, "Devices")
                 .await
                 .unwrap_or_default();
             let interface = match devices.first() {
                 Some(device) => match self.proxy(device, Self::DEVICE_IFACE).await {
-                    Ok(device) => self
-                        .property(&device, "Interface")
+                    Ok(device) => dbus::property(&device, "Interface")
                         .await
                         .unwrap_or_default(),
                     Err(_) => String::new(),
@@ -386,9 +384,11 @@ impl Link {
             };
 
             found.push(Active {
-                id: self.property(&connection, "Id").await.unwrap_or_default(),
-                kind: self.property(&connection, "Type").await.unwrap_or_default(),
-                is_vpn: self.property(&connection, "Vpn").await.unwrap_or(false),
+                id: dbus::property(&connection, "Id").await.unwrap_or_default(),
+                kind: dbus::property(&connection, "Type")
+                    .await
+                    .unwrap_or_default(),
+                is_vpn: dbus::property(&connection, "Vpn").await.unwrap_or(false),
                 interface,
             });
         }
@@ -397,11 +397,11 @@ impl Link {
 
     /// The first wireless device, if the machine has one.
     async fn wireless(&self) -> Option<Proxy<'static>> {
-        let devices: Vec<OwnedObjectPath> = self.property(&self.manager, "Devices").await?;
+        let devices: Vec<OwnedObjectPath> = dbus::property(&self.manager, "Devices").await?;
         for path in devices {
             let device = self.proxy(&path, Self::DEVICE_IFACE).await.ok()?;
             // `NM_DEVICE_TYPE_WIFI`.
-            if self.property::<u32>(&device, "DeviceType").await == Some(2) {
+            if dbus::property::<u32>(&device, "DeviceType").await == Some(2) {
                 return self.proxy(&path, Self::WIRELESS_IFACE).await.ok();
             }
         }
@@ -415,50 +415,25 @@ impl Link {
     ) -> Result<Proxy<'static>, BrokerError> {
         Proxy::new(&self.connection, Self::SERVICE, path.to_owned(), interface)
             .await
-            .map_err(Self::unreadable)
-    }
-
-    /// A property, or `None` where NetworkManager does not have it.
-    ///
-    /// Missing reads as absent rather than as a failure: the walk is a chain
-    /// of optional steps, and a wired device that has no `Strength` has not
-    /// gone wrong.
-    async fn property<T>(&self, proxy: &Proxy<'_>, name: &str) -> Option<T>
-    where
-        T: TryFrom<zbus::zvariant::OwnedValue>,
-        <T as TryFrom<zbus::zvariant::OwnedValue>>::Error: Into<zbus::Error>,
-    {
-        proxy.get_property(name).await.ok()
+            .map_err(BrokerError::unreadable)
     }
 
     /// An object path property, or `None` for NetworkManager's "there is none".
     async fn path(&self, proxy: &Proxy<'_>, name: &str) -> Option<OwnedObjectPath> {
-        let path: OwnedObjectPath = self.property(proxy, name).await?;
+        let path: OwnedObjectPath = dbus::property(proxy, name).await?;
         match path.as_str() == Self::NONE {
             true => None,
             false => Some(path),
         }
     }
-
-    fn unreadable(error: impl std::fmt::Display) -> BrokerError {
-        BrokerError::Unreadable {
-            subsystem: "network-manager",
-            detail: error.to_string(),
-        }
-    }
 }
 
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Link")
-    }
-}
+opaque_debug!(Link);
 
 #[derive(Debug)]
 pub struct NetworkManager {
     link: Option<Link>,
     tick: Cadence,
-    primed: bool,
 }
 
 impl Default for NetworkManager {
@@ -477,7 +452,6 @@ impl NetworkManager {
         Self {
             link: None,
             tick: Cadence::after(Self::REFRESH),
-            primed: false,
         }
     }
 
@@ -517,39 +491,31 @@ impl Broker for NetworkManager {
         &[SystemTopic::Network, SystemTopic::Wifi, SystemTopic::Vpn]
     }
 
-    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
-        if self.link.is_none() {
-            self.link = Some(Link::open().await?);
-            self.primed = false;
-        }
+    async fn connect(&mut self) -> Result<(), BrokerError> {
+        self.link = Some(Link::open().await?);
+        Ok(())
+    }
 
-        if self.primed {
-            let closed = {
-                let Self { link, tick, .. } = self;
-                let link = link.as_mut().expect("opened above");
-                // Both arms are cancel-safe: a signal stream is a receiver,
-                // and an interval keeps its own deadline.
-                tokio::select! {
-                    change = link.changes.next() => change.is_none(),
-                    _ = tick.wait() => false,
-                }
-            };
-            if closed {
-                self.link = None;
-                self.primed = false;
-                return Err(BrokerError::Unreadable {
-                    subsystem: "network-manager",
-                    detail: "the bus closed".into(),
-                });
-            }
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let Self { link, tick, .. } = self;
+        let link = link.as_mut().ok_or_else(BrokerError::gone)?;
+        // Both arms are cancel-safe: a signal stream is a receiver, and an
+        // interval keeps its own deadline.
+        tokio::select! {
+            change = link.changes.next() => match change {
+                Some(_) => Ok(()),
+                None => Err(BrokerError::gone()),
+            },
+            _ = tick.wait() => Ok(()),
         }
+    }
 
-        let link = self.link.as_ref().expect("opened above");
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
         let reading = link.read().await?;
         let network = reading.state();
         let scan = link.scan(network.ssid.clone()).await;
         let active = link.active().await;
-        self.primed = true;
         Ok(Self::patch(network, scan.state(), Tunnels::state(&active)))
     }
 }

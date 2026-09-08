@@ -120,18 +120,16 @@ impl Brokerage {
             answer,
         };
         if route.send(request).await.is_err() {
-            return Some(Err(BrokerError::Unreadable {
-                subsystem: "broker",
-                detail: "the broker that serves this stopped".into(),
-            }));
+            return Some(Err(BrokerError::unreadable(
+                "the broker that serves this stopped",
+            )));
         }
 
-        Some(answered.await.unwrap_or_else(|_| {
-            Err(BrokerError::Unreadable {
-                subsystem: "broker",
-                detail: "the broker answered nothing".into(),
-            })
-        }))
+        Some(
+            answered
+                .await
+                .unwrap_or_else(|_| Err(BrokerError::unreadable("the broker answered nothing"))),
+        )
     }
 
     /// Wait for every broker to notice the shutdown and stop.
@@ -148,6 +146,13 @@ impl Brokerage {
 
     /// One broker, until the daemon stops.
     ///
+    /// The driver owns the rules about holding a connection so that no broker
+    /// has to: open lazily and again after it goes; take the first reading at
+    /// once; count a broker primed only after a reading succeeds, so a
+    /// cancelled wait asks again rather than waiting on a change whose state
+    /// it already missed; drop the connection when what was being waited on
+    /// closes.
+    ///
     /// A failure is not fatal. A subsystem that goes away comes back — the
     /// user restarted PipeWire, the adapter was plugged in again — so the
     /// broker is asked again after a backoff rather than abandoned. The
@@ -161,67 +166,131 @@ impl Brokerage {
     ) {
         let name = broker.name();
         let mut backoff = Backoff::new();
+        let mut open = false;
+        let mut primed = false;
 
         loop {
-            // Taken inside the select and dropped before it is used, because
-            // `next` and `act` are both `&mut self` and only one may be
-            // borrowed at a time. An arriving action cancels the pending
-            // `next`, which is why the trait requires it to be cancel-safe.
-            let request = tokio::select! {
-                // Shutdown first, so stopping does not depend on which of
-                // several ready branches the runtime picks.
-                biased;
-                _ = shutdown.wait() => break,
-                // `None` is every sender gone, which cannot happen while
-                // the brokerage holds the route. Keep reporting either way.
-                request = inbox.recv() => request,
-                change = broker.next() => {
-                    match change {
-                        Ok(patch) => {
-                            backoff.reset();
-                            hub.publish_state(patch);
+            if !open {
+                match broker.connect().await {
+                    Ok(()) => open = true,
+                    Err(error) => {
+                        if Self::pause(&mut backoff, name, &error, &shutdown).await {
+                            break;
                         }
-                        Err(error) => {
-                            let delay = backoff.delay();
-                            tracing::error!(
-                                broker = name,
-                                %error,
-                                ?delay,
-                                attempt = backoff.attempts(),
-                                "broker failed"
-                            );
-                            tokio::select! {
-                                biased;
-                                _ = shutdown.wait() => break,
-                                _ = tokio::time::sleep(delay) => {}
-                            }
-                        }
+                        continue;
                     }
-                    None
+                }
+            }
+
+            // Taken inside the select and dropped before anything else is
+            // used, because `wake` and `act` are both `&mut self` and only one
+            // may be borrowed at a time. An arriving action cancels the
+            // pending wait, which is why the trait requires it to be
+            // cancel-safe.
+            let request = if primed {
+                tokio::select! {
+                    // Shutdown first, so stopping does not depend on which of
+                    // several ready branches the runtime picks.
+                    biased;
+                    _ = shutdown.wait() => break,
+                    request = inbox.recv() => request,
+                    woken = broker.wake() => {
+                        if let Err(error) = woken {
+                            // Whatever was being waited on is gone. Reopen
+                            // before reading rather than read through it.
+                            open = false;
+                            primed = false;
+                            if Self::pause(&mut backoff, name, &error, &shutdown).await {
+                                break;
+                            }
+                            continue;
+                        }
+                        None
+                    }
+                }
+            } else {
+                tokio::select! {
+                    biased;
+                    _ = shutdown.wait() => break,
+                    request = inbox.recv() => request,
+                    // Nothing to wait for: the first reading after connecting
+                    // is taken at once.
+                    () = std::future::ready(()) => None,
                 }
             };
 
             if let Some(request) = request {
-                let outcome = broker.act(&request.action).await;
-                if let Ok(Some(patch)) = &outcome {
-                    // What the action changed, without waiting for the poll
-                    // to notice it.
-                    hub.publish_state(patch.clone());
+                Self::serve(&mut broker, name, request, &hub).await;
+                continue;
+            }
+
+            match broker.read().await {
+                Ok(patch) => {
+                    backoff.reset();
+                    // Only now: a `read` cancelled or failed leaves this
+                    // broker asking again rather than waiting on a change it
+                    // has already missed the state of.
+                    primed = true;
+                    hub.publish_state(patch);
                 }
-                if let Err(error) = &outcome {
-                    tracing::warn!(
-                        broker = name,
-                        action = ActionKind::of(&request.action).name(),
-                        %error,
-                        "broker refused an action"
-                    );
+                Err(error) => {
+                    open = false;
+                    primed = false;
+                    if Self::pause(&mut backoff, name, &error, &shutdown).await {
+                        break;
+                    }
                 }
-                // The caller may have given up; that is not this broker's
-                // problem.
-                let _ = request.answer.send(outcome.map(|_| ()));
             }
         }
 
         tracing::debug!(broker = name, "broker stopped");
+    }
+
+    /// One action, and the answer to whoever asked.
+    async fn serve(broker: &mut Box<dyn Broker>, name: &'static str, request: Request, hub: &Hub) {
+        let outcome = broker.act(&request.action).await;
+
+        if let Ok(Some(patch)) = &outcome {
+            // What the action changed, without waiting for the next wake to
+            // notice it.
+            hub.publish_state(patch.clone());
+        }
+        if let Err(error) = &outcome {
+            tracing::warn!(
+                broker = name,
+                action = ActionKind::of(&request.action).name(),
+                %error,
+                "broker refused an action"
+            );
+        }
+        // The caller may have given up; that is not this broker's problem.
+        let _ = request.answer.send(outcome.map(|_| ()));
+    }
+
+    /// Wait out a failure. `true` when the daemon is stopping instead.
+    ///
+    /// The broker's name is attached here rather than carried in the error:
+    /// the driver knows which broker it is driving, and an error that named
+    /// itself would name whichever broker it was copied from.
+    async fn pause(
+        backoff: &mut Backoff,
+        name: &'static str,
+        error: &BrokerError,
+        shutdown: &Shutdown,
+    ) -> bool {
+        let delay = backoff.delay();
+        tracing::error!(
+            broker = name,
+            %error,
+            ?delay,
+            attempt = backoff.attempts(),
+            "broker failed"
+        );
+
+        tokio::select! {
+            biased;
+            _ = shutdown.wait() => true,
+            _ = tokio::time::sleep(delay) => false,
+        }
     }
 }
