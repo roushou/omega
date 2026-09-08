@@ -68,6 +68,9 @@ Item {
             case "spacer": return "nodes/Spacer.qml"
             case "header": return "nodes/Header.qml"
             case "graph": return "nodes/Graph.qml"
+            case "group": return "nodes/Group.qml"
+            case "grid": return "nodes/Grid.qml"
+            case "image": return "nodes/Image.qml"
             default: return ""
         }
     }

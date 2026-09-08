@@ -2,9 +2,9 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Graph, Header, Icon, List,
-    Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider, Spacer, Text, Toggle,
-    Topic, Ui, Values, Watch, Widget,
+    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Graph, Grid, Group, Header,
+    Icon, Image, List, Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider,
+    Spacer, Text, Toggle, Topic, Ui, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
@@ -581,6 +581,16 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
             .child(Button::new("Forget").on_press("forget").disabled())
             .child(Button::new("Connecting").on_press("cancel").busy())
             .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
+            .child(
+                Group::new()
+                    .option(Text::new("Auto").key("auto"))
+                    .option(Text::new("5 GHz").key("5"))
+                    .selected("auto")
+                    .on_select("band"),
+            )
+            .child(Grid::new(2).gap(4).child(Text::new("Sent")))
+            .child(Image::new("/tmp/art.png"))
+            .child(Image::new("https://example.invalid/art.png"))
             .into(),
     );
 
@@ -679,6 +689,23 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     // Pinned, because a percentage that scaled to its own noise would show an
     // idle machine as one on fire.
     assert_eq!(graph["props"]["high"]["doubleValue"], 100.0);
+
+    assert_eq!(children[15]["type"], "group");
+    assert_eq!(children[15]["props"]["selected"]["stringValue"], "auto");
+    assert_eq!(children[15]["children"][1]["key"], "5");
+
+    assert_eq!(children[16]["type"], "grid");
+    assert_eq!(children[16]["props"]["columns"]["intValue"], "2");
+
+    // A local file reaches the shell; a URL does not. Fetching what a unit
+    // named would make the shell issue requests on its behalf, which no
+    // capability granted — so the source is dropped and the node draws
+    // nothing rather than reaching out.
+    assert_eq!(
+        children[17]["props"]["source"]["stringValue"],
+        "/tmp/art.png"
+    );
+    assert!(children[18]["props"].get("source").is_none());
 
     // Keys are the path to a node, and the renderer keeps a node whose key it
     // already has rather than rebuilding it.

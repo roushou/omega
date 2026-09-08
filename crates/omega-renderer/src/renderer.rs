@@ -80,7 +80,10 @@ impl Renderer {
             "nodes/Separator.qml",
             "nodes/Spacer.qml",
             "nodes/Header.qml",
-            "nodes/Graph.qml"
+            "nodes/Graph.qml",
+            "nodes/Group.qml",
+            "nodes/Grid.qml",
+            "nodes/Image.qml"
         ]
     );
 

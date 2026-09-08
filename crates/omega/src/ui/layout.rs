@@ -124,3 +124,43 @@ impl Default for Spacer {
 }
 
 styled!(Spacer);
+
+/// Children in rows of a fixed width.
+///
+/// For the things a panel lays out in pairs — a label beside a figure, four
+/// times over. A [`Stack`] of stacks would let each row size itself and the
+/// columns would not line up.
+#[derive(Debug, Clone)]
+pub struct Grid {
+    node: Node,
+}
+
+impl Grid {
+    /// How many across. One is a column; zero is not a grid, and the shell
+    /// treats it as one.
+    pub fn new(columns: u32) -> Self {
+        Self {
+            node: Node::new("grid").number("columns", columns.max(1)),
+        }
+    }
+
+    /// Space between cells, both ways.
+    pub fn gap(mut self, gap: u32) -> Self {
+        self.node = self.node.number("gap", gap);
+        self
+    }
+
+    pub fn child(mut self, child: impl Into<Node>) -> Self {
+        self.node = self.node.child(child);
+        self
+    }
+
+    pub fn children<C: Into<Node>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+        for child in children {
+            self.node = self.node.child(child);
+        }
+        self
+    }
+}
+
+styled!(Grid);

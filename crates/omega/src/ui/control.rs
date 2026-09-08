@@ -239,3 +239,70 @@ impl Default for List {
 }
 
 styled!(List);
+
+/// One of a few, chosen.
+///
+/// A row of options where exactly one is on — a band picker, a mode switch.
+/// Drawn joined, so it reads as one control with several settings rather than
+/// several controls.
+///
+/// Every option carries a [`key`], which is what identifies it and what is
+/// handed back when it is chosen:
+///
+/// ```
+/// # use omega::{Bind, Group, Text};
+/// Group::new()
+///     .option(Text::new("Auto").key("auto"))
+///     .option(Text::new("5 GHz").key("5"))
+///     .selected("auto")
+///     .on_select(Bind::call("band"));
+/// ```
+///
+/// [`key`]: crate::ui::Text::key
+#[derive(Debug, Clone)]
+pub struct Group {
+    node: Node,
+}
+
+impl Group {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("group"),
+        }
+    }
+
+    pub fn option(mut self, option: impl Into<Node>) -> Self {
+        self.node = self.node.child(option);
+        self
+    }
+
+    pub fn options<C: Into<Node>>(mut self, options: impl IntoIterator<Item = C>) -> Self {
+        for option in options {
+            self.node = self.node.child(option);
+        }
+        self
+    }
+
+    /// Which one is on, by key. A key no option carries selects nothing,
+    /// which is what a group whose value came from somewhere else should
+    /// show rather than guessing at the first.
+    pub fn selected(mut self, key: impl Into<String>) -> Self {
+        self.node = self.node.text_prop("selected", key);
+        self
+    }
+
+    /// What to call when one is chosen. Its key is appended to the binding's
+    /// arguments.
+    pub fn on_select(mut self, select: impl Into<Bind>) -> Self {
+        self.node = self.node.on("select", select);
+        self
+    }
+}
+
+impl Default for Group {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(Group);

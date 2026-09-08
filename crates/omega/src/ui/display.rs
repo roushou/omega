@@ -76,3 +76,49 @@ impl Graph {
 }
 
 styled!(Graph);
+
+/// A picture.
+///
+/// Album art, a QR code, an avatar. Sized by the [`width`] and [`height`]
+/// every node has; given neither, it is drawn at its own size.
+///
+/// **A local file or a `data:` URI, and nothing else.** A shell that fetched
+/// whatever a unit named would be making network requests on that unit's
+/// behalf, which no capability granted and which would leak that the desktop
+/// is displaying something. A source that is neither is dropped, and the
+/// node draws nothing rather than reaching out.
+///
+/// ```
+/// # use omega::Image;
+/// Image::new("/home/me/.cache/art.png");
+/// ```
+///
+/// [`width`]: Image::width
+/// [`height`]: Image::height
+#[derive(Debug, Clone)]
+pub struct Image {
+    node: Node,
+}
+
+impl Image {
+    pub fn new(source: impl Into<String>) -> Self {
+        let source = source.into();
+        let mut node = Node::new("image");
+        if Self::is_local(&source) {
+            node = node.text_prop("source", source);
+        }
+        Self { node }
+    }
+
+    /// Whether a source is one the shell may read without reaching out.
+    ///
+    /// `file:` and an absolute path are the same thing said two ways; `data:`
+    /// carries the bytes itself. Everything else — `http`, `https`, and any
+    /// scheme invented later — is a request, and a unit that wanted to make
+    /// one has `CAPABILITY_NETWORK` and its own process to make it in.
+    fn is_local(source: &str) -> bool {
+        source.starts_with('/') || source.starts_with("file:/") || source.starts_with("data:")
+    }
+}
+
+styled!(Image);

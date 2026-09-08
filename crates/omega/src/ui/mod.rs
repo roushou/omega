@@ -28,9 +28,9 @@ mod style;
 mod text;
 
 pub use bind::Bind;
-pub use control::{Button, Field, List, Slider, Toggle};
-pub use display::{Graph, Progress};
-pub use layout::{Column, Row, Separator, Spacer, Stack};
+pub use control::{Button, Field, Group, List, Slider, Toggle};
+pub use display::{Graph, Image, Progress};
+pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
 pub use node::{Align, Node};
 pub use text::{Header, Icon, Text};
 
