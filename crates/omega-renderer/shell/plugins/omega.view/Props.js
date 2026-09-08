@@ -59,6 +59,22 @@ function encode(value) {
     }
 }
 
+// A run of numbers, as a graph's points arrive: a `Value` holding a
+// `ListValue` of doubles, which protobuf JSON writes as
+// `{"list": {"values": [{"doubleValue": 1.0}, …]}}`. An entry that is not a
+// double is dropped rather than laid out as NaN.
+function fractions(node, name) {
+    var value = prop(node, name)
+    if (!value || !value.list || !value.list.values) return []
+
+    var out = []
+    for (var i = 0; i < value.list.values.length; i++) {
+        var held = value.list.values[i]
+        if (held && held.doubleValue !== undefined) out.push(Number(held.doubleValue))
+    }
+    return out
+}
+
 function children(node) {
     return node && node.children ? node.children : []
 }

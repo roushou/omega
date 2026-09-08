@@ -67,6 +67,7 @@ Item {
             case "separator": return "nodes/Separator.qml"
             case "spacer": return "nodes/Spacer.qml"
             case "header": return "nodes/Header.qml"
+            case "graph": return "nodes/Graph.qml"
             default: return ""
         }
     }

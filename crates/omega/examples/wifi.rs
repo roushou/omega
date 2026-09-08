@@ -15,8 +15,8 @@
 //! rooms away.
 
 use omega::{
-    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Icon, List, Network, Percent,
-    Progress, Row, Shell, Stack, Text, Ui, Widget, Wifi,
+    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Graph, Icon, List, Network,
+    Own, Percent, Progress, Row, Shell, Stack, Text, Ui, Watch, Widget, Wifi,
 };
 
 /// This unit's name, for the config plane to refer to it by.
@@ -70,11 +70,37 @@ impl Widget for Indicator {
     }
 }
 
+/// How the signal has been, kept by this unit because nobody keeps it for it.
+///
+/// The daemon publishes readings, not histories — a topic that carried one
+/// would be a new revision on every sample. So a series is something a unit
+/// accumulates in its own keyspace, which outlives the process that wrote it.
+#[derive(omega::Topic, Debug, Clone, Default, PartialEq)]
+pub struct Signal {
+    pub recent: Vec<f64>,
+}
+
+impl Signal {
+    /// How much history a bar-sized graph can show. Beyond this the points
+    /// are narrower than a pixel and the line is a smear.
+    const KEPT: usize = 40;
+
+    fn with(&self, reading: f64) -> Self {
+        let mut recent = self.recent.clone();
+        recent.push(reading);
+        if recent.len() > Self::KEPT {
+            recent.drain(..recent.len() - Self::KEPT);
+        }
+        Self { recent }
+    }
+}
+
 /// The popout: the details, and the two things anyone does with them.
 #[derive(omega::Widget, Debug)]
 pub struct Panel {
     network: Network,
     wifi: Wifi,
+    signal: Watch<Signal>,
 }
 
 impl Widget for Panel {
@@ -92,6 +118,9 @@ impl Widget for Panel {
                         .child(Progress::new(self.network.strength()))
                         .child(Text::new(self.network.strength()).dim()),
                 )
+                // Pinned to the whole range: a signal wobbling between 70 and
+                // 74 would otherwise fill the frame and read as a collapse.
+                .child(Graph::new(self.signal.get().recent).range(0.0, 100.0))
                 .child(Button::new("Disconnect").on_press(Bind::call("disconnect").arg(name)));
         } else {
             panel = panel.child(Text::new("Not connected").dim());
@@ -166,6 +195,25 @@ impl Command for Connect {
     }
 }
 
+/// Take a signal reading, for the graph to draw later.
+///
+/// A command rather than the widget, because writing state is doing something
+/// — a widget that recorded on every render would record on every percent the
+/// battery moved, too.
+#[derive(omega::Command, Debug)]
+pub struct Sample {
+    network: Network,
+    signal: Own<Signal>,
+}
+
+impl Command for Sample {
+    fn call(&self, _: Args) -> Answer {
+        let strength = f64::from(self.network.strength().whole_percent());
+        self.signal.set(&self.signal.get().with(strength));
+        Answer::done()
+    }
+}
+
 /// Join the row that was chosen. Called with its key, which is the SSID.
 #[derive(omega::Command, Debug)]
 pub struct Join {
@@ -213,6 +261,7 @@ fn main() -> omega::Result<()> {
         .widget_as::<Panel>("panel")
         .command::<Connect>("connect")
         .command::<Join>("join")
+        .command::<Sample>("sample")
         .command::<Disconnect>("disconnect")
         .run()
 }

@@ -97,6 +97,25 @@ impl Node {
         self
     }
 
+    /// A run of numbers — the points of a graph.
+    ///
+    /// The only prop that is not one value. `Value` has carried a list all
+    /// along; nothing had a use for one until something had to draw a series.
+    pub(crate) fn fractions(mut self, name: &str, values: Vec<f64>) -> Self {
+        self.set(
+            name,
+            value::Kind::List(omega_proto::omega::ListValue {
+                values: values
+                    .into_iter()
+                    .map(|value| Value {
+                        kind: Some(value::Kind::DoubleValue(value)),
+                    })
+                    .collect(),
+            }),
+        );
+        self
+    }
+
     pub(crate) fn flag(mut self, name: &str, flag: bool) -> Self {
         self.set(name, value::Kind::BoolValue(flag));
         self

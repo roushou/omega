@@ -29,7 +29,7 @@ mod text;
 
 pub use bind::Bind;
 pub use control::{Button, Field, List, Slider, Toggle};
-pub use display::Progress;
+pub use display::{Graph, Progress};
 pub use layout::{Column, Row, Separator, Spacer, Stack};
 pub use node::{Align, Node};
 pub use text::{Header, Icon, Text};

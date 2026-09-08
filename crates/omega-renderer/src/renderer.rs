@@ -79,7 +79,8 @@ impl Renderer {
             "nodes/Stack.qml",
             "nodes/Separator.qml",
             "nodes/Spacer.qml",
-            "nodes/Header.qml"
+            "nodes/Header.qml",
+            "nodes/Graph.qml"
         ]
     );
 

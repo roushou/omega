@@ -58,8 +58,8 @@ pub use source::{AccessPoint, Audio, Backlight, Battery, Clock, Network, Weekday
 pub use state::{Own, Topic, Watch};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{
-    Align, Bind, Button, Column, Field, Header, Icon, List, Node, Progress, Row, Separator, Slider,
-    Spacer, Stack, Text, Toggle, Ui,
+    Align, Bind, Button, Column, Field, Graph, Header, Icon, List, Node, Progress, Row, Separator,
+    Slider, Spacer, Stack, Text, Toggle, Ui,
 };
 pub use units::{Percent, Remaining};
 

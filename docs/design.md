@@ -410,14 +410,21 @@ needed a special case to get there, one of the abstractions above is wrong.
 
 ### What happened
 
-`crates/omega/examples/wifi.rs` — **218 lines, 153 of them not comment or
-blank**, for the indicator, the panel, the network picker, and three
-commands. Against 1,970 lines of QML and 380 of JavaScript.
+`crates/omega/examples/wifi.rs` — **267 lines, 183 of them not comment or
+blank**, for the indicator, the panel, the network picker, a signal-history
+graph, and four commands. Against 1,970 lines of QML and 380 of JavaScript.
 
 Nothing needed a special case: the panel is a second view surface, the picker
 is a keyed list that owns its own cursor, the row bindings carry their own
 arguments, the passphrase field appends what was typed, and the shell owns
 every piece of interaction state. The abstractions held.
+
+The graph is the one that used the composition story rather than the drawing
+one. No topic carries a history — a field moving every sample would be a new
+revision every sample — so the unit keeps forty readings in its own keyspace
+and hands them to a `graph`. A command writes them, because writing state is
+doing something and a widget that recorded on every render would record on
+every percent.
 
 ### What it could not express, at first
 

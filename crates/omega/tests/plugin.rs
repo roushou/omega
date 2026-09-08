@@ -2,7 +2,7 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Header, Icon, List,
+    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Graph, Header, Icon, List,
     Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider, Spacer, Text, Toggle,
     Topic, Ui, Values, Watch, Widget,
 };
@@ -580,6 +580,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
             .child(Spacer::new().width(8))
             .child(Button::new("Forget").on_press("forget").disabled())
             .child(Button::new("Connecting").on_press("cancel").busy())
+            .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
             .into(),
     );
 
@@ -662,6 +663,22 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     // one is waiting on an answer and the other is simply not available.
     assert_eq!(children[12]["props"]["disabled"]["boolValue"], true);
     assert_eq!(children[13]["props"]["busy"]["boolValue"], true);
+
+    // The one prop that is not a single value. `Value` has carried a list all
+    // along; nothing needed one until something had to draw a series.
+    let graph = &children[14];
+    assert_eq!(graph["type"], "graph");
+    assert_eq!(
+        graph["props"]["points"]["list"]["values"][0]["doubleValue"],
+        14.0
+    );
+    assert_eq!(
+        graph["props"]["points"]["list"]["values"][2]["doubleValue"],
+        12.0
+    );
+    // Pinned, because a percentage that scaled to its own noise would show an
+    // idle machine as one on fire.
+    assert_eq!(graph["props"]["high"]["doubleValue"], 100.0);
 
     // Keys are the path to a node, and the renderer keeps a node whose key it
     // already has rather than rebuilding it.
