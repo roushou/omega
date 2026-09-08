@@ -7,9 +7,10 @@ cargo build
 cargo test
 cargo clippy --all-targets
 cargo fmt --check
+crates/omega-renderer/shell/lint.sh   # the QML, which no compiler sees
 ```
 
-All four must pass; CI runs the same four. `protoc` is bundled — nothing to
+All five must pass; CI runs the same five. `protoc` is bundled — nothing to
 install. `cargo test -- --ignored` additionally runs `omega-cli/tests/e2e.rs`,
 which compiles a scaffolded config through the real binaries.
 

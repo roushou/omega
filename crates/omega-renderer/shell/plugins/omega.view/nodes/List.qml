@@ -49,10 +49,13 @@ Rectangle {
         var wanted = list.wanted
 
         for (var i = held.count - 1; i >= 0; i--) {
-            var held = held.get(i).key
+            // Not `held`: `var` is function-scoped and hoisted, so a local of
+            // that name would shadow the model for the whole function and
+            // every `held.count` would read undefined.
+            var existing = held.get(i).key
             var stillWanted = false
             for (var w = 0; w < wanted.length; w++) {
-                if (list.keyOf(wanted[w]) === held) { stillWanted = true; break }
+                if (list.keyOf(wanted[w]) === existing) { stillWanted = true; break }
             }
             if (!stillWanted) held.remove(i)
         }
