@@ -23,6 +23,7 @@ pub mod backlight;
 pub mod bluez;
 mod broker;
 pub mod clock;
+pub mod desktop;
 pub mod hyprland;
 pub mod logind;
 pub mod mpris;
@@ -36,6 +37,7 @@ pub use backlight::Backlight;
 pub use bluez::BlueZ;
 pub use broker::{Broker, BrokerError};
 pub use clock::Clock;
+pub use desktop::Desktop;
 pub use hyprland::Hyprland;
 pub use logind::Logind;
 pub use mpris::Mpris;
@@ -67,6 +69,7 @@ impl Brokers {
             Box::new(Mpris::new()),
             Box::new(BlueZ::new()),
             Box::new(Procfs::new()),
+            Box::new(Desktop::new()),
         ]
     }
 }

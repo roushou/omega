@@ -13,7 +13,7 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, BluetoothState, DisplayState, MediaState,
+    AudioState, BacklightState, BatteryState, BluetoothState, DisplayState, IdleState, MediaState,
     NetworkState, PowerState, SystemState, TimeState, UnitsState, WifiState, WindowState,
     WorkspacesState, state_topic,
 };
@@ -87,6 +87,8 @@ topics! {
     Bluetooth => "bluetooth": BluetoothState,
     /// What the machine is doing with itself.
     System => "system": SystemState,
+    /// Whether anybody is using it.
+    Idle => "idle": IdleState,
 }
 
 impl SystemTopic {

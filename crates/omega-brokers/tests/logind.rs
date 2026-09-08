@@ -26,11 +26,8 @@ fn it_claims_the_five_ways_a_session_ends() {
 }
 
 #[test]
-fn it_reports_nothing() {
-    // A broker may exist only to be asked. Whether the session is idle or
-    // locked is worth a topic and does not have one yet, and claiming one it
-    // does not fill would make a unit wait forever on it.
-    assert!(Logind::new().topics().is_empty());
+fn it_reports_whether_anybody_is_using_the_machine() {
+    assert_eq!(Logind::new().topics(), &[omega_proto::SystemTopic::Idle]);
 }
 
 #[tokio::test]
@@ -48,4 +45,29 @@ async fn an_action_it_never_claimed_is_refused() {
         refused,
         Err(omega_brokers::BrokerError::Unserved(_))
     ));
+}
+
+// ---- against the machine this is running on ----
+
+use omega_proto::omega::state_topic;
+use std::time::Duration;
+
+#[tokio::test]
+#[ignore = "needs a system bus with logind; run with --ignored"]
+async fn it_reads_the_session_it_is_running_in() {
+    let mut logind = Logind::new();
+
+    let patch = logind.next().await.expect("logind answered");
+    assert_eq!(patch.topics[0].topic, "idle");
+
+    let Some(state_topic::Value::Idle(idle)) = patch.topics[0].value.as_ref() else {
+        panic!("expected an idle reading");
+    };
+    // A session running a test is being used, so it is not idle — and a
+    // session that is not idle has not been idle since any particular moment.
+    assert!(!idle.idle);
+    assert_eq!(idle.idle_since, 0);
+
+    let again = tokio::time::timeout(Duration::from_millis(500), logind.next()).await;
+    assert!(again.is_err(), "a second reading should wait");
 }

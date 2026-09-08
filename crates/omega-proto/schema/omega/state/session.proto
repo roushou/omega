@@ -39,3 +39,16 @@ message WindowInfo {
   bool floating = 6;
   bool fullscreen = 7;
 }
+
+// Whether anybody is using the machine.
+message IdleState {
+  // The session manager's own hint. What counts as idle is the manager's
+  // policy, not this daemon's to second-guess.
+  bool idle = 1;
+  // Unix seconds since it went idle, or 0 while it is not. Truncated to the
+  // second, which is all the manager reports.
+  uint64 idle_since = 2;
+  // Whether the session is locked. A locked session is not necessarily idle
+  // and an idle one is not necessarily locked.
+  bool locked = 3;
+}

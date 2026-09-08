@@ -1,28 +1,33 @@
 //! The session, from logind.
 //!
-//! The first broker that only writes. It projects no topics — Omega has no
-//! `session` or `idle` topic yet — and exists to serve the five actions that
-//! end a session one way or another. `next` is `Pending` forever, which the
-//! driver handles by simply never waking on it.
+//! It reports whether anybody is using the machine, and serves the five
+//! actions that end a session one way or another. What counts as idle is the
+//! session manager's policy, which is exactly why it is read from logind
+//! rather than decided here.
 //!
 //! Every call is non-interactive. logind will ask polkit to prompt when a
 //! caller allows it, and a broker that allowed it would block on a dialog
 //! with the action channel held open behind it — so a session that may not
 //! reboot is told so instead of hanging.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
+use futures_util::StreamExt;
+use zbus::fdo::PropertiesProxy;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::{Connection, Proxy};
 
-use omega_proto::omega::action;
+use omega_proto::omega::{IdleState, StatePatch, StateTopic, action, state_topic};
 use omega_proto::{ActionKind, SystemTopic};
 
-use crate::broker::{Broker, BrokerError};
+use crate::broker::{Broker, BrokerError, Cadence};
 
 /// The system bus, the login manager, and this session on it.
 struct Link {
     manager: Proxy<'static>,
     session: Proxy<'static>,
+    changes: zbus::fdo::PropertiesChangedStream,
 }
 
 impl Link {
@@ -50,11 +55,53 @@ impl Link {
             .call("GetSession", &(Self::OURS))
             .await
             .map_err(Self::unreadable)?;
-        let session = Proxy::new(&connection, Self::SERVICE, path, Self::SESSION_IFACE)
+        let session = Proxy::new(
+            &connection,
+            Self::SERVICE,
+            path.clone(),
+            Self::SESSION_IFACE,
+        )
+        .await
+        .map_err(Self::unreadable)?;
+
+        let properties = PropertiesProxy::builder(&connection)
+            .destination(Self::SERVICE)
+            .map_err(Self::unreadable)?
+            .path(path)
+            .map_err(Self::unreadable)?
+            .build()
+            .await
+            .map_err(Self::unreadable)?;
+        let changes = properties
+            .receive_properties_changed()
             .await
             .map_err(Self::unreadable)?;
 
-        Ok(Self { manager, session })
+        Ok(Self {
+            manager,
+            session,
+            changes,
+        })
+    }
+
+    /// Whether anybody is using the machine.
+    ///
+    /// Every field independently: a locked session is not necessarily idle,
+    /// and an idle one is not necessarily locked.
+    async fn idle(&self) -> IdleState {
+        IdleState {
+            idle: self.property("IdleHint").await.unwrap_or(false),
+            idle_since: self.property("IdleSinceHint").await.unwrap_or(0),
+            locked: self.property("LockedHint").await.unwrap_or(false),
+        }
+    }
+
+    async fn property<T>(&self, name: &str) -> Option<T>
+    where
+        T: TryFrom<zbus::zvariant::OwnedValue>,
+        <T as TryFrom<zbus::zvariant::OwnedValue>>::Error: Into<zbus::Error>,
+    {
+        self.session.get_property(name).await.ok()
     }
 
     /// Ask the manager for something, without letting it prompt.
@@ -88,14 +135,30 @@ impl std::fmt::Debug for Link {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Logind {
     link: Option<Link>,
+    tick: Cadence,
+    primed: bool,
+}
+
+impl Default for Logind {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Logind {
+    /// The floor under the signals. logind reports `IdleHint` changing, but
+    /// how long it has been idle only moves with the clock.
+    pub const REFRESH: Duration = Duration::from_secs(30);
+
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            link: None,
+            tick: Cadence::after(Self::REFRESH),
+            primed: false,
+        }
     }
 
     /// The logind method an action asks for.
@@ -120,10 +183,8 @@ impl Broker for Logind {
         "logind"
     }
 
-    /// None. Whether the session is idle or locked is worth a topic and does
-    /// not have one yet; a broker may exist only to be asked.
     fn topics(&self) -> &'static [SystemTopic] {
-        &[]
+        &[SystemTopic::Idle]
     }
 
     fn actions(&self) -> &'static [ActionKind] {
@@ -136,17 +197,43 @@ impl Broker for Logind {
         ]
     }
 
-    async fn next(&mut self) -> Result<omega_proto::omega::StatePatch, BrokerError> {
-        // Nothing to report, ever. The driver selects on this alongside
-        // shutdown and incoming actions, so a future that never resolves is
-        // simply a branch that never wins.
-        std::future::pending().await
+    async fn next(&mut self) -> Result<StatePatch, BrokerError> {
+        if self.link.is_none() {
+            self.link = Some(Link::open().await?);
+            self.primed = false;
+        }
+
+        if self.primed {
+            let closed = {
+                let Self { link, tick, .. } = self;
+                let link = link.as_mut().expect("opened above");
+                tokio::select! {
+                    change = link.changes.next() => change.is_none(),
+                    _ = tick.wait() => false,
+                }
+            };
+            if closed {
+                self.link = None;
+                self.primed = false;
+                return Err(BrokerError::Unreadable {
+                    subsystem: "logind",
+                    detail: "the bus closed".into(),
+                });
+            }
+        }
+
+        let idle = self.link.as_ref().expect("opened above").idle().await;
+        self.primed = true;
+        Ok(StatePatch {
+            topics: vec![StateTopic {
+                topic: SystemTopic::Idle.as_str().into(),
+                revision: 0, // the Hub assigns the real revision
+                value: Some(state_topic::Value::Idle(idle)),
+            }],
+        })
     }
 
-    async fn act(
-        &mut self,
-        action: &action::Kind,
-    ) -> Result<Option<omega_proto::omega::StatePatch>, BrokerError> {
+    async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
         if self.link.is_none() {
             self.link = Some(Link::open().await?);
         }

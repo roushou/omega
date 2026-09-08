@@ -35,12 +35,7 @@ const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Units];
 /// because nothing performs them. They are the daemon's to serve when
 /// something does — they act on the state document's own settings, which no
 /// subsystem owns.
-const UNSERVED_ACTIONS: &[ActionKind] = &[
-    ActionKind::LaunchApp,
-    ActionKind::SetSetting,
-    ActionKind::ToggleSetting,
-    ActionKind::Screenshot,
-];
+const UNSERVED_ACTIONS: &[ActionKind] = &[ActionKind::SetSetting, ActionKind::ToggleSetting];
 
 /// Actions the daemon performs itself rather than through a broker.
 const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokeUnit];
