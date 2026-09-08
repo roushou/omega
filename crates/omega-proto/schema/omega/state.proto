@@ -55,6 +55,8 @@ message StateTopic {
     BluetoothState bluetooth = 23;
     SystemState system = 24;
     IdleState idle = 25;
+    PeripheralsState peripherals = 26;
+    InputState input = 27;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

@@ -22,3 +22,31 @@ message PowerState {
   // and memory rather than here. Nothing ever filled it.
   reserved 2;
 }
+
+// The batteries of things plugged into the machine, rather than the machine's
+// own: a mouse, a keyboard, a headset.
+message PeripheralsState {
+  repeated Peripheral devices = 1;
+}
+
+message Peripheral {
+  string id = 1;                // stable across reconnects: UPower's own path
+  string model = 2;             // "Logitech G Pro"
+  PeripheralKind kind = 3;
+  uint32 percent = 4;
+  bool charging = 5;
+}
+
+// UPower knows thirty kinds of device. These are the ones a bar draws
+// differently; everything else is `OTHER`, which is honest — a widget can
+// still show the model and the percentage.
+enum PeripheralKind {
+  PERIPHERAL_KIND_UNSPECIFIED = 0;
+  PERIPHERAL_KIND_MOUSE = 1;
+  PERIPHERAL_KIND_KEYBOARD = 2;
+  PERIPHERAL_KIND_HEADSET = 3;
+  PERIPHERAL_KIND_GAMING_INPUT = 4;
+  PERIPHERAL_KIND_TABLET = 5;
+  PERIPHERAL_KIND_PHONE = 6;
+  PERIPHERAL_KIND_OTHER = 7;
+}

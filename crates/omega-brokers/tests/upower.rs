@@ -5,7 +5,7 @@
 //! fraction, a state enum against a boolean, and two time fields of which
 //! only one ever applies — and every one of those is somewhere to be wrong.
 
-use omega_brokers::upower::Reading;
+use omega_brokers::upower::{Attached, Peripherals, Reading};
 
 /// A laptop battery, discharging with two hours left.
 fn discharging() -> Reading {
@@ -103,6 +103,70 @@ fn an_estimate_still_being_worked_out_is_not_a_negative_duration() {
     assert_eq!(settling.state().unwrap().seconds_to_empty, 0);
 }
 
+// ---- what is plugged in ----
+
+fn attached(path: &str, kind: u32, percentage: f64) -> Attached {
+    Attached {
+        path: format!("/org/freedesktop/UPower/devices/{path}"),
+        model: "Logitech G Pro".into(),
+        kind,
+        percentage,
+        state: 0,
+    }
+}
+
+#[test]
+fn the_machines_own_supplies_are_not_peripherals() {
+    // UPower reports the laptop battery, the mains, and the mouse through one
+    // interface. The first two are what `battery` and `power` already answer.
+    let all = vec![
+        attached("battery_BAT0", 2, 87.0),
+        attached("line_power_AC", 1, 0.0),
+        attached("battery_hidpp_battery_2", 5, 72.0),
+    ];
+    let state = Peripherals::state(&all);
+
+    assert_eq!(state.devices.len(), 1);
+    assert_eq!(state.devices[0].percent, 72);
+}
+
+#[test]
+fn a_device_that_reports_no_battery_is_not_a_device_at_zero() {
+    // A keyboard with no battery is a keyboard, and listing it as empty would
+    // have a bar warning about hardware that is fine.
+    assert!(
+        Peripherals::state(&[attached("kbd", 6, 0.0)])
+            .devices
+            .is_empty()
+    );
+}
+
+#[test]
+fn the_emptiest_comes_first_and_ties_break_by_model() {
+    let all = vec![
+        attached("a", 5, 90.0),
+        attached("b", 6, 12.0),
+        attached("c", 17, 50.0),
+    ];
+    let percents: Vec<u32> = Peripherals::state(&all)
+        .devices
+        .iter()
+        .map(|device| device.percent)
+        .collect();
+
+    // A bar wants the one about to die at the top, and a stable order under
+    // it so the list does not shuffle between readings.
+    assert_eq!(percents, vec![12, 50, 90]);
+}
+
+#[test]
+fn the_id_is_the_path_because_a_model_is_not_unique() {
+    // Two identical mice are two devices. The object path is what survives a
+    // reconnect and tells them apart.
+    let state = Peripherals::state(&[attached("battery_hidpp_battery_2", 5, 72.0)]);
+    assert_eq!(state.devices[0].id, "battery_hidpp_battery_2");
+}
+
 // ---- against the machine this is running on ----
 
 use std::time::Duration;
@@ -126,7 +190,7 @@ async fn it_reads_the_machine_it_is_running_on() {
         .iter()
         .map(|topic| topic.topic.as_str())
         .collect();
-    assert_eq!(topics, vec!["battery", "power"]);
+    assert_eq!(topics, vec!["battery", "power", "peripherals"]);
 
     // A desktop reports no battery and is still on mains, so `power` always
     // has a value where `battery` may not.

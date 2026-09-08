@@ -235,8 +235,15 @@ async fn it_reads_the_machine_it_is_running_on() {
     let mut network = NetworkManager::new();
 
     let patch = network.next().await.expect("NetworkManager answered");
-    assert_eq!(patch.topics.len(), 1);
-    assert_eq!(patch.topics[0].topic, "network");
+    // One connection, one broker, two topics: what the machine is on, and
+    // what it could be on. The hub coalesces them apart, so an indicator
+    // holding one is not woken by the other.
+    let topics: Vec<&str> = patch
+        .topics
+        .iter()
+        .map(|topic| topic.topic.as_str())
+        .collect();
+    assert_eq!(topics, vec!["network", "wifi"]);
 
     let Some(state_topic::Value::Network(state)) = patch.topics[0].value.as_ref() else {
         panic!("expected a network reading");

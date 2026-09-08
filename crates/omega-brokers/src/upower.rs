@@ -20,7 +20,10 @@ use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
 use omega_proto::SystemTopic;
-use omega_proto::omega::{BatteryState, PowerState, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{
+    BatteryState, Peripheral, PeripheralKind, PeripheralsState, PowerState, StatePatch, StateTopic,
+    state_topic,
+};
 
 use crate::broker::{Broker, BrokerError};
 
@@ -106,6 +109,83 @@ impl Reading {
     }
 }
 
+/// One device that is not the machine itself.
+///
+/// UPower reports the laptop's own battery and everything plugged into it
+/// through the same interface. What separates them is `Type`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Attached {
+    pub path: String,
+    pub model: String,
+    pub kind: u32,
+    pub percentage: f64,
+    pub state: u32,
+}
+
+impl Attached {
+    /// `UpDeviceKind`. Below `Mouse` are the machine's own supplies — the
+    /// battery, the mains, a UPS — which the `battery` and `power` topics
+    /// already answer for.
+    const MOUSE: u32 = 5;
+
+    /// Whether this is something plugged in rather than the machine itself.
+    ///
+    /// A device with no reading is dropped too: a keyboard that reports no
+    /// battery is a keyboard, not a keyboard at zero percent.
+    pub fn is_peripheral(&self) -> bool {
+        self.kind >= Self::MOUSE && self.percentage > 0.0
+    }
+
+    fn peripheral(&self) -> Peripheral {
+        Peripheral {
+            // The object path, because a model is not unique — two identical
+            // mice are two devices — and it survives a reconnect.
+            id: self.path.rsplit('/').next().unwrap_or_default().to_string(),
+            model: self.model.clone(),
+            kind: self.peripheral_kind() as i32,
+            percent: self.percentage.clamp(0.0, 100.0).round() as u32,
+            charging: self.state == Reading::CHARGING,
+        }
+    }
+
+    /// The kinds a bar draws differently. UPower knows thirty; the rest are
+    /// `Other`, which still has a model and a percentage to show.
+    fn peripheral_kind(&self) -> PeripheralKind {
+        match self.kind {
+            5 => PeripheralKind::Mouse,
+            6 => PeripheralKind::Keyboard,
+            10 => PeripheralKind::Tablet,
+            8 => PeripheralKind::Phone,
+            12 => PeripheralKind::GamingInput,
+            17 | 19 => PeripheralKind::Headset,
+            _ => PeripheralKind::Other,
+        }
+    }
+}
+
+/// What is plugged in, turned into the ontology.
+#[derive(Debug)]
+pub struct Peripherals;
+
+impl Peripherals {
+    /// Emptiest first would be arbitrary; a bar wants the one about to die at
+    /// the top, and a stable order under it so the list does not shuffle.
+    pub fn state(attached: &[Attached]) -> PeripheralsState {
+        let mut mine: Vec<Peripheral> = attached
+            .iter()
+            .filter(|device| device.is_peripheral())
+            .map(Attached::peripheral)
+            .collect();
+
+        mine.sort_by(|a, b| {
+            a.percent
+                .cmp(&b.percent)
+                .then_with(|| a.model.cmp(&b.model))
+        });
+        PeripheralsState { devices: mine }
+    }
+}
+
 /// The system bus, the device this broker watches, and the manager above it.
 struct Link {
     device: PropertiesProxy<'static>,
@@ -172,6 +252,42 @@ impl Link {
         Ok(Reading::from_properties(&properties))
     }
 
+    /// Everything UPower knows about, other than the composite device.
+    ///
+    /// A second walk rather than a second broker: it is one connection and
+    /// one subsystem, and two brokers reading it would be two answers to one
+    /// question.
+    async fn attached(&self) -> Vec<Attached> {
+        let paths: Vec<zbus::zvariant::OwnedObjectPath> = self
+            .manager
+            .call("EnumerateDevices", &())
+            .await
+            .unwrap_or_default();
+
+        let mut found = Vec::new();
+        for path in paths {
+            let Ok(device) = Proxy::new(
+                self.manager.connection(),
+                Self::SERVICE,
+                path.clone(),
+                Self::INTERFACE,
+            )
+            .await
+            else {
+                continue;
+            };
+
+            found.push(Attached {
+                path: path.as_str().to_string(),
+                model: device.get_property("Model").await.unwrap_or_default(),
+                kind: device.get_property("Type").await.unwrap_or(0),
+                percentage: device.get_property("Percentage").await.unwrap_or(0.0),
+                state: device.get_property("State").await.unwrap_or(0),
+            });
+        }
+        found
+    }
+
     /// Whether the machine is on mains.
     ///
     /// The manager's answer, not the battery's: a desktop has no battery and
@@ -218,7 +334,11 @@ impl UPower {
 
     /// Both topics in one patch. One power supply subsystem, one broker:
     /// two of them reading it would be two answers to one question.
-    fn patch(state: Option<BatteryState>, on_ac: bool) -> StatePatch {
+    fn patch(
+        state: Option<BatteryState>,
+        on_ac: bool,
+        peripherals: PeripheralsState,
+    ) -> StatePatch {
         StatePatch {
             topics: vec![
                 StateTopic {
@@ -230,6 +350,11 @@ impl UPower {
                     topic: SystemTopic::Power.as_str().into(),
                     revision: 0,
                     value: Some(state_topic::Value::Power(PowerState { on_ac })),
+                },
+                StateTopic {
+                    topic: SystemTopic::Peripherals.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::Peripherals(peripherals)),
                 },
             ],
         }
@@ -243,7 +368,11 @@ impl Broker for UPower {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Battery, SystemTopic::Power]
+        &[
+            SystemTopic::Battery,
+            SystemTopic::Power,
+            SystemTopic::Peripherals,
+        ]
     }
 
     async fn next(&mut self) -> Result<StatePatch, BrokerError> {
@@ -272,7 +401,12 @@ impl Broker for UPower {
         let link = self.link.as_ref().expect("opened above");
         let reading = link.read().await?;
         let on_ac = link.on_ac().await;
+        let attached = link.attached().await;
         self.primed = true;
-        Ok(Self::patch(reading.state(), on_ac))
+        Ok(Self::patch(
+            reading.state(),
+            on_ac,
+            Peripherals::state(&attached),
+        ))
     }
 }

@@ -52,3 +52,13 @@ message IdleState {
   // and an idle one is not necessarily locked.
   bool locked = 3;
 }
+
+// How the machine is being typed at.
+message InputState {
+  // The keyboard the compositor considers the main one. A laptop has half a
+  // dozen "keyboards" — a power button, a video bus — and only one of them is
+  // the one somebody types on.
+  string keyboard = 1;          // the device's name
+  string layout = 2;            // "us", as xkb spells it
+  string keymap = 3;            // "English (US)", as a person reads it
+}

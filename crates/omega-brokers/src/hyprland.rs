@@ -17,9 +17,9 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use omega_proto::omega::{
-    Direction, DisplayState, MonitorInfo, StatePatch, StateTopic, WindowInfo, WindowSelector,
-    WindowState, WorkspaceInfo, WorkspacesState, action, move_to_workspace, state_topic,
-    switch_workspace, window_selector,
+    Direction, DisplayState, InputState, MonitorInfo, StatePatch, StateTopic, WindowInfo,
+    WindowSelector, WindowState, WorkspaceInfo, WorkspacesState, action, move_to_workspace,
+    state_topic, switch_workspace, window_selector,
 };
 use omega_proto::{ActionKind, SystemTopic};
 
@@ -187,6 +187,52 @@ impl Session {
     }
 }
 
+/// What `hyprctl -j devices` reports, of which only the keyboards are read.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Devices {
+    #[serde(default)]
+    pub keyboards: Vec<Keyboard>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Keyboard {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub layout: String,
+    #[serde(default)]
+    pub active_keymap: String,
+    /// Whether the compositor considers this the one somebody types on.
+    #[serde(default)]
+    pub main: bool,
+}
+
+impl Session {
+    /// How the machine is being typed at.
+    ///
+    /// A laptop reports half a dozen keyboards — a power button, a video bus,
+    /// a lid switch — and exactly one of them is the one under somebody's
+    /// hands. Hyprland says which; reading the first would report the layout
+    /// of a power button.
+    pub fn input(json: &str) -> Result<InputState, BrokerError> {
+        let devices: Devices = Self::parse(json)?;
+        let main = devices
+            .keyboards
+            .iter()
+            .find(|keyboard| keyboard.main)
+            // No main keyboard is a session with none attached, which is a
+            // reading rather than a reason to fail.
+            .cloned()
+            .unwrap_or_default();
+
+        Ok(InputState {
+            keyboard: main.name,
+            layout: main.layout,
+            keymap: main.active_keymap,
+        })
+    }
+}
+
 /// One action, as a Hyprland dispatcher.
 ///
 /// Pure, and the whole of what this broker decides. Omega's words and
@@ -309,6 +355,7 @@ impl Link {
         const DISPLAY: &[SystemTopic] = &[SystemTopic::Display];
         const WORKSPACES: &[SystemTopic] = &[SystemTopic::Workspaces];
         const WINDOW: &[SystemTopic] = &[SystemTopic::Window];
+        const INPUT: &[SystemTopic] = &[SystemTopic::Input];
         // Opening or closing a window changes what has focus *and* the count
         // on the workspace it was on.
         const BOTH: &[SystemTopic] = &[SystemTopic::Workspaces, SystemTopic::Window];
@@ -318,6 +365,7 @@ impl Link {
             SystemTopic::Display,
             SystemTopic::Workspaces,
             SystemTopic::Window,
+            SystemTopic::Input,
         ];
 
         match event {
@@ -330,6 +378,7 @@ impl Link {
             "openwindow" | "closewindow" | "movewindow" | "movewindowv2" => BOTH,
             "activewindow" | "activewindowv2" | "windowtitle" | "windowtitlev2" | "fullscreen"
             | "changefloatingmode" => WINDOW,
+            "activelayout" => INPUT,
             _ => &[],
         }
     }
@@ -374,6 +423,9 @@ impl Link {
                 }
                 SystemTopic::Window => {
                     state_topic::Value::Window(Session::window(&self.ask("j/activewindow").await?)?)
+                }
+                SystemTopic::Input => {
+                    state_topic::Value::Input(Session::input(&self.ask("j/devices").await?)?)
                 }
                 // Nothing else is this broker's, and the driver only ever
                 // asks for what `affected` named.
@@ -513,6 +565,7 @@ impl Broker for Hyprland {
             SystemTopic::Display,
             SystemTopic::Workspaces,
             SystemTopic::Window,
+            SystemTopic::Input,
         ]
     }
 

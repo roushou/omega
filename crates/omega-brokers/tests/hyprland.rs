@@ -91,7 +91,7 @@ async fn it_reads_the_session_it_is_running_in() {
         .iter()
         .map(|topic| topic.topic.as_str())
         .collect();
-    assert_eq!(topics, vec!["display", "workspaces", "window"]);
+    assert_eq!(topics, vec!["display", "workspaces", "window", "input"]);
 
     let Some(state_topic::Value::Display(display)) = patch.topics[0].value.as_ref() else {
         panic!("expected a display reading");
@@ -174,6 +174,28 @@ fn the_focused_window_carries_what_a_bar_shows() {
     assert!(!focused.floating);
     // Hyprland reports a mode, not a flag. Anything but zero is fullscreen.
     assert!(focused.fullscreen);
+}
+
+#[test]
+fn the_keyboard_somebody_types_on_is_the_main_one() {
+    // A laptop reports half a dozen keyboards — a power button, a video bus.
+    // Reading the first would report the layout of a power button.
+    let devices = r#"{"keyboards": [
+        {"name": "power-button", "layout": "us", "active_keymap": "English (US)", "main": false},
+        {"name": "at-translated-set-2", "layout": "fr", "active_keymap": "French", "main": true}
+    ]}"#;
+    let input = Session::input(devices).expect("valid devices");
+
+    assert_eq!(input.keyboard, "at-translated-set-2");
+    assert_eq!(input.layout, "fr");
+    assert_eq!(input.keymap, "French");
+}
+
+#[test]
+fn a_session_with_no_main_keyboard_is_a_reading() {
+    let input = Session::input(r#"{"keyboards": []}"#).unwrap();
+    assert_eq!(input.keyboard, "");
+    assert_eq!(input.layout, "");
 }
 
 // ---- dispatching ----
