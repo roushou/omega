@@ -12,6 +12,13 @@ message BatteryState {
 }
 
 message PowerState {
+  // Whether the machine is running on mains rather than its battery. From
+  // the same broker as the battery: it is one power supply subsystem, and two
+  // brokers reading it would be two answers to one question.
   bool on_ac = 1;
-  double load_percent = 2;
+
+  // 2 was `load_percent`, which is not a power-supply reading — it is the
+  // kernel's own load average, and it belongs in a `system` topic beside CPU
+  // and memory rather than here. Nothing ever filled it.
+  reserved 2;
 }

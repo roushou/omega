@@ -119,8 +119,18 @@ async fn it_reads_the_machine_it_is_running_on() {
     // change instead would leave a widget blank until the battery moved,
     // which on a machine sitting on AC is never.
     let patch = upower.next().await.expect("UPower answered");
-    assert_eq!(patch.topics.len(), 1);
-    assert_eq!(patch.topics[0].topic, "battery");
+    // One power supply subsystem, one broker, two topics: the battery and
+    // whether the machine is on mains.
+    let topics: Vec<&str> = patch
+        .topics
+        .iter()
+        .map(|topic| topic.topic.as_str())
+        .collect();
+    assert_eq!(topics, vec!["battery", "power"]);
+
+    // A desktop reports no battery and is still on mains, so `power` always
+    // has a value where `battery` may not.
+    assert!(patch.topics[1].value.is_some());
 
     match patch.topics[0].value.as_ref() {
         Some(state_topic::Value::Battery(battery)) => {

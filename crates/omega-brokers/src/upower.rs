@@ -20,7 +20,7 @@ use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
 use omega_proto::SystemTopic;
-use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{BatteryState, PowerState, StatePatch, StateTopic, state_topic};
 
 use crate::broker::{Broker, BrokerError};
 
@@ -106,14 +106,17 @@ impl Reading {
     }
 }
 
-/// The system bus, and the device this broker watches.
+/// The system bus, the device this broker watches, and the manager above it.
 struct Link {
     device: PropertiesProxy<'static>,
+    manager: Proxy<'static>,
     changes: zbus::fdo::PropertiesChangedStream,
 }
 
 impl Link {
     const SERVICE: &'static str = "org.freedesktop.UPower";
+    const MANAGER: &'static str = "/org/freedesktop/UPower";
+    const MANAGER_IFACE: &'static str = "org.freedesktop.UPower";
     const DEVICE: &'static str = "/org/freedesktop/UPower/devices/DisplayDevice";
     const INTERFACE: &'static str = "org.freedesktop.UPower.Device";
 
@@ -126,6 +129,15 @@ impl Link {
         Proxy::new(&connection, Self::SERVICE, Self::DEVICE, Self::INTERFACE)
             .await
             .map_err(Self::unreadable)?;
+
+        let manager = Proxy::new(
+            &connection,
+            Self::SERVICE,
+            Self::MANAGER,
+            Self::MANAGER_IFACE,
+        )
+        .await
+        .map_err(Self::unreadable)?;
 
         let device = PropertiesProxy::builder(&connection)
             .destination(Self::SERVICE)
@@ -141,7 +153,11 @@ impl Link {
             .await
             .map_err(Self::unreadable)?;
 
-        Ok(Self { device, changes })
+        Ok(Self {
+            device,
+            manager,
+            changes,
+        })
     }
 
     /// Every property in one call. Six round trips for one reading would be
@@ -154,6 +170,18 @@ impl Link {
             .await
             .map_err(Self::unreadable)?;
         Ok(Reading::from_properties(&properties))
+    }
+
+    /// Whether the machine is on mains.
+    ///
+    /// The manager's answer, not the battery's: a desktop has no battery and
+    /// is still on mains, and asking the device would report nothing.
+    async fn on_ac(&self) -> bool {
+        !self
+            .manager
+            .get_property::<bool>("OnBattery")
+            .await
+            .unwrap_or(false)
     }
 
     fn unreadable(error: impl std::fmt::Display) -> BrokerError {
@@ -188,13 +216,22 @@ impl UPower {
         Self::default()
     }
 
-    fn patch(state: Option<BatteryState>) -> StatePatch {
+    /// Both topics in one patch. One power supply subsystem, one broker:
+    /// two of them reading it would be two answers to one question.
+    fn patch(state: Option<BatteryState>, on_ac: bool) -> StatePatch {
         StatePatch {
-            topics: vec![StateTopic {
-                topic: SystemTopic::Battery.as_str().into(),
-                revision: 0, // the Hub assigns the real revision
-                value: state.map(state_topic::Value::Battery),
-            }],
+            topics: vec![
+                StateTopic {
+                    topic: SystemTopic::Battery.as_str().into(),
+                    revision: 0, // the Hub assigns the real revision
+                    value: state.map(state_topic::Value::Battery),
+                },
+                StateTopic {
+                    topic: SystemTopic::Power.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::Power(PowerState { on_ac })),
+                },
+            ],
         }
     }
 }
@@ -206,7 +243,7 @@ impl Broker for UPower {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Battery]
+        &[SystemTopic::Battery, SystemTopic::Power]
     }
 
     async fn next(&mut self) -> Result<StatePatch, BrokerError> {
@@ -232,8 +269,10 @@ impl Broker for UPower {
             }
         }
 
-        let reading = self.link.as_ref().expect("opened above").read().await?;
+        let link = self.link.as_ref().expect("opened above");
+        let reading = link.read().await?;
+        let on_ac = link.on_ac().await;
         self.primed = true;
-        Ok(Self::patch(reading.state()))
+        Ok(Self::patch(reading.state(), on_ac))
     }
 }

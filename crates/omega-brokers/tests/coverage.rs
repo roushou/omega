@@ -18,16 +18,25 @@ use omega_proto::{ActionKind, SystemTopic};
 /// Topics no broker projects yet.
 const UNSERVED_TOPICS: &[SystemTopic] = &[
     SystemTopic::Audio, // PipeWire
-    SystemTopic::Power, // sysfs and /proc/loadavg
-    // Not a broker's: the supervisor's own projection of the unit table.
-    SystemTopic::Units,
 ];
 
-/// Actions no broker serves yet.
+/// Topics the daemon fills itself rather than through a broker.
+///
+/// Not a subsystem: the supervisor's report on the units it runs is its own
+/// projection of its own table, and a broker for it would be the daemon
+/// asking itself.
+const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Units];
+
+/// Actions nothing serves yet.
 ///
 /// `RunCommand` and `InvokeUnit` are absent because the daemon performs them
 /// itself: spawning a process is not brokering a subsystem, and routing
 /// between units is the daemon's own job.
+///
+/// `SetSetting` and `ToggleSetting` are on this list rather than the daemon's
+/// because nothing performs them. They are the daemon's to serve when
+/// something does — they act on the state document's own settings, which no
+/// subsystem owns.
 const UNSERVED_ACTIONS: &[ActionKind] = &[
     ActionKind::LaunchApp,
     ActionKind::SetSetting,
@@ -58,10 +67,11 @@ fn served_actions() -> HashSet<ActionKind> {
 fn every_topic_is_served_or_named_unserved() {
     let served = served_topics();
     let unserved: HashSet<SystemTopic> = UNSERVED_TOPICS.iter().copied().collect();
+    let daemons: HashSet<SystemTopic> = DAEMON_TOPICS.iter().copied().collect();
 
     for topic in SystemTopic::ALL {
         assert!(
-            served.contains(topic) || unserved.contains(topic),
+            served.contains(topic) || unserved.contains(topic) || daemons.contains(topic),
             "the ontology declares {topic} and nothing serves it. Add a broker, \
              or add it to UNSERVED_TOPICS — a topic that is silently unserved \
              is a unit that never renders."
@@ -92,7 +102,7 @@ fn nothing_is_named_unserved_and_then_served() {
     // behind. A broker that lands has to delete its line, or the inventory
     // stops being the truth about what is missing.
     let served = served_topics();
-    for topic in UNSERVED_TOPICS {
+    for topic in UNSERVED_TOPICS.iter().chain(DAEMON_TOPICS) {
         assert!(
             !served.contains(topic),
             "{topic} is served by a broker but still listed in UNSERVED_TOPICS"
