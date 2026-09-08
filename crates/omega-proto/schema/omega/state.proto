@@ -6,6 +6,7 @@ import "omega/state/display.proto";
 import "omega/state/media.proto";
 import "omega/state/network.proto";
 import "omega/state/power.proto";
+import "omega/state/session.proto";
 import "omega/state/time.proto";
 import "omega/state/units.proto";
 import "omega/value.proto";
@@ -19,7 +20,8 @@ import "omega/value.proto";
 // splitting that would be splitting the thing this schema exists to fix.
 
 // One topic value. "topic" is the address: "battery", "network", "audio",
-// "backlight", "power", "display", "units", "time", "wifi", or
+// "backlight", "power", "display", "units", "time", "wifi", "workspaces",
+// "window", or
 // "unit.<name>.<key>" for
 // unit-owned data.
 //
@@ -46,6 +48,8 @@ message StateTopic {
     UnitsState units = 16;
     TimeState time = 17;
     WifiState wifi = 18;
+    WorkspacesState workspaces = 19;
+    WindowState window = 21;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

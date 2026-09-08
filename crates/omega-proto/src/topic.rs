@@ -14,7 +14,7 @@ use std::fmt;
 
 use crate::omega::{
     AudioState, BacklightState, BatteryState, DisplayState, NetworkState, PowerState, TimeState,
-    UnitsState, WifiState, state_topic,
+    UnitsState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -78,6 +78,9 @@ topics! {
     Time => "time": TimeState,
     /// What the last scan found on the air.
     Wifi => "wifi": WifiState,
+    Workspaces => "workspaces": WorkspacesState,
+    /// What has focus.
+    Window => "window": WindowState,
 }
 
 impl SystemTopic {

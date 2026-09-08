@@ -2,9 +2,10 @@ syntax = "proto3";
 
 package omega;
 
-// MonitorInfo only: an event carries the display it is about, not the
-// whole state topic.
+// The shapes an event carries: a display, a window. Both belong to state —
+// an event says one changed, and says it in the same words.
 import "omega/state/display.proto";
+import "omega/state/session.proto";
 import "omega/value.proto";
 
 // Events are the imperative inputs of the runtime plane. EventKind is the
@@ -67,14 +68,6 @@ message MonitorEvent {
 
 message WindowEvent {
   WindowInfo window = 1;
-}
-
-message WindowInfo {
-  string app_id = 1;
-  string title = 2;
-  string workspace = 3;
-  string monitor_id = 4;
-  uint32 pid = 5;
 }
 
 message PowerEvent {

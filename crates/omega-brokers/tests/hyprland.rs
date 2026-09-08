@@ -83,8 +83,15 @@ fn no_monitors_is_an_answer() {
 async fn it_reads_the_session_it_is_running_in() {
     let mut hyprland = Hyprland::new();
 
+    // A fresh connection reports everything it covers; after that, only what
+    // the event that woke it can have changed.
     let patch = hyprland.next().await.expect("Hyprland answered");
-    assert_eq!(patch.topics[0].topic, "display");
+    let topics: Vec<&str> = patch
+        .topics
+        .iter()
+        .map(|topic| topic.topic.as_str())
+        .collect();
+    assert_eq!(topics, vec!["display", "workspaces", "window"]);
 
     let Some(state_topic::Value::Display(display)) = patch.topics[0].value.as_ref() else {
         panic!("expected a display reading");
@@ -94,11 +101,79 @@ async fn it_reads_the_session_it_is_running_in() {
         "a session being drawn has a monitor"
     );
 
+    let Some(state_topic::Value::Workspaces(workspaces)) = patch.topics[1].value.as_ref() else {
+        panic!("expected a workspaces reading");
+    };
+    assert!(
+        workspaces.workspaces.iter().any(|w| w.active),
+        "one workspace is the one being looked at"
+    );
+
     // The second reading waits on the event socket. Hyprland streams every
     // window focus down it, so a broker that woke on all of them would re-read
     // the monitors on each keystroke.
     let again = tokio::time::timeout(Duration::from_millis(500), hyprland.next()).await;
     assert!(again.is_err(), "a second reading should wait for an event");
+}
+
+// ---- workspaces and focus ----
+
+use omega_brokers::hyprland::Session;
+
+const WORKSPACES: &str = r#"[
+  {"id": 3, "name": "3", "monitor": "eDP-1", "windows": 2},
+  {"id": 1, "name": "1", "monitor": "eDP-1", "windows": 1}
+]"#;
+
+#[test]
+fn workspaces_come_back_in_order_with_the_active_one_marked() {
+    let state = Session::workspaces(WORKSPACES, "3").expect("valid workspaces");
+    let ids: Vec<i32> = state.workspaces.iter().map(|w| w.id).collect();
+
+    // Hyprland answers in whatever order it holds them. A bar shows them in
+    // order, and sorting here is what stops every widget doing it.
+    assert_eq!(ids, vec![1, 3]);
+    assert!(!state.workspaces[0].active);
+    assert!(state.workspaces[1].active);
+    assert_eq!(state.workspaces[1].windows, 2);
+    assert_eq!(state.workspaces[0].monitor_id, "eDP-1");
+}
+
+#[test]
+fn the_active_workspace_is_read_by_name() {
+    assert_eq!(
+        Session::active_name(r#"{"id": 1, "name": "mail", "monitor": "eDP-1", "windows": 0}"#),
+        "mail"
+    );
+}
+
+#[test]
+fn an_empty_workspace_has_nothing_focused() {
+    // Hyprland answers `{}` when nothing has focus. That is nothing focused,
+    // not a window with no name — a bar drawing an empty title would look
+    // like a bug rather than an empty desktop.
+    assert!(Session::window("{}").unwrap().focused.is_none());
+}
+
+#[test]
+fn the_focused_window_carries_what_a_bar_shows() {
+    let json = r#"{
+        "class": "com.mitchellh.ghostty",
+        "title": "0 · 1:nvim",
+        "workspace": {"id": 1, "name": "1"},
+        "pid": 4242,
+        "floating": false,
+        "fullscreen": 2
+    }"#;
+    let focused = Session::window(json).unwrap().focused.expect("a window");
+
+    assert_eq!(focused.app_id, "com.mitchellh.ghostty");
+    assert_eq!(focused.title, "0 · 1:nvim");
+    assert_eq!(focused.workspace, "1");
+    assert_eq!(focused.pid, 4242);
+    assert!(!focused.floating);
+    // Hyprland reports a mode, not a flag. Anything but zero is fullscreen.
+    assert!(focused.fullscreen);
 }
 
 // ---- dispatching ----

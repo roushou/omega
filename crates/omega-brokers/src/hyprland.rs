@@ -17,8 +17,9 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use omega_proto::omega::{
-    Direction, DisplayState, MonitorInfo, StatePatch, StateTopic, WindowSelector, action,
-    move_to_workspace, state_topic, switch_workspace, window_selector,
+    Direction, DisplayState, MonitorInfo, StatePatch, StateTopic, WindowInfo, WindowSelector,
+    WindowState, WorkspaceInfo, WorkspacesState, action, move_to_workspace, state_topic,
+    switch_workspace, window_selector,
 };
 use omega_proto::{ActionKind, SystemTopic};
 
@@ -83,6 +84,105 @@ impl Monitors {
             })?;
         Ok(DisplayState {
             monitors: monitors.iter().map(Monitor::info).collect(),
+        })
+    }
+}
+
+/// One workspace, as `hyprctl -j workspaces` describes it.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct Workspace {
+    pub id: i32,
+    pub name: String,
+    /// The monitor's name, unlike the window's, which is a number.
+    pub monitor: String,
+    pub windows: u32,
+}
+
+/// The focused window, as `hyprctl -j activewindow` describes it.
+///
+/// Hyprland answers `{}` when nothing has focus, so every field defaults.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Focused {
+    #[serde(default)]
+    pub class: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub workspace: FocusedWorkspace,
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub floating: bool,
+    /// A mode, not a flag: zero is not fullscreen.
+    #[serde(default)]
+    pub fullscreen: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct FocusedWorkspace {
+    #[serde(default)]
+    pub name: String,
+}
+
+/// What the compositor answered, turned into the ontology.
+#[derive(Debug)]
+pub struct Session;
+
+impl Session {
+    pub fn workspaces(json: &str, active: &str) -> Result<WorkspacesState, BrokerError> {
+        let mut found: Vec<Workspace> = Self::parse(json)?;
+        // Hyprland answers in whatever order it holds them. A bar shows them
+        // in order, and sorting here is what stops every widget doing it.
+        found.sort_by_key(|workspace| workspace.id);
+
+        Ok(WorkspacesState {
+            workspaces: found
+                .into_iter()
+                .map(|workspace| WorkspaceInfo {
+                    id: workspace.id,
+                    active: workspace.name == active,
+                    name: workspace.name,
+                    monitor_id: workspace.monitor,
+                    windows: workspace.windows,
+                })
+                .collect(),
+        })
+    }
+
+    /// The focused window, or none.
+    ///
+    /// Hyprland answers `{}` on an empty workspace. That is nothing focused,
+    /// not a window with no name — and a bar drawing an empty title would
+    /// look like a bug rather than an empty desktop.
+    pub fn window(json: &str) -> Result<WindowState, BrokerError> {
+        let focused: Focused = Self::parse(json)?;
+        Ok(WindowState {
+            focused: (!focused.class.is_empty() || !focused.title.is_empty()).then(|| WindowInfo {
+                app_id: focused.class,
+                title: focused.title,
+                workspace: focused.workspace.name,
+                // Hyprland reports a numeric monitor here and the ontology
+                // carries names. The workspace above already says which.
+                monitor_id: String::new(),
+                pid: focused.pid,
+                floating: focused.floating,
+                fullscreen: focused.fullscreen != 0,
+            }),
+        })
+    }
+
+    /// The name out of `j/activeworkspace`, which is the whole of what is
+    /// wanted from it: which of the workspaces below to mark.
+    pub fn active_name(json: &str) -> String {
+        Self::parse::<Workspace>(json)
+            .map(|workspace| workspace.name)
+            .unwrap_or_default()
+    }
+
+    fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, BrokerError> {
+        serde_json::from_str(json).map_err(|error| BrokerError::Unreadable {
+            subsystem: "hyprland",
+            detail: error.to_string(),
         })
     }
 }
@@ -199,19 +299,40 @@ struct Link {
 }
 
 impl Link {
-    /// The events that change what a display looks like. Hyprland streams
-    /// every window focus and workspace switch down the same socket, and
-    /// re-reading the monitors on each of those would be a request per
-    /// keystroke.
-    const WATCHED: &'static [&'static str] = &[
-        "monitoradded",
-        "monitoraddedv2",
-        "monitorremoved",
-        "monitorremovedv2",
-        "focusedmon",
-        "focusedmonv2",
-        "configreloaded",
-    ];
+    /// Which topics an event can have changed.
+    ///
+    /// Hyprland streams everything down one socket, so a broker that re-read
+    /// all three on every line would run three requests per keystroke. The
+    /// answer is per event: a window title changing cannot have moved a
+    /// monitor.
+    fn affected(event: &str) -> &'static [SystemTopic] {
+        const DISPLAY: &[SystemTopic] = &[SystemTopic::Display];
+        const WORKSPACES: &[SystemTopic] = &[SystemTopic::Workspaces];
+        const WINDOW: &[SystemTopic] = &[SystemTopic::Window];
+        // Opening or closing a window changes what has focus *and* the count
+        // on the workspace it was on.
+        const BOTH: &[SystemTopic] = &[SystemTopic::Workspaces, SystemTopic::Window];
+        // A monitor arriving moves workspaces onto it and takes focus with
+        // them.
+        const EVERYTHING: &[SystemTopic] = &[
+            SystemTopic::Display,
+            SystemTopic::Workspaces,
+            SystemTopic::Window,
+        ];
+
+        match event {
+            "monitoradded" | "monitoraddedv2" | "monitorremoved" | "monitorremovedv2"
+            | "configreloaded" => EVERYTHING,
+            "focusedmon" | "focusedmonv2" => DISPLAY,
+            "workspace" | "workspacev2" | "createworkspace" | "createworkspacev2"
+            | "destroyworkspace" | "destroyworkspacev2" | "moveworkspace" | "moveworkspacev2"
+            | "renameworkspace" => WORKSPACES,
+            "openwindow" | "closewindow" | "movewindow" | "movewindowv2" => BOTH,
+            "activewindow" | "activewindowv2" | "windowtitle" | "windowtitlev2" | "fullscreen"
+            | "changefloatingmode" => WINDOW,
+            _ => &[],
+        }
+    }
 
     fn dir() -> Result<PathBuf, BrokerError> {
         let runtime =
@@ -232,14 +353,50 @@ impl Link {
         })
     }
 
-    /// Ask for the monitors. A fresh connection each time because Hyprland
-    /// answers one request and closes.
-    async fn read(&self) -> Result<DisplayState, BrokerError> {
+    /// Read exactly the topics named, and nothing else.
+    async fn read(&self, wanted: &[SystemTopic]) -> Result<StatePatch, BrokerError> {
+        let mut topics = Vec::with_capacity(wanted.len());
+
+        for topic in wanted {
+            let value = match topic {
+                SystemTopic::Display => {
+                    state_topic::Value::Display(Monitors::parse(&self.ask("j/monitors").await?)?)
+                }
+                SystemTopic::Workspaces => {
+                    // Which one is active is a second question, and asking it
+                    // separately is how the answer stays one word rather than
+                    // a whole workspace to compare against.
+                    let active = Session::active_name(&self.ask("j/activeworkspace").await?);
+                    state_topic::Value::Workspaces(Session::workspaces(
+                        &self.ask("j/workspaces").await?,
+                        &active,
+                    )?)
+                }
+                SystemTopic::Window => {
+                    state_topic::Value::Window(Session::window(&self.ask("j/activewindow").await?)?)
+                }
+                // Nothing else is this broker's, and the driver only ever
+                // asks for what `affected` named.
+                _ => continue,
+            };
+            topics.push(StateTopic {
+                topic: topic.as_str().into(),
+                revision: 0, // the Hub assigns the real revision
+                value: Some(value),
+            });
+        }
+
+        Ok(StatePatch { topics })
+    }
+
+    /// One request. A fresh connection each time, because Hyprland answers
+    /// one and closes.
+    async fn ask(&self, request: &str) -> Result<String, BrokerError> {
         let mut socket = UnixStream::connect(self.dir.join(".socket.sock"))
             .await
             .map_err(Self::unreadable)?;
         socket
-            .write_all(b"j/monitors")
+            .write_all(request.as_bytes())
             .await
             .map_err(Self::unreadable)?;
         socket.shutdown().await.map_err(Self::unreadable)?;
@@ -249,7 +406,7 @@ impl Link {
             .read_to_string(&mut answer)
             .await
             .map_err(Self::unreadable)?;
-        Monitors::parse(&answer)
+        Ok(answer)
     }
 
     /// Send a dispatch, and believe the answer.
@@ -288,7 +445,7 @@ impl Link {
     /// line, which for a stream of complete events means losing one wake-up —
     /// and the next event re-reads everything anyway, because a reading is the
     /// whole set of monitors rather than a delta.
-    async fn wait(&mut self) -> Result<(), BrokerError> {
+    async fn wait(&mut self) -> Result<&'static [SystemTopic], BrokerError> {
         loop {
             let mut line = String::new();
             match self.events.read_line(&mut line).await {
@@ -300,8 +457,9 @@ impl Link {
                 }
                 Ok(_) => {
                     let name = line.split(">>").next().unwrap_or("").trim();
-                    if Self::WATCHED.contains(&name) {
-                        return Ok(());
+                    let affected = Self::affected(name);
+                    if !affected.is_empty() {
+                        return Ok(affected);
                     }
                 }
                 Err(error) => return Err(Self::unreadable(error)),
@@ -342,16 +500,6 @@ impl Hyprland {
     pub fn new() -> Self {
         Self::default()
     }
-
-    fn patch(state: DisplayState) -> StatePatch {
-        StatePatch {
-            topics: vec![StateTopic {
-                topic: SystemTopic::Display.as_str().into(),
-                revision: 0, // the Hub assigns the real revision
-                value: Some(state_topic::Value::Display(state)),
-            }],
-        }
-    }
 }
 
 #[async_trait]
@@ -361,7 +509,11 @@ impl Broker for Hyprland {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Display]
+        &[
+            SystemTopic::Display,
+            SystemTopic::Workspaces,
+            SystemTopic::Window,
+        ]
     }
 
     fn actions(&self) -> &'static [ActionKind] {
@@ -381,18 +533,31 @@ impl Broker for Hyprland {
             self.primed = false;
         }
 
-        if self.primed {
-            let link = self.link.as_mut().expect("opened above");
-            if let Err(error) = link.wait().await {
-                self.link = None;
-                self.primed = false;
-                return Err(error);
+        // A fresh connection reports everything; after that, only what the
+        // event that woke us can have changed.
+        let wanted = match self.primed {
+            false => self.topics(),
+            true => {
+                let link = self.link.as_mut().expect("opened above");
+                match link.wait().await {
+                    Ok(affected) => affected,
+                    Err(error) => {
+                        self.link = None;
+                        self.primed = false;
+                        return Err(error);
+                    }
+                }
             }
-        }
+        };
 
-        let state = self.link.as_ref().expect("opened above").read().await?;
+        let patch = self
+            .link
+            .as_ref()
+            .expect("opened above")
+            .read(wanted)
+            .await?;
         self.primed = true;
-        Ok(Self::patch(state))
+        Ok(patch)
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
