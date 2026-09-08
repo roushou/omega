@@ -1,6 +1,5 @@
 name: ci
 
-# The four checks AGENTS.md requires of a change, run on every one.
 on:
   push:
     branches: [main]
@@ -35,10 +34,6 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-  # Separate from `check` because it needs Qt rather than a Rust toolchain,
-  # and because the renderer is the one part of Omega no compiler sees: the
-  # Rust tests pin the props the QML reads and the files it carries, and
-  # nothing at all reads the QML.
   renderer:
     runs-on: ubuntu-latest
     steps:
@@ -54,8 +49,6 @@ jobs:
         env:
           QMLLINT: /usr/lib/qt6/bin/qmllint
 
-  # Separate from `check` so a new advisory against a dependency reads as a
-  # supply-chain problem rather than as this workspace's code going red.
   supply-chain:
     runs-on: ubuntu-latest
     steps:
