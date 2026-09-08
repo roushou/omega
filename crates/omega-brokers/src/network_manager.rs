@@ -78,9 +78,10 @@ impl Reading {
     /// rather than nothing: a Wi-Fi widget with a blank label while the
     /// association settles looks broken.
     fn name(&self) -> String {
-        match self.ssid.is_empty() {
-            false => self.ssid.clone(),
-            true => self.id.clone(),
+        if self.ssid.is_empty() {
+            self.id.clone()
+        } else {
+            self.ssid.clone()
         }
     }
 
@@ -421,9 +422,10 @@ impl Link {
     /// An object path property, or `None` for NetworkManager's "there is none".
     async fn path(&self, proxy: &Proxy<'_>, name: &str) -> Option<OwnedObjectPath> {
         let path: OwnedObjectPath = dbus::property(proxy, name).await?;
-        match path.as_str() == Self::NONE {
-            true => None,
-            false => Some(path),
+        if path.as_str() == Self::NONE {
+            None
+        } else {
+            Some(path)
         }
     }
 }

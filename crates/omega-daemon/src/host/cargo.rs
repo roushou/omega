@@ -92,13 +92,10 @@ impl CargoConfig {
     /// Replace the whole patch table: linking is a statement about where the
     /// crates come from, not an addition to previous statements.
     pub fn replace_patch(&mut self, patched: Dependencies) {
-        match patched.is_empty() {
-            true => {
-                self.patch.remove(Self::REGISTRY);
-            }
-            false => {
-                self.patch.insert(Self::REGISTRY, patched);
-            }
+        if patched.is_empty() {
+            self.patch.remove(Self::REGISTRY);
+        } else {
+            self.patch.insert(Self::REGISTRY, patched);
         }
     }
 

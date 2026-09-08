@@ -147,9 +147,10 @@ impl CheckCmd {
             asks.push(format!("serves {}", surfaces.join(", ")));
         }
 
-        match asks.is_empty() {
-            true => "declares nothing".to_string(),
-            false => asks.join(" · "),
+        if asks.is_empty() {
+            "declares nothing".to_string()
+        } else {
+            asks.join(" · ")
         }
     }
 }

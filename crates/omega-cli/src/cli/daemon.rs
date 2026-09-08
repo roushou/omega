@@ -141,21 +141,21 @@ impl DaemonCmd {
             return Ok(());
         }
 
-        match foreign {
-            true => {
-                ui.warn(format!(
-                    "a daemon is already serving {} — this one takes over at the next login",
-                    Paint::path(Socket::resolve().path())
-                ));
-                ui.next("systemctl --user start omega.service");
-            }
-            false => ui.step(
+        if foreign {
+            ui.warn(format!(
+                "a daemon is already serving {} — this one takes over at the next login",
+                Paint::path(Socket::resolve().path())
+            ));
+            ui.next("systemctl --user start omega.service");
+        } else {
+            ui.step(
                 Step::Done,
-                match install.no_start {
-                    true => "the daemon runs at the next login",
-                    false => "the daemon is running, and runs at every login",
+                if install.no_start {
+                    "the daemon runs at the next login"
+                } else {
+                    "the daemon is running, and runs at every login"
                 },
-            ),
+            );
         }
         Ok(())
     }
@@ -208,14 +208,12 @@ impl DaemonCmd {
                 enabled && active,
                 Paint::dim(format!(
                     "{}, {}",
-                    match enabled {
-                        true => "starts at login",
-                        false => "does not start at login",
+                    if enabled {
+                        "starts at login"
+                    } else {
+                        "does not start at login"
                     },
-                    match active {
-                        true => "running now",
-                        false => "not running",
-                    }
+                    if active { "running now" } else { "not running" }
                 )),
             );
         }
@@ -241,15 +239,16 @@ impl DaemonCmd {
         }
 
         let path = manager.unit_path();
-        match Service::uninstall(&path)? {
-            true => ui.step(
+        if Service::uninstall(&path)? {
+            ui.step(
                 Step::Removed,
                 format!("{} from {}", Paint::name(Service::NAME), Paint::path(path)),
-            ),
-            false => ui.step(
+            );
+        } else {
+            ui.step(
                 Step::Done,
                 format!("{} was not installed", Paint::name(Service::NAME)),
-            ),
+            );
         }
 
         Self::tell(manager.reload(), manager, ui)?;

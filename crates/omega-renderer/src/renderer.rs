@@ -217,11 +217,12 @@ impl Renderer {
 
         // A file an older renderer shipped, or one somebody added, is a
         // difference too: the shell loads the directory, not our list.
-        match differs || self.has_strays(&dir) {
-            true => Installed::Stale {
+        if differs || self.has_strays(&dir) {
+            Installed::Stale {
                 version: self.installed_version(&dir),
-            },
-            false => Installed::Current,
+            }
+        } else {
+            Installed::Current
         }
     }
 
@@ -260,14 +261,15 @@ impl Renderer {
         fn descend(root: &Path, dir: &Path, found: &mut Vec<String>) -> Option<()> {
             for entry in std::fs::read_dir(dir).ok()?.flatten() {
                 let path = entry.path();
-                match path.is_dir() {
-                    true => descend(root, &path, found)?,
-                    false => found.push(
+                if path.is_dir() {
+                    descend(root, &path, found)?;
+                } else {
+                    found.push(
                         path.strip_prefix(root)
                             .ok()?
                             .to_string_lossy()
                             .replace(std::path::MAIN_SEPARATOR, "/"),
-                    ),
+                    );
                 }
             }
             Some(())

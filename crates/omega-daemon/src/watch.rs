@@ -24,9 +24,10 @@ impl StateStamp {
     /// for the rename that replaces it wholesale.
     pub fn watch(layout: &Layout, settle: std::time::Duration) -> Result<Changes, WatchError> {
         let parent = layout.state.parent().unwrap_or(&layout.state);
-        let watched: Vec<&Path> = match layout.state.exists() {
-            true => vec![layout.state.as_path(), parent],
-            false => vec![parent],
+        let watched: Vec<&Path> = if layout.state.exists() {
+            vec![layout.state.as_path(), parent]
+        } else {
+            vec![parent]
         };
         Changes::with_settle(&watched, Recursion::NonRecursive, settle)
     }

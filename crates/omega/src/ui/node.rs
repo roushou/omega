@@ -133,9 +133,10 @@ impl Node {
     /// shape is, which is exactly when positional identity is the truth.
     pub(crate) fn assign_keys(&mut self, prefix: &str) {
         if self.key.is_none() {
-            self.key = Some(match prefix.is_empty() {
-                true => "root".to_string(),
-                false => prefix.to_string(),
+            self.key = Some(if prefix.is_empty() {
+                "root".to_string()
+            } else {
+                prefix.to_string()
             });
         }
 

@@ -18,9 +18,10 @@ struct Charge {
 
 impl Widget for Charge {
     fn render(&self) -> Ui {
-        match self.battery.is_charging() {
-            true => Text::new(format!("{} charging", self.battery.charge())),
-            false => Text::new(self.battery.charge()),
+        if self.battery.is_charging() {
+            Text::new(format!("{} charging", self.battery.charge()))
+        } else {
+            Text::new(self.battery.charge())
         }
         .into()
     }
@@ -150,9 +151,10 @@ struct Warned {
 
 impl Widget for Warned {
     fn render(&self) -> Ui {
-        match self.battery.charge() < self.settings.low_threshold {
-            true => Text::new("low").color("urgent"),
-            false => Text::new(self.battery.charge()),
+        if self.battery.charge() < self.settings.low_threshold {
+            Text::new("low").color("urgent")
+        } else {
+            Text::new(self.battery.charge())
         }
         .into()
     }
@@ -258,9 +260,10 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
     impl Widget for Labelled {
         fn render(&self) -> Ui {
             let charge = self.battery.charge();
-            match charge < self.settings.low_threshold {
-                true => Text::new(format!("{} low", self.settings.label)),
-                false => Text::new(format!("{} {charge}", self.settings.label)),
+            if charge < self.settings.low_threshold {
+                Text::new(format!("{} low", self.settings.label))
+            } else {
+                Text::new(format!("{} {charge}", self.settings.label))
             }
             .into()
         }
@@ -336,9 +339,10 @@ struct MaybeCharge {
 
 impl Widget for MaybeCharge {
     fn render(&self) -> Ui {
-        match self.battery.has_reading() {
-            true => Text::new(self.battery.charge()),
-            false => Text::new("no battery"),
+        if self.battery.has_reading() {
+            Text::new(self.battery.charge())
+        } else {
+            Text::new("no battery")
         }
         .into()
     }
@@ -457,9 +461,10 @@ struct Showing {
 
 impl Widget for Showing {
     fn render(&self) -> Ui {
-        match self.mode.get().focus {
-            true => Text::new("focus").into(),
-            false => Text::new("open").into(),
+        if self.mode.get().focus {
+            Text::new("focus").into()
+        } else {
+            Text::new("open").into()
         }
     }
 }

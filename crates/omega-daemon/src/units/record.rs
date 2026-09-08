@@ -130,9 +130,10 @@ impl UnitRecord {
             phase: self.phase() as i32,
             restarts: self.restarts,
             last_exit_code: self.lifecycle.exit_code(),
-            detail: match self.adopted {
-                true => Self::ADOPTED.to_string(),
-                false => self.lifecycle.detail().to_string(),
+            detail: if self.adopted {
+                Self::ADOPTED.to_string()
+            } else {
+                self.lifecycle.detail().to_string()
             },
         }
     }
@@ -150,9 +151,10 @@ impl UnitRecord {
             return self.lifecycle.phase(self.is_connected());
         }
 
-        match self.is_connected() {
-            true => UnitPhase::Running,
-            false => UnitPhase::Starting,
+        if self.is_connected() {
+            UnitPhase::Running
+        } else {
+            UnitPhase::Starting
         }
     }
 }

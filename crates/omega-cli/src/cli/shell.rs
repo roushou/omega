@@ -174,9 +174,10 @@ impl ShellCmd {
 
         // Not a failure: a machine that draws nothing on its bar is entitled
         // to have no renderer installed. It is a thing to do about it.
-        match wanted {
-            true => ui.next("omega shell install"),
-            false => ui.step(Step::Checked, "the shell draws what this omega speaks"),
+        if wanted {
+            ui.next("omega shell install");
+        } else {
+            ui.step(Step::Checked, "the shell draws what this omega speaks");
         }
         Ok(())
     }
@@ -203,14 +204,15 @@ impl ShellCmd {
 
     /// The checkout a `--link` means: the one named, else the one found.
     fn checkout(path: &str) -> anyhow::Result<SourceTree> {
-        match path.is_empty() {
-            false => Ok(SourceTree::at(path)?),
-            true => SourceTree::detect().with_context(|| {
+        if path.is_empty() {
+            SourceTree::detect().with_context(|| {
                 format!(
                     "no omega checkout to link — name one, or set {}",
                     Paint::name(SourceTree::ENV)
                 )
-            }),
+            })
+        } else {
+            Ok(SourceTree::at(path)?)
         }
     }
 

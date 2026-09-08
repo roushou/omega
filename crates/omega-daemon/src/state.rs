@@ -55,12 +55,13 @@ impl StateStore {
     /// dropping it here would read as never having been asked. Empty
     /// `topics` means every topic.
     pub fn read(&self, topics: &[String]) -> StatePatch {
-        let selected = match topics.is_empty() {
-            true => self.topics.values().cloned().collect(),
-            false => topics
+        let selected = if topics.is_empty() {
+            self.topics.values().cloned().collect()
+        } else {
+            topics
                 .iter()
                 .filter_map(|topic| self.topics.get(topic).cloned())
-                .collect(),
+                .collect()
         };
         StatePatch { topics: selected }
     }

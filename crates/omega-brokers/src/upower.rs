@@ -71,13 +71,15 @@ impl Reading {
             // UPower reports the one that does not apply as zero, and so does
             // the ontology — but only the applicable one is passed through, so
             // a discharging battery cannot report a time to full.
-            seconds_to_empty: match charging {
-                true => 0,
-                false => Self::seconds(self.time_to_empty),
+            seconds_to_empty: if charging {
+                0
+            } else {
+                Self::seconds(self.time_to_empty)
             },
-            seconds_to_full: match charging {
-                true => Self::seconds(self.time_to_full),
-                false => 0,
+            seconds_to_full: if charging {
+                Self::seconds(self.time_to_full)
+            } else {
+                0
             },
         })
     }

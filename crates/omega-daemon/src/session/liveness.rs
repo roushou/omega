@@ -55,9 +55,10 @@ impl Liveness {
     }
 
     pub fn health_at(&self, now: Instant) -> Health {
-        match now.duration_since(self.last_seen) > self.timeout {
-            true => Health::Unresponsive,
-            false => Health::Alive,
+        if now.duration_since(self.last_seen) > self.timeout {
+            Health::Unresponsive
+        } else {
+            Health::Alive
         }
     }
 

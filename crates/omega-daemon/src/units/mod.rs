@@ -129,12 +129,11 @@ impl UnitTable {
             return false;
         };
 
-        match record.config == config {
-            true => false,
-            false => {
-                record.config = config;
-                true
-            }
+        if record.config == config {
+            false
+        } else {
+            record.config = config;
+            true
         }
     }
 

@@ -33,12 +33,11 @@ impl StatusCmd {
             .await
             .context("the daemon did not report its units in time")??;
 
-        match units.is_empty() {
-            true => {
-                ui.warn("the daemon is running no units");
-                ui.next("omega build");
-            }
-            false => ui.table(&Self::table(&units)),
+        if units.is_empty() {
+            ui.warn("the daemon is running no units");
+            ui.next("omega build");
+        } else {
+            ui.table(&Self::table(&units));
         }
         Ok(())
     }

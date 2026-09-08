@@ -52,9 +52,10 @@ impl Widget for Indicator {
         let Some(ssid) = self.network.ssid() else {
             // Wired, or nothing at all. Both are a plug or a slash, and
             // neither has a name worth drawing.
-            return match self.network.is_connected() {
-                true => Icon::new("link").into(),
-                false => Icon::new("globe").dim().into(),
+            return if self.network.is_connected() {
+                Icon::new("link").into()
+            } else {
+                Icon::new("globe").dim().into()
             };
         };
 
@@ -62,9 +63,10 @@ impl Widget for Indicator {
         Row::new()
             .gap(6)
             .child(Icon::new(bars(strength)))
-            .child(match strength < self.settings.weak {
-                true => Text::new(ssid).color("urgent"),
-                false => Text::new(ssid),
+            .child(if strength < self.settings.weak {
+                Text::new(ssid).color("urgent")
+            } else {
+                Text::new(ssid)
             })
             .into()
     }
@@ -144,18 +146,20 @@ fn networks(wifi: &Wifi) -> List {
 }
 
 fn row(point: &AccessPoint) -> Stack {
-    let name = match point.is_active() {
-        true => Text::new(point.ssid()).bold(),
-        false => Text::new(point.ssid()),
+    let name = if point.is_active() {
+        Text::new(point.ssid()).bold()
+    } else {
+        Text::new(point.ssid())
     };
     Row::new()
         .gap(6)
         .key(point.ssid())
         .child(name)
         .child(Text::new(point.strength()).dim())
-        .child(match point.is_secured() {
-            true => Icon::new("lock").dim(),
-            false => Icon::new("globe").dim(),
+        .child(if point.is_secured() {
+            Icon::new("lock").dim()
+        } else {
+            Icon::new("globe").dim()
         })
 }
 

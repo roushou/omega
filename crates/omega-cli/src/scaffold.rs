@@ -248,9 +248,10 @@ impl Scaffold {
 
         // A `str::replace` that matched nothing is silent, and a template
         // that still has a token in it is a file that will not compile.
-        match stamped == template || stamped.contains("{unit") {
-            true => Err(ScaffoldError::SystemTemplate { token: UNIT_TOKEN }),
-            false => Ok(stamped),
+        if stamped == template || stamped.contains("{unit") {
+            Err(ScaffoldError::SystemTemplate { token: UNIT_TOKEN })
+        } else {
+            Ok(stamped)
         }
     }
 
@@ -298,9 +299,10 @@ impl SourceTree {
         }
 
         let built_from = Self::built_from();
-        match Self::is_cargos_own(&built_from) {
-            true => None,
-            false => Self::at(built_from).ok(),
+        if Self::is_cargos_own(&built_from) {
+            None
+        } else {
+            Self::at(built_from).ok()
         }
     }
 
@@ -316,16 +318,18 @@ impl SourceTree {
     /// A checkout at a path, checked for actually being one.
     pub fn at(path: impl Into<PathBuf>) -> Result<Self, ScaffoldError> {
         let root = path.into();
-        let crates_dir = match root.ends_with("crates") {
-            true => root.clone(),
-            false => root.join("crates"),
+        let crates_dir = if root.ends_with("crates") {
+            root.clone()
+        } else {
+            root.join("crates")
         };
 
         // A path that is not an omega checkout would produce a patch that
         // cargo rejects three commands later, naming a file nobody wrote.
-        match crates_dir.join("omega").join("Cargo.toml").exists() {
-            true => Ok(Self { crates_dir }),
-            false => Err(ScaffoldError::NotACheckout { path: root }),
+        if crates_dir.join("omega").join("Cargo.toml").exists() {
+            Ok(Self { crates_dir })
+        } else {
+            Err(ScaffoldError::NotACheckout { path: root })
         }
     }
 

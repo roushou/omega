@@ -233,11 +233,12 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
     let build = fields.iter().map(|field| {
         let ident = &field.ident;
         let ty = &field.ty;
-        match field.is_config {
-            true => quote! { #ident: <#ty as ::omega::Fields>::read(settings) },
-            false => quote! {
+        if field.is_config {
+            quote! { #ident: <#ty as ::omega::Fields>::read(settings) }
+        } else {
+            quote! {
                 #ident: <#ty as ::omega::internal::Wiring>::build(context)
-            },
+            }
         }
     });
 
@@ -314,12 +315,13 @@ fn is_config(field: &syn::Field) -> syn::Result<bool> {
         if !attribute.path().is_ident("omega") {
             continue;
         }
-        attribute.parse_nested_meta(|meta| match meta.path.is_ident("config") {
-            true => {
+        attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("config") {
                 config = true;
                 Ok(())
+            } else {
+                Err(meta.error("unknown omega attribute; the only one is `config`"))
             }
-            false => Err(meta.error("unknown omega attribute; the only one is `config`")),
         })?;
     }
     Ok(config)

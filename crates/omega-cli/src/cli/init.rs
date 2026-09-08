@@ -42,15 +42,16 @@ impl InitCmd {
             AtomicFile::at(layout.system_main()).write(scaffold.system_main().as_bytes())?;
         }
 
-        match founded {
-            true => ui.step(
+        if founded {
+            ui.step(
                 Step::Created,
                 format!("{} — a Rust workspace", Paint::path(&layout.config)),
-            ),
-            false => ui.step(
+            );
+        } else {
+            ui.step(
                 Step::Checked,
                 format!("{} — already a workspace", Paint::path(&layout.config)),
-            ),
+            );
         }
 
         if plane {

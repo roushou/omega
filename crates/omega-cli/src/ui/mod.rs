@@ -99,9 +99,10 @@ impl Ui {
     /// The result of one thing among many: a mark in the rail, the thing
     /// after it, and — when it went wrong — why, on the same line.
     pub fn item(&mut self, ok: bool, message: impl Display) {
-        let (mark, style) = match ok {
-            true => (self.glyphs.ok(), Step::Checked.style()),
-            false => (self.glyphs.failed(), Step::Failed.style()),
+        let (mark, style) = if ok {
+            (self.glyphs.ok(), Step::Checked.style())
+        } else {
+            (self.glyphs.failed(), Step::Failed.style())
         };
         self.report(format_args!("{style}{mark:>RAIL$}{style:#} {message}"));
     }

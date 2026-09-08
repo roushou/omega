@@ -21,9 +21,10 @@ impl HostShell {
 
     /// The shell on this machine, if omega knows how to install into it.
     pub fn detect() -> Option<Self> {
-        match std::env::var_os(Self::ENV).is_some() || Self::Omarchy.config_dir().is_dir() {
-            true => Some(Self::Omarchy),
-            false => None,
+        if std::env::var_os(Self::ENV).is_some() || Self::Omarchy.config_dir().is_dir() {
+            Some(Self::Omarchy)
+        } else {
+            None
         }
     }
 

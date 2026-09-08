@@ -33,18 +33,20 @@ impl Battery {
     /// How long until it is empty, or `None` while charging or unknown.
     pub fn until_empty(&self) -> Option<Remaining> {
         let battery = self.read()?;
-        match battery.charging {
-            true => None,
-            false => Remaining::seconds(battery.seconds_to_empty),
+        if battery.charging {
+            None
+        } else {
+            Remaining::seconds(battery.seconds_to_empty)
         }
     }
 
     /// How long until it is full, or `None` while discharging or unknown.
     pub fn until_full(&self) -> Option<Remaining> {
         let battery = self.read()?;
-        match battery.charging {
-            true => Remaining::seconds(battery.seconds_to_full),
-            false => None,
+        if battery.charging {
+            Remaining::seconds(battery.seconds_to_full)
+        } else {
+            None
         }
     }
 

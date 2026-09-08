@@ -45,9 +45,10 @@ impl DesktopEntry {
             .filter(|word| !Self::is_field_code(word))
             .collect();
 
-        match cleaned.is_empty() {
-            true => None,
-            false => Some(cleaned.join(" ")),
+        if cleaned.is_empty() {
+            None
+        } else {
+            Some(cleaned.join(" "))
         }
     }
 
@@ -73,9 +74,10 @@ impl DesktopEntry {
     /// Where a desktop id could be, most specific first: a user's own copy of
     /// an entry wins over the one a package installed.
     pub fn paths(desktop_id: &str) -> Vec<PathBuf> {
-        let name = match desktop_id.ends_with(".desktop") {
-            true => desktop_id.to_string(),
-            false => format!("{desktop_id}.desktop"),
+        let name = if desktop_id.ends_with(".desktop") {
+            desktop_id.to_string()
+        } else {
+            format!("{desktop_id}.desktop")
         };
 
         let mut roots = Vec::new();
@@ -139,9 +141,10 @@ impl Capture {
     /// These go through a shell — `grim … | wl-copy` is a pipeline — so a
     /// path carrying a quote or a semicolon would be a second command.
     fn named(name: &str) -> Option<&str> {
-        match name.is_empty() || name.contains(['\'', '"', ';', '&', '|', '$', '`', '\n']) {
-            true => None,
-            false => Some(name),
+        if name.is_empty() || name.contains(['\'', '"', ';', '&', '|', '$', '`', '\n']) {
+            None
+        } else {
+            Some(name)
         }
     }
 }
@@ -162,9 +165,10 @@ impl Desktop {
             };
             if let Some(command) = DesktopEntry::command(&entry) {
                 let arguments = app.args.join(" ");
-                return Ok(match arguments.is_empty() {
-                    true => command,
-                    false => format!("{command} {arguments}"),
+                return Ok(if arguments.is_empty() {
+                    command
+                } else {
+                    format!("{command} {arguments}")
                 });
             }
         }
@@ -184,12 +188,13 @@ impl Desktop {
             .await
             .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
 
-        match status.success() {
-            true => Ok(()),
+        if status.success() {
+            Ok(())
+        } else {
             // Loud: a screenshot nobody took is not a screenshot.
-            false => Err(BrokerError::unreadable(format!(
+            Err(BrokerError::unreadable(format!(
                 "{command:?} exited {status}"
-            ))),
+            )))
         }
     }
 }

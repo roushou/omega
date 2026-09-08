@@ -258,11 +258,12 @@ impl Dispatch {
                 Self::named(&move_to.monitor_id)?
             )),
             action::Kind::CloseWindow(close) => {
-                Some(match Self::is_focused(close.window.as_ref()) {
+                Some(if Self::is_focused(close.window.as_ref()) {
                     // The focused window has its own dispatcher, and it is the
                     // one that works when nothing matches a selector.
-                    true => "killactive".to_string(),
-                    false => format!("closewindow {}", Self::window(close.window.as_ref())?),
+                    "killactive".to_string()
+                } else {
+                    format!("closewindow {}", Self::window(close.window.as_ref())?)
                 })
             }
             action::Kind::ToggleFloating(toggle) => Some(format!(
@@ -325,9 +326,10 @@ impl Dispatch {
     /// make the rest of it a second dispatch — so both are refused rather
     /// than sent.
     fn named(name: &str) -> Option<&str> {
-        match name.is_empty() || name.contains(['\n', '\r', ';']) {
-            true => None,
-            false => Some(name),
+        if name.is_empty() || name.contains(['\n', '\r', ';']) {
+            None
+        } else {
+            Some(name)
         }
     }
 }
@@ -476,12 +478,13 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
-        match answer.trim() == "ok" {
-            true => Ok(()),
-            false => Err(BrokerError::unreadable(format!(
+        if answer.trim() == "ok" {
+            Ok(())
+        } else {
+            Err(BrokerError::unreadable(format!(
                 "refused {command:?}: {}",
                 answer.trim()
-            ))),
+            )))
         }
     }
 

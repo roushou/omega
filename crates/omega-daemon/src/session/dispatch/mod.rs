@@ -179,9 +179,10 @@ impl Dispatcher {
                 // The module is the unit's own sub-namespace within a
                 // surface it owns, so it needs no separate authorization —
                 // whatever it calls an instance, it is still its instance.
-                let module = match publish.module_id.is_empty() {
-                    true => None,
-                    false => Some(ModuleId::parse(publish.module_id.clone()).or_refuse()?),
+                let module = if publish.module_id.is_empty() {
+                    None
+                } else {
+                    Some(ModuleId::parse(publish.module_id.clone()).or_refuse()?)
                 };
 
                 self.hub.publish_view(ViewUpdate {
@@ -198,12 +199,11 @@ impl Dispatcher {
             invoke::Op::GetState(get) => {
                 // Reading is bounded by the subscription, so a `GetState` can
                 // never reach past what the manifest declared.
-                let topics = match get.topics.is_empty() {
-                    true => subscriptions.active(),
-                    false => {
-                        Self::permitted(subscriptions, &get.topics)?;
-                        get.topics.clone()
-                    }
+                let topics = if get.topics.is_empty() {
+                    subscriptions.active()
+                } else {
+                    Self::permitted(subscriptions, &get.topics)?;
+                    get.topics.clone()
                 };
                 Ok(Response::State(self.hub.read_state(&topics)))
             }

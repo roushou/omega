@@ -92,9 +92,10 @@ impl Paint {
                 .nth_back(1)
                 .is_some_and(|before| !"aeiou".contains(before));
 
-        match consonant_y {
-            true => format!("{}ies", &noun[..noun.len() - 1]),
-            false => format!("{noun}s"),
+        if consonant_y {
+            format!("{}ies", &noun[..noun.len() - 1])
+        } else {
+            format!("{noun}s")
         }
     }
 
@@ -118,10 +119,7 @@ impl Glyphs {
     /// What this terminal can be trusted with.
     pub fn detect() -> Self {
         let dumb = std::env::var("TERM").is_ok_and(|term| term == "dumb");
-        match dumb {
-            true => Self::Ascii,
-            false => Self::Unicode,
-        }
+        if dumb { Self::Ascii } else { Self::Unicode }
     }
 
     pub fn ok(self) -> &'static str {

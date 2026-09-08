@@ -42,9 +42,10 @@ impl LinkCmd {
             );
         }
 
-        match self.published {
-            true => Self::unlink(&layout, ui),
-            false => self.link(&layout, ui),
+        if self.published {
+            Self::unlink(&layout, ui)
+        } else {
+            self.link(&layout, ui)
         }
     }
 
@@ -157,12 +158,13 @@ impl LinkCmd {
             .and_then(|config| config.patched().map(|patched| !patched.is_empty()))
             .unwrap_or(false);
 
-        match linked {
-            true => None,
-            false => Some(format!(
+        if linked {
+            None
+        } else {
+            Some(format!(
                 "this config is not linked to a checkout of omega, and asks for crates that may not be published yet — point it at one with {}",
                 Paint::command("omega link <path>")
-            )),
+            ))
         }
     }
 }

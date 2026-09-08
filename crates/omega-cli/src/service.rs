@@ -76,12 +76,11 @@ WantedBy=graphical-session.target
 
     /// Take the unit file away. Says whether there was one.
     pub fn uninstall(path: &Path) -> anyhow::Result<bool> {
-        match path.exists() {
-            false => Ok(false),
-            true => {
-                std::fs::remove_file(path)?;
-                Ok(true)
-            }
+        if path.exists() {
+            std::fs::remove_file(path)?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
@@ -91,11 +90,12 @@ WantedBy=graphical-session.target
             return Installed::Missing;
         };
 
-        match found == Self::unit(program) {
-            true => Installed::Current,
-            false => Installed::Stale {
+        if found == Self::unit(program) {
+            Installed::Current
+        } else {
+            Installed::Stale {
                 program: Self::runs(&found),
-            },
+            }
         }
     }
 
@@ -159,9 +159,10 @@ impl ServiceManager {
             .map(PathBuf::from)
             .is_some_and(|dir| dir.join("systemd").is_dir());
 
-        match running && which("systemctl") {
-            true => Some(Self::Systemd),
-            false => None,
+        if running && which("systemctl") {
+            Some(Self::Systemd)
+        } else {
+            None
         }
     }
 
@@ -196,9 +197,10 @@ impl ServiceManager {
 
     /// Run it at every login from now on, and — unless told otherwise — now.
     pub fn enable(self, start: bool) -> std::io::Result<Output> {
-        match start {
-            true => self.run(&["enable", "--now", Service::NAME]),
-            false => self.run(&["enable", Service::NAME]),
+        if start {
+            self.run(&["enable", "--now", Service::NAME])
+        } else {
+            self.run(&["enable", Service::NAME])
         }
     }
 

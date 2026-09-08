@@ -39,9 +39,10 @@ impl BuildCmd {
     }
 
     fn profile(&self) -> Profile {
-        match self.debug {
-            true => Profile::Debug,
-            false => Profile::Release,
+        if self.debug {
+            Profile::Debug
+        } else {
+            Profile::Release
         }
     }
 
@@ -156,9 +157,10 @@ impl BuildCmd {
             .map(|(amount, noun)| Paint::count(*amount, noun))
             .collect();
 
-        match declared.is_empty() {
-            true => "an empty document".to_string(),
-            false => declared.join(", "),
+        if declared.is_empty() {
+            "an empty document".to_string()
+        } else {
+            declared.join(", ")
         }
     }
 }
@@ -207,9 +209,10 @@ impl BuildPlan {
             .flat_map(|unit| unit.manifest.capabilities.iter().map(String::as_str))
             .collect();
 
-        match capabilities.is_empty() {
-            true => "no capabilities".to_string(),
-            false => Paint::count(capabilities.len(), "capability"),
+        if capabilities.is_empty() {
+            "no capabilities".to_string()
+        } else {
+            Paint::count(capabilities.len(), "capability")
         }
     }
 

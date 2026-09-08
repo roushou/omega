@@ -168,9 +168,10 @@ impl Cadence {
         let immediate = self.immediate;
         self.tick
             .get_or_insert_with(|| {
-                let start = match immediate {
-                    true => tokio::time::Instant::now(),
-                    false => tokio::time::Instant::now() + every,
+                let start = if immediate {
+                    tokio::time::Instant::now()
+                } else {
+                    tokio::time::Instant::now() + every
                 };
                 let mut tick = tokio::time::interval_at(start, every);
                 tick.set_missed_tick_behavior(MissedTickBehavior::Skip);

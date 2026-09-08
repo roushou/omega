@@ -65,12 +65,13 @@ impl<'a> System<'a> {
             .filter(|name| !built.iter().any(|built| built.as_str() == *name))
             .collect();
 
-        match unknown.is_empty() {
-            true => Ok(()),
-            false => bail!(
+        if unknown.is_empty() {
+            Ok(())
+        } else {
+            bail!(
                 "the config plane names unit(s) this workspace does not build: {}",
                 unknown.join(", ")
-            ),
+            )
         }
     }
 }

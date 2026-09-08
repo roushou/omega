@@ -16,9 +16,10 @@
 //!
 //! impl Widget for Charge {
 //!     fn render(&self) -> Ui {
-//!         match self.battery.is_charging() {
-//!             true => Text::new(format!("{} charging", self.battery.charge())),
-//!             false => Text::new(self.battery.charge()),
+//!         if self.battery.is_charging() {
+//!             Text::new(format!("{} charging", self.battery.charge()))
+//!         } else {
+//!             Text::new(self.battery.charge())
 //!         }
 //!         .into()
 //!     }

@@ -53,9 +53,10 @@ impl LogsCmd {
         let tail = Self::tail(&path, self.lines)?;
         ui.passthrough(&tail);
 
-        match self.follow {
-            true => Self::follow(&path, ui).await,
-            false => Ok(()),
+        if self.follow {
+            Self::follow(&path, ui).await
+        } else {
+            Ok(())
         }
     }
 
@@ -117,26 +118,23 @@ impl LogsCmd {
             })
             .unwrap_or_default();
 
-        match logged.is_empty() {
-            true => {
-                ui.warn("no unit has written a log yet");
-                ui.next("omega daemon");
+        if logged.is_empty() {
+            ui.warn("no unit has written a log yet");
+            ui.next("omega daemon");
+        } else {
+            // The names are the answer, one per line, so the list can be
+            // piped; where they live is a footnote about the answer.
+            for unit in &logged {
+                ui.line(unit);
             }
-            false => {
-                // The names are the answer, one per line, so the list can be
-                // piped; where they live is a footnote about the answer.
-                for unit in &logged {
-                    ui.line(unit);
-                }
-                ui.step(
-                    Step::Done,
-                    format!(
-                        "{} in {}",
-                        Paint::count(logged.len(), "log"),
-                        Paint::path(layout.logs_dir())
-                    ),
-                );
-            }
+            ui.step(
+                Step::Done,
+                format!(
+                    "{} in {}",
+                    Paint::count(logged.len(), "log"),
+                    Paint::path(layout.logs_dir())
+                ),
+            );
         }
         Ok(())
     }

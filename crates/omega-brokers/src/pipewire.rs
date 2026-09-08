@@ -155,14 +155,15 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
-        match output.status.success() {
-            true => Ok(String::from_utf8_lossy(&output.stdout).into_owned()),
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        } else {
             // Loud: a `pactl` that refused is not a machine with no sound.
-            false => Err(BrokerError::Unreadable(format!(
+            Err(BrokerError::Unreadable(format!(
                 "pactl {}: {}",
                 args.join(" "),
                 String::from_utf8_lossy(&output.stderr).trim()
-            ))),
+            )))
         }
     }
 }

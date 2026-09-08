@@ -93,9 +93,10 @@ impl Transitions {
         let mut events = Vec::new();
 
         if next.charging != previous.charging {
-            events.push(match next.charging {
-                true => EventKind::EventAcPlugged,
-                false => EventKind::EventAcUnplugged,
+            events.push(if next.charging {
+                EventKind::EventAcPlugged
+            } else {
+                EventKind::EventAcUnplugged
             });
         }
 
