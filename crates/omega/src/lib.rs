@@ -54,7 +54,7 @@ pub mod wiring;
 pub use effect::{Brightness, Notification, Notify, Session, Shell, Volume};
 pub use error::{Error, Result};
 pub use plugin::Plugin;
-pub use source::{Audio, Backlight, Battery, Clock, Network, Weekday};
+pub use source::{AccessPoint, Audio, Backlight, Battery, Clock, Network, Weekday, Wifi};
 pub use state::{Own, Topic, Watch};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{

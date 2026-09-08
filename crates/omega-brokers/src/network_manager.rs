@@ -18,7 +18,9 @@ use zbus::zvariant::OwnedObjectPath;
 use zbus::{Connection, Proxy};
 
 use omega_proto::SystemTopic;
-use omega_proto::omega::{NetworkState, NetworkType, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{
+    AccessPoint, NetworkState, NetworkType, StatePatch, StateTopic, WifiState, state_topic,
+};
 
 use crate::broker::{Broker, BrokerError, Cadence};
 
@@ -94,6 +96,77 @@ impl Reading {
             "gsm" | "cdma" | "wwan" => NetworkType::Cellular,
             "vpn" | "wireguard" => NetworkType::Vpn,
             _ => NetworkType::Unspecified,
+        }
+    }
+}
+
+/// One access point, as NetworkManager reports it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Point {
+    pub ssid: String,
+    /// 0..100.
+    pub strength: u8,
+    /// `NM80211ApFlags`. Bit 0 is privacy.
+    pub flags: u32,
+    /// `NM80211ApSecurityFlags`, WPA and RSN. Either being set is enough.
+    pub wpa: u32,
+    pub rsn: u32,
+}
+
+impl Point {
+    /// `NM_802_11_AP_FLAGS_PRIVACY`.
+    const PRIVACY: u32 = 0x1;
+
+    fn secured(&self) -> bool {
+        self.flags & Self::PRIVACY != 0 || self.wpa != 0 || self.rsn != 0
+    }
+}
+
+/// What the last scan found, and what the machine is on.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Scan {
+    pub points: Vec<Point>,
+    /// The network the machine is associated with, so the list can say which.
+    pub active: String,
+}
+
+impl Scan {
+    /// The ontology's view: one entry per network, strongest first.
+    ///
+    /// A network is often several radios on the same SSID, and a picker
+    /// listing each of them is showing the hardware rather than the choice —
+    /// so they are folded, keeping the strongest, which is the one that would
+    /// be joined anyway.
+    ///
+    /// Hidden networks broadcast an empty SSID. They are dropped: a row a
+    /// user cannot tell from another row is not a choice.
+    pub fn state(&self) -> WifiState {
+        let mut best: Vec<AccessPoint> = Vec::new();
+
+        for point in self.points.iter().filter(|point| !point.ssid.is_empty()) {
+            match best.iter_mut().find(|held| held.ssid == point.ssid) {
+                Some(held) => {
+                    held.signal_percent = held.signal_percent.max(u32::from(point.strength));
+                    held.secured |= point.secured();
+                }
+                None => best.push(AccessPoint {
+                    ssid: point.ssid.clone(),
+                    signal_percent: u32::from(point.strength),
+                    secured: point.secured(),
+                    active: point.ssid == self.active,
+                }),
+            }
+        }
+
+        // Strongest first, then by name so a list of equals does not reorder
+        // itself under the cursor every scan.
+        best.sort_by(|a, b| {
+            b.signal_percent
+                .cmp(&a.signal_percent)
+                .then_with(|| a.ssid.cmp(&b.ssid))
+        });
+        WifiState {
+            access_points: best,
         }
     }
 }
@@ -196,6 +269,54 @@ impl Link {
         Ok(reading)
     }
 
+    /// Every access point the wireless device can see.
+    ///
+    /// From the device rather than the connection: a machine that is on
+    /// nothing still scans, and a picker with no list is the case that most
+    /// needs one.
+    async fn scan(&self, active: String) -> Scan {
+        let mut scan = Scan {
+            active,
+            ..Scan::default()
+        };
+
+        let Some(device) = self.wireless().await else {
+            return scan;
+        };
+        let paths: Vec<OwnedObjectPath> = self
+            .property(&device, "AccessPoints")
+            .await
+            .unwrap_or_default();
+
+        for path in paths {
+            let Ok(point) = self.proxy(&path, Self::AP_IFACE).await else {
+                continue;
+            };
+            let ssid: Vec<u8> = self.property(&point, "Ssid").await.unwrap_or_default();
+            scan.points.push(Point {
+                ssid: String::from_utf8_lossy(&ssid).into_owned(),
+                strength: self.property(&point, "Strength").await.unwrap_or(0),
+                flags: self.property(&point, "Flags").await.unwrap_or(0),
+                wpa: self.property(&point, "WpaFlags").await.unwrap_or(0),
+                rsn: self.property(&point, "RsnFlags").await.unwrap_or(0),
+            });
+        }
+        scan
+    }
+
+    /// The first wireless device, if the machine has one.
+    async fn wireless(&self) -> Option<Proxy<'static>> {
+        let devices: Vec<OwnedObjectPath> = self.property(&self.manager, "Devices").await?;
+        for path in devices {
+            let device = self.proxy(&path, Self::DEVICE_IFACE).await.ok()?;
+            // `NM_DEVICE_TYPE_WIFI`.
+            if self.property::<u32>(&device, "DeviceType").await == Some(2) {
+                return self.proxy(&path, Self::WIRELESS_IFACE).await.ok();
+            }
+        }
+        None
+    }
+
     async fn proxy(
         &self,
         path: &zbus::zvariant::ObjectPath<'_>,
@@ -269,13 +390,23 @@ impl NetworkManager {
         }
     }
 
-    fn patch(state: NetworkState) -> StatePatch {
+    /// Both topics in one patch. The hub coalesces per topic, so a signal
+    /// that only moved the connection does not wake a picker, and a scan that
+    /// only moved the list does not wake an indicator.
+    fn patch(network: NetworkState, wifi: WifiState) -> StatePatch {
         StatePatch {
-            topics: vec![StateTopic {
-                topic: SystemTopic::Network.as_str().into(),
-                revision: 0, // the Hub assigns the real revision
-                value: Some(state_topic::Value::Network(state)),
-            }],
+            topics: vec![
+                StateTopic {
+                    topic: SystemTopic::Network.as_str().into(),
+                    revision: 0, // the Hub assigns the real revision
+                    value: Some(state_topic::Value::Network(network)),
+                },
+                StateTopic {
+                    topic: SystemTopic::Wifi.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::Wifi(wifi)),
+                },
+            ],
         }
     }
 }
@@ -287,7 +418,7 @@ impl Broker for NetworkManager {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Network]
+        &[SystemTopic::Network, SystemTopic::Wifi]
     }
 
     async fn next(&mut self) -> Result<StatePatch, BrokerError> {
@@ -317,8 +448,11 @@ impl Broker for NetworkManager {
             }
         }
 
-        let reading = self.link.as_ref().expect("opened above").read().await?;
+        let link = self.link.as_ref().expect("opened above");
+        let reading = link.read().await?;
+        let network = reading.state();
+        let scan = link.scan(network.ssid.clone()).await;
         self.primed = true;
-        Ok(Self::patch(reading.state()))
+        Ok(Self::patch(network, scan.state()))
     }
 }

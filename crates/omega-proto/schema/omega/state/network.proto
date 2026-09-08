@@ -19,3 +19,22 @@ enum NetworkType {
   NETWORK_TYPE_CELLULAR = 3;
   NETWORK_TYPE_VPN = 4;
 }
+
+// What the machine could connect to, as the last scan found it.
+//
+// A topic of its own rather than a field on NetworkState: forty access points
+// whose signal jitters would bump the network revision every few seconds and
+// wake every indicator that only ever wanted the SSID.
+message WifiState {
+  repeated AccessPoint access_points = 1;
+}
+
+// One network on the air. Deduplicated by SSID — a single network is often
+// several radios, and a picker showing each of them is showing the hardware
+// rather than the choice.
+message AccessPoint {
+  string ssid = 1;
+  uint32 signal_percent = 2;
+  bool secured = 3;
+  bool active = 4;              // the one the machine is on
+}

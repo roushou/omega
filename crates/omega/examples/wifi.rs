@@ -9,26 +9,14 @@
 //! compiles and reads well, which a person judges. `cargo build --examples`
 //! keeps it honest: the SDK cannot change out from under it silently.
 //!
-//! **What it is not.** There is no list of networks to pick from, because
-//! Omega cannot express one. Two gaps, and neither is a missing feature so
-//! much as a hole the ontology has:
-//!
-//!  - `NetworkState` describes the connection the machine *has*. There is
-//!    nothing in it for the ones it could have, so a scan result has nowhere
-//!    to live. That wants a topic of its own rather than another field:
-//!    forty access points whose signal jitters would bump the `network`
-//!    revision and wake every indicator that only ever wanted the SSID.
-//!  - A unit cannot work around that in its own keyspace either. `Value` has
-//!    `ListValue` and `MapValue`, but `IntoValue`/`FromValue` are implemented
-//!    for scalars only — so a unit cannot hold a list of anything, scanned or
-//!    otherwise.
-//!
-//! Both are recorded in `docs/design.md`. Until they are closed, joining a
-//! network is typing its name, which is what the two fields below are.
+//! The indicator holds `Network` — the one connection the machine has — and
+//! the panel holds `Wifi`, the list it could have. Holding only what it draws
+//! is what keeps the indicator from waking every time a signal jitters three
+//! rooms away.
 
 use omega::{
-    Answer, Args, Bind, Button, Column, Command, Field, Icon, Network, Percent, Progress, Row,
-    Shell, Stack, Text, Ui, Widget,
+    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Icon, List, Network, Percent,
+    Progress, Row, Shell, Stack, Text, Ui, Widget, Wifi,
 };
 
 /// This unit's name, for the config plane to refer to it by.
@@ -86,33 +74,60 @@ impl Widget for Indicator {
 #[derive(omega::Widget, Debug)]
 pub struct Panel {
     network: Network,
+    wifi: Wifi,
 }
 
 impl Widget for Panel {
     fn render(&self) -> Ui {
-        if !self.network.is_connected() {
-            return Column::new()
-                .gap(8)
-                .child(Text::new("Not connected").dim())
-                .child(join())
-                .into();
+        let mut panel = Column::new().gap(8);
+
+        if self.network.is_connected() {
+            let name = self.network.ssid().unwrap_or_else(|| "Wired".to_string());
+            panel = panel
+                .child(Text::new(&name).bold())
+                .child(
+                    Row::new()
+                        .gap(6)
+                        .child(Icon::new("wifi").dim())
+                        .child(Progress::new(self.network.strength()))
+                        .child(Text::new(self.network.strength()).dim()),
+                )
+                .child(Button::new("Disconnect").on_press(Bind::call("disconnect").arg(name)));
+        } else {
+            panel = panel.child(Text::new("Not connected").dim());
         }
 
-        let name = self.network.ssid().unwrap_or_else(|| "Wired".to_string());
-        Column::new()
-            .gap(8)
-            .child(Text::new(&name).bold())
-            .child(
-                Row::new()
-                    .gap(6)
-                    .child(Icon::new("wifi").dim())
-                    .child(Progress::new(self.network.strength()))
-                    .child(Text::new(self.network.strength()).dim()),
-            )
-            .child(Button::new("Disconnect").on_press(Bind::call("disconnect").arg(name)))
-            .child(join())
-            .into()
+        panel.child(networks(&self.wifi)).child(join()).into()
     }
+}
+
+/// Everything on the air, one row each.
+///
+/// The list owns the cursor: arrows move it and Enter activates, and neither
+/// reaches this unit. What arrives is the key of the row that was chosen —
+/// which is the SSID, because that is what the row was keyed by.
+fn networks(wifi: &Wifi) -> List {
+    List::new()
+        .gap(2)
+        .height(180)
+        .children(wifi.networks().iter().map(row))
+        .on_activate(Bind::call("join"))
+}
+
+fn row(point: &AccessPoint) -> Stack {
+    let name = match point.is_active() {
+        true => Text::new(point.ssid()).bold(),
+        false => Text::new(point.ssid()),
+    };
+    Row::new()
+        .gap(6)
+        .key(point.ssid())
+        .child(name)
+        .child(Text::new(point.strength()).dim())
+        .child(match point.is_secured() {
+            true => Icon::new("lock").dim(),
+            false => Icon::new("globe").dim(),
+        })
 }
 
 /// Somewhere to type a network and its passphrase.
@@ -143,11 +158,27 @@ impl Command for Connect {
         let Some(secret) = args.get::<String>(0) else {
             return Answer::refused("no passphrase");
         };
-        // The escape hatch, and honestly so: connecting is NetworkManager's
-        // and Omega has no action for it yet.
+        // The escape hatch, and honestly so: joining is NetworkManager's and
+        // Omega has no action for it yet.
         self.shell
             .run(format!("nmcli device wifi connect --ask password {secret}"));
         Answer::from("connecting")
+    }
+}
+
+/// Join the row that was chosen. Called with its key, which is the SSID.
+#[derive(omega::Command, Debug)]
+pub struct Join {
+    shell: Shell,
+}
+
+impl Command for Join {
+    fn call(&self, args: Args) -> Answer {
+        let Some(ssid) = args.get::<String>(0) else {
+            return Answer::refused("no network");
+        };
+        self.shell.run(format!("nmcli device wifi connect {ssid}"));
+        Answer::from("joining")
     }
 }
 
@@ -181,6 +212,7 @@ fn main() -> omega::Result<()> {
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
         .command::<Connect>("connect")
+        .command::<Join>("join")
         .command::<Disconnect>("disconnect")
         .run()
 }

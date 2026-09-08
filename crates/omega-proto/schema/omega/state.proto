@@ -19,7 +19,8 @@ import "omega/value.proto";
 // splitting that would be splitting the thing this schema exists to fix.
 
 // One topic value. "topic" is the address: "battery", "network", "audio",
-// "backlight", "power", "display", "units", "time", or "unit.<name>.<key>" for
+// "backlight", "power", "display", "units", "time", "wifi", or
+// "unit.<name>.<key>" for
 // unit-owned data.
 //
 // A topic published with no value is the daemon saying there is nothing to
@@ -44,6 +45,7 @@ message StateTopic {
     DisplayState display = 15;
     UnitsState units = 16;
     TimeState time = 17;
+    WifiState wifi = 18;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

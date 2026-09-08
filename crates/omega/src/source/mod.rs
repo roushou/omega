@@ -13,12 +13,14 @@ mod backlight;
 mod battery;
 mod clock;
 mod network;
+mod wifi;
 
 pub use audio::Audio;
 pub use backlight::Backlight;
 pub use battery::Battery;
 pub use clock::{Clock, Weekday};
 pub use network::Network;
+pub use wifi::{AccessPoint, Wifi};
 
 /// Declares a state handle: its capability, and the accessor that reads the
 /// current value.

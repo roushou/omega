@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use omega_brokers::network_manager::Reading;
+use omega_brokers::network_manager::{Point, Reading, Scan};
 use omega_brokers::{Broker, NetworkManager};
 use omega_proto::omega::{NetworkType, state_topic};
 
@@ -123,6 +123,108 @@ fn a_wired_connection_has_no_signal_and_says_which_it_is() {
     assert_eq!(state.signal_percent, 0, "a cable has no bars");
     assert_eq!(state.r#type, NetworkType::Ethernet as i32);
     assert_eq!(state.interface, "enp0s31f6");
+}
+
+// ---- the scan ----
+
+fn seen(ssid: &str, strength: u8) -> Point {
+    Point {
+        ssid: ssid.into(),
+        strength,
+        flags: 0,
+        wpa: 0,
+        rsn: 0,
+    }
+}
+
+#[test]
+fn one_network_on_several_radios_is_one_row() {
+    // A network is often two or three access points. A picker listing each of
+    // them is showing the hardware rather than the choice.
+    let scan = Scan {
+        points: vec![seen("home", 40), seen("home", 71), seen("cafe", 55)],
+        active: "home".into(),
+    };
+    let state = scan.state();
+
+    assert_eq!(state.access_points.len(), 2);
+    // And it keeps the strongest, which is the one that would be joined.
+    assert_eq!(state.access_points[0].ssid, "home");
+    assert_eq!(state.access_points[0].signal_percent, 71);
+}
+
+#[test]
+fn the_list_is_strongest_first_and_stable_between_equals() {
+    let scan = Scan {
+        points: vec![seen("beta", 50), seen("alpha", 50), seen("best", 90)],
+        active: String::new(),
+    };
+    let state = scan.state();
+    let names: Vec<&str> = state
+        .access_points
+        .iter()
+        .map(|point| point.ssid.as_str())
+        .collect();
+
+    // Equals break by name, so a list does not reorder itself under the
+    // cursor every time somebody scans.
+    assert_eq!(names, vec!["best", "alpha", "beta"]);
+}
+
+#[test]
+fn security_is_any_of_the_three_ways_networkmanager_says_it() {
+    let open = Scan {
+        points: vec![seen("open", 50)],
+        active: String::new(),
+    };
+    assert!(!open.state().access_points[0].secured);
+
+    for point in [
+        Point {
+            flags: 1,
+            ..seen("locked", 50)
+        },
+        Point {
+            wpa: 0x100,
+            ..seen("locked", 50)
+        },
+        Point {
+            rsn: 392,
+            ..seen("locked", 50)
+        },
+    ] {
+        let scan = Scan {
+            points: vec![point],
+            active: String::new(),
+        };
+        assert!(scan.state().access_points[0].secured);
+    }
+}
+
+#[test]
+fn the_network_the_machine_is_on_is_marked() {
+    let scan = Scan {
+        points: vec![seen("home", 70), seen("cafe", 50)],
+        active: "home".into(),
+    };
+    let state = scan.state();
+
+    assert!(state.access_points[0].active);
+    assert!(!state.access_points[1].active);
+}
+
+#[test]
+fn a_hidden_network_is_not_a_row() {
+    // Hidden networks broadcast an empty SSID. A row a user cannot tell from
+    // another row is not a choice.
+    let scan = Scan {
+        points: vec![seen("", 90), seen("home", 40)],
+        active: String::new(),
+    };
+    let state = scan.state();
+
+    assert_eq!(state.access_points.len(), 1);
+    assert_eq!(state.access_points[0].ssid, "home");
 }
 
 // ---- against the machine this is running on ----

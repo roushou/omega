@@ -410,19 +410,19 @@ needed a special case to get there, one of the abstractions above is wrong.
 
 ### What happened
 
-`crates/omega/examples/wifi.rs` — **173 lines, 120 of them not comment or
-blank**, for the indicator, the panel, and both commands. Nothing needed a
-special case: the panel is a second view surface, the row bindings carry their
-own arguments, the passphrase field appends what was typed, and the shell
-owns every piece of interaction state. The abstractions held.
+`crates/omega/examples/wifi.rs` — **218 lines, 153 of them not comment or
+blank**, for the indicator, the panel, the network picker, and three
+commands. Against 1,970 lines of QML and 380 of JavaScript.
 
-They held for a smaller feature than the one measured, though, and the
-difference is the finding.
+Nothing needed a special case: the panel is a second view surface, the picker
+is a keyed list that owns its own cursor, the row bindings carry their own
+arguments, the passphrase field appends what was typed, and the shell owns
+every piece of interaction state. The abstractions held.
 
-### What it could not express
+### What it could not express, at first
 
-A list of networks to pick from. Two holes, and the second is the one that
-matters:
+The first pass could not show a list of networks to pick from. Two holes, and
+the second was the one that mattered:
 
 1. **`NetworkState` describes the connection the machine has**, not the ones
    it could have. A scan result has nowhere to live. It wants a topic of its
@@ -447,7 +447,10 @@ list that looks complete and is not is the worse answer. Reading a _field_
 stays total, so a malformed list takes the type's default and one bad
 document does not fail the rest.
 
-What remains of the first gap is a `wifi` topic and a broker to fill it.
+The first is closed too: `wifi` is a topic of its own, filled by the
+NetworkManager broker, which folds a network's several radios into one row and
+drops the hidden ones. Both fell out of writing the thing rather than out of
+designing it, which is the whole argument for writing it.
 
 ### What it cost to write
 
