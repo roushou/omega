@@ -20,6 +20,7 @@
 //! there rather than discovered by a unit that hangs.
 
 pub mod backlight;
+pub mod bluez;
 mod broker;
 pub mod clock;
 pub mod hyprland;
@@ -31,6 +32,7 @@ pub mod pipewire;
 pub mod upower;
 
 pub use backlight::Backlight;
+pub use bluez::BlueZ;
 pub use broker::{Broker, BrokerError};
 pub use clock::Clock;
 pub use hyprland::Hyprland;
@@ -61,6 +63,7 @@ impl Brokers {
             Box::new(Notifications::new()),
             Box::new(PipeWire::new()),
             Box::new(Mpris::new()),
+            Box::new(BlueZ::new()),
         ]
     }
 }

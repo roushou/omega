@@ -13,8 +13,9 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, DisplayState, MediaState, NetworkState, PowerState,
-    TimeState, UnitsState, WifiState, WindowState, WorkspacesState, state_topic,
+    AudioState, BacklightState, BatteryState, BluetoothState, DisplayState, MediaState,
+    NetworkState, PowerState, TimeState, UnitsState, WifiState, WindowState, WorkspacesState,
+    state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -83,6 +84,7 @@ topics! {
     Window => "window": WindowState,
     /// What is playing.
     Media => "media": MediaState,
+    Bluetooth => "bluetooth": BluetoothState,
 }
 
 impl SystemTopic {

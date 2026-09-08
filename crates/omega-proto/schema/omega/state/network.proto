@@ -38,3 +38,30 @@ message AccessPoint {
   bool secured = 3;
   bool active = 4;              // the one the machine is on
 }
+
+// The Bluetooth adapter and the devices that belong to this machine.
+message BluetoothState {
+  // Whether the machine has an adapter at all. A desktop without one reports
+  // false rather than an absent topic: BlueZ answering is a reading.
+  bool available = 1;
+  bool powered = 2;
+  bool discovering = 3;
+
+  // Paired or connected — the machine's own devices, not everything on the
+  // air. Listing a scan would need discovery turned on, which is an action
+  // the ontology does not have.
+  repeated BluetoothDevice devices = 4;
+}
+
+message BluetoothDevice {
+  string address = 1;           // "60:AB:D2:25:8C:49"
+  string name = 2;              // the alias, which is what a person renamed it to
+  bool connected = 3;
+  bool paired = 4;
+  string icon = 5;              // BlueZ's own icon name: "audio-headphones"
+
+  // 0 is unknown, not empty. BlueZ reports a battery only for a connected
+  // device that has one, and a device at zero percent is off and not
+  // reporting anything.
+  uint32 battery_percent = 6;
+}
