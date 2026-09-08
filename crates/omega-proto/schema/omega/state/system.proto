@@ -28,3 +28,19 @@ message SystemState {
 
   uint64 uptime_seconds = 10;
 }
+
+// Where the machine keeps things, and how much room is left.
+message DiskState {
+  repeated Mount mounts = 1;
+}
+
+message Mount {
+  string path = 1;              // "/", "/home"
+  string device = 2;            // "/dev/nvme0n1p2"
+  string filesystem = 3;        // "ext4"
+  uint64 total_bytes = 4;
+  // What a normal user could still write. Reserved blocks are the root
+  // account's, and counting them as free is how a disk reads as having room
+  // right up until nothing can be saved.
+  uint64 available_bytes = 5;
+}

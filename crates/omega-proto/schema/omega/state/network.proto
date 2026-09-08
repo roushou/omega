@@ -65,3 +65,18 @@ message BluetoothDevice {
   // reporting anything.
   uint32 battery_percent = 6;
 }
+
+// The tunnels the machine is running through.
+//
+// A topic of its own rather than another arm of NetworkType: a machine is on
+// Wi-Fi *and* a VPN, and an enum can only say one of those. More than one
+// tunnel at a time is unusual but not wrong, so this is the list.
+message VpnState {
+  repeated Tunnel tunnels = 1;
+}
+
+message Tunnel {
+  string name = 1;              // the connection's name
+  string interface = 2;         // "wg0", "tun0"
+  string kind = 3;              // "wireguard", "openvpn", …
+}

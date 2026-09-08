@@ -3,7 +3,8 @@
 //! Fixed text formats, so the whole translation is testable against captured
 //! strings — including the part that needs two readings to mean anything.
 
-use omega_brokers::procfs::{Cpu, Jiffies, Load, Memory};
+use omega_brokers::procfs::{Cpu, Jiffies, Load, Memory, Mounts};
+use omega_proto::omega::Mount;
 
 const STAT: &str = "cpu  100 0 100 800 0 0 0 0 0 0
 cpu0 50 0 50 400 0 0 0 0 0 0
@@ -108,6 +109,46 @@ fn uptime_is_whole_seconds() {
     assert_eq!(Load::uptime(""), 0);
 }
 
+const MOUNTS: &str = "proc /proc proc rw,nosuid 0 0
+sys /sys sysfs rw,nosuid 0 0
+dev /dev devtmpfs rw,nosuid 0 0
+run /run tmpfs rw,nosuid 0 0
+/dev/nvme0n1p2 / ext4 rw,relatime 0 0
+/dev/nvme0n1p1 /boot vfat rw,relatime 0 0
+/dev/sda1 /media/My\\040Disk ext4 rw 0 0
+cgroup2 /sys/fs/cgroup cgroup2 rw 0 0";
+
+#[test]
+fn the_kernels_own_furniture_is_not_a_disk() {
+    // A machine has forty-odd mounts and four of them are disks. Listing
+    // `cgroup2` and eleven `tmpfs` buries the one anybody cares about.
+    let mounted = Mounts::parse(MOUNTS);
+    let paths: Vec<&str> = mounted.iter().map(|m| m.path.as_str()).collect();
+
+    assert_eq!(paths.len(), 3);
+    assert!(paths.contains(&"/"));
+    assert!(paths.contains(&"/boot"));
+}
+
+#[test]
+fn a_mount_point_with_a_space_is_one_mount_point() {
+    // `/proc/mounts` escapes a space as `\\040`, and a parser that split on
+    // whitespace without unescaping would report two mounts and find neither.
+    let mounted = Mounts::parse(MOUNTS);
+    let disk = mounted.iter().find(|m| m.device == "/dev/sda1").unwrap();
+    assert_eq!(disk.path, "/media/My Disk");
+}
+
+#[test]
+fn a_mount_keeps_what_it_is_and_what_it_is_on() {
+    let root = Mounts::parse(MOUNTS)
+        .into_iter()
+        .find(|m| m.path == "/")
+        .unwrap();
+    assert_eq!(root.device, "/dev/nvme0n1p2");
+    assert_eq!(root.filesystem, "ext4");
+}
+
 // ---- against the machine this is running on ----
 
 use omega_brokers::Procfs;
@@ -136,4 +177,57 @@ fn it_reads_the_machine_it_is_running_on() {
         "the cores do not come and go between two readings"
     );
     assert!(!second.core_percent.is_empty(), "a machine has a core");
+}
+
+#[test]
+fn one_filesystem_at_three_paths_is_one_disk() {
+    // A btrfs root is often also `/home` and `/var/log`. They share the
+    // space, so reporting each is reporting the same disk three times with
+    // the same numbers.
+    let measured = vec![
+        Mount {
+            path: "/var/log".into(),
+            device: "/dev/nvme0n1p2".into(),
+            filesystem: "btrfs".into(),
+            total_bytes: 500,
+            available_bytes: 100,
+        },
+        Mount {
+            path: "/".into(),
+            device: "/dev/nvme0n1p2".into(),
+            filesystem: "btrfs".into(),
+            total_bytes: 500,
+            available_bytes: 100,
+        },
+        Mount {
+            path: "/boot".into(),
+            device: "/dev/nvme0n1p1".into(),
+            filesystem: "vfat".into(),
+            total_bytes: 100,
+            available_bytes: 40,
+        },
+    ];
+
+    let kept = Mounts::by_device(measured);
+    let paths: Vec<&str> = kept.iter().map(|m| m.path.as_str()).collect();
+
+    // The shortest path is the one a person means, and the result is ordered
+    // by where things are mounted rather than by device name.
+    assert_eq!(paths, vec!["/", "/boot"]);
+}
+
+#[test]
+fn the_disks_are_measured_less_often_than_the_cpu() {
+    // A `statvfs` per mount is real work and free space moves in minutes. The
+    // first turn is a reading; the ones under it are not.
+    let mut procfs = Procfs::new();
+
+    let first = procfs.disks().expect("the first turn measures");
+    assert!(
+        first.mounts.iter().any(|mount| mount.path == "/"),
+        "a machine has a root filesystem"
+    );
+    assert!(first.mounts.iter().all(|mount| mount.total_bytes > 0));
+
+    assert!(procfs.disks().is_none(), "and the next turn does not");
 }

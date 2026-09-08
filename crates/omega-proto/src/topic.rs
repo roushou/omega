@@ -13,9 +13,9 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, BluetoothState, DisplayState, IdleState, InputState,
-    MediaState, NetworkState, PeripheralsState, PowerState, SystemState, TimeState, UnitsState,
-    WifiState, WindowState, WorkspacesState, state_topic,
+    AudioState, BacklightState, BatteryState, BluetoothState, DiskState, DisplayState, IdleState,
+    InputState, MediaState, NetworkState, PeripheralsState, PowerState, SystemState, TimeState,
+    UnitsState, VpnState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -93,6 +93,10 @@ topics! {
     Peripherals => "peripherals": PeripheralsState,
     /// How it is being typed at.
     Input => "input": InputState,
+    /// The tunnels it is running through.
+    Vpn => "vpn": VpnState,
+    /// Where it keeps things.
+    Disk => "disk": DiskState,
 }
 
 impl SystemTopic {

@@ -57,6 +57,8 @@ message StateTopic {
     IdleState idle = 25;
     PeripheralsState peripherals = 26;
     InputState input = 27;
+    VpnState vpn = 28;
+    DiskState disk = 29;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

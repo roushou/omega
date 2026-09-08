@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use omega_brokers::network_manager::{Point, Reading, Scan};
+use omega_brokers::network_manager::{Active, Point, Reading, Scan, Tunnels};
 use omega_brokers::{Broker, NetworkManager};
 use omega_proto::omega::{NetworkType, state_topic};
 
@@ -227,6 +227,46 @@ fn a_hidden_network_is_not_a_row() {
     assert_eq!(state.access_points[0].ssid, "home");
 }
 
+// ---- tunnels ----
+
+fn active(id: &str, kind: &str, is_vpn: bool) -> Active {
+    Active {
+        id: id.into(),
+        kind: kind.into(),
+        is_vpn,
+        interface: "wg0".into(),
+    }
+}
+
+#[test]
+fn a_tunnel_is_spelled_two_ways_and_neither_alone_is_enough() {
+    // NetworkManager sets the flag for its VPN plugins and leaves it false
+    // for WireGuard, which it drives natively.
+    let all = vec![
+        active("home wifi", "802-11-wireless", false),
+        active("work", "vpn", true),
+        active("mullvad", "wireguard", false),
+    ];
+    let state = Tunnels::state(&all);
+    let names: Vec<&str> = state.tunnels.iter().map(|t| t.name.as_str()).collect();
+
+    // Sorted by name, so a bar does not reorder them between readings.
+    assert_eq!(names, vec!["mullvad", "work"]);
+}
+
+#[test]
+fn on_wifi_and_a_vpn_is_two_readings_not_one() {
+    // The whole reason this is a topic rather than another arm of the type
+    // enum: a machine is on both, and an enum can say only one.
+    let all = vec![
+        active("home wifi", "802-11-wireless", false),
+        active("work", "vpn", true),
+    ];
+    assert_eq!(Tunnels::state(&all).tunnels.len(), 1);
+    // And the `network` topic still reports the link under it separately.
+    assert!(!Reading::default().state().connected);
+}
+
 // ---- against the machine this is running on ----
 
 #[tokio::test]
@@ -243,7 +283,7 @@ async fn it_reads_the_machine_it_is_running_on() {
         .iter()
         .map(|topic| topic.topic.as_str())
         .collect();
-    assert_eq!(topics, vec!["network", "wifi"]);
+    assert_eq!(topics, vec!["network", "wifi", "vpn"]);
 
     let Some(state_topic::Value::Network(state)) = patch.topics[0].value.as_ref() else {
         panic!("expected a network reading");

@@ -13,7 +13,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use omega_proto::SystemTopic;
-use omega_proto::omega::{StatePatch, StateTopic, SystemState, state_topic};
+use omega_proto::omega::{DiskState, Mount, StatePatch, StateTopic, SystemState, state_topic};
 
 use crate::broker::{Broker, BrokerError, Cadence};
 
@@ -140,12 +140,102 @@ impl Load {
     }
 }
 
+/// One line of `/proc/mounts`, before anything is asked of the filesystem.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Mounted {
+    pub device: String,
+    pub path: String,
+    pub filesystem: String,
+}
+
+/// Which mounts are worth reporting.
+#[derive(Debug)]
+pub struct Mounts;
+
+impl Mounts {
+    /// Filesystems that are the kernel talking to itself.
+    ///
+    /// A machine has forty-odd mounts and four of them are disks. A bar
+    /// listing `cgroup2` and eleven `tmpfs` is listing the kernel's furniture,
+    /// and the one the user cares about is somewhere in the middle of it.
+    ///
+    /// A fast path, not the rule. This list will never be complete — there is
+    /// always another pseudo-filesystem — so what actually decides is whether
+    /// a mount reports any blocks at all, which is asked after.
+    const PSEUDO: &'static [&'static str] = &[
+        "autofs",
+        "bpf",
+        "cgroup",
+        "cgroup2",
+        "configfs",
+        "debugfs",
+        "devpts",
+        "devtmpfs",
+        "efivarfs",
+        "fuse.gvfsd-fuse",
+        "fuse.portal",
+        "fusectl",
+        "hugetlbfs",
+        "mqueue",
+        "proc",
+        "pstore",
+        "ramfs",
+        "securityfs",
+        "sysfs",
+        "tmpfs",
+        "tracefs",
+    ];
+
+    /// One entry per device, at its shortest mount point.
+    ///
+    /// Subvolumes and bind mounts put one filesystem at several paths — a
+    /// btrfs root is often also `/home` and `/var/log` — and they share the
+    /// space, so reporting each is reporting the same disk three times with
+    /// the same numbers. The shortest path is the one a person means.
+    pub fn by_device(mut measured: Vec<Mount>) -> Vec<Mount> {
+        measured.sort_by(|a, b| {
+            a.device
+                .cmp(&b.device)
+                .then_with(|| a.path.len().cmp(&b.path.len()))
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        measured.dedup_by(|a, b| a.device == b.device);
+
+        // Back into the order a person reads: by where it is mounted.
+        measured.sort_by(|a, b| a.path.cmp(&b.path));
+        measured
+    }
+
+    pub fn parse(mounts: &str) -> Vec<Mounted> {
+        mounts
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                let device = fields.next()?;
+                let path = fields.next()?;
+                let filesystem = fields.next()?;
+                Some(Mounted {
+                    device: device.to_string(),
+                    // `/proc/mounts` escapes a space in a path as `\040`, and
+                    // a mount point with one is a mount point, not two.
+                    path: path.replace("\\040", " "),
+                    filesystem: filesystem.to_string(),
+                })
+            })
+            .filter(|mounted| !Self::PSEUDO.contains(&mounted.filesystem.as_str()))
+            .collect()
+    }
+}
+
 #[derive(Debug)]
 pub struct Procfs {
     tick: Cadence,
     /// The last `/proc/stat` sample. Utilisation is a change between two, so
     /// the first reading reports zero rather than a number it cannot know.
     last: Option<Vec<Jiffies>>,
+    /// Ticks since the disks were last measured. A `statvfs` per mount is
+    /// real work and free space moves in minutes, not seconds.
+    since_disks: u32,
     root: std::path::PathBuf,
 }
 
@@ -165,10 +255,17 @@ impl Procfs {
     /// `/proc` is somewhere unusual.
     const ROOT_ENV: &'static str = "OMEGA_PROC";
 
+    /// One reading in this many is a disk reading. Free space moves in
+    /// minutes; a `statvfs` per mount every two seconds would be this daemon
+    /// spending more effort watching the disks than anything else does using
+    /// them.
+    pub const DISKS_EVERY: u32 = 15;
+
     pub fn new() -> Self {
         Self {
             tick: Cadence::every(Self::INTERVAL),
             last: None,
+            since_disks: Self::DISKS_EVERY,
             root: std::env::var(Self::ROOT_ENV)
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::PathBuf::from("/proc")),
@@ -208,6 +305,64 @@ impl Procfs {
         }
     }
 
+    /// The disks, when it is their turn.
+    ///
+    /// `None` between turns, and a patch that carries no disk topic leaves
+    /// the last one standing — which is what last-value-wins is for.
+    pub fn disks(&mut self) -> Option<DiskState> {
+        self.since_disks += 1;
+        if self.since_disks < Self::DISKS_EVERY {
+            return None;
+        }
+        self.since_disks = 0;
+
+        let measured: Vec<Mount> = Mounts::parse(&self.read("mounts"))
+            .into_iter()
+            .filter_map(|mounted| Self::room(&mounted))
+            .collect();
+
+        Some(DiskState {
+            mounts: Mounts::by_device(measured),
+        })
+    }
+
+    /// How much room a mount has, or nothing where it cannot be asked — a
+    /// stale network mount blocks rather than answers, and a disk list is not
+    /// worth hanging the broker over.
+    fn room(mounted: &Mounted) -> Option<Mount> {
+        let path = std::ffi::CString::new(mounted.path.as_bytes()).ok()?;
+        // SAFETY: `stats` is written by `statvfs` before it is read, and the
+        // path is a NUL-terminated C string that outlives the call.
+        let stats = unsafe {
+            let mut stats: libc::statvfs = std::mem::zeroed();
+            match libc::statvfs(path.as_ptr(), &mut stats) {
+                0 => stats,
+                _ => return None,
+            }
+        };
+
+        let block = stats.f_frsize as u64;
+        let total = (stats.f_blocks as u64).saturating_mul(block);
+
+        // What actually separates a disk from the kernel's furniture: a
+        // filesystem with no blocks is not somewhere anything is kept. Catches
+        // every pseudo-filesystem the name list above does not know about.
+        if total == 0 {
+            return None;
+        }
+
+        Some(Mount {
+            path: mounted.path.clone(),
+            device: mounted.device.clone(),
+            filesystem: mounted.filesystem.clone(),
+            total_bytes: total,
+            // `f_bavail`, not `f_bfree`: the difference is the blocks reserved
+            // for root, and counting those as free is how a disk looks like it
+            // has room right up until nothing can be saved.
+            available_bytes: (stats.f_bavail as u64).saturating_mul(block),
+        })
+    }
+
     fn read(&self, file: &str) -> String {
         std::fs::read_to_string(self.root.join(file)).unwrap_or_default()
     }
@@ -220,17 +375,26 @@ impl Broker for Procfs {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::System]
+        &[SystemTopic::System, SystemTopic::Disk]
     }
 
     async fn next(&mut self) -> Result<StatePatch, BrokerError> {
         self.tick.wait().await;
-        Ok(StatePatch {
-            topics: vec![StateTopic {
-                topic: SystemTopic::System.as_str().into(),
-                revision: 0, // the Hub assigns the real revision
-                value: Some(state_topic::Value::System(self.reading())),
-            }],
-        })
+
+        let mut topics = vec![StateTopic {
+            topic: SystemTopic::System.as_str().into(),
+            revision: 0, // the Hub assigns the real revision
+            value: Some(state_topic::Value::System(self.reading())),
+        }];
+
+        if let Some(disks) = self.disks() {
+            topics.push(StateTopic {
+                topic: SystemTopic::Disk.as_str().into(),
+                revision: 0,
+                value: Some(state_topic::Value::Disk(disks)),
+            });
+        }
+
+        Ok(StatePatch { topics })
     }
 }

@@ -19,7 +19,8 @@ use zbus::{Connection, Proxy};
 
 use omega_proto::SystemTopic;
 use omega_proto::omega::{
-    AccessPoint, NetworkState, NetworkType, StatePatch, StateTopic, WifiState, state_topic,
+    AccessPoint, NetworkState, NetworkType, StatePatch, StateTopic, Tunnel, VpnState, WifiState,
+    state_topic,
 };
 
 use crate::broker::{Broker, BrokerError, Cadence};
@@ -171,6 +172,55 @@ impl Scan {
     }
 }
 
+/// One active connection that is a tunnel.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Active {
+    pub id: String,
+    /// The connection's `Type`: `"wireguard"`, `"vpn"`, `"802-11-wireless"`.
+    pub kind: String,
+    /// The `Vpn` flag, which NetworkManager sets for the plugins it drives
+    /// and leaves false for kinds it handles natively.
+    pub is_vpn: bool,
+    pub interface: String,
+}
+
+impl Active {
+    /// Whether this connection is a tunnel rather than the link under one.
+    ///
+    /// Two spellings, and neither alone is enough: NetworkManager sets the
+    /// flag for its VPN plugins and leaves it false for WireGuard, which it
+    /// drives natively.
+    pub fn is_tunnel(&self) -> bool {
+        self.is_vpn || matches!(self.kind.as_str(), "vpn" | "wireguard")
+    }
+}
+
+/// The tunnels, turned into the ontology.
+#[derive(Debug)]
+pub struct Tunnels;
+
+impl Tunnels {
+    /// Every tunnel up, by name.
+    ///
+    /// A list because a machine can be on Wi-Fi *and* a VPN, and on two
+    /// tunnels at once — which is unusual and not wrong. Sorted by name so a
+    /// bar does not reorder them between readings.
+    pub fn state(active: &[Active]) -> VpnState {
+        let mut up: Vec<Tunnel> = active
+            .iter()
+            .filter(|connection| connection.is_tunnel())
+            .map(|connection| Tunnel {
+                name: connection.id.clone(),
+                interface: connection.interface.clone(),
+                kind: connection.kind.clone(),
+            })
+            .collect();
+
+        up.sort_by(|a, b| a.name.cmp(&b.name));
+        VpnState { tunnels: up }
+    }
+}
+
 /// The system bus, and the manager this broker walks from.
 struct Link {
     connection: Connection,
@@ -304,6 +354,47 @@ impl Link {
         scan
     }
 
+    /// Every active connection, with what it is and what it runs on.
+    ///
+    /// From `ActiveConnections` rather than `PrimaryConnection`: a VPN over
+    /// Wi-Fi has both up at once, and the primary one is only ever the tunnel.
+    async fn active(&self) -> Vec<Active> {
+        let paths: Vec<OwnedObjectPath> = self
+            .property(&self.manager, "ActiveConnections")
+            .await
+            .unwrap_or_default();
+
+        let mut found = Vec::new();
+        for path in paths {
+            let Ok(connection) = self.proxy(&path, Self::ACTIVE_IFACE).await else {
+                continue;
+            };
+
+            let devices: Vec<OwnedObjectPath> = self
+                .property(&connection, "Devices")
+                .await
+                .unwrap_or_default();
+            let interface = match devices.first() {
+                Some(device) => match self.proxy(device, Self::DEVICE_IFACE).await {
+                    Ok(device) => self
+                        .property(&device, "Interface")
+                        .await
+                        .unwrap_or_default(),
+                    Err(_) => String::new(),
+                },
+                None => String::new(),
+            };
+
+            found.push(Active {
+                id: self.property(&connection, "Id").await.unwrap_or_default(),
+                kind: self.property(&connection, "Type").await.unwrap_or_default(),
+                is_vpn: self.property(&connection, "Vpn").await.unwrap_or(false),
+                interface,
+            });
+        }
+        found
+    }
+
     /// The first wireless device, if the machine has one.
     async fn wireless(&self) -> Option<Proxy<'static>> {
         let devices: Vec<OwnedObjectPath> = self.property(&self.manager, "Devices").await?;
@@ -393,7 +484,7 @@ impl NetworkManager {
     /// Both topics in one patch. The hub coalesces per topic, so a signal
     /// that only moved the connection does not wake a picker, and a scan that
     /// only moved the list does not wake an indicator.
-    fn patch(network: NetworkState, wifi: WifiState) -> StatePatch {
+    fn patch(network: NetworkState, wifi: WifiState, vpn: VpnState) -> StatePatch {
         StatePatch {
             topics: vec![
                 StateTopic {
@@ -405,6 +496,11 @@ impl NetworkManager {
                     topic: SystemTopic::Wifi.as_str().into(),
                     revision: 0,
                     value: Some(state_topic::Value::Wifi(wifi)),
+                },
+                StateTopic {
+                    topic: SystemTopic::Vpn.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::Vpn(vpn)),
                 },
             ],
         }
@@ -418,7 +514,7 @@ impl Broker for NetworkManager {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Network, SystemTopic::Wifi]
+        &[SystemTopic::Network, SystemTopic::Wifi, SystemTopic::Vpn]
     }
 
     async fn next(&mut self) -> Result<StatePatch, BrokerError> {
@@ -452,7 +548,8 @@ impl Broker for NetworkManager {
         let reading = link.read().await?;
         let network = reading.state();
         let scan = link.scan(network.ssid.clone()).await;
+        let active = link.active().await;
         self.primed = true;
-        Ok(Self::patch(network, scan.state()))
+        Ok(Self::patch(network, scan.state(), Tunnels::state(&active)))
     }
 }

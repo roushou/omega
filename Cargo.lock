@@ -694,6 +694,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures-util",
+ "libc",
  "omega-proto",
  "serde",
  "serde_json",

@@ -18,6 +18,7 @@ workspace = true
 async-trait = "0.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 futures-util = { version = "0.3.34", default-features = false }
+libc = "0.2.189"
 omega-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true
