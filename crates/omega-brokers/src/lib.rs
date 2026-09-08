@@ -24,6 +24,7 @@ mod broker;
 pub mod clock;
 pub mod hyprland;
 pub mod logind;
+pub mod mpris;
 pub mod network_manager;
 pub mod notifications;
 pub mod pipewire;
@@ -34,6 +35,7 @@ pub use broker::{Broker, BrokerError};
 pub use clock::Clock;
 pub use hyprland::Hyprland;
 pub use logind::Logind;
+pub use mpris::Mpris;
 pub use network_manager::NetworkManager;
 pub use notifications::Notifications;
 pub use pipewire::PipeWire;
@@ -58,6 +60,7 @@ impl Brokers {
             Box::new(Clock::new()),
             Box::new(Notifications::new()),
             Box::new(PipeWire::new()),
+            Box::new(Mpris::new()),
         ]
     }
 }

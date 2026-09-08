@@ -9,3 +9,37 @@ message AudioState {
   bool muted = 2;
   string default_sink = 3;
 }
+
+// What is playing, and where.
+//
+// Several players at once is normal — a browser tab and a music app — so this
+// is the list rather than one answer, and `active` says which a media key
+// would reach.
+message MediaState {
+  repeated PlayerInfo players = 1;
+}
+
+message PlayerInfo {
+  string id = 1;                // the bus name's suffix: "chromium"
+  string identity = 2;          // what the player calls itself: "Chromium"
+  Playback playback = 3;
+  string title = 4;
+  string artist = 5;            // every artist, joined
+  string album = 6;
+  uint64 length_us = 7;         // microseconds, as MPRIS counts them
+
+  // The one a media key reaches: whichever is playing, or the first there is.
+  bool active = 8;
+
+  // Position is deliberately absent. MPRIS does not report it changing — by
+  // its own spec — so it would have to be polled, and a field that moved every
+  // tick would be a new revision every tick. Last-value-wins only helps when
+  // the value is actually the same.
+}
+
+enum Playback {
+  PLAYBACK_UNSPECIFIED = 0;
+  PLAYBACK_PLAYING = 1;
+  PLAYBACK_PAUSED = 2;
+  PLAYBACK_STOPPED = 3;
+}

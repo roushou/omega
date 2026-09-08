@@ -21,7 +21,7 @@ import "omega/value.proto";
 
 // One topic value. "topic" is the address: "battery", "network", "audio",
 // "backlight", "power", "display", "units", "time", "wifi", "workspaces",
-// "window", or
+// "window", "media", or
 // "unit.<name>.<key>" for
 // unit-owned data.
 //
@@ -50,6 +50,7 @@ message StateTopic {
     WifiState wifi = 18;
     WorkspacesState workspaces = 19;
     WindowState window = 21;
+    MediaState media = 22;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

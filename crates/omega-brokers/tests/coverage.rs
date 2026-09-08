@@ -40,7 +40,6 @@ const UNSERVED_ACTIONS: &[ActionKind] = &[
     ActionKind::SetSetting,
     ActionKind::ToggleSetting,
     ActionKind::Screenshot,
-    ActionKind::MediaKey,
 ];
 
 /// Actions the daemon performs itself rather than through a broker.
