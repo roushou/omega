@@ -24,7 +24,6 @@ omega-daemon = { path = "../omega-daemon", version = "0.1.0" }
 omega-document.workspace = true
 omega-proto.workspace = true
 omega-renderer.workspace = true
-serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = [
   "rt-multi-thread",

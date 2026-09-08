@@ -699,7 +699,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "tracing",
  "zbus",
 ]
 
@@ -716,7 +715,6 @@ dependencies = [
  "omega-document",
  "omega-proto",
  "omega-renderer",
- "serde_json",
  "thiserror",
  "tokio",
  "toml",
