@@ -114,3 +114,131 @@ impl Toggle {
 }
 
 styled!(Toggle);
+
+/// Something to type into.
+///
+/// The buffer lives in the shell. A half-typed passphrase is not a fact about
+/// the machine, and a render round trip per keystroke would put a Unix socket
+/// in the path of every character — so the unit hears the value once, when
+/// the user commits it:
+///
+/// ```
+/// # use omega::{Bind, Field};
+/// # let ssid = "home";
+/// Field::new("Passphrase")
+///     .secret()
+///     .on_submit(Bind::call("connect").arg(ssid));
+/// ```
+///
+/// The submitted text is appended to the binding's arguments, so that command
+/// is called with `(ssid, passphrase)`.
+#[derive(Debug, Clone)]
+pub struct Field {
+    node: Node,
+}
+
+impl Field {
+    /// An empty field, with the given placeholder.
+    pub fn new(placeholder: impl Display) -> Self {
+        Self {
+            node: Node::new("field").text_prop("placeholder", placeholder.to_string()),
+        }
+    }
+
+    /// Draw what is typed as dots.
+    ///
+    /// Only how it draws. It is the same text on the wire when submitted, and
+    /// this is not a claim about how the value is handled after that.
+    pub fn secret(mut self) -> Self {
+        self.node = self.node.flag("secret", true);
+        self
+    }
+
+    /// What the field starts with, and what it goes back to whenever the unit
+    /// says so.
+    ///
+    /// The exception to the buffer being the shell's: giving a value takes it
+    /// over, so a unit can clear a field after acting on it. Without one the
+    /// field keeps what the user typed across a re-render, which is what
+    /// stops a list refreshing underneath somebody mid-passphrase.
+    pub fn value(mut self, value: impl Display) -> Self {
+        self.node = self.node.text_prop("value", value.to_string());
+        self
+    }
+
+    /// What to call when the user commits it. The text is appended to the
+    /// binding's arguments.
+    pub fn on_submit(mut self, submit: impl Into<Bind>) -> Self {
+        self.node = self.node.on("submit", submit);
+        self
+    }
+}
+
+styled!(Field);
+
+/// Rows to choose from.
+///
+/// A [`Stack`] draws children in a line; a list is the one the user moves
+/// through. Arrows change the selection and Enter activates it, and neither
+/// reaches the unit — where the cursor is right now is what the user is
+/// doing, not something the machine knows. The unit hears the key of the row
+/// that was activated, appended to the binding's arguments.
+///
+/// Give every child a [`key`]: it is the identity the selection is kept
+/// against and the one handed back on activation, so a list of networks
+/// should key by SSID rather than let position decide.
+///
+/// [`Stack`]: crate::ui::Stack
+/// [`key`]: crate::ui::Text::key
+#[derive(Debug, Clone)]
+pub struct List {
+    node: Node,
+}
+
+impl List {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("list"),
+        }
+    }
+
+    /// Space between rows.
+    pub fn gap(mut self, gap: u32) -> Self {
+        self.node = self.node.number("gap", gap);
+        self
+    }
+
+    /// How tall the list is before it scrolls, in the shell's units. Unset,
+    /// it is as tall as its rows.
+    pub fn height(mut self, height: u32) -> Self {
+        self.node = self.node.number("height", height);
+        self
+    }
+
+    pub fn child(mut self, child: impl Into<Node>) -> Self {
+        self.node = self.node.child(child);
+        self
+    }
+
+    pub fn children<C: Into<Node>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+        for child in children {
+            self.node = self.node.child(child);
+        }
+        self
+    }
+
+    /// What to call when a row is activated, by Enter or by clicking it. The
+    /// row's key is appended to the binding's arguments.
+    pub fn on_activate(mut self, activate: impl Into<Bind>) -> Self {
+        self.node = self.node.on("activate", activate);
+        self
+    }
+}
+
+impl Default for List {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(List);

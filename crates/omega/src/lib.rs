@@ -58,7 +58,8 @@ pub use source::{Audio, Backlight, Battery, Network};
 pub use state::{Own, Topic, Watch};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{
-    Align, Bind, Button, Column, Icon, Node, Progress, Row, Slider, Stack, Text, Toggle, Ui,
+    Align, Bind, Button, Column, Field, Icon, List, Node, Progress, Row, Slider, Stack, Text,
+    Toggle, Ui,
 };
 pub use units::{Percent, Remaining};
 

@@ -112,9 +112,19 @@ the incoming children by the keys the SDK assigns.
 
 Interaction state stays in the shell. A slider mid-drag shows where the finger
 is, not what was last published; a toggle flips optimistically and corrects
-itself on the next render. Neither is a fact about the machine until the unit
-is told, and telling it every frame would make the control lag the finger
-doing it.
+itself on the next render; a field keeps what was typed across a re-render,
+and a list keeps where the cursor is. None of it is a fact about the machine
+until the unit is told, and telling it every frame would put a socket round
+trip in the path of every keystroke.
+
+A unit takes a field's buffer over by giving the node a `value` — that is how
+a field is cleared after being acted on, and it is the only way interaction
+state crosses back.
+
+A list owns its own keyboard navigation: arrows move the selection, Enter
+activates it, and only the activation reaches the unit, carrying the row's
+key. That is why rows want real keys — the identity a list reports is the one
+an author gave it, not a position.
 
 `Props.js` reads a node's props, which are protobuf `Value`s: the trap is
 `intValue`, which protobuf JSON writes as a _string_. It also reads a node's

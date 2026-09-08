@@ -28,7 +28,7 @@ mod style;
 mod text;
 
 pub use bind::Bind;
-pub use control::{Button, Slider, Toggle};
+pub use control::{Button, Field, List, Slider, Toggle};
 pub use display::Progress;
 pub use layout::{Column, Row, Stack};
 pub use node::{Align, Node};

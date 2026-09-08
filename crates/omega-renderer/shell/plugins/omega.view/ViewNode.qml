@@ -45,6 +45,8 @@ Item {
             case "button": return "nodes/Button.qml"
             case "slider": return "nodes/Slider.qml"
             case "toggle": return "nodes/Toggle.qml"
+            case "field": return "nodes/Field.qml"
+            case "list": return "nodes/List.qml"
             case "stack": return "nodes/Stack.qml"
             default: return ""
         }

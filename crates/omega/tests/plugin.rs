@@ -2,8 +2,8 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Command, Fields, Icon, Network, Notify, Own, Percent,
-    Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch, Widget,
+    Answer, Args, Battery, Bind, Button, Command, Field, Fields, Icon, List, Network, Notify, Own,
+    Percent, Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
@@ -564,6 +564,16 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
             .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))
             .child(Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output")))
             .child(Toggle::new(true).on_change("mute"))
+            .child(
+                Field::new("Passphrase")
+                    .secret()
+                    .on_submit(Bind::call("connect").arg("home")),
+            )
+            .child(
+                List::new()
+                    .child(Text::new("home").key("home"))
+                    .on_activate("select"),
+            )
             .into(),
     );
 
@@ -619,6 +629,22 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
         children[5]["events"]["change"]["args"][0]["stringValue"],
         "output"
     );
+
+    // A field says how it draws, not what it holds: the buffer is the
+    // shell's until the user commits it.
+    assert_eq!(children[7]["type"], "field");
+    assert_eq!(
+        children[7]["props"]["placeholder"]["stringValue"],
+        "Passphrase"
+    );
+    assert_eq!(children[7]["props"]["secret"]["boolValue"], true);
+    assert_eq!(children[7]["events"]["submit"]["command"], "connect");
+
+    // A list reports which row was activated, and the row's key is the
+    // identity it reports — so a row must carry one.
+    assert_eq!(children[8]["type"], "list");
+    assert_eq!(children[8]["events"]["activate"]["command"], "select");
+    assert_eq!(children[8]["children"][0]["key"], "home");
 
     // Keys are the path to a node, and the renderer keeps a node whose key it
     // already has rather than rebuilding it.

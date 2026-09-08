@@ -74,6 +74,8 @@ impl Renderer {
             "nodes/Button.qml",
             "nodes/Slider.qml",
             "nodes/Toggle.qml",
+            "nodes/Field.qml",
+            "nodes/List.qml",
             "nodes/Stack.qml"
         ]
     );
