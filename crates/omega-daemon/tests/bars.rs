@@ -14,7 +14,7 @@ use omega_daemon::reconcile::{Action, BarProvider, Provider};
 use omega_daemon::units::UnitTable;
 use omega_document::{Bars, Document, Modules};
 use omega_proto::UnitName;
-use omega_proto::omega::{StateDocument, ViewNode, ViewTree};
+use omega_proto::omega::{StateDocument, SurfaceKind, ViewNode, ViewTree};
 
 fn surface(id: &str) -> omega_proto::SurfaceId {
     omega_proto::SurfaceId::parse(id).unwrap()
@@ -35,6 +35,7 @@ fn view() -> ViewTree {
             r#type: "text".into(),
             props: HashMap::new(),
             children: Vec::new(),
+            ..Default::default()
         }),
         revision: 0,
     }
@@ -198,4 +199,65 @@ async fn a_unit_renders_every_instance_the_document_gives_it() {
 
     // Both instances now exist as separate views of one surface.
     assert!(provider.plan(&two_clocks()).is_empty());
+}
+
+/// A unit with two view surfaces: one for the slot, one for the popout.
+fn wifi_manifest() -> omega_proto::Manifest {
+    omega_proto::Manifest {
+        surfaces: vec![
+            omega_proto::Surface::new(surface("indicator"), SurfaceKind::Widget),
+            omega_proto::Surface::new(surface("details"), SurfaceKind::Widget),
+        ],
+        ..widget_manifest("wifi", "indicator")
+    }
+}
+
+fn wifi_provider(hub: Hub, units: UnitTable) -> BarProvider {
+    BarProvider::new(
+        hub,
+        units,
+        Arc::new(ManifestStore::from_manifests([wifi_manifest()])),
+    )
+}
+
+fn wifi_bar(module: omega_proto::omega::Module) -> StateDocument {
+    Document::new()
+        .bar(Bars::top("bar", vec![module]))
+        .into_inner()
+}
+
+#[test]
+fn a_placement_with_a_panel_renders_both_of_its_surfaces() {
+    let placed = Modules::panel(
+        Modules::surface(Modules::plain_widget("wifi", "wifi"), "indicator"),
+        "details",
+    );
+    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new())).plan(&wifi_bar(placed));
+
+    // One placement, two views: the document placed one thing, and it draws
+    // in two. They are rendered separately because they are separate views.
+    assert_eq!(plan.len(), 2, "the slot and the popout");
+    assert!(plan.iter().all(|change| change.target == "wifi"));
+}
+
+#[test]
+fn a_placement_without_a_panel_renders_one_surface() {
+    let placed = Modules::surface(Modules::plain_widget("wifi", "wifi"), "indicator");
+    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new())).plan(&wifi_bar(placed));
+
+    assert_eq!(plan.len(), 1);
+}
+
+#[test]
+fn a_unit_with_several_surfaces_must_be_told_which_one_is_placed() {
+    // Naming the unit alone was enough while a unit had one surface. It
+    // cannot be once it has two, and the daemon reports that rather than
+    // picking whichever the manifest happened to list first.
+    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new()))
+        .plan(&wifi_bar(Modules::plain_widget("wifi", "wifi")));
+
+    assert!(
+        plan.is_empty(),
+        "nothing is planned from an ambiguous placement"
+    );
 }

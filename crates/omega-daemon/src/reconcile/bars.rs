@@ -23,11 +23,16 @@ use crate::reconcile::{Action, Change, Provider, ProviderError};
 use crate::units::UnitTable;
 use std::sync::Arc;
 
-/// One widget instance a bar declares.
+/// One view instance a bar declares.
+///
+/// Keyed by surface as well as module: a module can place two — the widget in
+/// the slot and the panel that pops out of it — and they are rendered
+/// separately because they are separate views of the same unit.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Instance {
     unit: UnitName,
     module: ModuleId,
+    surface: SurfaceId,
 }
 
 #[derive(Debug)]
@@ -48,17 +53,35 @@ impl BarProvider {
 
     /// The widget instances the document declares, ignoring modules the
     /// daemon renders itself (a clock is not a unit).
-    fn declared(document: &StateDocument) -> BTreeSet<Instance> {
+    fn declared(&self, document: &StateDocument) -> BTreeSet<Instance> {
         document
             .bars
             .iter()
             .flat_map(|bar| bar.modules.iter())
             .filter_map(|module| match module.kind.as_ref()? {
-                module::Kind::Widget(widget) => Some(Instance {
-                    unit: UnitName::parse(widget.unit.clone()).ok()?,
-                    module: ModuleId::parse(module.id.clone()).ok()?,
-                }),
+                module::Kind::Widget(widget) => {
+                    let unit = UnitName::parse(widget.unit.clone()).ok()?;
+                    let module = ModuleId::parse(module.id.clone()).ok()?;
+                    Some((unit, module, widget))
+                }
                 _ => None,
+            })
+            .flat_map(|(unit, module, widget)| {
+                // The slot, and the popout when there is one. A surface the
+                // document names but the unit does not declare is caught in
+                // `surface_of`, which reports rather than guesses.
+                [widget.surface.as_str(), widget.panel.as_str()]
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, named)| *index == 0 || !named.is_empty())
+                    .filter_map(|(_, named)| {
+                        Some(Instance {
+                            unit: unit.clone(),
+                            module: module.clone(),
+                            surface: self.surface_of(&unit, named).ok()?,
+                        })
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect()
     }
@@ -72,16 +95,19 @@ impl BarProvider {
                 Some(Instance {
                     unit: update.surface.unit,
                     module: update.surface.module?,
+                    surface: update.surface.surface,
                 })
             })
             .collect()
     }
 
-    /// The unit's widget surface. A unit with one is unambiguous; a unit with
-    /// several cannot be addressed by unit name alone, and the document has
-    /// to say which — until it can, that is a plan the daemon reports rather
-    /// than a guess it makes.
-    fn surface_of(&self, unit: &UnitName) -> Result<SurfaceId, String> {
+    /// The surface a placement means.
+    ///
+    /// Named, and the unit has to declare it. Unnamed, and the unit's only
+    /// widget surface is what naming the unit meant — a unit with several
+    /// cannot be addressed by name alone, and the document has to say which
+    /// rather than have the daemon guess.
+    fn surface_of(&self, unit: &UnitName, named: &str) -> Result<SurfaceId, String> {
         let Some(entry) = self.manifests.get(unit) else {
             return Err(format!("{unit} is not a unit of this build"));
         };
@@ -94,11 +120,19 @@ impl BarProvider {
             .map(|surface| &surface.id)
             .collect();
 
+        if !named.is_empty() {
+            return widgets
+                .into_iter()
+                .find(|surface| surface.as_str() == named)
+                .cloned()
+                .ok_or_else(|| format!("{unit} declares no widget surface {named:?}"));
+        }
+
         match widgets.as_slice() {
             [surface] => Ok((*surface).clone()),
             [] => Err(format!("{unit} declares no widget surface")),
             many => Err(format!(
-                "{unit} declares {} widget surfaces; a module cannot say which",
+                "{unit} declares {} widget surfaces; a module must name the one it places",
                 many.len()
             )),
         }
@@ -106,7 +140,7 @@ impl BarProvider {
 
     /// Ask a unit to render one instance, and publish what it answers.
     async fn render(&self, instance: &Instance, document: &StateDocument) -> Result<(), String> {
-        let surface = self.surface_of(&instance.unit)?;
+        let surface = instance.surface.clone();
         let config = Self::config_of(document, &instance.module);
 
         let outcome = self
@@ -165,7 +199,7 @@ impl Provider for BarProvider {
     }
 
     fn plan(&self, document: &StateDocument) -> Vec<Change> {
-        let declared = Self::declared(document);
+        let declared = self.declared(document);
         let rendered = self.rendered();
 
         let mut changes: Vec<Change> = declared
@@ -190,7 +224,7 @@ impl Provider for BarProvider {
         document: &StateDocument,
         changes: &[Change],
     ) -> Result<(), ProviderError> {
-        let declared = Self::declared(document);
+        let declared = self.declared(document);
 
         for change in changes {
             match change.action {

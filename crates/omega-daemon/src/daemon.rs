@@ -1,4 +1,4 @@
-//! The daemon core: binds the sockets and ties sources, units, sessions, and
+//! The daemon core: binds the sockets and ties brokers, units, sessions, and
 //! the shell together.
 
 use std::io;
@@ -11,22 +11,27 @@ use crate::host::StateConfig;
 use omega_proto::Layout;
 use omega_proto::{Observation, Socket};
 
-use crate::error::DaemonError;
+use crate::broker::Brokerage;
 use crate::hub::Hub;
 use crate::manifest::ManifestStore;
+use crate::manifest::ManifestStoreError;
 use crate::reconcile::{Context, Converger, Work};
 use crate::session::Session;
+use crate::shell::ShellError;
 use crate::shell::ShellServer;
 use crate::shutdown::Shutdown;
-use crate::source::StateSource;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
 use crate::watch::StateStamp;
+use omega_proto::TomlError;
+use std::path::PathBuf;
 
 /// The Omega daemon: trust boundary, state owner, supervisor.
 #[derive(Debug)]
 pub struct Daemon {
     hub: Hub,
+    /// The subsystems this daemon brokers.
+    brokers: Brokerage,
     supervisor: Supervisor,
     listener: UnixListener,
     socket: Socket,
@@ -80,9 +85,10 @@ impl Daemon {
         }
     }
 
-    /// Register a state source, polled on its own interval.
-    pub fn add_source<S: StateSource>(&self, source: S) {
-        source.spawn(self.hub.clone());
+    /// Start a broker: its topics are published into the hub, and it stops
+    /// when the daemon does.
+    pub fn add_broker(&self, broker: Box<dyn omega_brokers::Broker>) {
+        self.brokers.add(broker);
     }
 
     /// Run until interrupted, then shut down in order: stop accepting, ask
@@ -199,6 +205,7 @@ impl Daemon {
     /// daemon waits for them.
     async fn stop(&self) {
         self.shutdown.trigger();
+        self.brokers.stop().await;
 
         let deadline = tokio::time::Instant::now() + Self::SHUTDOWN_GRACE;
         while tokio::time::Instant::now() < deadline {
@@ -215,6 +222,7 @@ impl Daemon {
         loop {
             let (stream, _) = self.listener.accept().await?;
             let session = Session::new(self.supervisor.clone(), self.hub.clone())
+                .with_brokers(self.brokers.clone())
                 .with_shutdown(self.shutdown.clone())
                 .with_units(self.units.clone());
             tokio::spawn(async move {
@@ -273,6 +281,7 @@ impl DaemonBuilder {
 
         let hub = Hub::new();
         let shutdown = Shutdown::new();
+        let brokers = Brokerage::new(hub.clone(), shutdown.clone());
         let (units, arrivals) = UnitTable::new(hub.clone());
         units.adopt(&manifests);
         let supervisor = Supervisor::new(socket.clone(), units.clone(), shutdown.clone());
@@ -282,9 +291,10 @@ impl DaemonBuilder {
         )?
         // A shell draws what a plugin publishes, so it has to be able to
         // press what it drew.
-        .serving(supervisor.clone(), units.clone());
+        .serving(supervisor.clone(), units.clone(), brokers.clone());
 
         Ok(Daemon {
+            brokers,
             hub,
             supervisor,
             listener,
@@ -330,4 +340,25 @@ impl DaemonHandle {
     pub fn is_stopping(&self) -> bool {
         self.shutdown.is_triggered()
     }
+}
+
+/// What starting or running the daemon can fail with.
+#[derive(Debug, thiserror::Error)]
+pub enum DaemonError {
+    #[error("cannot bind control socket {}: {source}", path.display())]
+    Bind {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("cannot load the state config: {0}")]
+    Config(#[from] TomlError),
+    #[error("cannot load unit manifests: {0}")]
+    Manifests(#[from] ManifestStoreError),
+    #[error("cannot load the state document: {0}")]
+    Document(#[from] omega_document::DocumentError),
+    #[error("{0}")]
+    Shell(#[from] ShellError),
+    #[error("io error: {0}")]
+    Io(#[from] io::Error),
 }

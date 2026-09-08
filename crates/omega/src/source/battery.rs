@@ -26,7 +26,7 @@ pub struct Battery {
     context: Context,
 }
 
-reads!(Battery, Battery, BatteryState);
+reads!(Battery, BatteryState);
 
 impl Battery {
     /// How full it is. Prints itself as `80%`.

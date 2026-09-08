@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package omega;
+
+// What the machine is running on.
+
+message BatteryState {
+  double level = 1;             // 0.0 .. 1.0
+  bool charging = 2;
+  uint32 seconds_to_empty = 3;
+  uint32 seconds_to_full = 4;
+}
+
+message PowerState {
+  bool on_ac = 1;
+  double load_percent = 2;
+}

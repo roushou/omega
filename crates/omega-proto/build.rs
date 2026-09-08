@@ -3,6 +3,11 @@ use std::path::PathBuf;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let protos = [
         "omega/value.proto",
+        "omega/state/display.proto",
+        "omega/state/media.proto",
+        "omega/state/network.proto",
+        "omega/state/power.proto",
+        "omega/state/units.proto",
         "omega/state.proto",
         "omega/action.proto",
         "omega/event.proto",

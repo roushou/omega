@@ -55,7 +55,7 @@ impl Context {
     /// can read its topic without asking whether it exists.
     pub(crate) fn holds(&self, topics: &[SystemTopic]) -> bool {
         let state = self.read();
-        topics.iter().all(|topic| state.has(*topic))
+        topics.iter().all(|topic| state.knows(*topic))
     }
 
     /// The current value of a topic, if the daemon has published one.

@@ -2,9 +2,10 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Button, Command, Fields, Icon, Network, Notify, Own, Percent, Progress,
-    Row, Session, Text, Topic, Ui, Values, Watch, Widget,
+    Answer, Args, Battery, Bind, Button, Command, Fields, Icon, Network, Notify, Own, Percent,
+    Progress, Row, Session, Slider, Text, Toggle, Topic, Ui, Values, Watch, Widget,
 };
+use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
 
 // ---- the shortest plugin anyone will write ----
@@ -326,6 +327,37 @@ async fn a_widget_is_not_asked_to_draw_a_machine_it_cannot_see() {
     assert_eq!(daemon.next_view().await.view.text(), "42%");
 }
 
+/// The shape an author writes once a topic can report nothing.
+#[derive(omega::Widget)]
+struct MaybeCharge {
+    battery: Battery,
+}
+
+impl Widget for MaybeCharge {
+    fn render(&self) -> Ui {
+        match self.battery.has_reading() {
+            true => Text::new(self.battery.charge()),
+            false => Text::new("no battery"),
+        }
+        .into()
+    }
+}
+
+#[tokio::test]
+async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
+    let mut daemon =
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<MaybeCharge>());
+
+    // A desktop has no battery, and the daemon says so by publishing the
+    // topic with no value. That is an answer, so the widget draws — where
+    // waiting for a reading that never comes held the first render forever.
+    daemon
+        .welcome(&State::new().absent(SystemTopic::Battery))
+        .await;
+
+    assert_eq!(daemon.next_view().await.view.text(), "no battery");
+}
+
 #[tokio::test]
 async fn a_document_can_instantiate_one_surface_more_than_once() {
     let mut daemon =
@@ -529,6 +561,9 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
             .child(Icon::new("battery"))
             .child(Progress::new(Percent::of(0.7)))
             .child(Button::new("toggle").on_press("toggle"))
+            .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))
+            .child(Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output")))
+            .child(Toggle::new(true).on_change("mute"))
             .into(),
     );
 
@@ -554,9 +589,39 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
 
     assert_eq!(children[3]["type"], "button");
     assert_eq!(children[3]["props"]["label"]["stringValue"], "toggle");
-    assert_eq!(children[3]["props"]["command"]["stringValue"], "toggle");
+    // What a node *does* is not a prop. A binding lives beside them, so the
+    // shell reads behaviour from one place rather than sniffing prop names.
+    assert_eq!(children[3]["events"]["press"]["command"], "toggle");
 
-    // Keys are the path to a node, and the renderer diffs on them.
+    // Arguments travel as protobuf JSON `Value`s, which is exactly what an
+    // `InvokeUnit` carries — so the shell forwards them verbatim instead of
+    // re-encoding them, and this is the shape it forwards.
+    let connect = &children[4]["events"]["press"];
+    assert_eq!(connect["command"], "connect");
+    assert_eq!(connect["args"][0]["stringValue"], "home");
+
+    // A press with nothing to say carries no arguments at all.
+    assert!(children[3]["events"]["press"].get("args").is_none());
+
+    // A control reports; a display does not. Both carry their reading the
+    // same way, and what separates them is whether anything is bound.
+    assert_eq!(children[5]["type"], "slider");
+    assert_eq!(children[5]["props"]["value"]["doubleValue"], 0.6);
+    assert_eq!(children[5]["events"]["change"]["command"], "set");
+
+    assert_eq!(children[6]["type"], "toggle");
+    assert_eq!(children[6]["props"]["on"]["boolValue"], true);
+    assert_eq!(children[6]["events"]["change"]["command"], "mute");
+
+    // The value the user lands on is appended to these by the shell, so a
+    // unit reads the arguments it chose by position and the reading last.
+    assert_eq!(
+        children[5]["events"]["change"]["args"][0]["stringValue"],
+        "output"
+    );
+
+    // Keys are the path to a node, and the renderer keeps a node whose key it
+    // already has rather than rebuilding it.
     assert_eq!(root["key"], "root");
     assert_eq!(children[3]["key"], "root.3");
 }

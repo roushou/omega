@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use omega_daemon::Shutdown;
+use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::session::{Liveness, Session};
@@ -32,6 +33,9 @@ pub struct Harness {
     /// The socket path spawned units are pointed at. Never bound: a test's
     /// units connect through the pair, not through the filesystem.
     socket: Socket,
+    /// Empty unless a test registers one, so an action nothing claims is
+    /// refused exactly as it is on a daemon with no brokers.
+    brokers: Brokerage,
 }
 
 impl Harness {
@@ -44,11 +48,18 @@ impl Harness {
 
         Self {
             supervisor,
+            brokers: Brokerage::new(hub.clone(), Shutdown::new()),
             hub,
             units,
             liveness: None,
             socket,
         }
+    }
+
+    /// Register a broker, so an action it claims can reach it.
+    pub fn with_broker(self, broker: Box<dyn omega_brokers::Broker>) -> Self {
+        self.brokers.add(broker);
+        self
     }
 
     /// Serve sessions with a shorter keepalive than the default.
@@ -76,8 +87,9 @@ impl Harness {
     ) -> Transport<tokio::net::UnixStream> {
         let (peer, daemon) = tokio::net::UnixStream::pair().unwrap();
 
-        let mut session =
-            Session::new(self.supervisor.clone(), self.hub.clone()).with_units(self.units.clone());
+        let mut session = Session::new(self.supervisor.clone(), self.hub.clone())
+            .with_units(self.units.clone())
+            .with_brokers(self.brokers.clone());
         if let Some(liveness) = &self.liveness {
             session = session.with_liveness(liveness.clone());
         }

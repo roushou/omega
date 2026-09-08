@@ -11,7 +11,8 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::Framed;
 
 use crate::codec::FrameCodec;
-use crate::error::CodecError;
+
+use crate::CodecError;
 use crate::omega::Frame;
 
 /// A framed transport over an async byte stream.

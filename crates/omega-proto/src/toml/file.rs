@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use crate::error::{ReadError, TomlError};
+use super::{ReadError, TomlError};
 use crate::fs::AtomicFile;
 use crate::toml::schema::{TomlSchema, Validated};
 use crate::toml::{Toml, TomlDoc};

@@ -19,11 +19,20 @@
 //! them. The exception is a list whose items move, where the identity is the
 //! item's, not the position's — say so with [`Node::key`].
 
+mod bind;
+mod control;
+mod display;
+mod layout;
 mod node;
-mod nodes;
+mod style;
+mod text;
 
+pub use bind::Bind;
+pub use control::{Button, Slider, Toggle};
+pub use display::Progress;
+pub use layout::{Column, Row, Stack};
 pub use node::{Align, Node};
-pub use nodes::{Button, Column, Icon, Progress, Row, Stack, Text};
+pub use text::{Icon, Text};
 
 use omega_proto::omega::ViewTree;
 

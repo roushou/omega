@@ -23,6 +23,7 @@ fn view() -> ViewTree {
             r#type: "box".into(),
             props: Default::default(),
             children: Vec::new(),
+            ..Default::default()
         }),
         revision: 0,
     }

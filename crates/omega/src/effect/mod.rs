@@ -15,11 +15,13 @@
 //!
 //! [`Does`]: crate::wiring::Does
 
+mod brightness;
 mod notify;
 mod session;
 mod shell;
 mod volume;
 
+pub use brightness::Brightness;
 pub use notify::{Notification, Notify};
 pub use session::Session;
 pub use shell::Shell;

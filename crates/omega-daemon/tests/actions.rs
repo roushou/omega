@@ -5,11 +5,14 @@ mod common;
 use std::time::Duration;
 
 use common::{Harness, expect_ok, expect_refusal, next_result, policy_manifest, widget_manifest};
-use omega_daemon::action::ActionKind;
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::Manifest;
+use std::sync::{Arc, Mutex};
+
+use omega_proto::ActionKind;
 use omega_proto::omega::{
-    Act, Action, Capability, ErrorCode, Frame, Invoke, Lock, RunCommand, action, frame, invoke,
+    Act, Action, ErrorCode, Frame, Invoke, Lock, RunCommand, SetBacklight, StatePatch, action,
+    frame, invoke, set_backlight,
 };
 
 fn act(stream_id: u64, kind: action::Kind) -> Frame {
@@ -23,6 +26,64 @@ fn act(stream_id: u64, kind: action::Kind) -> Frame {
     }
 }
 
+/// A broker that serves one kind and remembers being asked.
+///
+/// Standing in for the real one on purpose: what the daemon owes is that an
+/// action reaches the broker claiming its kind. Whether sysfs then took the
+/// write is `omega-brokers`' business, and dragging a device tree in here
+/// would test that twice and this once.
+#[derive(Debug, Clone, Default)]
+struct Recorder {
+    served: Arc<Mutex<Vec<ActionKind>>>,
+}
+
+#[async_trait::async_trait]
+impl omega_brokers::Broker for Recorder {
+    fn name(&self) -> &'static str {
+        "recorder"
+    }
+
+    fn topics(&self) -> &'static [omega_proto::SystemTopic] {
+        &[]
+    }
+
+    fn actions(&self) -> &'static [ActionKind] {
+        &[ActionKind::SetBacklight]
+    }
+
+    async fn next(&mut self) -> Result<StatePatch, omega_brokers::BrokerError> {
+        // Reports nothing, ever: a broker may exist only to be asked.
+        std::future::pending().await
+    }
+
+    async fn act(
+        &mut self,
+        action: &action::Kind,
+    ) -> Result<Option<StatePatch>, omega_brokers::BrokerError> {
+        self.served
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(ActionKind::of(action));
+        Ok(None)
+    }
+}
+
+fn dim() -> action::Kind {
+    action::Kind::SetBacklight(SetBacklight {
+        change: Some(set_backlight::Change::AbsolutePercent(40)),
+    })
+}
+
+fn backlight_manifest(name: &str) -> Manifest {
+    Manifest {
+        capabilities: vec![
+            "CAPABILITY_STATE_READ".into(),
+            "CAPABILITY_BACKLIGHT".into(),
+        ],
+        ..widget_manifest(name, "battery")
+    }
+}
+
 async fn connected(
     tag: &str,
     manifest: Manifest,
@@ -32,18 +93,6 @@ async fn connected(
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
     (harness, transport)
-}
-
-#[test]
-fn every_action_states_what_it_costs() {
-    // The escape hatch and the power button are not the same permission.
-    assert_eq!(ActionKind::RunCommand.cost(), Some(Capability::Spawn));
-    assert_eq!(ActionKind::Shutdown.cost(), Some(Capability::SystemControl));
-    assert_eq!(ActionKind::SetBacklight.cost(), Some(Capability::Backlight));
-    assert_eq!(ActionKind::Notify.cost(), Some(Capability::Notify));
-
-    // Actions that only move a unit's own windows around cost nothing extra.
-    assert_eq!(ActionKind::ToggleFullscreen.cost(), None);
 }
 
 #[tokio::test]
@@ -136,4 +185,43 @@ async fn an_authorized_but_unperformable_action_says_so() {
     let refusal = expect_refusal(next_result(&mut transport).await);
     assert_eq!(refusal.code, ErrorCode::Unimplemented);
     assert!(refusal.message.contains("Lock"), "{refusal}");
+}
+
+#[tokio::test]
+async fn an_action_reaches_the_broker_that_claims_its_kind() {
+    let recorder = Recorder::default();
+    let manifest = backlight_manifest("dimmer");
+    let harness = Harness::new(
+        "act-brokered",
+        ManifestStore::from_manifests([manifest.clone()]),
+    )
+    .with_broker(Box::new(recorder.clone()));
+
+    let token = harness.register_unit(manifest.name.as_str());
+    let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
+    transport.recv().await.unwrap().unwrap(); // Welcome
+
+    transport.send(act(1, dim())).await.unwrap();
+    expect_ok(next_result(&mut transport).await);
+
+    assert_eq!(
+        *recorder.served.lock().unwrap(),
+        vec![ActionKind::SetBacklight],
+        "the broker that claimed the kind is the one that was asked"
+    );
+}
+
+#[tokio::test]
+async fn an_action_no_broker_claims_is_still_unimplemented() {
+    // The same request, on a daemon running no broker for it. Authorization
+    // already passed — so the answer has to be that nothing can do it, not
+    // silence, or a granted capability would stand in for a handler that does
+    // not exist.
+    let (_harness, mut transport) = connected("act-unbrokered", backlight_manifest("dimmer")).await;
+
+    transport.send(act(1, dim())).await.unwrap();
+
+    let refusal = expect_refusal(next_result(&mut transport).await);
+    assert_eq!(refusal.code, ErrorCode::Unimplemented);
+    assert!(refusal.message.contains("SetBacklight"), "{refusal}");
 }

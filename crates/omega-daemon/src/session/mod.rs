@@ -15,11 +15,12 @@ use omega_proto::{
     Handshake, HandshakeError, PROTOCOL_VERSION, ReadHalf, Refusal, Transport, WriteHalf,
 };
 
-use crate::error::SessionError;
+use crate::broker::Brokerage;
 use crate::hub::Hub;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
 use crate::units::{DaemonStreams, Request, UnitTable};
+use omega_proto::CodecError;
 
 pub use admission::{Peer, Role};
 pub use dispatch::{Dispatcher, OpKind, Response};
@@ -35,18 +36,29 @@ pub struct Session {
     shutdown: Shutdown,
     /// Where a connected unit registers itself, so the daemon can invoke it.
     units: UnitTable,
+    /// The subsystems this daemon brokers. Empty by default, which answers
+    /// every brokered action `UNIMPLEMENTED` — right for a session that is
+    /// not a daemon, and for a test that is only exercising the protocol.
+    brokers: Brokerage,
 }
 
 impl Session {
     pub fn new(supervisor: Supervisor, hub: Hub) -> Self {
-        let hub_for_table = hub.clone();
+        let shutdown = Shutdown::new();
         Self {
             supervisor,
+            brokers: Brokerage::new(hub.clone(), shutdown.clone()),
+            units: UnitTable::detached(hub.clone()),
             hub,
             liveness: Liveness::new(),
-            shutdown: Shutdown::new(),
-            units: UnitTable::detached(hub_for_table),
+            shutdown,
         }
+    }
+
+    /// Join the brokers the daemon runs, so an action can reach one.
+    pub fn with_brokers(mut self, brokers: Brokerage) -> Self {
+        self.brokers = brokers;
+        self
     }
 
     /// Join the table the daemon invokes units through.
@@ -149,6 +161,7 @@ impl Session {
             self.hub.clone(),
             self.supervisor.clone(),
             self.units.clone(),
+            self.brokers.clone(),
         );
         let mut liveness = self.liveness.clone();
         let mut keepalive = tokio::time::interval(liveness.interval());
@@ -383,4 +396,19 @@ impl Session {
         }
         Ok(())
     }
+}
+
+/// Why a session ended.
+#[derive(Debug, thiserror::Error)]
+pub enum SessionError {
+    #[error("handshake failed: {0}")]
+    Handshake(#[from] HandshakeError),
+    #[error("transport error: {0}")]
+    Transport(#[from] CodecError),
+    /// The peer was turned away. It was told why before the socket closed.
+    #[error("refused: {0}")]
+    Refused(#[from] Refusal),
+    /// The peer stopped answering keepalives.
+    #[error("{0} stopped answering")]
+    Unresponsive(String),
 }

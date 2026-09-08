@@ -5,9 +5,11 @@
 //! separate registry that can drift out of sync with the crates.
 
 use crate::host::cargo::{CargoManifest, CargoSlot};
-use crate::host::error::UnitsError;
+use crate::host::glob::PatternError;
 use omega_proto::Layout;
 use omega_proto::UnitName;
+use omega_proto::{IdentError, TomlError};
+use std::path::PathBuf;
 
 /// The units of a config workspace, in deterministic (sorted) order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -69,4 +71,17 @@ impl<'a> IntoIterator for &'a Units {
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
+}
+
+/// Why the units of a build could not be discovered.
+#[derive(Debug, thiserror::Error)]
+pub enum UnitsError {
+    #[error(transparent)]
+    Manifest(#[from] TomlError),
+    #[error(transparent)]
+    Pattern(#[from] PatternError),
+    #[error(transparent)]
+    Name(#[from] IdentError),
+    #[error("workspace member has no directory name: {}", .0.display())]
+    UnnamedMember(PathBuf),
 }

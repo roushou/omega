@@ -7,7 +7,6 @@
 use std::time::Duration;
 
 use crate::PROTOCOL_VERSION;
-use crate::error::HandshakeError;
 use crate::omega::{Frame, Hello, Welcome, frame};
 
 #[derive(Debug)]
@@ -85,4 +84,20 @@ impl Handshake {
             None => Err(HandshakeError::ClosedBefore("Welcome")),
         }
     }
+}
+
+/// Why a connection could not be established.
+#[derive(Debug, thiserror::Error)]
+pub enum HandshakeError {
+    #[error("timed out waiting for {0}")]
+    Timeout(&'static str),
+    #[error("connection closed before {0}")]
+    ClosedBefore(&'static str),
+    #[error("expected {expected}, got {got:?}")]
+    Unexpected {
+        expected: &'static str,
+        got: Box<Option<frame::Body>>,
+    },
+    #[error("protocol mismatch: peer speaks v{peer}, we speak v{ours}")]
+    VersionMismatch { peer: u32, ours: u32 },
 }

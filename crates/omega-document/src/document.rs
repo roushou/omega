@@ -164,8 +164,50 @@ impl Modules {
             module::Kind::Widget(WidgetModule {
                 unit: unit.into(),
                 config: settings.into_map(),
+                surface: String::new(),
+                panel: String::new(),
             }),
         )
+    }
+
+    /// Which of the unit's surfaces this placement draws.
+    ///
+    /// Only needed for a unit with more than one: naming a unit has always
+    /// meant its only widget surface, and a unit with several cannot be
+    /// addressed by name alone.
+    ///
+    /// ```
+    /// # use omega_document::Modules;
+    /// Modules::surface(Modules::plain_widget("wifi", "wifi"), "indicator");
+    /// ```
+    pub fn surface(module: Module, surface: impl Into<String>) -> Module {
+        Self::mapped(module, |widget| widget.surface = surface.into())
+    }
+
+    /// A second of the unit's surfaces, drawn as a popout anchored to this
+    /// one — the shape of every panel in the bar.
+    ///
+    /// The bar draws the first; pressing it opens the second. What the popout
+    /// contains is the unit's business, and a unit that renders nothing for it
+    /// has a panel with nothing in it rather than a panel that will not open.
+    ///
+    /// ```
+    /// # use omega_document::Modules;
+    /// let wifi = Modules::plain_widget("wifi", "wifi");
+    /// Modules::panel(Modules::surface(wifi, "indicator"), "details");
+    /// ```
+    pub fn panel(module: Module, panel: impl Into<String>) -> Module {
+        Self::mapped(module, |widget| widget.panel = panel.into())
+    }
+
+    /// Change a widget placement, leaving anything else alone: a clock has no
+    /// surfaces to name, and saying so is not an error worth failing a build
+    /// over.
+    fn mapped(mut module: Module, change: impl FnOnce(&mut WidgetModule)) -> Module {
+        if let Some(module::Kind::Widget(widget)) = module.kind.as_mut() {
+            change(widget);
+        }
+        module
     }
 
     fn of(id: impl Into<String>, kind: module::Kind) -> Module {

@@ -11,8 +11,6 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::IdentError;
-
 /// The shared rule. Kept private: a caller names the *kind* of identifier it
 /// wants, and the kind decides what is allowed.
 struct Ident;
@@ -99,4 +97,14 @@ impl fmt::Display for ModuleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
+}
+
+/// A name that does not obey the one rule every omega identifier follows.
+/// The kind is carried so the message says what was being named.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum IdentError {
+    #[error("{kind} must be lowercase letters, digits, hyphens and underscores: {name:?}")]
+    InvalidCharacters { kind: &'static str, name: String },
+    #[error("{kind} must start with a lowercase letter: {name:?}")]
+    InvalidStart { kind: &'static str, name: String },
 }

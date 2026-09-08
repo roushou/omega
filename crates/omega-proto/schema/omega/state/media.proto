@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package omega;
+
+// What the machine is playing, and how loudly.
+
+message AudioState {
+  double volume = 1;            // 0.0 .. 1.0
+  bool muted = 2;
+  string default_sink = 3;
+}

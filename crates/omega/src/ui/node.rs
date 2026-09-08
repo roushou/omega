@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use omega_proto::omega::{Value, ViewNode, value};
+use omega_proto::omega::{Bind as WireBind, Value, ViewNode, value};
+
+use crate::ui::bind::Bind;
 
 /// A node in a view tree.
 ///
@@ -14,6 +16,7 @@ pub struct Node {
     kind: &'static str,
     key: Option<String>,
     props: HashMap<String, Value>,
+    events: HashMap<String, WireBind>,
     children: Vec<Node>,
 }
 
@@ -23,6 +26,7 @@ impl Node {
             kind,
             key: None,
             props: HashMap::new(),
+            events: HashMap::new(),
             children: Vec::new(),
         }
     }
@@ -68,6 +72,13 @@ impl Node {
 
     pub(crate) fn child(mut self, child: impl Into<Node>) -> Self {
         self.children.push(child.into());
+        self
+    }
+
+    /// Bind an event to a call back into this unit.
+    pub(crate) fn on(mut self, event: &str, bind: impl Into<Bind>) -> Self {
+        self.events
+            .insert(event.to_string(), bind.into().into_wire());
         self
     }
 
@@ -120,6 +131,7 @@ impl Node {
             key: self.key.unwrap_or_default(),
             r#type: self.kind.to_string(),
             props: self.props,
+            events: self.events,
             children: self.children.into_iter().map(Self::into_wire).collect(),
         }
     }

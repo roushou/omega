@@ -1,141 +1,35 @@
-//! Actions: the closed taxonomy of what a unit may make the machine do.
+//! Performing actions, and refusing the ones a unit may not ask for.
 //!
-//! Two tables, declared once. [`ActionKind`] names every action in
-//! `action.proto` — exhaustively, so the schema growing is a compile error
-//! here until the new action's cost is stated — and `COST` says which
-//! capability each one requires.
-//!
-//! Authorization is complete even where implementation is not: an action the
-//! daemon cannot perform yet is still refused for the right reason first, so
-//! a unit can never be granted something by the accident of a missing
-//! handler.
+//! The taxonomy and its costs are [`ActionKind`], declared in `omega-proto`
+//! because a broker names the kinds it serves. This is the half that decides
+//! whether a caller may, and then does the ones the daemon itself performs.
 
 use omega_proto::Refusal;
 use omega_proto::UnitName;
-use omega_proto::omega::{CallCommand, Capability, InvokeUnit, RunCommand, action, invoke, result};
+use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke, result};
 
+use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
 use crate::session::admission::Grants;
 use crate::session::dispatch::Response;
 use crate::units::UnitTable;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ActionKind {
-    LaunchApp,
-    RunCommand,
-    SetSetting,
-    ToggleSetting,
-    SwitchWorkspace,
-    MoveToWorkspace,
-    MoveToMonitor,
-    CloseWindow,
-    Lock,
-    Sleep,
-    Hibernate,
-    Reboot,
-    Shutdown,
-    Screenshot,
-    MediaKey,
-    SetVolume,
-    SetBacklight,
-    Notify,
-    InvokeUnit,
-    ToggleFloating,
-    ToggleFullscreen,
-}
-
-impl ActionKind {
-    pub fn of(action: &action::Kind) -> Self {
-        match action {
-            action::Kind::LaunchApp(_) => Self::LaunchApp,
-            action::Kind::RunCommand(_) => Self::RunCommand,
-            action::Kind::SetSetting(_) => Self::SetSetting,
-            action::Kind::ToggleSetting(_) => Self::ToggleSetting,
-            action::Kind::SwitchWorkspace(_) => Self::SwitchWorkspace,
-            action::Kind::MoveToWorkspace(_) => Self::MoveToWorkspace,
-            action::Kind::MoveToMonitor(_) => Self::MoveToMonitor,
-            action::Kind::CloseWindow(_) => Self::CloseWindow,
-            action::Kind::Lock(_) => Self::Lock,
-            action::Kind::Sleep(_) => Self::Sleep,
-            action::Kind::Hibernate(_) => Self::Hibernate,
-            action::Kind::Reboot(_) => Self::Reboot,
-            action::Kind::Shutdown(_) => Self::Shutdown,
-            action::Kind::Screenshot(_) => Self::Screenshot,
-            action::Kind::MediaKey(_) => Self::MediaKey,
-            action::Kind::SetVolume(_) => Self::SetVolume,
-            action::Kind::SetBacklight(_) => Self::SetBacklight,
-            action::Kind::Notify(_) => Self::Notify,
-            action::Kind::InvokeUnit(_) => Self::InvokeUnit,
-            action::Kind::ToggleFloating(_) => Self::ToggleFloating,
-            action::Kind::ToggleFullscreen(_) => Self::ToggleFullscreen,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::LaunchApp => "LaunchApp",
-            Self::RunCommand => "RunCommand",
-            Self::SetSetting => "SetSetting",
-            Self::ToggleSetting => "ToggleSetting",
-            Self::SwitchWorkspace => "SwitchWorkspace",
-            Self::MoveToWorkspace => "MoveToWorkspace",
-            Self::MoveToMonitor => "MoveToMonitor",
-            Self::CloseWindow => "CloseWindow",
-            Self::Lock => "Lock",
-            Self::Sleep => "Sleep",
-            Self::Hibernate => "Hibernate",
-            Self::Reboot => "Reboot",
-            Self::Shutdown => "Shutdown",
-            Self::Screenshot => "Screenshot",
-            Self::MediaKey => "MediaKey",
-            Self::SetVolume => "SetVolume",
-            Self::SetBacklight => "SetBacklight",
-            Self::Notify => "Notify",
-            Self::InvokeUnit => "InvokeUnit",
-            Self::ToggleFloating => "ToggleFloating",
-            Self::ToggleFullscreen => "ToggleFullscreen",
-        }
-    }
-
-    /// The capability this action costs. `None` is not "free": it means the
-    /// action affects only the unit's own surfaces, and the daemon still has
-    /// to be able to perform it.
-    pub fn cost(self) -> Option<Capability> {
-        match self {
-            Self::RunCommand | Self::LaunchApp => Some(Capability::Spawn),
-            Self::Lock | Self::Sleep | Self::Hibernate | Self::Reboot | Self::Shutdown => {
-                Some(Capability::SystemControl)
-            }
-            Self::MediaKey => Some(Capability::Media),
-            Self::SetVolume => Some(Capability::Audio),
-            Self::SetBacklight => Some(Capability::Backlight),
-            Self::Notify => Some(Capability::Notify),
-            Self::Screenshot => Some(Capability::Screenshot),
-            Self::SetSetting | Self::ToggleSetting => Some(Capability::SystemControl),
-            // Making another unit run its own code is making code run.
-            Self::InvokeUnit => Some(Capability::Spawn),
-            Self::SwitchWorkspace
-            | Self::MoveToWorkspace
-            | Self::MoveToMonitor
-            | Self::CloseWindow
-            | Self::ToggleFloating
-            | Self::ToggleFullscreen => None,
-        }
-    }
-}
+pub use omega_proto::ActionKind;
 
 /// Performing actions the daemon knows how to perform.
 ///
-/// Some are the daemon's own doing; some are a request to a unit, which is
-/// why this holds the way to reach one.
+/// Three kinds: the daemon's own doing, a request to a unit, and a request to
+/// the broker that owns the subsystem — which is why this holds the way to
+/// reach both.
 #[derive(Debug)]
 pub struct Actions {
     units: UnitTable,
+    brokers: Brokerage,
 }
 
 impl Actions {
-    pub fn new(units: UnitTable) -> Self {
-        Self { units }
+    pub fn new(units: UnitTable, brokers: Brokerage) -> Self {
+        Self { units, brokers }
     }
 
     /// The capability check, which happens whether or not the action is one
@@ -155,11 +49,30 @@ impl Actions {
     /// Carry out an authorized action.
     pub async fn perform(&self, action: &action::Kind) -> Result<Response, Refusal> {
         match action {
+            // The daemon's own: spawning a process is not brokering a
+            // subsystem, and routing between units is its own job.
             action::Kind::RunCommand(run) => Self::run(run),
             action::Kind::InvokeUnit(invoke) => self.invoke_unit(invoke).await,
-            other => Err(Refusal::unimplemented(format!(
+            other => self.broker(other).await,
+        }
+    }
+
+    /// Hand the action to whichever broker owns the subsystem.
+    ///
+    /// A kind nothing claims is `UNIMPLEMENTED` — the daemon cannot do it,
+    /// and saying so is what keeps a granted capability from standing in for
+    /// a handler that does not exist. A broker that *did* claim it and failed
+    /// is a different answer: the subsystem is there and said no.
+    async fn broker(&self, action: &action::Kind) -> Result<Response, Refusal> {
+        match self.brokers.act(action).await {
+            None => Err(Refusal::unimplemented(format!(
                 "{} is not performed by this daemon",
-                ActionKind::of(other).name()
+                ActionKind::of(action).name()
+            ))),
+            Some(Ok(())) => Ok(Response::Ok),
+            Some(Err(error)) => Err(Refusal::unimplemented(format!(
+                "{} could not be performed: {error}",
+                ActionKind::of(action).name()
             ))),
         }
     }

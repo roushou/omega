@@ -2,7 +2,9 @@ syntax = "proto3";
 
 package omega;
 
-import "omega/state.proto";
+// MonitorInfo only: an event carries the display it is about, not the
+// whole state topic.
+import "omega/state/display.proto";
 import "omega/value.proto";
 
 // Events are the imperative inputs of the runtime plane. EventKind is the
@@ -60,7 +62,7 @@ enum EventKind {
 }
 
 message MonitorEvent {
-  MonitorInfo monitor = 1;      // MonitorInfo from state.proto
+  MonitorInfo monitor = 1;
 }
 
 message WindowEvent {

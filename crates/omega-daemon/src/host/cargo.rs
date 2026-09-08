@@ -7,8 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::host::error::PatternError;
 use crate::host::glob::PathPattern;
+use crate::host::glob::PatternError;
 use omega_proto::Layout;
 use omega_proto::TomlSchema;
 use omega_proto::UnitName;

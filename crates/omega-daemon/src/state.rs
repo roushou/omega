@@ -50,8 +50,10 @@ impl StateStore {
         StatePatch { topics: changed }
     }
 
-    /// The current value of each named topic, skipping ones with no value
-    /// yet. Empty `topics` means every topic the store holds.
+    /// Each named topic the store holds, including one published with no
+    /// value — that is the daemon saying there is nothing to report, and
+    /// dropping it here would read as never having been asked. Empty
+    /// `topics` means every topic.
     pub fn read(&self, topics: &[String]) -> StatePatch {
         let selected = match topics.is_empty() {
             true => self.topics.values().cloned().collect(),

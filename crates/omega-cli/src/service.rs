@@ -132,7 +132,7 @@ pub enum Installed {
 
 /// What keeps a user's services running on this machine.
 ///
-/// A type rather than a path, for the same reason [`crate::shell::HostShell`]
+/// A type rather than a path, for the same reason [`omega_renderer::HostShell`]
 /// is one: installing is more than writing a file — something has to be told
 /// the file exists, and told to run it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

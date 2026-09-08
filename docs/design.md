@@ -92,26 +92,35 @@ A panel is not a surface kind.
 What separates a bar widget from a panel is size, visibility, summoning and
 focus. Every one of those is _where it is drawn_, not _what it is_ — and
 placement is already a document concept. So a panel is another placement of
-the same thing:
+the same thing: a second of the unit's view surfaces, drawn as a popout
+anchored to the first.
 
 ```rust
-Modules::widget("wifi-bar", wifi::INDICATOR, &settings)  // a bar slot
-Panels::summon("wifi", wifi::PANEL, &settings)           // summoned
+let wifi = Modules::plain_widget("wifi", wifi::UNIT);
+Modules::panel(Modules::surface(wifi, "indicator"), "details")
 ```
 
 One unit, two view surfaces, addressed by `surface_id` the way the protocol
 already addresses them. `RenderWidget { surface_id, module_id, config }` is
-unchanged; the shell's `summon <id> <payload>` carries `(unit, surface,
-module)` and is unchanged.
+unchanged, and the reconciler renders the two separately because they are
+separate views of one placement.
 
-**Anchoring is one optional field on the placement.** Name a bar module and
-the shell anchors the panel to it; leave it empty and the panel floats. Two
-behaviours, no taxonomy.
+**Anchored, not free-standing.** An earlier draft had a panel that could
+float, summoned from nowhere, with anchoring as an optional field. The host
+shell does not have that primitive: its popup is a bar item that pops out,
+owning focus and dismissal against the bar it hangs from. A surface summoned
+from nowhere is a different kind of window — a menu, an overlay — and would be
+a different placement rather than this one with a field left empty.
 
-The protocol cost is zero. The document grows `repeated Panel`, the
-reconciler grows `panels.rs` beside `bars.rs`, and the renderer grows a second
-entry point that hosts the same `ViewNode`. Making a panel a surface kind
-would have bought a duplicated render path and nothing else.
+**Whether it is open is the shell's.** Opening a panel is what the user is
+doing, so no unit is told and none has to be asked; there is no action for it
+and nothing the daemon has to push to the shell. What is _in_ the panel is the
+unit's, and a unit that renders nothing for that surface has a panel with
+nothing in it rather than a panel that will not open.
+
+The protocol cost of all of this is zero. What it cost the document is two
+strings on a placement, because a unit with two view surfaces can no longer be
+addressed by name alone.
 
 `SURFACE_KIND_WIDGET` should read `VIEW`, since a view no longer implies a
 bar. Cosmetic, and only worth doing while the protocol is young.
@@ -158,25 +167,40 @@ and is written once rather than once per panel.
 
 ## Presence
 
-A desktop has no battery. An adapter is unplugged. NetworkManager dies. Three
-states, two wire forms, no schema addition — proto3's unset `oneof` already
-means absent:
+A desktop has no battery. An adapter is unplugged. NetworkManager dies. Two
+wire forms, no schema addition — proto3's unset `oneof` already means "nothing
+to report":
 
-| state     | meaning                              | wire                   |
-| --------- | ------------------------------------ | ---------------------- |
-| `Unknown` | nobody has said                      | never published        |
-| `Absent`  | the broker says the machine has none | published, value unset |
-| `Present` | a reading                            | published with value   |
+| the daemon has        | wire                   | a unit sees                |
+| --------------------- | ---------------------- | -------------------------- |
+| never said            | never published        | not known; hold the render |
+| said there is nothing | published, value unset | no reading                 |
+| said a reading        | published with value   | a reading                  |
 
-The render gate becomes "every declared topic is _known_", where known
-includes known-absent, and the SDK reads `Option<T>`. Without this a battery
-widget on a desktop waits forever.
+The render gate is "every declared topic is _known_", and a topic is known
+once the daemon has spoken about it — including to say there is nothing to
+report. Without that a battery widget on a desktop waits forever, which is
+what shipped.
 
-**A broker that fails retracts its topics to `Unknown`.** "NetworkManager
-crashed" and "you are offline" are different facts and must not render
-alike. `BarWidget.qml` already carries this lesson for the socket — a peer
-that goes away leaves `connected` reading true, and a widget that trusts it
-freezes on a reading nobody is taking. It belongs in the state layer too.
+**A unit branches on having a reading, not on why it has none.** No battery
+in the machine and a broker that just died are one thing to a widget: draw
+the no-reading branch. They are two things to an operator, so the difference
+lives where an operator looks — the driver already holds each broker's name,
+its backoff attempt, and its last error, and that is what `omega status`
+reports.
+
+An earlier draft of this section had a third unit-facing state, `Unknown`,
+which a failing broker retracted its topics to. Implementing it showed that
+inverts the failure: `Unknown` means _hold the render_, which is right
+exactly once, before anything is known. Retracting a live topic to it does
+not degrade a widget that was drawing 80% — it blocks the widget and takes it
+off the bar. The states are not symmetric, and "no reading right now" is the
+honest report for every reason there is no reading.
+
+The lesson is one `BarWidget.qml` already carries for the socket: a peer that
+goes away leaves `connected` reading true, and a widget that trusts it
+freezes on a reading nobody is taking. Absence has to be said out loud. It
+just must not be said by going quiet.
 
 ## Time
 
@@ -320,21 +344,37 @@ shell/plugins/omega.view/
   Connection.qml     socket, filter, reconnect — shared
   ViewNode.qml       dispatch only: type to delegate url
   nodes/*.qml        one per node kind
-  Props.js  Icons.js  Theme.js
+  Props.js  Icons.js
 ```
 
 `Connection.qml` is what makes the second host cheap: everything below the
-layout in `BarWidget.qml` is protocol, and a panel needs all of it. Two fixes
-belong in the same move — `Theme.js` must resolve names through
-`qs.Commons.Color` rather than the One Dark literals hardcoded in
-`ViewNode.colorOf`, and the `Repeater` must key on `model.key`.
+layout in `BarWidget.qml` is protocol, and a panel needs all of it.
+
+Theme names resolve through `qs.Commons.Color` rather than the One Dark
+literals hardcoded in `ViewNode.colorOf` — in `ViewNode` itself, not a
+`Theme.js`, because a `.pragma library` cannot reach a QML singleton.
+
+Keyed reconciliation belongs with the first stateful node rather than here. A
+`Repeater` over a plain array has no keying to turn on — keeping delegates
+across a reorder means reconciling a `ListModel` by key — and there is nothing
+to keep until a child holds something: a slider's drag, a toggle's optimistic
+flip. Text does not care what rebuilds it.
 
 **Schema** — `state.proto` keeps the envelope and the `oneof`, because the
-oneof _is_ the ontology. Payloads move to
-`state/{power,network,media,session,system,time}.proto` under the same
-`package omega`, so no consumer changes. The oneof's typed arms occupy 10..19
-with `generic` at 20, which does not fit twenty topics: renumbering `generic`
-out of the way is a one-line edit now and a migration later.
+oneof _is_ the ontology: what a topic can carry is one list, and splitting
+that would split the thing the schema exists to fix. Payloads move to
+`state/*.proto`, one file per domain, under the same `package omega` — prost
+consolidates by package, so every generated type still lands in one Rust
+module and no consumer changes.
+
+Files exist where there are payloads to put in them: `power`, `network`,
+`media`, `display`, `units` today, and `session`, `system` and `time` when
+the topics that belong in them land. An empty file named after a plan is a
+plan two people will disagree about.
+
+The oneof's typed arms occupy 10..19 with `generic` at 20, which does not fit
+twenty topics: renumbering `generic` out of the way is a one-line edit now and
+a migration later.
 
 ## Order
 
@@ -347,11 +387,13 @@ out of the way is a one-line edit now and a migration later.
    Then `pipewire.rs`, which is the first broker to prove the shape by making
    `SetVolume` real.
 4. `Bind` and arguments on the wire. Everything interactive waits on it.
-5. Extract `omega-renderer`. `Connection.qml`, `nodes/`, keys, theme.
-6. Split `omega/src/ui/`; add the control and list nodes.
+5. Extract `omega-renderer`. `Connection.qml`, `nodes/`, theme.
+6. Split `omega/src/ui/`; add the control nodes, and the keyed
+   reconciliation a stateful child is what needs.
 7. Split `state.proto`. Topics start landing.
-8. `Panels` in the document, `panels.rs` in the reconciler, `Panel.qml` in
-   the renderer.
+8. A panel surface on a bar placement, rendered by the second host in
+   `BarWidget.qml`, and the controls that were waiting for focus and scroll:
+   `field`, `select`, `list`.
 
 Steps 1 and 2 are hours and pay down debt. 3 and 5 are the two real
 refactors, both behaviour-preserving and checkable against the existing

@@ -9,8 +9,8 @@
 use anyhow::Context;
 
 use crate::scaffold::SourceTree;
-use crate::shell::{HostShell, Installed, Renderer};
 use crate::ui::{Paint, Step, Ui};
+use omega_renderer::{HostShell, Installed, Renderer};
 
 /// Install and inspect the shell plugin that draws omega's views.
 #[derive(Debug, clap::Args)]

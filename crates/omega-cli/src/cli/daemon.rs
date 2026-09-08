@@ -12,8 +12,8 @@
 
 use anyhow::Context;
 
+use omega_brokers::Brokers;
 use omega_daemon::Daemon;
-use omega_daemon::sources::Battery;
 use omega_proto::Layout;
 use omega_proto::Socket;
 
@@ -69,7 +69,11 @@ impl DaemonCmd {
     async fn serve() -> anyhow::Result<()> {
         let layout = Layout::resolve();
         let daemon = Daemon::from_layout(&layout)?;
-        daemon.add_source(Battery::new());
+        // Which brokers a daemon runs is `omega-brokers`' to say, not the
+        // CLI's: this is wiring, and that is the map.
+        for broker in Brokers::all() {
+            daemon.add_broker(broker);
+        }
         daemon.run().await?;
         Ok(())
     }

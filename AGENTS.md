@@ -24,6 +24,14 @@ which compiles a scaffolded config through the real binaries.
 - Comments state the constraint, not the story. Public API in `crates/omega`
   gets rustdoc with doctests; internal code gets a line saying why, where why
   is not obvious. Delete anything that restates the code.
+- An error type lives with the operation that raises it: `CodecError` in
+  `codec.rs`, `ShellError` in `shell.rs`. A file named `error.rs` earns the
+  name only for a crate's own top-level error, and a `<thing>_error.rs` is a
+  module that should have been a directory.
+- A module is a directory when it holds concepts that are read separately —
+  the policy table apart from the dispatcher, a schema's payloads apart from
+  its envelope. Length alone is not a reason: one type of four hundred lines
+  is one file.
 
 ## Protocol
 
@@ -50,8 +58,10 @@ which compiles a scaffolded config through the real binaries.
   supervisor. Grants come from the daemon's copy of the manifest, never a
   frame.
 - Every op declares its requirement in the `POLICY` table in
-  `session/dispatch.rs`. An op with no row is refused, so authorization
-  cannot be forgotten at a call site.
+  `session/dispatch/policy.rs` — its own file because it is the contract, and
+  reading what a peer may do should not mean scrolling past the code that
+  does it. An op with no row is refused, so authorization cannot be forgotten
+  at a call site.
 - The manifest is the ceiling; `Subscribe` narrows it and never widens. A unit
   writes `unit.<its own name>.<key>` and nothing else.
 - Action capabilities are declared per kind in `action::ActionKind` and
@@ -155,7 +165,7 @@ which compiles a scaffolded config through the real binaries.
 ## Renderer
 
 - The renderer travels _inside_ the binary (`include_str!` in
-  `omega-cli/src/shell.rs`); `omega shell install` writes what the binary
+  `omega-renderer`); `omega shell install` writes what the binary
   carries, so a stale copy is unreachable rather than discouraged.
 - `ViewNode.qml` puts one item on screen per node and recurses. An unknown
   node kind draws nothing, so a tree from a newer plugin degrades to the parts
@@ -172,11 +182,13 @@ which compiles a scaffolded config through the real binaries.
 ## Crates
 
 ```
-omega-proto    wire format, manifest, identifiers, layout, TOML
+omega-proto    wire format, manifest, identifiers, layout, TOML, staging
 omega          the SDK — what a unit is written against
 omega-document the desired-state document
 omega-derive   proc-macros
-omega-daemon   the daemon, plus host/ (watching, staging, globs, discovery)
+omega-brokers  the subsystems the daemon brokers: state out, actions in
+omega-daemon   the daemon, plus host/ (watching, globs, discovery)
+omega-renderer the QML it ships, and how that installs
 omega-cli      the binary
 ```
 
@@ -242,4 +254,4 @@ omega-cli      the binary
 - `docs/architecture.md` — design and rationale
 - `docs/design.md` — the abstractions being built next, and the roads not taken
 - `crates/omega-proto/schema/README.md` — schema rules
-- `crates/omega-cli/shell/README.md` — the renderer and the shell socket
+- `crates/omega-renderer/shell/README.md` — the renderer and the shell socket

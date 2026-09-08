@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package omega;
+
+// The runtime plane's view of itself.
+
+// The supervisor's view of the units it runs. Daemon-owned: a unit publishes
+// views and its own keyspace, never its own health.
+message UnitsState {
+  repeated UnitStatus units = 1;
+}
+
+message UnitStatus {
+  string unit = 1;
+  UnitPhase phase = 2;
+  uint32 restarts = 3;          // spawns after the first
+  int32 last_exit_code = 4;     // -1 when it was signalled or never ran
+  string detail = 5;            // the last failure, for humans
+}
+
+enum UnitPhase {
+  UNIT_PHASE_UNSPECIFIED = 0;
+  UNIT_PHASE_STARTING = 1;
+  UNIT_PHASE_RUNNING = 2;
+  UNIT_PHASE_RESTARTING = 3;    // exited; waiting out the backoff
+  UNIT_PHASE_FAILED = 4;        // could not be spawned at all
+  UNIT_PHASE_STOPPED = 5;       // the daemon is shutting down
+}

@@ -19,4 +19,30 @@ message ViewNode {
   string type = 2;              // "box" | "text" | "button" | "progress" | "icon" | ...
   map<string, Value> props = 3;
   repeated ViewNode children = 4;
+
+  // What this node does when something happens to it, keyed by the event:
+  // "press", "change", "submit", "activate". A string rather than an enum for
+  // the same reason "type" is one — a shell ignores an event it has no
+  // meaning for, so a tree from a newer unit degrades instead of failing.
+  //
+  // Separate from props because they answer different questions. Props are
+  // what a node looks like; events are what it does. A shell reading a
+  // binding out of the prop map would be sniffing names for behaviour.
+  map<string, Bind> events = 5;
+}
+
+// What a node does when something happens to it.
+//
+// The command is one of the publishing unit's own, so a press reaches the
+// unit that drew it and no other. The args are what that unit wants handed
+// back: a Wi-Fi row says which network it is, and without them a list of
+// forty needs forty registered commands.
+//
+// A control that carries a value appends it as the last argument, so a
+// slider's "change" arrives as `args ++ [0.42]`. The unit reads its own args
+// by position and the value last, which is why args are ordered and not a
+// map.
+message Bind {
+  string command = 1;
+  repeated Value args = 2;
 }

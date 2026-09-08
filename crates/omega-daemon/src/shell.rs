@@ -26,18 +26,20 @@ use tokio::sync::broadcast;
 use omega_proto::omega::{Frame, Invoke, frame};
 use omega_proto::{Observation, Refusal, Socket};
 
-use crate::error::ShellError;
+use crate::broker::Brokerage;
 use crate::hub::{Hub, Observed, ViewUpdate};
 use crate::session::admission::Peer;
 use crate::session::{Dispatcher, Subscriptions};
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
+use std::path::PathBuf;
 
 /// What a request needs to be served, once a peer has been admitted.
 #[derive(Debug, Clone)]
 struct Gateway {
     supervisor: Supervisor,
     units: UnitTable,
+    brokers: Brokerage,
 }
 
 /// Streams each surface's latest view as a JSON line over a dedicated socket,
@@ -73,8 +75,12 @@ impl ShellServer {
 
     /// Serve requests as well as stream: a shell that draws a button can
     /// press it.
-    pub fn serving(mut self, supervisor: Supervisor, units: UnitTable) -> Self {
-        self.gateway = Some(Gateway { supervisor, units });
+    pub fn serving(mut self, supervisor: Supervisor, units: UnitTable, brokers: Brokerage) -> Self {
+        self.gateway = Some(Gateway {
+            supervisor,
+            units,
+            brokers,
+        });
         self
     }
 
@@ -175,6 +181,7 @@ impl ShellConnection {
                 self.hub.clone(),
                 gateway.supervisor.clone(),
                 gateway.units.clone(),
+                gateway.brokers.clone(),
             )
         });
         let mut subscriptions = Subscriptions::watcher();
@@ -287,4 +294,19 @@ impl ShellConnection {
         self.writer.flush().await?;
         Ok(())
     }
+}
+
+/// What serving the shell socket can fail with.
+#[derive(Debug, thiserror::Error)]
+pub enum ShellError {
+    #[error("cannot bind shell socket {}: {source}", path.display())]
+    Bind {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("cannot serialize view: {0}")]
+    Encode(#[from] serde_json::Error),
 }

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use common::{TempSocket, command_manifest, unit_name, widget_manifest};
 use omega_daemon::Shutdown;
+use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::shell::ShellServer;
@@ -38,9 +39,16 @@ impl Shell {
         ]));
         let supervisor = Supervisor::new(socket.clone(), units.clone(), Shutdown::new());
 
-        let server = ShellServer::bind_at(socket.clone(), hub)
+        // No brokers: this exercises the gateway, and an action a broker
+        // would serve is refused as unimplemented, which is what a daemon
+        // with none does too.
+        let server = ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
-            .serving(supervisor.clone(), units);
+            .serving(
+                supervisor.clone(),
+                units,
+                Brokerage::new(hub, Shutdown::new()),
+            );
         tokio::spawn(async move {
             let _ = server.run().await;
         });

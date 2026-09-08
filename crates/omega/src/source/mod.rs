@@ -9,23 +9,28 @@
 //! construction.
 
 mod audio;
+mod backlight;
 mod battery;
 mod network;
 
 pub use audio::Audio;
+pub use backlight::Backlight;
 pub use battery::Battery;
 pub use network::Network;
 
-/// Declares a state handle: its topic, its capability, and the accessor that
-/// reads the current value.
+/// Declares a state handle: its capability, and the accessor that reads the
+/// current value.
 ///
 /// A macro because every handle is the same three lines of wiring around a
 /// different topic, and a handle that got them subtly wrong would be a
-/// plugin reading someone else's state.
+/// plugin reading someone else's state. The topic is not one of the three:
+/// it comes from the value type, which is where `state.proto` already bound
+/// it, so a handle cannot name a topic other than its own.
 macro_rules! reads {
-    ($handle:ident, $topic:ident, $value:ty) => {
+    ($handle:ident, $value:ty) => {
         impl $crate::wiring::Wiring for $handle {
-            const TOPICS: &'static [omega_proto::SystemTopic] = &[omega_proto::SystemTopic::$topic];
+            const TOPICS: &'static [omega_proto::SystemTopic] =
+                &[<$value as omega_proto::TopicValue>::TOPIC];
             const CAPABILITIES: &'static [omega_proto::omega::Capability] =
                 &[omega_proto::omega::Capability::StateRead];
 
@@ -39,11 +44,15 @@ macro_rules! reads {
         impl $crate::wiring::Reads for $handle {}
 
         impl $handle {
-            /// Whether the daemon has published this topic at all.
+            /// Whether there is a reading right now.
             ///
-            /// Rarely needed: the runtime holds a plugin's first render until
-            /// every topic it declared has a value.
-            pub fn is_known(&self) -> bool {
+            /// False on a machine that has no such device, and false while a
+            /// broker that reports it is down — a widget branches on having a
+            /// reading, not on why it has none. The runtime holds a plugin's
+            /// first render until the daemon has spoken about every topic it
+            /// declared, which includes saying there is nothing to report, so
+            /// this is answerable rather than a wait.
+            pub fn has_reading(&self) -> bool {
                 self.read().is_some()
             }
 

@@ -13,8 +13,8 @@ use omega_proto::{Layout, Profile};
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;
-use crate::shell::{HostShell, Renderer};
 use crate::ui::{Paint, Step, Ui};
+use omega_renderer::{HostShell, Renderer};
 
 /// Compile every plugin and report what it asks the daemon for.
 #[derive(Debug, clap::Args)]

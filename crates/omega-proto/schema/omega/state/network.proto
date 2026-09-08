@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package omega;
+
+// What the machine is connected through.
+
+message NetworkState {
+  bool connected = 1;
+  string ssid = 2;
+  string interface = 3;
+  uint32 signal_percent = 4;
+  NetworkType type = 5;
+}
+
+enum NetworkType {
+  NETWORK_TYPE_UNSPECIFIED = 0;
+  NETWORK_TYPE_ETHERNET = 1;
+  NETWORK_TYPE_WIFI = 2;
+  NETWORK_TYPE_CELLULAR = 3;
+  NETWORK_TYPE_VPN = 4;
+}

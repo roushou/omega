@@ -8,7 +8,10 @@ config.
 
 - `wire.proto` — the frame envelope, handshake, and bidirectional RPC.
 - `value.proto` — the generic data model (the open escape hatch).
-- `state.proto` — typed system state topics and the replicated patches.
+- `state.proto` — the topic envelope and the replicated patches. The oneof
+  in it _is_ the ontology: what a topic can carry is one list, in one place.
+- `state/*.proto` — the payloads, one file per domain. Adding a topic is a
+  message in the domain it belongs to and one arm in the envelope.
 - `action.proto` — the closed action taxonomy and keybinds.
 - `event.proto` — the closed event taxonomy.
 - `unit.proto` — manifests, surfaces, capabilities.
@@ -28,6 +31,13 @@ config.
 4. **Revisions are daemon-owned.** `StateTopic.revision` and `ViewTree.revision`
    are assigned by the daemon (monotonic per topic/surface); producers publish
    values, never revisions.
+5. **Absence is a value, not a silence.** A `StateTopic` published with its
+   oneof unset is the daemon saying there is nothing to report — no battery,
+   no adapter, the broker is down. Saying nothing instead is indistinguishable
+   from never having been asked, which is what a unit waits on before its
+   first render.
+6. **A field whose value is a constant is a field two readers will disagree
+   about.** `BacklightState.max_percent` was always 100; it is `reserved`.
 
 ## The minimal slice
 

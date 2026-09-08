@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::TomlError;
+use super::TomlError;
 use crate::toml::file::TomlFile;
 use crate::toml::schema::TomlSchema;
 

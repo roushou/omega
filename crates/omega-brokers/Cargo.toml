@@ -1,0 +1,25 @@
+[package]
+name = "omega-brokers"
+version.workspace = true
+categories = ["os::linux-apis", "asynchronous"]
+edition.workspace = true
+homepage.workspace = true
+keywords = ["desktop", "dbus", "upower", "pipewire", "hyprland"]
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The subsystems Omega brokers: state out, actions in, one connection each."
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = "0.1"
+omega-proto.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "rt", "macros"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }

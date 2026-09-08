@@ -4,14 +4,13 @@
 //! of it.
 
 pub mod cargo;
-pub mod error;
 pub mod fs;
 pub mod glob;
 pub mod state;
 pub mod units;
 
 pub use cargo::{CargoConfig, CargoManifest, CargoSlot};
-pub use error::{PatternError, UnitsError};
 pub use fs::{Changes, Recursion, StageDir, WatchError};
+pub use glob::PatternError;
 pub use state::{BuiltUnit, StateConfig};
-pub use units::Units;
+pub use units::{Units, UnitsError};

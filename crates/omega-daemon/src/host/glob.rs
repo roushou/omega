@@ -3,8 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::host::error::PatternError;
-
 /// A `*`/`?` pattern for a single path segment. Never crosses `/`.
 #[derive(Debug, Clone, Copy)]
 pub struct Glob<'a>(&'a str);
@@ -108,4 +106,16 @@ impl<'a> PathPattern<'a> {
         matched.sort();
         Ok(matched)
     }
+}
+
+/// Why a pattern could not be expanded.
+#[derive(Debug, thiserror::Error)]
+pub enum PatternError {
+    #[error("cannot expand {pattern:?} in {}: {source}", dir.display())]
+    Expand {
+        pattern: String,
+        dir: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }

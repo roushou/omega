@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use crate::host::StateConfig;
 use omega_proto::Manifest;
+use omega_proto::ManifestError;
+use omega_proto::ReadError;
 use omega_proto::{Layout, UnitName};
-
-use crate::error::ManifestStoreError;
 
 /// A unit's canonical manifest and the hash a peer must present to claim it.
 #[derive(Debug, Clone)]
@@ -72,4 +72,13 @@ impl ManifestStore {
     pub fn is_empty(&self) -> bool {
         self.units.is_empty()
     }
+}
+
+/// A unit whose manifest could not be loaded or trusted.
+#[derive(Debug, thiserror::Error)]
+#[error("unit {unit}: {source}")]
+pub struct ManifestStoreError {
+    pub unit: UnitName,
+    #[source]
+    pub source: ReadError<ManifestError>,
 }

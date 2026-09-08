@@ -12,7 +12,7 @@ pub struct Audio {
     context: Context,
 }
 
-reads!(Audio, Audio, AudioState);
+reads!(Audio, AudioState);
 
 impl Audio {
     /// The output level. Prints itself as `40%`.

@@ -1,5 +1,7 @@
 //! Topic addresses are validated at the edge.
 
+use std::collections::HashSet;
+
 use omega_proto::{SystemTopic, Topic, TopicError};
 
 #[test]
@@ -45,4 +47,13 @@ fn a_malformed_unit_address_is_rejected() {
 fn keys_may_contain_dots() {
     let topic = Topic::parse("unit.clock.format.long").unwrap();
     assert_eq!(topic, Topic::of_unit("clock", "format.long"));
+}
+
+#[test]
+fn every_topic_is_addressed_once() {
+    // The table generates the enum, so `ALL` cannot miss a topic. Two rows
+    // sharing an address is the one collision it cannot catch, and a
+    // duplicate would make one of them unreachable through `parse`.
+    let names: HashSet<&str> = SystemTopic::ALL.iter().map(|t| t.as_str()).collect();
+    assert_eq!(names.len(), SystemTopic::ALL.len());
 }

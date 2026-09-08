@@ -34,7 +34,9 @@ fn view_with_text(text: &str) -> ViewTree {
                 r#type: "text".into(),
                 props,
                 children: Vec::new(),
+                ..Default::default()
             }],
+            ..Default::default()
         }),
         revision: 0,
     }

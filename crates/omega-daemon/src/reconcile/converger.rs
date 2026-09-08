@@ -20,7 +20,7 @@ use crate::host::StateConfig;
 use omega_document::{DocumentFile, StateDocument};
 use omega_proto::Layout;
 
-use crate::error::DaemonError;
+use crate::DaemonError;
 use crate::hub::Hub;
 use crate::manifest::ManifestStore;
 use crate::reconcile::{

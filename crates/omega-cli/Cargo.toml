@@ -19,9 +19,11 @@ anstream = "1"
 anstyle = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+omega-brokers.workspace = true
 omega-daemon = { path = "../omega-daemon", version = "0.1.0" }
 omega-document.workspace = true
 omega-proto.workspace = true
+omega-renderer.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = [

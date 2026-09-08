@@ -2,7 +2,12 @@
 
 /// The wire protocol version. Both peers must agree; a `Hello` mismatch
 /// closes the connection.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// 2 renumbered `StateTopic.generic`. A unit binary built against 1 still
+/// has the right manifest hash, so the handshake is the only thing that can
+/// tell it apart from a current one — and reading its keyspace values as an
+/// unknown field would drop them silently.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Generated protobuf types.
 ///

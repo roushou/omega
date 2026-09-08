@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package omega;
+
+// What the machine is showing, and how brightly.
+
+message BacklightState {
+  // 0 .. 100. The kernel's raw scale is per device — 255 on one panel, 96000
+  // on the next — and converting is the broker's job, so the ontology only
+  // ever speaks percent.
+  uint32 percent = 1;
+
+  // 2 was `max_percent`, which was always 100: sysfs has no cap below the
+  // full scale, so the most any device takes is all of it. A field whose
+  // value is a constant is a field two readers will disagree about.
+  reserved 2;
+}
+
+// Actual state of displays, as reported by the compositor. Distinct from the
+// desired Monitor in the state document: this is reality, that is intent.
+message DisplayState {
+  repeated MonitorInfo monitors = 1;
+}
+
+message MonitorInfo {
+  string id = 1;            // "eDP-1"
+  bool connected = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 refresh_mhz = 5;
+  int32 x = 6;
+  int32 y = 7;
+  float scale = 8;
+  bool primary = 9;
+}

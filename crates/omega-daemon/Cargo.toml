@@ -19,6 +19,7 @@ async-trait = "0.1"
 getrandom = "0.3"
 libc = "0.2"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
+omega-brokers.workspace = true
 omega-document.workspace = true
 omega-proto.workspace = true
 serde.workspace = true

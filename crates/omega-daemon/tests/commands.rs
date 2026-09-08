@@ -72,7 +72,15 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
         panic!("expected a CallCommand");
     };
     assert_eq!(called.command, "toggle");
-    assert_eq!(called.args.len(), 1);
+    // Not just the count: a button binds its arguments to say which row was
+    // pressed, and an argument replaced by a default would be a list of forty
+    // networks that all connect to the same one.
+    assert_eq!(
+        called.args,
+        vec![Value {
+            kind: Some(value::Kind::StringValue("now".into())),
+        }]
+    );
 
     // The unit answers, and the answer reaches the operator.
     unit.send(Frame {

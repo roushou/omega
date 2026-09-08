@@ -40,6 +40,13 @@ pub struct BatteryWidget {
 
 impl Widget for BatteryWidget {
     fn render(&self) -> Ui {
+        // A desktop has no battery, and a broker that is down has no reading
+        // either. Both are nothing to draw — not a charge of zero, which this
+        // widget would then colour as urgent.
+        if !self.battery.has_reading() {
+            return Ui::empty();
+        }
+
         let charge = self.battery.charge();
         let label = if charge < self.settings.low {
             Text::new(charge).color("urgent").bold()
@@ -85,6 +92,12 @@ mod tests {
 
         let drawn = Drawn::configured::<BatteryWidget>(&state, &strict);
         assert_eq!(drawn.color_of("root").as_deref(), Some("urgent"));
+    }
+
+    #[test]
+    fn a_machine_with_no_battery_draws_nothing() {
+        let state = State::new().absent(omega::SystemTopic::Battery);
+        assert!(Drawn::of::<BatteryWidget>(&state).is_empty());
     }
 
     #[test]

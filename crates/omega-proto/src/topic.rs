@@ -4,6 +4,11 @@
 //! validates it: a closed set of system topics, plus one open escape hatch —
 //! `unit.<name>.<key>`, the keyspace a unit owns. A typo like `"batery"` is
 //! rejected here rather than silently subscribing to nothing.
+//!
+//! The closed set is declared once, in [`topics!`]. A topic's name, its
+//! place in `SystemTopic::ALL`, and the type it carries came from four lists
+//! that had to agree; they are now one row, because a topic missing from one
+//! of those lists is a topic nothing can be checked against.
 
 use std::fmt;
 
@@ -12,43 +17,67 @@ use crate::omega::{
     state_topic,
 };
 
-/// The system topics the daemon publishes. Closed: the ontology grows in
-/// `state.proto`, not at a call site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum SystemTopic {
-    Battery,
-    Network,
-    Audio,
-    Backlight,
-    Power,
-    Display,
+/// Declare the system topics: the enum, `ALL`, the wire name, and the value
+/// type each one carries.
+///
+/// The variant is also the `state_topic::Value` variant, which prost names
+/// after the oneof field — so `Battery` here is `battery` there, and a row
+/// whose proto field is not the snake_case of its variant will not compile.
+macro_rules! topics {
+    ($(
+        $(#[$meta:meta])*
+        $variant:ident => $name:literal : $value:ty,
+    )*) => {
+        /// The system topics the daemon publishes. Closed: the ontology grows
+        /// in `state.proto` and in the table below, never at a call site.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum SystemTopic {
+            $($(#[$meta])* $variant,)*
+        }
+
+        impl SystemTopic {
+            /// Every topic, in declaration order. Generated from the same row
+            /// as the variant, so it cannot omit one.
+            pub const ALL: &'static [SystemTopic] = &[$(Self::$variant,)*];
+
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $name,)*
+                }
+            }
+        }
+
+        $(
+            impl TopicValue for $value {
+                const TOPIC: SystemTopic = SystemTopic::$variant;
+
+                fn of(value: &state_topic::Value) -> Option<&Self> {
+                    match value {
+                        state_topic::Value::$variant(value) => Some(value),
+                        _ => None,
+                    }
+                }
+
+                fn into_value(self) -> state_topic::Value {
+                    state_topic::Value::$variant(self)
+                }
+            }
+        )*
+    };
+}
+
+topics! {
+    Battery => "battery": BatteryState,
+    Network => "network": NetworkState,
+    Audio => "audio": AudioState,
+    Backlight => "backlight": BacklightState,
+    Power => "power": PowerState,
+    Display => "display": DisplayState,
     /// The supervisor's report on every unit it runs.
-    Units,
+    Units => "units": UnitsState,
 }
 
 impl SystemTopic {
-    pub const ALL: &'static [SystemTopic] = &[
-        Self::Battery,
-        Self::Network,
-        Self::Audio,
-        Self::Backlight,
-        Self::Power,
-        Self::Display,
-        Self::Units,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Battery => "battery",
-            Self::Network => "network",
-            Self::Audio => "audio",
-            Self::Backlight => "backlight",
-            Self::Power => "power",
-            Self::Display => "display",
-            Self::Units => "units",
-        }
-    }
-
     pub fn parse(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|t| t.as_str() == name)
     }
@@ -145,30 +174,3 @@ pub trait TopicValue: Sized {
     /// [`of`]: Self::of
     fn into_value(self) -> state_topic::Value;
 }
-
-macro_rules! topic_value {
-    ($type:ty, $topic:ident, $variant:ident) => {
-        impl TopicValue for $type {
-            const TOPIC: SystemTopic = SystemTopic::$topic;
-
-            fn of(value: &state_topic::Value) -> Option<&Self> {
-                match value {
-                    state_topic::Value::$variant(value) => Some(value),
-                    _ => None,
-                }
-            }
-
-            fn into_value(self) -> state_topic::Value {
-                state_topic::Value::$variant(self)
-            }
-        }
-    };
-}
-
-topic_value!(BatteryState, Battery, Battery);
-topic_value!(NetworkState, Network, Network);
-topic_value!(AudioState, Audio, Audio);
-topic_value!(BacklightState, Backlight, Backlight);
-topic_value!(PowerState, Power, Power);
-topic_value!(DisplayState, Display, Display);
-topic_value!(UnitsState, Units, Units);

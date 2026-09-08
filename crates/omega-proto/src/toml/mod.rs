@@ -18,15 +18,16 @@
 //! the shape it wants — see [`TomlSchema::INLINE_ENTRIES`].
 
 mod doc;
+mod error;
 mod file;
 mod format;
 mod schema;
 mod table;
 
-use crate::TomlError;
 use crate::toml::format::Formatter;
 
 pub use doc::TomlDoc;
+pub use error::{ReadError, TomlError};
 pub use file::TomlFile;
 pub use schema::{TomlSchema, Validated};
 pub use table::Table;

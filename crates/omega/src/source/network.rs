@@ -12,7 +12,7 @@ pub struct Network {
     context: Context,
 }
 
-reads!(Network, Network, NetworkState);
+reads!(Network, NetworkState);
 
 impl Network {
     pub fn is_connected(&self) -> bool {

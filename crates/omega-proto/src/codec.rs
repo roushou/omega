@@ -8,7 +8,6 @@ use bytes::{Buf, BytesMut};
 use prost::Message;
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::error::CodecError;
 use crate::omega::Frame;
 
 /// Upper bound on a single frame. The daemon rejects anything larger; this
@@ -87,4 +86,21 @@ impl Decoder for FrameCodec {
             None => Err(CodecError::Truncated),
         }
     }
+}
+
+/// What framing can fail with.
+#[derive(Debug, thiserror::Error)]
+pub enum CodecError {
+    #[error("frame length {0} exceeds MAX_FRAME_LEN")]
+    FrameTooLong(usize),
+    #[error("length prefix overflows 64 bits")]
+    PrefixOverflow,
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("connection closed mid-frame")]
+    Truncated,
+    #[error("encode error: {0}")]
+    Encode(#[from] prost::EncodeError),
+    #[error("decode error: {0}")]
+    Decode(#[from] prost::DecodeError),
 }

@@ -51,13 +51,15 @@ mod units;
 pub mod testing;
 pub mod wiring;
 
-pub use effect::{Notification, Notify, Session, Shell, Volume};
+pub use effect::{Brightness, Notification, Notify, Session, Shell, Volume};
 pub use error::{Error, Result};
 pub use plugin::Plugin;
-pub use source::{Audio, Battery, Network};
+pub use source::{Audio, Backlight, Battery, Network};
 pub use state::{Own, Topic, Watch};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
-pub use ui::{Align, Button, Column, Icon, Node, Progress, Row, Stack, Text, Ui};
+pub use ui::{
+    Align, Bind, Button, Column, Icon, Node, Progress, Row, Slider, Stack, Text, Toggle, Ui,
+};
 pub use units::{Percent, Remaining};
 
 pub use omega_derive::{Command, Config, Reaction, Topic, Widget};
@@ -67,6 +69,10 @@ pub use omega_proto::{Fields, FromValue, IntoValue, Values};
 
 /// The events a reaction can answer.
 pub use omega_proto::omega::{Event, EventKind};
+
+/// Naming a topic, for a test that describes a machine which has none of it.
+/// Reading one is a field like [`Battery`], never this.
+pub use omega_proto::SystemTopic;
 
 /// Internals the derives expand into. Not a stable surface: write
 /// `#[derive(Widget)]`, not this.

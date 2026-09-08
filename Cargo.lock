@@ -492,6 +492,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "omega-brokers"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "omega-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "omega-cli"
 version = "0.1.0"
 dependencies = [
@@ -499,9 +510,11 @@ dependencies = [
  "anstyle",
  "anyhow",
  "clap",
+ "omega-brokers",
  "omega-daemon",
  "omega-document",
  "omega-proto",
+ "omega-renderer",
  "serde_json",
  "thiserror",
  "tokio",
@@ -517,6 +530,7 @@ dependencies = [
  "getrandom",
  "libc",
  "notify",
+ "omega-brokers",
  "omega-document",
  "omega-proto",
  "serde",
@@ -565,6 +579,15 @@ dependencies = [
  "tokio-util",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "omega-renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "omega-proto",
+ "serde_json",
 ]
 
 [[package]]

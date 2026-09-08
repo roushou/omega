@@ -42,10 +42,15 @@ impl Mirror {
         }
     }
 
-    pub(crate) fn has(&self, topic: SystemTopic) -> bool {
-        self.topics
-            .get(topic.as_str())
-            .is_some_and(|held| held.value.is_some())
+    /// Whether the daemon has spoken about this topic at all.
+    ///
+    /// Not "has a reading": a topic published with no value is the daemon
+    /// saying this machine has none right now — no battery, no adapter, the
+    /// broker is down — and that is an answer. Waiting for a value that will
+    /// never come is what left a battery widget on a desktop holding its
+    /// first render forever.
+    pub(crate) fn knows(&self, topic: SystemTopic) -> bool {
+        self.topics.contains_key(topic.as_str())
     }
 
     fn insert(&mut self, topic: &StateTopic) {

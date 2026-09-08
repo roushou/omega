@@ -83,6 +83,21 @@ message TrayModule {}
 message WidgetModule {
   string unit = 1;              // unit name from its manifest
   map<string, Value> config = 2;
+
+  // Which of the unit's view surfaces goes in the bar slot. Empty means the
+  // unit's only one, which is what naming a unit has always meant — a unit
+  // with several could not be addressed by name alone, and this is the
+  // document saying which.
+  string surface = 3;
+
+  // A second surface, drawn as a popout anchored to the first. Empty for a
+  // widget that is only a widget.
+  //
+  // Anchored rather than free-standing because that is the shape the host
+  // shell's popup primitive has: a bar item that pops out, owning focus and
+  // dismissal. A surface summoned from nowhere is a different kind of window
+  // and would be a different placement.
+  string panel = 4;
 }
 
 message Setting {
