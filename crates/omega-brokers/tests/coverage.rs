@@ -17,7 +17,6 @@ use omega_proto::{ActionKind, SystemTopic};
 
 /// Topics no broker projects yet.
 const UNSERVED_TOPICS: &[SystemTopic] = &[
-    SystemTopic::Network, // NetworkManager
     SystemTopic::Audio,   // PipeWire
     SystemTopic::Power,   // sysfs and /proc/loadavg
     SystemTopic::Display, // Hyprland

@@ -19,13 +19,15 @@
 //! it against the ontology, so a topic or an action nothing serves is listed
 //! there rather than discovered by a unit that hangs.
 
-mod backlight;
+pub mod backlight;
 mod broker;
-mod upower;
+pub mod network_manager;
+pub mod upower;
 
 pub use backlight::Backlight;
 pub use broker::{Broker, BrokerError};
-pub use upower::{Reading, UPower};
+pub use network_manager::NetworkManager;
+pub use upower::UPower;
 
 /// The brokers a daemon runs.
 ///
@@ -37,7 +39,11 @@ pub struct Brokers;
 impl Brokers {
     /// Every broker, in the order they start.
     pub fn all() -> Vec<Box<dyn Broker>> {
-        vec![Box::new(UPower::new()), Box::new(Backlight::new())]
+        vec![
+            Box::new(UPower::new()),
+            Box::new(NetworkManager::new()),
+            Box::new(Backlight::new()),
+        ]
     }
 }
 

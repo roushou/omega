@@ -5,7 +5,7 @@
 //! fraction, a state enum against a boolean, and two time fields of which
 //! only one ever applies — and every one of those is somewhere to be wrong.
 
-use omega_brokers::Reading;
+use omega_brokers::upower::Reading;
 
 /// A laptop battery, discharging with two hours left.
 fn discharging() -> Reading {

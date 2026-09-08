@@ -77,20 +77,50 @@ pub trait Broker: Send + 'static {
 #[derive(Debug)]
 pub(crate) struct Cadence {
     every: Duration,
+    /// Whether the first turn comes at once or after a period.
+    immediate: bool,
     tick: Option<Interval>,
 }
 
 impl Cadence {
+    /// Every period, starting now.
+    ///
+    /// For a broker the clock drives: the first turn is immediate, so it
+    /// reports once before its interval has elapsed rather than leaving a
+    /// widget blank for it.
     pub(crate) fn every(every: Duration) -> Self {
-        Self { every, tick: None }
+        Self {
+            every,
+            immediate: true,
+            tick: None,
+        }
     }
 
-    /// Wait for the next turn. The first is immediate, so a broker reports
-    /// once before its interval has elapsed. Cancel-safe.
+    /// Every period, starting one period from now.
+    ///
+    /// For a cadence that is a floor under signals rather than the thing
+    /// driving the broker. The reading has already been taken by the time
+    /// this is first awaited, so a turn that came at once would make the
+    /// broker report twice in a row and read as a hot loop.
+    pub(crate) fn after(every: Duration) -> Self {
+        Self {
+            every,
+            immediate: false,
+            tick: None,
+        }
+    }
+
+    /// Wait for the next turn. Cancel-safe.
     pub(crate) async fn wait(&mut self) {
+        let every = self.every;
+        let immediate = self.immediate;
         self.tick
             .get_or_insert_with(|| {
-                let mut tick = tokio::time::interval(self.every);
+                let start = match immediate {
+                    true => tokio::time::Instant::now(),
+                    false => tokio::time::Instant::now() + every,
+                };
+                let mut tick = tokio::time::interval_at(start, every);
                 tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
                 tick
             })
