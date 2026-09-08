@@ -401,10 +401,51 @@ suite. Nothing after step 4 changes the protocol.
 
 ## The test of all of it
 
-Rebuild `omarchy.network` as an Omega unit at step 8. It is 1,970 lines of
-QML and 380 of JavaScript today. If it does not come out at a few hundred
-lines of Rust, the typed path is not shorter than the untyped one and the SDK
-is decoration.
+Rebuild `omarchy.network` as an Omega unit. It is 1,970 lines of QML and 380
+of JavaScript. If it does not come out at a few hundred lines of Rust, the
+typed path is not shorter than the untyped one and the SDK is decoration.
 
 If `SetVolume`, keyboard navigation, or the connect-and-fail lifecycle each
 needed a special case to get there, one of the abstractions above is wrong.
+
+### What happened
+
+`crates/omega/examples/wifi.rs` — **173 lines, 120 of them not comment or
+blank**, for the indicator, the panel, and both commands. Nothing needed a
+special case: the panel is a second view surface, the row bindings carry their
+own arguments, the passphrase field appends what was typed, and the shell
+owns every piece of interaction state. The abstractions held.
+
+They held for a smaller feature than the one measured, though, and the
+difference is the finding.
+
+### What it could not express
+
+A list of networks to pick from. Two holes, and the second is the one that
+matters:
+
+1. **`NetworkState` describes the connection the machine has**, not the ones
+   it could have. A scan result has nowhere to live. It wants a topic of its
+   own rather than another field — forty access points whose signal jitters
+   would bump the `network` revision and wake every indicator that only
+   wanted the SSID.
+2. **A unit cannot work around that in its own keyspace.** `Value` carries
+   `ListValue` and `MapValue`, but `IntoValue`/`FromValue` are implemented for
+   scalars and `Values` only. So a unit cannot hold a list of anything.
+
+The second is the real defect. The first is one topic that has not been
+written yet; the second means _no_ unit can publish a collection, which
+quietly closes the escape hatch the whole composition story rests on — "a
+plugin can publish a fact and another can draw it" only holds for facts that
+are one scalar deep. Closing it is `IntoValue for Vec<T>` and a `Fields`
+derive that handles a repeated field, not a new concept.
+
+### What it cost to write
+
+Two papercuts worth fixing while they are cheap:
+
+- `Column::new()` returns a `Stack`, so a helper that builds one cannot be
+  written `fn join() -> Column`. `Column` names a direction, not a type, and
+  the compiler error says something else.
+- `Answer` has `value`, `done` and `refused` but no `From<&str>`, so the
+  obvious `Answer::from("connecting")` does not compile.
