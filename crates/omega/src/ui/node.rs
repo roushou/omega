@@ -43,10 +43,9 @@ impl Node {
 
     // ---- shared properties ----
 
-    /// A colour, as the shell's theme names it (`"accent"`, `"urgent"`) or as
-    /// a literal (`"#ff8800"`).
-    pub fn color(self, color: impl Into<String>) -> Self {
-        self.text_prop("color", color)
+    /// A colour, by the part it plays. See [`Role`].
+    pub fn color(self, role: Role) -> Self {
+        self.text_prop("color", role.as_str())
     }
 
     pub fn bold(self) -> Self {
@@ -153,6 +152,40 @@ impl Node {
             props: self.props,
             events: self.events,
             children: self.children.into_iter().map(Self::into_wire).collect(),
+        }
+    }
+}
+
+/// A colour, by the part it plays rather than by its value.
+///
+/// Closed, and deliberately with no way to name a literal. A hex here was the
+/// one thing that let a plugin draw a colour the desktop's theme had never
+/// heard of — which is how a bar ends up looking like nine people's taste
+/// instead of one machine's. A role the shell does not know falls back to
+/// whatever it inherited, so a tree from a newer plugin degrades rather than
+/// drawing something arbitrary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// What text is drawn in unless it says otherwise.
+    Foreground,
+    /// Quieter than its neighbours, and still readable.
+    Muted,
+    /// The theme's own highlight.
+    Accent,
+    /// Something the user should deal with.
+    Urgent,
+    /// The colour behind things, for the rare node that draws on top of it.
+    Background,
+}
+
+impl Role {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Foreground => "foreground",
+            Self::Muted => "muted",
+            Self::Accent => "accent",
+            Self::Urgent => "urgent",
+            Self::Background => "background",
         }
     }
 }

@@ -49,6 +49,16 @@ impl Notification {
         self
     }
 
+    /// A **freedesktop icon name**, resolved by the notification daemon
+    /// against the desktop's icon theme — `battery-caution`, `network-wired`.
+    ///
+    /// Not one of this shell's [`Glyph`] names, which look the same and are a
+    /// different set: `battery-quarter` is a glyph here and no icon theme
+    /// carries it, so passing one draws nothing at all. A string rather than
+    /// an enum because the set belongs to whichever icon theme is installed,
+    /// and Omega does not own it.
+    ///
+    /// [`Glyph`]: crate::Glyph
     pub fn icon(mut self, icon: impl Into<String>) -> Self {
         self.icon = icon.into();
         self

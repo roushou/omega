@@ -154,7 +154,10 @@ nodes! {
     // than repeated per node — which is why they have no kind in their
     // generated reader's name.
     shared {
-        /// A theme name (`"accent"`, `"urgent"`) or a literal (`"#ff8800"`).
+        /// A role in the shell's palette: `"foreground"`, `"muted"`,
+        /// `"accent"`, `"urgent"`, `"background"`. Not a literal — a colour
+        /// no theme chose is a widget that does not belong to the desktop
+        /// it is drawn on.
         color: Text,
         bold: Flag,
         /// Drawn quieter than its neighbours.

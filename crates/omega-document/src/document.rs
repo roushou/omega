@@ -6,9 +6,12 @@
 
 use omega_proto::omega::{
     Action, Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting,
-    InvokeUnit, Module, NightLightSetting, Notify, RunCommand, Schedule, Setting, StateDocument,
-    ThemeSetting, UnitRef, WidgetModule, action, idle_setting, module, setting,
+    InvokeUnit, Keybind, Modifier, Module, NightLightSetting, Notify, RunCommand, Schedule,
+    Setting, StateDocument, ThemeSetting, UnitRef, WidgetModule, action, idle_setting, module,
+    setting,
 };
+
+use crate::keys::Key;
 use omega_proto::{Cadence, Fields, IntoValue, Values};
 
 /// The machine's desired state, built one declaration at a time.
@@ -45,6 +48,15 @@ impl Document {
     /// Something the daemon does on its own clock. See [`Schedules`].
     pub fn schedule(mut self, schedule: Schedule) -> Self {
         self.inner.schedules.push(schedule);
+        self
+    }
+
+    /// A key that does something. See [`Keybinds`].
+    ///
+    /// Nothing converges these yet — `omega build` refuses a document that
+    /// declares one rather than staging a bind that would never fire.
+    pub fn keybind(mut self, keybind: Keybind) -> Self {
+        self.inner.keybinds.push(keybind);
         self
     }
 
@@ -220,6 +232,45 @@ impl Modules {
         Module {
             id: id.into(),
             kind: Some(kind),
+        }
+    }
+}
+
+/// Keys that do things.
+///
+/// The key is a [`Key`] rather than a string: nobody remembers that page-up
+/// is spelled `Prior`, and a bind that names it wrong is a bind that never
+/// fires and never says so.
+///
+/// ```
+/// # use omega_document::{Actions, Key, Keybinds};
+/// # use omega_proto::omega::Modifier;
+/// Keybinds::on("lock", Key::L, [Modifier::Super], Actions::run("omarchy-lock-screen"));
+/// ```
+#[derive(Debug)]
+pub struct Keybinds;
+
+impl Keybinds {
+    pub fn on(
+        id: impl Into<String>,
+        key: Key,
+        modifiers: impl IntoIterator<Item = Modifier>,
+        action: Action,
+    ) -> Keybind {
+        Keybind {
+            id: id.into(),
+            modifiers: modifiers.into_iter().map(|held| held as i32).collect(),
+            key: key.keysym().to_string(),
+            action: Some(action),
+            repeat: false,
+        }
+    }
+
+    /// The same, held down: a brightness key that keeps going while it is.
+    pub fn repeating(keybind: Keybind) -> Keybind {
+        Keybind {
+            repeat: true,
+            ..keybind
         }
     }
 }

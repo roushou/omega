@@ -27,14 +27,37 @@
 mod audio;
 mod backlight;
 mod battery;
+mod bluetooth;
 mod clock;
+mod disk;
+mod idle;
+mod input;
 mod keyspace;
+mod media;
+mod monitors;
 mod network;
+mod peripherals;
+mod power;
+mod supervised;
+mod system;
+mod vpn;
 mod wifi;
+mod window;
+mod workspaces;
 
+pub use bluetooth::BluetoothDevice;
 pub use clock::Weekday;
+pub use disk::Mount;
 pub use keyspace::{Own, UnitState, Watch};
+pub use media::{Playback, Player};
+pub use monitors::Monitor;
+pub use peripherals::{Peripheral, PeripheralKind};
+pub use supervised::{UnitPhase, UnitReport};
+pub use system::{Load, Memory};
+pub use vpn::Tunnel;
 pub use wifi::AccessPoint;
+pub use window::Focused;
+pub use workspaces::Workspace;
 
 use crate::context::Context;
 

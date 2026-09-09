@@ -15,8 +15,8 @@
 //! rooms away.
 
 use omega::{
-    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Graph, Icon, List, Network,
-    Own, Percent, Progress, Row, Shell, Stack, Text, Ui, Watch, Widget, Wifi,
+    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Glyph, Graph, Icon, List,
+    Network, Own, Percent, Progress, Role, Row, Shell, Stack, Text, Ui, Watch, Widget, Wifi,
 };
 
 /// This unit's name, for the config plane to refer to it by.
@@ -53,9 +53,9 @@ impl Widget for Indicator {
             // Wired, or nothing at all. Both are a plug or a slash, and
             // neither has a name worth drawing.
             return if self.network.is_connected() {
-                Icon::new("link").into()
+                Icon::new(Glyph::Link).into()
             } else {
-                Icon::new("globe").dim().into()
+                Icon::new(Glyph::Globe).dim().into()
             };
         };
 
@@ -64,7 +64,7 @@ impl Widget for Indicator {
             .gap(6)
             .child(Icon::new(bars(strength)))
             .child(if strength < self.settings.weak {
-                Text::new(ssid).color("urgent")
+                Text::new(ssid).color(Role::Urgent)
             } else {
                 Text::new(ssid)
             })
@@ -116,7 +116,7 @@ impl Widget for Panel {
                 .child(
                     Row::new()
                         .gap(6)
-                        .child(Icon::new("wifi").dim())
+                        .child(Icon::new(Glyph::Wifi).dim())
                         .child(Progress::new(self.network.strength()))
                         .child(Text::new(self.network.strength()).dim()),
                 )
@@ -157,9 +157,9 @@ fn row(point: &AccessPoint) -> Stack {
         .child(name)
         .child(Text::new(point.strength()).dim())
         .child(if point.is_secured() {
-            Icon::new("lock").dim()
+            Icon::new(Glyph::Lock).dim()
         } else {
-            Icon::new("globe").dim()
+            Icon::new(Glyph::Globe).dim()
         })
 }
 
@@ -262,8 +262,8 @@ impl Command for Disconnect {
 /// One glyph today: the shell's icon set has `wifi` and nothing weaker, so
 /// strength is carried by the colour instead. A richer set would branch here
 /// and nothing else would change.
-fn bars(_strength: Percent) -> &'static str {
-    "wifi"
+fn bars(_strength: Percent) -> Glyph {
+    Glyph::Wifi
 }
 
 fn main() -> omega::Result<()> {

@@ -159,9 +159,14 @@ Item {
             : base
     }
 
-    // Theme names come from the shell's own palette, so a unit inherits the
-    // theme the user chose without knowing one exists. Hardcoded hex here
-    // meant every widget drew One Dark whatever the desktop was set to.
+    // Roles come from the shell's own palette, so a unit inherits the theme
+    // the user chose without knowing one exists. Hardcoded hex here meant
+    // every widget drew One Dark whatever the desktop was set to.
+    //
+    // A role this shell does not know falls back to what the node inherited
+    // rather than being taken literally. Taking it literally is how a unit
+    // could name `#ff8800` and draw a colour no theme chose — the SDK closed
+    // that off, and this is the other half of closing it.
     function themed(name) {
         switch (name) {
             case "urgent": return Color.urgent
@@ -169,7 +174,7 @@ Item {
             case "muted": return Color.muted
             case "foreground": return Color.foreground
             case "background": return Color.background
-            default: return name
+            default: return node.foreground
         }
     }
 

@@ -12,10 +12,12 @@
 mod document;
 mod error;
 mod file;
+mod keys;
 
-pub use document::{Actions, Bars, Document, Host, Modules, Schedules, Settings, Units};
+pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};
 pub use error::DocumentError;
 pub use file::DocumentFile;
+pub use keys::Key;
 
 pub use omega_proto::omega::StateDocument;
 
@@ -25,4 +27,6 @@ pub use omega_proto::Cadence;
 /// Re-exported so a `system/` crate declares one dependency and never names
 /// the protocol: a config says what the machine should be, and which wire
 /// types carry that is not its business.
-pub use omega_proto::omega::{Action, Bar, Edge, Module, Schedule, Setting, UnitRef, Value, value};
+pub use omega_proto::omega::{
+    Action, Bar, Edge, Keybind, Modifier, Module, Schedule, Setting, UnitRef, Value, value,
+};

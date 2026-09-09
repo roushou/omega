@@ -2,9 +2,9 @@
 
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
-    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Graph, Grid, Group, Header,
-    Icon, Image, List, Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider,
-    Spacer, Text, Toggle, Ui, UnitState, Values, Watch, Widget,
+    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Glyph, Graph, Grid, Group,
+    Header, Icon, Image, List, Network, Notify, Own, Percent, Progress, Role, Row, Separator,
+    Session, Slider, Spacer, Text, Toggle, Ui, UnitState, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Capability, Lock, SurfaceKind, action, value};
@@ -78,7 +78,7 @@ impl Widget for Signal {
     fn render(&self) -> Ui {
         Row::new()
             .gap(6)
-            .child(Icon::new("wifi"))
+            .child(Icon::new(Glyph::Wifi))
             .child(Text::new(self.network.ssid().unwrap_or_default()))
             .child(Progress::new(self.network.strength()))
             .into()
@@ -153,7 +153,7 @@ struct Warned {
 impl Widget for Warned {
     fn render(&self) -> Ui {
         if self.battery.charge() < self.settings.low_threshold {
-            Text::new("low").color("urgent")
+            Text::new("low").color(Role::Urgent)
         } else {
             Text::new(self.battery.charge())
         }
@@ -568,8 +568,8 @@ fn wire(ui: Ui) -> serde_json::Value {
 fn every_node() -> Ui {
     Row::new()
         .gap(6)
-        .child(Text::new("80%").bold().color("urgent"))
-        .child(Icon::new("battery"))
+        .child(Text::new("80%").bold().color(Role::Urgent))
+        .child(Icon::new(Glyph::Battery))
         .child(Progress::new(Percent::of(0.7)))
         .child(Button::new("toggle").on_press("toggle"))
         .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))

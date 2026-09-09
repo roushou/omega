@@ -12,10 +12,11 @@
 macro_rules! styled {
     ($type:ident) => {
         impl $type {
-            /// A colour, as the shell's theme names it (`"accent"`,
-            /// `"urgent"`, `"muted"`) or as a literal (`"#ff8800"`).
-            pub fn color(mut self, color: impl Into<String>) -> Self {
-                self.node = self.node.color(color);
+            /// A colour, by the part it plays. See [`Role`].
+            ///
+            /// [`Role`]: crate::ui::Role
+            pub fn color(mut self, role: $crate::ui::Role) -> Self {
+                self.node = self.node.color(role);
                 self
             }
 

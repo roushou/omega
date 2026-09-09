@@ -1,4 +1,43 @@
-.pragma library
+//! Generating the shell's icon set.
+//!
+//! The same bargain [`Props`] makes, for the same reason: the names a unit
+//! can ask for lived in three places — a rustdoc list, a hand-written
+//! `Icons.js`, and a test that scraped one to compare against the other.
+//! [`Glyph`] is the vocabulary now, and this emits the file from it.
+//!
+//! [`Props`]: crate::Props
+
+use std::fmt::Write as _;
+
+use omega_proto::Glyph;
+
+/// The generated icon set.
+#[derive(Debug)]
+pub struct Icons;
+
+impl Icons {
+    /// Where the generated file belongs in the shell tree.
+    pub const FILE: &'static str = "Icons.js";
+
+    /// The whole file.
+    pub fn generate() -> String {
+        let mut out = String::new();
+        out.push_str(Self::PREAMBLE);
+
+        for glyph in Glyph::ALL {
+            let _ = write!(
+                out,
+                "\n    {:?}: \"\\u{:04x}\",",
+                glyph.name(),
+                glyph.glyph() as u32
+            );
+        }
+
+        out.push_str(Self::EPILOGUE);
+        out
+    }
+
+    const PREAMBLE: &'static str = r#".pragma library
 
 // Icon names, and the glyphs a bar draws them as. GENERATED from
 // `omega-proto`'s icon table by `omega_renderer::Icons` — do not edit; add
@@ -20,53 +59,9 @@
 // asking for an icon this shell has never heard of shows a legible word
 // rather than a blank space or a replacement box.
 
-var GLYPHS = {
-    "battery": "\uf240",
-    "battery-full": "\uf240",
-    "battery-three-quarters": "\uf241",
-    "battery-half": "\uf242",
-    "battery-quarter": "\uf243",
-    "battery-empty": "\uf244",
-    "plug": "\uf1e6",
-    "power": "\uf011",
-    "wifi": "\uf1eb",
-    "globe": "\uf0ac",
-    "link": "\uf0c1",
-    "bluetooth": "\uf293",
-    "download": "\uf019",
-    "upload": "\uf093",
-    "volume": "\uf028",
-    "volume-up": "\uf028",
-    "volume-down": "\uf027",
-    "volume-off": "\uf026",
-    "headphones": "\uf025",
-    "microphone": "\uf130",
-    "microphone-off": "\uf131",
-    "music": "\uf001",
-    "cpu": "\uf2db",
-    "thermometer": "\uf2c7",
-    "keyboard": "\uf11c",
-    "camera": "\uf030",
-    "terminal": "\uf120",
-    "cog": "\uf013",
-    "clock": "\uf017",
-    "calendar": "\uf073",
-    "sun": "\uf185",
-    "moon": "\uf186",
-    "bell": "\uf0f3",
-    "warning": "\uf071",
-    "check": "\uf00c",
-    "close": "\uf00d",
-    "refresh": "\uf021",
-    "lock": "\uf023",
-    "search": "\uf002",
-    "star": "\uf005",
-    "heart": "\uf004",
-    "home": "\uf015",
-    "user": "\uf007",
-    "folder": "\uf07b",
-    "envelope": "\uf0e0",
-    "trash": "\uf1f8",
+var GLYPHS = {"#;
+
+    const EPILOGUE: &'static str = r#"
 }
 
 // The glyph for a name, or "" for one this shell does not draw.
@@ -77,4 +72,6 @@ function glyph(name) {
 // Every name this shell draws, sorted.
 function names() {
     return Object.keys(GLYPHS).sort()
+}
+"#;
 }

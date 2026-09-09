@@ -134,6 +134,7 @@ impl BuildCmd {
         //    still looking at the output, not in a log at three in the
         //    morning.
         Self::check_cadences(&document)?;
+        Self::check_keybinds(&document)?;
 
         // 6. Assemble the daemon's state atomically.
         plan.materialize(layout, &document)?;
@@ -158,6 +159,23 @@ impl BuildCmd {
                 .with_context(|| format!("schedule {:?} will never fire", schedule.id))?;
         }
         Ok(())
+    }
+
+    /// Keybinds are declarable and nothing converges them yet.
+    ///
+    /// Refused rather than staged, for the reason the daemon refuses an
+    /// action it cannot perform: a bind that is accepted and never fires is
+    /// worse than one that is turned away, because the first costs an
+    /// afternoon to find. Delete this when a provider converges them.
+    fn check_keybinds(document: &StateDocument) -> anyhow::Result<()> {
+        let Some(keybind) = document.keybinds.first() else {
+            return Ok(());
+        };
+        bail!(
+            "keybind {:?}: the daemon does not converge keybinds yet, so this \
+             would build and never fire",
+            keybind.id
+        )
     }
 
     /// What the config plane said, in one line: a document is the point of

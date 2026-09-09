@@ -4,6 +4,7 @@ use std::fmt::Display;
 
 use crate::ui::node::{Node, Size};
 use crate::ui::style::styled;
+use omega_proto::Glyph;
 
 /// A run of text.
 ///
@@ -30,33 +31,32 @@ impl Text {
 
 styled!(Text);
 
-/// A named icon, as the shell's icon set spells it.
+/// A glyph from the shell's icon set.
 ///
-/// The shell draws these as Nerd Font glyphs. A name it does not know is
-/// drawn as the name itself, so a typo — or a unit written for a richer
-/// shell — reads as a legible word rather than a blank space.
+/// [`Glyph`] is the set, so a name this build cannot draw is a compile error
+/// rather than a word in somebody's bar. [`Icon::named`] is the way out for a
+/// unit written against a richer shell.
 ///
-/// What `omega.view` draws today:
-///
-/// `battery`  `battery-full`  `battery-three-quarters`  `battery-half`
-/// `battery-quarter`  `battery-empty`  `plug`  `power`
-/// `wifi`  `globe`  `link`  `bluetooth`
-/// `download`  `upload`  `volume`  `volume-up`
-/// `volume-down`  `volume-off`  `headphones`  `microphone`
-/// `microphone-off`  `music`  `cpu`  `thermometer`
-/// `keyboard`  `camera`  `terminal`  `cog`
-/// `clock`  `calendar`  `sun`  `moon`
-/// `bell`  `warning`  `check`  `close`
-/// `refresh`  `lock`  `search`  `star`
-/// `heart`  `home`  `user`  `folder`
-/// `envelope`  `trash`
 #[derive(Debug, Clone)]
 pub struct Icon {
     node: Node,
 }
 
 impl Icon {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(glyph: Glyph) -> Self {
+        Self {
+            node: Node::new("icon").text_prop("name", glyph.name()),
+        }
+    }
+
+    /// An icon by a name this build does not know.
+    ///
+    /// The wire keeps `icon.name` a string so a shell meeting a name it has
+    /// no glyph for draws the name itself — a legible word rather than a
+    /// blank space. This is how a unit written for a richer shell reaches
+    /// one, and it is deliberately the longer spelling: a name here is not
+    /// checked by anything.
+    pub fn named(name: impl Into<String>) -> Self {
         Self {
             node: Node::new("icon").text_prop("name", name),
         }

@@ -55,16 +55,17 @@ pub use effect::{Brightness, Notification, Notify, Session, Shell, Volume};
 pub use error::{Error, Result};
 pub use plugin::Plugin;
 pub use state::{
-    AccessPoint, Audio, Backlight, Battery, Bluetooth, Clock, Disk, Idle, Input, Media, Monitors,
-    Network, Own, Peripherals, Power, System, UnitState, Units, Vpn, Watch, Weekday, Wifi, Window,
-    Workspaces,
+    AccessPoint, Audio, Backlight, Battery, Bluetooth, BluetoothDevice, Clock, Disk, Focused, Idle,
+    Input, Load, Media, Memory, Monitor, Monitors, Mount, Network, Own, Peripheral, PeripheralKind,
+    Peripherals, Playback, Player, Power, System, Tunnel, UnitPhase, UnitReport, UnitState, Units,
+    Vpn, Watch, Weekday, Wifi, Window, Workspace, Workspaces,
 };
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{
     Align, Bind, Button, Column, Field, Graph, Grid, Group, Header, Icon, Image, List, Node,
-    Progress, Row, Separator, Size, Slider, Spacer, Stack, Text, Toggle, Ui,
+    Progress, Role, Row, Separator, Size, Slider, Spacer, Stack, Text, Toggle, Ui,
 };
-pub use units::{Percent, Remaining};
+pub use units::{Bytes, Percent, Remaining, Uptime};
 
 pub use omega_derive::{Command, Config, Reaction, UnitState, Widget};
 
@@ -76,6 +77,7 @@ pub use omega_proto::omega::{Event, EventKind};
 
 /// Naming a topic, for a test that describes a machine which has none of it.
 /// Reading one is a field like [`Battery`], never this.
+pub use omega_proto::Glyph;
 pub use omega_proto::SystemTopic;
 
 /// Internals the derives expand into. Not a stable surface: write
