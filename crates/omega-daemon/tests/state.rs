@@ -182,6 +182,7 @@ async fn a_unit_is_woken_only_for_what_it_subscribes_to() {
             invoke::Op::Subscribe(Subscribe {
                 topics: vec!["battery".into()],
                 events: Vec::new(),
+                replace: false,
             }),
         ))
         .await
@@ -208,6 +209,7 @@ async fn subscribing_is_not_a_way_to_widen_a_grant() {
             invoke::Op::Subscribe(Subscribe {
                 topics: vec!["network".into()],
                 events: Vec::new(),
+                replace: false,
             }),
         ))
         .await

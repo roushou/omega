@@ -107,6 +107,13 @@ message SetState {
 message Subscribe {
   repeated string topics = 1;
   repeated EventKind events = 2;
+  // Make `topics` the whole selection rather than an addition to it.
+  //
+  // The only way an observer can narrow: its ceiling is every topic the
+  // daemon holds, so there is no list for Unsubscribe to subtract from, and
+  // naming everything unwanted would let each new topic back in as the
+  // ontology grows. Unset is the additive behaviour a unit already has.
+  bool replace = 3;
 }
 
 message Unsubscribe {

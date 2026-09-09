@@ -27,7 +27,7 @@ use omega_proto::omega::{Frame, Invoke, frame};
 use omega_proto::{Observation, Refusal, Socket};
 
 use crate::broker::Brokerage;
-use crate::hub::{Hub, Observed, ViewUpdate};
+use crate::hub::{Heartbeat, Hub, Observed, ViewUpdate};
 use crate::session::admission::Peer;
 use crate::session::{Dispatcher, Subscriptions};
 use crate::supervisor::Supervisor;
@@ -143,6 +143,13 @@ struct ShellConnection {
 }
 
 impl ShellConnection {
+    /// How often a connection says it is still there when nothing else has.
+    ///
+    /// Comfortably inside the silence an observer treats as a dead daemon —
+    /// the shell reconnects after fifteen seconds of nothing — so a quiet
+    /// machine never looks like a stopped one.
+    const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
+
     fn new(
         stream: UnixStream,
         views: broadcast::Receiver<ViewUpdate>,
@@ -171,8 +178,13 @@ impl ShellConnection {
         views: Vec<ViewUpdate>,
         state: omega_proto::omega::StateSnapshot,
     ) -> Result<(), ShellError> {
+        // Everything, until the observer says otherwise: reading this socket
+        // needs no handshake, so a peer that asks for nothing is a peer that
+        // wants what the daemon holds.
+        let mut subscriptions = Subscriptions::watcher();
+
         self.write_views(&views).await?;
-        self.write_topics(&state.topics).await?;
+        self.write_topics(&subscriptions, &state.topics).await?;
 
         // One dispatcher per connection, as a session has: what it holds on
         // this peer's behalf is given back when the connection ends.
@@ -184,7 +196,11 @@ impl ShellConnection {
                 gateway.brokers.clone(),
             )
         });
-        let mut subscriptions = Subscriptions::watcher();
+        let mut beat = tokio::time::interval(Self::HEARTBEAT);
+        beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // The first tick is immediate and would beat before anything was
+        // said; the connection has just written everything it holds.
+        beat.tick().await;
 
         loop {
             tokio::select! {
@@ -200,11 +216,11 @@ impl ShellConnection {
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
                 },
                 patch = self.state.recv() => match patch {
-                    Ok(patch) => self.write_topics(&patch.topics).await?,
+                    Ok(patch) => self.write_topics(&subscriptions, &patch.topics).await?,
                     Err(broadcast::error::RecvError::Lagged(missed)) => {
                         tracing::warn!(missed, "observer lagged on state; resending every topic");
                         let snapshot = self.hub.snapshot();
-                        self.write_topics(&snapshot.topics).await?;
+                        self.write_topics(&subscriptions, &snapshot.topics).await?;
                     }
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
                 },
@@ -217,6 +233,7 @@ impl ShellConnection {
                     // The observer hung up. Its views have nowhere to go.
                     None => return Ok(()),
                 },
+                _ = beat.tick() => self.write_line(&Observed::Beat(Heartbeat { heartbeat: true })).await?,
             }
         }
     }
@@ -270,11 +287,20 @@ impl ShellConnection {
         Ok(())
     }
 
+    /// The topics this observer asked for, one line each.
+    ///
+    /// Filtered by the same [`Subscriptions`] a unit's session filters by. It
+    /// was not filtered at all: the shell draws views and was sent every topic
+    /// the daemon held, and so was every other reader of this socket.
     async fn write_topics(
         &mut self,
+        subscriptions: &Subscriptions,
         topics: &[omega_proto::omega::StateTopic],
     ) -> Result<(), ShellError> {
         for topic in topics {
+            if !subscriptions.wants(&topic.topic) {
+                continue;
+            }
             self.write_line(&Observed::State(topic.clone())).await?;
         }
         Ok(())

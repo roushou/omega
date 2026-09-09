@@ -112,14 +112,19 @@ pub(super) const POLICY: &[OpPolicy] = &[
         surface: None,
     },
     OpPolicy {
+        // Served to both, and it widens nothing either way: a subscription
+        // selects within a ceiling it cannot raise. A unit's ceiling is its
+        // manifest; an observer's is what the daemon holds, which it may
+        // already read. Narrowing is the observer's whole interest in it —
+        // the shell draws views and is sent every topic besides.
         kind: OpKind::Subscribe,
-        roles: &[Role::Unit],
+        roles: &[Role::Unit, Role::Operator],
         capabilities: &[Capability::StateRead],
         surface: None,
     },
     OpPolicy {
         kind: OpKind::Unsubscribe,
-        roles: &[Role::Unit],
+        roles: &[Role::Unit, Role::Operator],
         capabilities: &[Capability::StateRead],
         surface: None,
     },

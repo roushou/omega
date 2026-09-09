@@ -209,7 +209,7 @@ impl Dispatcher {
             }
 
             invoke::Op::Subscribe(subscribe) => {
-                subscriptions.subscribe(&subscribe.topics)?;
+                subscriptions.subscribe(&subscribe.topics, subscribe.replace)?;
                 subscriptions.subscribe_events(&subscribe.events)?;
                 Ok(Response::Ok)
             }

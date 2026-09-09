@@ -152,6 +152,7 @@ async fn subscribing_to_an_undeclared_event_is_refused() {
                 op: Some(invoke::Op::Subscribe(Subscribe {
                     topics: Vec::new(),
                     events: vec![EventKind::EventWindowFocused as i32],
+                    replace: false,
                 })),
             })),
         })

@@ -73,7 +73,8 @@ pub struct ViewUpdate {
     pub view: ViewTree,
 }
 
-/// One line on the observation socket: a rendered surface, or a state topic.
+/// One line on the observation socket: a rendered surface, a state topic, or
+/// a sign that the daemon is still there.
 ///
 /// The shell reads the views; `omega status` reads the `units` topic. Both
 /// are the same read-only stream, because both are asking the same question —
@@ -83,6 +84,26 @@ pub struct ViewUpdate {
 pub enum Observed {
     View(ViewUpdate),
     State(StateTopic),
+    Beat(Heartbeat),
+}
+
+/// Proof the daemon is still on the other end.
+///
+/// An observer cannot tell a quiet daemon from a dead one: a peer that goes
+/// away leaves the socket reading connected, so the shell watches for silence
+/// instead and reconnects through it. That made incidental traffic load-
+/// bearing — the shell stayed up because some topic happened to change every
+/// couple of seconds — and an observer that narrows its subscription is an
+/// observer that has just turned its own keepalive off.
+///
+/// So the socket says it out loud on a cadence of its own, and liveness stops
+/// depending on how busy the machine is.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Heartbeat {
+    /// Always true. A field, because every line on this socket is a JSON
+    /// object and an observer tells them apart by which keys they carry.
+    pub heartbeat: bool,
 }
 
 /// A handle to the daemon's authoritative state and message channels.

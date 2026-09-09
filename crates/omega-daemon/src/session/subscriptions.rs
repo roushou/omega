@@ -18,9 +18,13 @@ pub struct Subscriptions {
     owner: Option<UnitName>,
     /// Topics the manifest declared: the ceiling, fixed at admission.
     allowed: HashSet<String>,
-    /// Topics currently wanted. Starts as everything allowed, so a unit that
-    /// never calls `Subscribe` behaves as its manifest reads.
-    active: HashSet<String>,
+    /// Topics currently wanted, or `None` for everything the ceiling allows.
+    ///
+    /// `None` is not an empty set. It is a session that has never selected —
+    /// which is how a unit that never calls `Subscribe` behaves as its
+    /// manifest reads, and the only way to say "everything" for a watcher,
+    /// whose ceiling is every topic there is and cannot be listed.
+    active: Option<HashSet<String>>,
     /// A watcher sees every topic. Only a debug client the operator admitted
     /// on purpose is one.
     watches_all: bool,
@@ -46,7 +50,7 @@ impl Subscriptions {
 
         Self {
             owner: Some(unit.clone()),
-            active: allowed.clone(),
+            active: Some(allowed.clone()),
             allowed,
             watches_all: false,
             active_events: allowed_events.clone(),
@@ -60,16 +64,22 @@ impl Subscriptions {
         Self {
             owner: None,
             allowed: HashSet::new(),
-            active: HashSet::new(),
+            active: None,
             watches_all: true,
             allowed_events: HashSet::new(),
             active_events: HashSet::new(),
         }
     }
 
-    /// Narrow (or restore) the selection. Asking for a topic the manifest did
-    /// not declare is refused: subscribing is not a way to widen a grant.
-    pub fn subscribe(&mut self, topics: &[String]) -> Result<(), Refusal> {
+    /// Add to the selection. Asking for a topic the manifest did not declare
+    /// is refused: subscribing is not a way to widen a grant.
+    ///
+    /// `replace` makes the named topics the *whole* selection rather than an
+    /// addition. That is the only way a watcher can narrow — its ceiling is
+    /// every topic there is, so there is no list for `Unsubscribe` to
+    /// subtract from — and it is stable as the ontology grows, where naming
+    /// everything unwanted would quietly let each new topic back in.
+    pub fn subscribe(&mut self, topics: &[String], replace: bool) -> Result<(), Refusal> {
         for topic in topics {
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
@@ -77,13 +87,26 @@ impl Subscriptions {
                 )));
             }
         }
-        self.active.extend(topics.iter().cloned());
+
+        if replace {
+            self.active = Some(topics.iter().cloned().collect());
+        } else if let Some(active) = self.active.as_mut() {
+            active.extend(topics.iter().cloned());
+        }
+        // Otherwise the selection already stands for everything the ceiling
+        // allows, and adding to it changes nothing.
         Ok(())
     }
 
     pub fn unsubscribe(&mut self, topics: &[String]) {
+        // A selection standing for "everything allowed" has no list to take a
+        // topic out of. `Subscribe` with `replace` is how such a session says
+        // what it wants instead.
+        let Some(active) = self.active.as_mut() else {
+            return;
+        };
         for topic in topics {
-            self.active.remove(topic);
+            active.remove(topic);
         }
     }
 
@@ -125,8 +148,18 @@ impl Subscriptions {
     }
 
     /// Whether the session wants this topic right now.
+    ///
+    /// The selection, not the ceiling — which is the whole difference between
+    /// this and [`permits`]. `watches_all` was consulted here too, so a
+    /// watcher could never narrow however it asked, and every observer of the
+    /// shell socket was sent every topic the daemon held.
+    ///
+    /// [`permits`]: Self::permits
     pub fn wants(&self, topic: &str) -> bool {
-        self.watches_all || self.active.contains(topic) || self.owns(topic)
+        match &self.active {
+            Some(active) => active.contains(topic) || self.owns(topic),
+            None => self.permits(topic),
+        }
     }
 
     /// A unit's own keyspace: always readable, always writable by it alone.
@@ -165,8 +198,14 @@ impl Subscriptions {
     }
 
     /// The topics a `GetState` with no names should answer with.
+    ///
+    /// Empty for a selection standing for everything allowed, which has no
+    /// list to give — a watcher, and what one was already answered with.
     pub fn active(&self) -> Vec<String> {
-        let mut topics: Vec<_> = self.active.iter().cloned().collect();
+        let Some(active) = self.active.as_ref() else {
+            return Vec::new();
+        };
+        let mut topics: Vec<_> = active.iter().cloned().collect();
         topics.sort();
         topics
     }

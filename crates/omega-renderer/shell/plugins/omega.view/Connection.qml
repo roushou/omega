@@ -72,6 +72,22 @@ Item {
         link.tree = msg.view && msg.view.root ? msg.view.root : null
     }
 
+    // This host draws views and reads no state, so it asks for none.
+    //
+    // `replace` rather than a list of what to drop: the daemon holds every
+    // topic there is, and naming the unwanted ones would let each new one
+    // back in as the ontology grows. An empty selection stays empty.
+    //
+    // The daemon sends everything it holds the moment a connection opens, so
+    // this narrows what follows rather than what arrived — one snapshot, and
+    // then only the views this host is here for.
+    function subscribeToNothing() {
+        socket.write(JSON.stringify({
+            streamId: link.nextStream++,
+            invoke: { subscribe: { topics: [], events: [], replace: true } }
+        }) + "\n")
+    }
+
     // A press is the operator asking this unit to run one of its own
     // commands: the same request the CLI makes, and the same one the daemon
     // authorizes by uid. It goes as JSON because QML cannot encode protobuf —
@@ -126,9 +142,13 @@ Item {
         // A daemon that went away is not a daemon still saying 91%. Holding
         // the last tree would leave the bar showing a reading nobody is
         // taking.
-        onConnectedChanged: if (!connected) {
-            link.tree = null
-            link.drawnBy = ""
+        onConnectedChanged: {
+            if (connected) {
+                link.subscribeToNothing()
+            } else {
+                link.tree = null
+                link.drawnBy = ""
+            }
         }
     }
 
