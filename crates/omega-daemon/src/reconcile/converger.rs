@@ -139,7 +139,11 @@ impl Worker {
 
             if work.reload {
                 match self.reload() {
-                    Ok(document) => self.document = document,
+                    Ok(Some(document)) => self.document = document,
+                    // A fresh machine, not a broken one. The daemon keeps
+                    // running with nothing to converge toward, and the build
+                    // that lands triggers the pass that adopts it.
+                    Ok(None) => tracing::info!("nothing built yet; run `omega build`"),
                     // A half-written or broken build must not take down a
                     // daemon that is running the last good one.
                     Err(e) => {
@@ -171,16 +175,39 @@ impl Worker {
     /// Re-read everything derived from the state dir. The manifests the
     /// daemon vouches for are replaced together with the document that says
     /// what to do with them.
-    fn reload(&self) -> Result<StateDocument, DaemonError> {
-        let config = self.context.layout.file::<StateConfig>(()).read()?;
+    fn reload(&self) -> Result<Option<StateDocument>, DaemonError> {
+        let Some(config) = self.built()? else {
+            return Ok(None);
+        };
         let manifests = ManifestStore::load(&config, &self.context.layout)?;
         self.context.supervisor.adopt(Arc::new(manifests));
 
-        Ok(DocumentFile::of(&self.context.layout).read_or_default()?)
+        Ok(Some(
+            DocumentFile::of(&self.context.layout).read_or_default()?,
+        ))
+    }
+
+    /// What the last build produced, or `None` where none has run.
+    ///
+    /// A state dir with no unit config is a machine `omega build` has never
+    /// been run on, which is the ordinary first boot rather than a fault —
+    /// reporting it as one makes every fresh install look broken. Every
+    /// other way of failing to read it still is one.
+    fn built(&self) -> Result<Option<StateConfig>, DaemonError> {
+        match self.context.layout.file::<StateConfig>(()).read() {
+            Ok(config) => Ok(Some(config)),
+            Err(e) if e.is_not_found() => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn converge(&self) -> Result<(), DaemonError> {
-        let config = self.context.layout.file::<StateConfig>(()).read()?;
+        // Nothing built is nothing to converge toward. Tearing down what is
+        // running because the config went missing is the opposite of what a
+        // daemon owes a desktop.
+        let Some(config) = self.built()? else {
+            return Ok(());
+        };
         let manifests = Arc::new(ManifestStore::load(&config, &self.context.layout)?);
 
         Reconciler::new()
@@ -215,6 +242,10 @@ impl Worker {
 mod tests {
     use super::*;
 
+    use std::path::PathBuf;
+
+    use omega_proto::Socket;
+
     #[test]
     fn triggers_that_arrive_together_are_one_pass() {
         let queue = Queue::default();
@@ -242,5 +273,93 @@ mod tests {
         queue.push(Work::REBUILD);
         queue.push(Work::CONVERGE);
         assert_eq!(queue.take(), Some(Work::REBUILD));
+    }
+
+    /// A state dir that cleans up after itself.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir =
+                std::env::temp_dir().join(format!("omega-{tag}-{}-{nanos}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+
+        fn layout(&self) -> Layout {
+            Layout::at(
+                self.0.join("config"),
+                self.0.join("state"),
+                self.0.join("cache"),
+            )
+        }
+
+        /// A worker over this dir, with nothing built in it yet.
+        fn worker(&self) -> Worker {
+            let hub = Hub::new();
+            let units = UnitTable::detached(hub.clone());
+
+            Worker {
+                queue: Arc::new(Queue::default()),
+                document: StateDocument::default(),
+                context: Context {
+                    layout: self.layout(),
+                    hub: hub.clone(),
+                    // Never bound: nothing here spawns a unit.
+                    supervisor: Supervisor::new(
+                        Socket::at(self.0.join("omega.sock")),
+                        units.clone(),
+                        Shutdown::new(),
+                    ),
+                    units,
+                },
+                shutdown: Shutdown::new(),
+            }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_machine_with_no_build_has_nothing_to_adopt() {
+        // The ordinary first boot. `omega build` has not run, so there is no
+        // unit config to read — which was reported as a failure to load one,
+        // and made every fresh install log an error about the state it was
+        // supposed to be in.
+        let dir = TempDir::new("unbuilt");
+        let worker = dir.worker();
+
+        assert!(worker.built().unwrap().is_none());
+        assert!(matches!(worker.reload(), Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn converging_toward_no_build_does_nothing_rather_than_failing() {
+        let dir = TempDir::new("unbuilt-converge");
+        let worker = dir.worker();
+
+        assert!(worker.converge().await.is_ok());
+    }
+
+    #[test]
+    fn a_unit_config_that_cannot_be_parsed_is_still_a_failure() {
+        // The half that keeps the two above honest: absent and unreadable are
+        // different, and only the first one is ordinary.
+        let dir = TempDir::new("unbuilt-broken");
+        let path = dir.layout().file::<StateConfig>(()).into_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "this is not toml {").unwrap();
+
+        let worker = dir.worker();
+        assert!(worker.built().is_err());
+        assert!(worker.reload().is_err());
     }
 }
