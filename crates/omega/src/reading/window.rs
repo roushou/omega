@@ -1,6 +1,6 @@
 //! What has focus.
 
-use crate::state::Window;
+use crate::reading::Window;
 
 /// The focused window.
 #[derive(Debug, Clone, PartialEq)]

@@ -11,11 +11,20 @@ message BatteryState {
   uint32 seconds_to_full = 4;
 }
 
-message PowerState {
+// Whether the machine is plugged in.
+//
+// Named for the socket rather than for power in general, and kept apart from
+// BatteryState for two reasons that both matter. A desktop has no battery, so
+// `battery` is absent there and this is not — a machine with nothing to say
+// about a battery still has something to say about the wall. And the two move
+// at different rates: a charge changes on every poll and this changes when
+// somebody pulls the cable, so a widget that only watches the cable should not
+// be woken by the other.
+message MainsState {
   // Whether the machine is running on mains rather than its battery. From
   // the same broker as the battery: it is one power supply subsystem, and two
   // brokers reading it would be two answers to one question.
-  bool on_ac = 1;
+  bool connected = 1;
 
   // 2 was `load_percent`, which is not a power-supply reading — it is the
   // kernel's own load average, and it belongs in a `system` topic beside CPU

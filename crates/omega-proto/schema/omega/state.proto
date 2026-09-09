@@ -21,7 +21,7 @@ import "omega/value.proto";
 // splitting that would be splitting the thing this schema exists to fix.
 
 // One topic value. "topic" is the address: "battery", "network", "audio",
-// "backlight", "power", "display", "units", "time", "wifi", "workspaces",
+// "backlight", "mains", "display", "units", "time", "wifi", "workspaces",
 // "window", "media", "bluetooth", "system", or
 // "unit.<name>.<key>" for
 // unit-owned data.
@@ -44,7 +44,7 @@ message StateTopic {
     NetworkState network = 11;
     AudioState audio = 12;
     BacklightState backlight = 13;
-    PowerState power = 14;
+    MainsState mains = 14;
     DisplayState display = 15;
     UnitsState units = 16;
     TimeState time = 17;

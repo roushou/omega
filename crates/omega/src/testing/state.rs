@@ -57,6 +57,13 @@ impl State {
         })
     }
 
+    /// Whether the cable is in. Its own topic, so a test can describe a
+    /// desktop — no battery, on mains — which is the case a widget holding
+    /// both is most likely to get wrong.
+    pub fn mains(self, connected: bool) -> Self {
+        self.with(omega_proto::omega::MainsState { connected })
+    }
+
     /// A plugin's own state, as the daemon replicates it.
     pub fn keyspace(mut self, address: &str, values: Values) -> Self {
         self.topics.retain(|held| held.topic != address);

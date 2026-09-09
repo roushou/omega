@@ -1,6 +1,6 @@
 //! The network.
 
-use crate::state::Network;
+use crate::reading::Network;
 use crate::units::Percent;
 
 /// The machine's network connection.

@@ -1,6 +1,6 @@
 //! The workspaces, and which is being looked at.
 
-use crate::state::Workspaces;
+use crate::reading::Workspaces;
 
 /// One workspace, as the compositor reports it.
 #[derive(Debug, Clone, PartialEq)]

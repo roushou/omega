@@ -1,6 +1,6 @@
 //! The tunnels the machine is running through.
 
-use crate::state::Vpn;
+use crate::reading::Vpn;
 
 /// One tunnel, as NetworkManager reports it.
 #[derive(Debug, Clone, PartialEq)]

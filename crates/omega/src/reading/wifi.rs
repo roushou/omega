@@ -1,6 +1,6 @@
 //! What the machine could connect to.
 
-use crate::state::Wifi;
+use crate::reading::Wifi;
 use crate::units::Percent;
 
 /// The networks on the air, as the last scan found them.

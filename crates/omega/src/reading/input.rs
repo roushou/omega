@@ -1,6 +1,6 @@
 //! How the machine is being typed at.
 
-use crate::state::Input;
+use crate::reading::Input;
 
 impl Input {
     /// The keyboard's device name.

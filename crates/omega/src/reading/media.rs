@@ -1,6 +1,6 @@
 //! What is playing.
 
-use crate::state::Media;
+use crate::reading::Media;
 use crate::units::Remaining;
 
 pub use omega_proto::omega::Playback;

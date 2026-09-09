@@ -1,6 +1,6 @@
 //! The batteries of things plugged into the machine.
 
-use crate::state::Peripherals;
+use crate::reading::Peripherals;
 use crate::units::Percent;
 
 pub use omega_proto::omega::PeripheralKind;

@@ -1,6 +1,6 @@
 //! The adapter, and what is paired with it.
 
-use crate::state::Bluetooth;
+use crate::reading::Bluetooth;
 use crate::units::Percent;
 
 /// One paired or nearby device.

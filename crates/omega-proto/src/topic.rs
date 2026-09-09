@@ -14,7 +14,7 @@ use std::fmt;
 
 use crate::omega::{
     AudioState, BacklightState, BatteryState, BluetoothState, DiskState, DisplayState, IdleState,
-    InputState, MediaState, NetworkState, PeripheralsState, PowerState, SystemState, TimeState,
+    InputState, MainsState, MediaState, NetworkState, PeripheralsState, SystemState, TimeState,
     UnitsState, VpnState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
@@ -72,7 +72,9 @@ topics! {
     Network => "network": NetworkState,
     Audio => "audio": AudioState,
     Backlight => "backlight": BacklightState,
-    Power => "power": PowerState,
+    /// Whether it is plugged in. Named for the socket: a battery is a
+    /// different reading, and on a desktop this is the only one there is.
+    Mains => "mains": MainsState,
     Display => "display": DisplayState,
     /// The supervisor's report on every unit it runs.
     Units => "units": UnitsState,

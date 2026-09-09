@@ -1,6 +1,6 @@
 //! What the machine is doing with itself.
 
-use crate::state::System;
+use crate::reading::System;
 use crate::units::{Bytes, Percent, Uptime};
 
 /// A pool of memory: how much there is, and how much of it is spoken for.

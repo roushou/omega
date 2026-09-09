@@ -1,12 +1,12 @@
 //! The battery.
 
-use crate::state::Battery;
+use crate::reading::Battery;
 use crate::units::{Percent, Remaining};
 
 /// The machine's battery, as a widget sees it.
 ///
 /// ```no_run
-/// # use omega::state::Battery;
+/// # use omega::reading::Battery;
 /// # use omega::ui::Text;
 /// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]

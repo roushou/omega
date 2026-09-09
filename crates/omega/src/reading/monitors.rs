@@ -1,6 +1,6 @@
 //! The monitors the compositor is driving.
 
-use crate::state::Monitors;
+use crate::reading::Monitors;
 
 /// One monitor.
 #[derive(Debug, Clone, PartialEq)]

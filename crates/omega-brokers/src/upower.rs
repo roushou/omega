@@ -20,7 +20,7 @@ use zbus::{Connection, Proxy};
 
 use omega_proto::SystemTopic;
 use omega_proto::omega::{
-    BatteryState, Peripheral, PeripheralKind, PeripheralsState, PowerState, StatePatch, StateTopic,
+    BatteryState, MainsState, Peripheral, PeripheralKind, PeripheralsState, StatePatch, StateTopic,
     state_topic,
 };
 
@@ -316,9 +316,9 @@ impl UPower {
                     value: state.map(state_topic::Value::Battery),
                 },
                 StateTopic {
-                    topic: SystemTopic::Power.as_str().into(),
+                    topic: SystemTopic::Mains.as_str().into(),
                     revision: 0,
-                    value: Some(state_topic::Value::Power(PowerState { on_ac })),
+                    value: Some(state_topic::Value::Mains(MainsState { connected: on_ac })),
                 },
                 StateTopic {
                     topic: SystemTopic::Peripherals.as_str().into(),
@@ -339,7 +339,7 @@ impl Broker for UPower {
     fn topics(&self) -> &'static [SystemTopic] {
         &[
             SystemTopic::Battery,
-            SystemTopic::Power,
+            SystemTopic::Mains,
             SystemTopic::Peripherals,
         ]
     }

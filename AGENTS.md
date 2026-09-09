@@ -120,6 +120,14 @@ which compiles a scaffolded config through the real binaries.
   because a build replaces the state dir and the log explaining the last
   crash has to outlive it.
 
+- A field is a **reading** (`omega::reading` — one topic, no interpretation), a
+  **composite** (`omega::composite` — several topics, interpretation once), a
+  **record** (`omega::record` — this unit's own memory) or an **effect**
+  (`omega::effect`). That is the distinction `wiring`'s `Reads`/`Does` already
+  makes; `state` named the plane instead of the thing.
+- A topic is the unit of *what wakes a widget*, so two facts that move at
+  different rates are two topics: `battery` changes on every poll and `mains`
+  when the cable moves. What spans them is a composite, not a wider topic.
 - The SDK's root is what every unit uses whatever it does — the three
   surfaces, `Ui`, `Args`/`Answer`, and the reading types. Everything else is
   in a module named for the kind of thing it is: `omega::state`,

@@ -190,7 +190,7 @@ async fn it_reads_the_machine_it_is_running_on() {
         .iter()
         .map(|topic| topic.topic.as_str())
         .collect();
-    assert_eq!(topics, vec!["battery", "power", "peripherals"]);
+    assert_eq!(topics, vec!["battery", "mains", "peripherals"]);
 
     // A desktop reports no battery and is still on mains, so `power` always
     // has a value where `battery` may not.

@@ -15,7 +15,8 @@
 //! rooms away.
 
 use omega::effect::Shell;
-use omega::state::{AccessPoint, Network, Own, Watch, Wifi};
+use omega::reading::{AccessPoint, Network, Wifi};
+use omega::record::{Own, Watch};
 use omega::ui::{
     Bind, Button, Column, Field, Glyph, Graph, Icon, List, Progress, Role, Row, Stack, Text,
 };

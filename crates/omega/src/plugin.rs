@@ -6,7 +6,7 @@
 //! list, arrived at once.
 //!
 //! ```no_run
-//! # use omega::state::Battery;
+//! # use omega::reading::Battery;
 //! # use omega::ui::Text;
 //! # use omega::{Ui, Widget};
 //! # #[derive(omega::Widget)]

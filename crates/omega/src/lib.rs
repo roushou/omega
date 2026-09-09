@@ -7,7 +7,7 @@
 //! the code: `omega build` compiles a plugin and asks it what it declares.
 //!
 //! ```no_run
-//! use omega::state::Battery;
+//! use omega::reading::Battery;
 //! use omega::ui::Text;
 //! use omega::{Ui, Widget};
 //!
@@ -47,8 +47,10 @@ mod runtime;
 mod surface;
 mod units;
 
+pub mod composite;
 pub mod effect;
-pub mod state;
+pub mod reading;
+pub mod record;
 pub mod testing;
 pub mod ui;
 pub mod wiring;
@@ -57,10 +59,21 @@ pub mod wiring;
 //
 // The root is the vocabulary every unit uses whatever it does: the three
 // surfaces, what they are called with, what they answer, and the readings
-// that pass through both. Everything a unit reaches for *sometimes* is in a
-// module named for the kind of thing it is, so a `use` line says what it is
-// bringing in — `omega::state::Battery` and `omega::ui::Row` are different
-// kinds of thing and a single flat list said so about neither.
+// that pass through both.
+//
+// Everything else is in a module named for the *kind of field* it holds,
+// because that is the distinction `wiring` already makes and the one that
+// decides what a surface may hold:
+//
+// - `reading`   — what is true of the machine. Safe on anything.
+// - `composite` — a reading that takes more than one topic to answer.
+// - `record`  — what this unit remembers. Reading one is; writing is not.
+// - `effect`  — what this unit can change. Never on a widget.
+// - `ui`      — what a widget draws with. Not a field at all.
+//
+// `state` was none of these. It named the plane the value lives in rather
+// than the thing being imported, which is why `omega::reading::Battery` read
+// oddly where `omega::ui::Row` does not.
 
 pub use error::{Error, Result};
 pub use plugin::Plugin;
@@ -91,7 +104,7 @@ pub mod config {
 #[doc(hidden)]
 pub mod internal {
     pub use crate::context::Context;
-    pub use crate::state::UnitState;
+    pub use crate::record::UnitState;
     pub use crate::surface::Wired;
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use omega_proto::omega::Capability;

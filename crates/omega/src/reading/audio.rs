@@ -1,6 +1,6 @@
 //! Sound output.
 
-use crate::state::Audio;
+use crate::reading::Audio;
 use crate::units::Percent;
 
 /// What the speakers are doing. To *change* them, hold a `Volume`.

@@ -32,12 +32,11 @@ mod clock;
 mod disk;
 mod idle;
 mod input;
-mod keyspace;
+mod mains;
 mod media;
 mod monitors;
 mod network;
 mod peripherals;
-mod power;
 mod supervised;
 mod system;
 mod vpn;
@@ -52,7 +51,6 @@ pub use omega_proto::SystemTopic;
 pub use bluetooth::BluetoothDevice;
 pub use clock::Weekday;
 pub use disk::Mount;
-pub use keyspace::{Own, UnitState, Watch};
 pub use media::{Playback, Player};
 pub use monitors::Monitor;
 pub use peripherals::{Peripheral, PeripheralKind};
@@ -102,8 +100,8 @@ macro_rules! handles {
 handles! {
     /// The machine's battery.
     Battery: omega_proto::omega::BatteryState,
-    /// Whether it is running on mains.
-    Power: omega_proto::omega::PowerState,
+    /// Whether it is plugged in.
+    Mains: omega_proto::omega::MainsState,
     /// The batteries of things plugged into it.
     Peripherals: omega_proto::omega::PeripheralsState,
 

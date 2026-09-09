@@ -1,6 +1,6 @@
 //! Where the machine keeps things.
 
-use crate::state::Disk;
+use crate::reading::Disk;
 use crate::units::{Bytes, Percent};
 
 /// One mounted filesystem.

@@ -2,7 +2,8 @@
 
 use omega::config::{Fields, Values};
 use omega::effect::{Notify, Session};
-use omega::state::{Battery, Clock, Network, Own, UnitState, Watch};
+use omega::reading::{Battery, Clock, Network};
+use omega::record::{Own, UnitState, Watch};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
     Bind, Button, Field, Glyph, Graph, Grid, Group, Header, Icon, Image, List, Progress, Role, Row,
@@ -934,7 +935,7 @@ fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
 /// Reading a topic that has no typed accessors, only the floor `get()` gives.
 #[derive(omega::Widget)]
 struct Devices {
-    bluetooth: omega::state::Bluetooth,
+    bluetooth: omega::reading::Bluetooth,
 }
 
 impl Widget for Devices {
@@ -987,4 +988,51 @@ fn a_handle_declares_the_topic_its_type_names() {
     let manifest =
         omega::testing::manifest_of(&omega::Plugin::named("devices", "0.1.0").widget::<Devices>());
     assert_eq!(manifest.state_topics, vec!["bluetooth"]);
+}
+
+// ---- composites ----------------------------------------------------------
+
+/// A widget holding a composite rather than its two parts.
+#[derive(omega::Widget)]
+struct Situation {
+    power: omega::composite::Power,
+}
+
+impl Widget for Situation {
+    fn render(&self) -> Ui {
+        Text::new(self.power.status().label()).into()
+    }
+}
+
+#[test]
+fn a_composite_declares_every_topic_it_is_made_of() {
+    // The point of it being a field like any other: the manifest is still the
+    // union of what the fields declare, and a composite is one field that
+    // declares two topics.
+    let manifest = manifest_of(&omega::Plugin::named("situation", "0.1.0").widget::<Situation>());
+    assert_eq!(manifest.state_topics, vec!["battery", "mains"]);
+}
+
+#[test]
+fn a_full_battery_on_the_wall_is_neither_charging_nor_on_battery() {
+    // The case every hand-written version of this got wrong.
+    let full = State::new().battery(1.0, false).mains(true);
+    assert_eq!(Drawn::of::<Situation>(&full).text(), "Fully charged");
+
+    let held = State::new().battery(0.8, false).mains(true);
+    assert_eq!(Drawn::of::<Situation>(&held).text(), "On mains");
+
+    let charging = State::new().battery(0.8, true).mains(true);
+    assert_eq!(Drawn::of::<Situation>(&charging).text(), "Charging");
+
+    let draining = State::new().battery(0.8, false).mains(false);
+    assert_eq!(Drawn::of::<Situation>(&draining).text(), "On battery");
+}
+
+#[test]
+fn a_machine_with_no_battery_is_on_mains_not_flat() {
+    // A desktop. `charge()` is None rather than nought, so nothing reads it as
+    // an empty battery.
+    let desktop = State::new().absent(SystemTopic::Battery).mains(true);
+    assert_eq!(Drawn::of::<Situation>(&desktop).text(), "On mains");
 }

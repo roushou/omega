@@ -2,7 +2,7 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::state::Idle;
+use crate::reading::Idle;
 
 impl Idle {
     /// Whether the session has gone idle.

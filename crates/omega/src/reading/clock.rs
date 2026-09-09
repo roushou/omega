@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::state::Clock;
+use crate::reading::Clock;
 
 /// The wall clock, in the machine's own zone.
 ///
@@ -10,7 +10,7 @@ use crate::state::Clock;
 /// carrying a calendar:
 ///
 /// ```no_run
-/// # use omega::state::Clock;
+/// # use omega::reading::Clock;
 /// # use omega::ui::Text;
 /// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]
@@ -70,7 +70,7 @@ impl Clock {
     /// parser, and a bar wants one of these:
     ///
     /// ```
-    /// # use omega::state::Clock;
+    /// # use omega::reading::Clock;
     /// # fn show(clock: &Clock) -> String {
     /// format!("{} {}", clock.weekday().short(), clock.time())
     /// # }

@@ -1,6 +1,6 @@
 //! The screen's brightness.
 
-use crate::state::Backlight;
+use crate::reading::Backlight;
 use crate::units::Percent;
 
 /// The screen's backlight, as a widget sees it.
@@ -10,7 +10,7 @@ use crate::units::Percent;
 /// [`has_reading`](Backlight::has_reading) answers.
 ///
 /// ```no_run
-/// # use omega::state::Backlight;
+/// # use omega::reading::Backlight;
 /// # use omega::ui::Text;
 /// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]
