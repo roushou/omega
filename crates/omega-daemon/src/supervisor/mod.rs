@@ -253,8 +253,20 @@ impl UnitProcess {
                     }
                 }
                 Err(e) => {
-                    tracing::error!(unit = %self.spec.name, error = %e, "failed to spawn unit");
-                    self.report(Transition::Unspawnable(e.to_string()));
+                    // Named, both times. "No such file or directory" reaches
+                    // `omega status` as a phase with no subject, and which
+                    // path was missing is the whole diagnosis: a build that
+                    // never staged the binary looks exactly like this.
+                    tracing::error!(
+                        unit = %self.spec.name,
+                        program = %self.spec.program.display(),
+                        error = %e,
+                        "failed to spawn unit"
+                    );
+                    self.report(Transition::Unspawnable(format!(
+                        "cannot run {}: {e}",
+                        self.spec.program.display()
+                    )));
                 }
             }
 
@@ -361,8 +373,16 @@ impl UnitProcess {
                 });
             }
             Err(e) => {
-                tracing::error!(unit = %self.spec.name, error = %e, "wait failed");
-                self.report(Transition::Unspawnable(e.to_string()));
+                tracing::error!(
+                    unit = %self.spec.name,
+                    program = %self.spec.program.display(),
+                    error = %e,
+                    "wait failed"
+                );
+                self.report(Transition::Unspawnable(format!(
+                    "cannot wait on {}: {e}",
+                    self.spec.program.display()
+                )));
             }
         }
     }

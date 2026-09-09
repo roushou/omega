@@ -153,9 +153,14 @@ async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
 
     let statuses = supervisor.statuses();
     assert_eq!(statuses[0].unit, "missing-unit");
+    // Not merely non-empty: a bare "No such file or directory" is what this
+    // reads as to whoever runs `omega status`, and the missing path is the
+    // only part of it that says anything.
     assert!(
-        !statuses[0].detail.is_empty(),
-        "a unit that cannot be spawned says why"
+        statuses[0].detail.contains("/nonexistent/omega"),
+        "a unit that cannot be spawned names the program it could not run, \
+         got {:?}",
+        statuses[0].detail
     );
 
     // Three attempts means two waits: the base delay, then twice it. Jitter
