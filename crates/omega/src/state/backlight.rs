@@ -10,7 +10,9 @@ use crate::units::Percent;
 /// [`has_reading`](Backlight::has_reading) answers.
 ///
 /// ```no_run
-/// # use omega::{Backlight, Text, Ui, Widget};
+/// # use omega::state::Backlight;
+/// # use omega::ui::Text;
+/// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]
 /// struct Brightness {
 ///     backlight: Backlight,

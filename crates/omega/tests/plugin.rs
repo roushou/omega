@@ -1,11 +1,14 @@
 //! What a plugin author writes, and what it costs them.
 
+use omega::config::{Fields, Values};
+use omega::effect::{Notify, Session};
+use omega::state::{Battery, Clock, Network, Own, UnitState, Watch};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
-use omega::{
-    Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Glyph, Graph, Grid, Group,
-    Header, Icon, Image, List, Network, Notify, Own, Percent, Progress, Role, Row, Separator,
-    Session, Slider, Spacer, Text, Toggle, Ui, UnitState, Values, Watch, Widget,
+use omega::ui::{
+    Bind, Button, Field, Glyph, Graph, Grid, Group, Header, Icon, Image, List, Progress, Role, Row,
+    Separator, Slider, Spacer, Text, Toggle,
 };
+use omega::{Answer, Args, Command, Percent, Ui, Widget};
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Capability, Lock, SurfaceKind, action, value};
 
@@ -523,8 +526,10 @@ fn publishing_state_is_an_effect_like_any_other() {
     assert_eq!(published.topic, Mode::address());
     assert_eq!(
         Mode::read(
-            &<omega::Values as omega::FromValue>::from_value(published.value.as_ref().unwrap())
-                .unwrap()
+            &<omega::config::Values as omega::config::FromValue>::from_value(
+                published.value.as_ref().unwrap()
+            )
+            .unwrap()
         ),
         Mode { focus: true }
     );
@@ -929,24 +934,34 @@ fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
 /// Reading a topic that has no typed accessors, only the floor `get()` gives.
 #[derive(omega::Widget)]
 struct Devices {
-    bluetooth: omega::Bluetooth,
+    bluetooth: omega::state::Bluetooth,
 }
 
 impl Widget for Devices {
     fn render(&self) -> Ui {
-        let Some(state) = self.bluetooth.get() else {
+        if !self.bluetooth.has_reading() {
             return Ui::empty();
-        };
-        Text::new(format!("{} paired", state.devices.len())).into()
+        }
+        let charged = self
+            .bluetooth
+            .connected()
+            .into_iter()
+            .filter_map(|device| device.battery())
+            .count();
+        Text::new(format!(
+            "{} paired, {charged} reporting",
+            self.bluetooth.devices().len()
+        ))
+        .into()
     }
 }
 
 #[test]
-fn a_topic_with_no_accessors_is_still_readable() {
-    // The point of generating a handle for every topic: `bluetooth` was
-    // brokered, coalesced and replicated for a dozen commits with no way for
-    // a unit to name it. Nobody has written `paired()` or `is_connected()`
-    // yet, and it is readable anyway.
+fn a_handle_reads_its_topic_through_the_types_it_carries() {
+    // `bluetooth` was brokered, coalesced and replicated for a dozen commits
+    // with no way for a unit to name it. It has a handle now, and typed
+    // accessors over it — including the one that matters here, where BlueZ's
+    // nought means "does not report a battery" rather than a flat one.
     let state = State::new().with(omega_proto::omega::BluetoothState {
         available: true,
         powered: true,
@@ -961,7 +976,7 @@ fn a_topic_with_no_accessors_is_still_readable() {
         }],
     });
 
-    assert_eq!(Drawn::of::<Devices>(&state).text(), "1 paired");
+    assert_eq!(Drawn::of::<Devices>(&state).text(), "1 paired, 1 reporting");
     assert!(Drawn::of::<Devices>(&State::new()).is_empty());
 }
 

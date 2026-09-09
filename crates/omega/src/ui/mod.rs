@@ -3,7 +3,8 @@
 //! A tree of nodes, built by the things it is made of:
 //!
 //! ```
-//! # use omega::{Row, Text, Ui};
+//! # use omega::ui::{Row, Text};
+//! # use omega::Ui;
 //! let ui: Ui = Row::new()
 //!     .gap(6)
 //!     .child(Text::new("80%").bold())
@@ -26,6 +27,9 @@ mod layout;
 mod node;
 mod style;
 mod text;
+
+/// The icon set a shell draws: what [`Icon::new`] names.
+pub use omega_proto::Glyph;
 
 pub use bind::Bind;
 pub use control::{Button, Field, Group, List, Slider, Toggle};

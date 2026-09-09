@@ -27,6 +27,10 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "time", "rt", "sync", "macros"] }
 
 [dev-dependencies]
-omega-proto.workspace = true
+# `json`: the view tests compare a rendered tree against protobuf JSON. Without
+# it here, `cargo test -p omega-rs` fails on its own and passes from the
+# workspace, which is the feature unification catching somebody out rather
+# than telling them anything.
+omega-proto = { workspace = true, features = ["json"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

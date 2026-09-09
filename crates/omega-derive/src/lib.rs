@@ -81,15 +81,15 @@ fn fields_impl(input: TokenStream) -> TokenStream {
     });
 
     quote! {
-        impl ::omega::Fields for #name {
-            fn read(values: &::omega::Values) -> Self {
+        impl ::omega::internal::Fields for #name {
+            fn read(values: &::omega::internal::Values) -> Self {
                 // What the writer left out is what this type says it is.
                 let defaults = <Self as ::core::default::Default>::default();
                 Self { #(#reads,)* }
             }
 
-            fn write(&self) -> ::omega::Values {
-                let mut values = ::omega::Values::new();
+            fn write(&self) -> ::omega::internal::Values {
+                let mut values = ::omega::internal::Values::new();
                 #(#writes)*
                 values
             }
@@ -102,16 +102,16 @@ fn fields_impl(input: TokenStream) -> TokenStream {
         impl ::omega::internal::IntoValue for #name {
             fn into_value(self) -> ::omega::internal::Value {
                 ::omega::internal::IntoValue::into_value(
-                    <Self as ::omega::Fields>::write(&self),
+                    <Self as ::omega::internal::Fields>::write(&self),
                 )
             }
         }
 
         impl ::omega::internal::FromValue for #name {
             fn from_value(value: &::omega::internal::Value) -> ::core::option::Option<Self> {
-                let values: ::omega::Values =
+                let values: ::omega::internal::Values =
                     ::omega::internal::FromValue::from_value(value)?;
-                ::core::option::Option::Some(<Self as ::omega::Fields>::read(&values))
+                ::core::option::Option::Some(<Self as ::omega::internal::Fields>::read(&values))
             }
         }
     }
@@ -131,7 +131,7 @@ pub fn unit_state(input: TokenStream) -> TokenStream {
     let key = kebab(&name.to_string());
 
     let identity = quote! {
-        impl ::omega::UnitState for #name {
+        impl ::omega::internal::UnitState for #name {
             const UNIT: &'static str = env!("CARGO_PKG_NAME");
             const KEY: &'static str = #key;
         }
@@ -234,7 +234,7 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
         let ident = &field.ident;
         let ty = &field.ty;
         if field.is_config {
-            quote! { #ident: <#ty as ::omega::Fields>::read(settings) }
+            quote! { #ident: <#ty as ::omega::internal::Fields>::read(settings) }
         } else {
             quote! {
                 #ident: <#ty as ::omega::internal::Wiring>::build(context)
@@ -243,7 +243,7 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
     });
 
     quote! {
-        impl ::omega::Wired for #name {
+        impl ::omega::internal::Wired for #name {
             fn topics() -> ::std::vec::Vec<::omega::internal::SystemTopic> {
                 let mut topics = ::std::vec::Vec::new();
                 #(#topics)*

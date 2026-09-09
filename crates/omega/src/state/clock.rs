@@ -10,7 +10,9 @@ use crate::state::Clock;
 /// carrying a calendar:
 ///
 /// ```no_run
-/// # use omega::{Clock, Text, Ui, Widget};
+/// # use omega::state::Clock;
+/// # use omega::ui::Text;
+/// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]
 /// struct Bar {
 ///     clock: Clock,
@@ -68,7 +70,7 @@ impl Clock {
     /// parser, and a bar wants one of these:
     ///
     /// ```
-    /// # use omega::Clock;
+    /// # use omega::state::Clock;
     /// # fn show(clock: &Clock) -> String {
     /// format!("{} {}", clock.weekday().short(), clock.time())
     /// # }

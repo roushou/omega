@@ -10,7 +10,7 @@ use omega_proto::omega::{Bind as WireBind, Value};
 /// are what the unit wants handed back with the press:
 ///
 /// ```
-/// # use omega::{Bind, Button};
+/// # use omega::ui::{Bind, Button};
 /// # let ssid = "home";
 /// Button::new("Connect").on_press(Bind::call("connect").arg(ssid));
 /// ```
@@ -20,7 +20,7 @@ use omega_proto::omega::{Bind as WireBind, Value};
 /// genuinely has nothing to say:
 ///
 /// ```
-/// # use omega::Button;
+/// # use omega::ui::Button;
 /// Button::new("Toggle").on_press("toggle");
 /// ```
 #[derive(Debug, Clone, PartialEq)]

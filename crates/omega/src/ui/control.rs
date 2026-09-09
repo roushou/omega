@@ -57,7 +57,8 @@ styled!(Button);
 /// between zero and one:
 ///
 /// ```
-/// # use omega::{Bind, Percent, Slider};
+/// # use omega::ui::{Bind, Slider};
+/// # use omega::Percent;
 /// // `set` is called with ("output", 0.42) when dragged to 42%.
 /// Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output"));
 /// ```
@@ -123,7 +124,7 @@ styled!(Toggle);
 /// the user commits it:
 ///
 /// ```
-/// # use omega::{Bind, Field};
+/// # use omega::ui::{Bind, Field};
 /// # let ssid = "home";
 /// Field::new("Passphrase")
 ///     .secret()
@@ -250,7 +251,7 @@ styled!(List);
 /// handed back when it is chosen:
 ///
 /// ```
-/// # use omega::{Bind, Group, Text};
+/// # use omega::ui::{Bind, Group, Text};
 /// Group::new()
 ///     .option(Text::new("Auto").key("auto"))
 ///     .option(Text::new("5 GHz").key("5"))

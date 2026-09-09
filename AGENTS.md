@@ -120,6 +120,17 @@ which compiles a scaffolded config through the real binaries.
   because a build replaces the state dir and the log explaining the last
   crash has to outlive it.
 
+- The SDK's root is what every unit uses whatever it does — the three
+  surfaces, `Ui`, `Args`/`Answer`, and the reading types. Everything else is
+  in a module named for the kind of thing it is: `omega::state`,
+  `omega::ui`, `omega::effect`, `omega::config`. A flat root said nothing
+  about which of thirty-five names was a handle and which was a node.
+- The derives expand into `::omega::internal::`, never the root. Reaching
+  through the root tied a macro to where a type happened to be re-exported.
+- `omega new`'s template is compiled by `crates/omega/tests/scaffold.rs`. It
+  was `include_str!` text for a long time, and went on generating a unit whose
+  own tests did not compile.
+
 ## Units and settings
 
 - Settings are _construction_, not state: a plugin's fields are built from

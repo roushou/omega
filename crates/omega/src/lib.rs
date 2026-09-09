@@ -7,7 +7,9 @@
 //! the code: `omega build` compiles a plugin and asks it what it declares.
 //!
 //! ```no_run
-//! use omega::{Battery, Text, Ui, Widget};
+//! use omega::state::Battery;
+//! use omega::ui::Text;
+//! use omega::{Ui, Widget};
 //!
 //! #[derive(omega::Widget)]
 //! struct Charge {
@@ -37,54 +39,59 @@
 //! both may hold effects, because both run when there is a reason to.
 
 mod context;
-mod effect;
 mod error;
 mod mirror;
 mod plugin;
 mod registry;
 mod runtime;
-mod state;
 mod surface;
-mod ui;
 mod units;
 
+pub mod effect;
+pub mod state;
 pub mod testing;
+pub mod ui;
 pub mod wiring;
 
-pub use effect::{Brightness, Notification, Notify, Session, Shell, Volume};
+// ---- what a plugin is -------------------------------------------------
+//
+// The root is the vocabulary every unit uses whatever it does: the three
+// surfaces, what they are called with, what they answer, and the readings
+// that pass through both. Everything a unit reaches for *sometimes* is in a
+// module named for the kind of thing it is, so a `use` line says what it is
+// bringing in — `omega::state::Battery` and `omega::ui::Row` are different
+// kinds of thing and a single flat list said so about neither.
+
 pub use error::{Error, Result};
 pub use plugin::Plugin;
-pub use state::{
-    AccessPoint, Audio, Backlight, Battery, Bluetooth, BluetoothDevice, Clock, Disk, Focused, Idle,
-    Input, Load, Media, Memory, Monitor, Monitors, Mount, Network, Own, Peripheral, PeripheralKind,
-    Peripherals, Playback, Player, Power, System, Tunnel, UnitPhase, UnitReport, UnitState, Units,
-    Vpn, Watch, Weekday, Wifi, Window, Workspace, Workspaces,
-};
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
-pub use ui::{
-    Align, Bind, Button, Column, Field, Graph, Grid, Group, Header, Icon, Image, List, Node,
-    Progress, Role, Row, Separator, Size, Slider, Spacer, Stack, Text, Toggle, Ui,
-};
+
+/// What `Widget::render` hands back. Part of the surface's contract, so it
+/// lives beside the trait rather than with the nodes it is built from.
+pub use ui::Ui;
+
+/// What a reaction is called with.
+pub use omega_proto::omega::{Event, EventKind};
+
+/// The units a reading is in. At the root because they cross every
+/// boundary — a handle hands one back, a node draws one, a setting is
+/// compared against one.
 pub use units::{Bytes, Percent, Remaining, Uptime};
 
 pub use omega_derive::{Command, Config, Reaction, UnitState, Widget};
 
-/// A struct that is a map of values: what `#[derive(Config)]` implements.
-pub use omega_proto::{Fields, FromValue, IntoValue, Values};
-
-/// The events a reaction can answer.
-pub use omega_proto::omega::{Event, EventKind};
-
-/// Naming a topic, for a test that describes a machine which has none of it.
-/// Reading one is a field like [`Battery`], never this.
-pub use omega_proto::Glyph;
-pub use omega_proto::SystemTopic;
+/// Settings: the values a document hands an instance, and what
+/// `#[derive(Config)]` implements to read them.
+pub mod config {
+    pub use omega_proto::{Fields, FromValue, IntoValue, Values};
+}
 
 /// Internals the derives expand into. Not a stable surface: write
 /// `#[derive(Widget)]`, not this.
 #[doc(hidden)]
 pub mod internal {
     pub use crate::context::Context;
+    pub use crate::state::UnitState;
     pub use crate::surface::Wired;
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use omega_proto::omega::Capability;

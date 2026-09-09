@@ -13,7 +13,9 @@
 //! `cargo test`: a widget is a function from state to a view, and the tests
 //! at the bottom of this file call it without a daemon anywhere.
 
-use omega::{Battery, Plugin, Row, Text, Ui, Widget};
+use omega::state::Battery;
+use omega::ui::{Role, Row, Text};
+use omega::{Plugin, Ui, Widget};
 
 /// This plugin's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -49,7 +51,7 @@ impl Widget for BatteryWidget {
 
         let charge = self.battery.charge();
         let label = if charge < self.settings.low {
-            Text::new(charge).color("urgent").bold()
+            Text::new(charge).color(Role::Urgent).bold()
         } else {
             Text::new(charge).bold()
         };
@@ -73,7 +75,7 @@ pub fn plugin() -> Plugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use omega::Fields;
+    use omega::config::Fields;
     use omega::testing::{Drawn, State};
 
     #[test]
@@ -96,7 +98,7 @@ mod tests {
 
     #[test]
     fn a_machine_with_no_battery_draws_nothing() {
-        let state = State::new().absent(omega::SystemTopic::Battery);
+        let state = State::new().absent(omega::state::SystemTopic::Battery);
         assert!(Drawn::of::<BatteryWidget>(&state).is_empty());
     }
 
@@ -107,6 +109,9 @@ mod tests {
         // Reading the battery is the only thing this plugin can do, and the
         // only thing it asked for.
         assert_eq!(manifest.state_topics, vec!["battery"]);
-        assert_eq!(manifest.capabilities, vec!["CAPABILITY_STATE_READ"]);
+        assert_eq!(
+            manifest.granted().unwrap(),
+            vec![omega::internal::Capability::StateRead]
+        );
     }
 }

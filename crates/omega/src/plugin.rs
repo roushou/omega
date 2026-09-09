@@ -6,7 +6,9 @@
 //! list, arrived at once.
 //!
 //! ```no_run
-//! # use omega::{Battery, Text, Ui, Widget};
+//! # use omega::state::Battery;
+//! # use omega::ui::Text;
+//! # use omega::{Ui, Widget};
 //! # #[derive(omega::Widget)]
 //! # struct Charge { battery: Battery }
 //! # impl Widget for Charge {

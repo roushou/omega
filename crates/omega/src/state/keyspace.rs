@@ -13,7 +13,7 @@
 //! break.
 //!
 //! ```no_run
-//! # use omega::{Own, Watch};
+//! # use omega::state::{Own, Watch};
 //! #[derive(omega::UnitState, Default, Clone)]
 //! pub struct Power {
 //!     pub on: bool,

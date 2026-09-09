@@ -14,10 +14,12 @@
 //! is what keeps the indicator from waking every time a signal jitters three
 //! rooms away.
 
-use omega::{
-    AccessPoint, Answer, Args, Bind, Button, Column, Command, Field, Glyph, Graph, Icon, List,
-    Network, Own, Percent, Progress, Role, Row, Shell, Stack, Text, Ui, Watch, Widget, Wifi,
+use omega::effect::Shell;
+use omega::state::{AccessPoint, Network, Own, Watch, Wifi};
+use omega::ui::{
+    Bind, Button, Column, Field, Glyph, Graph, Icon, List, Progress, Role, Row, Stack, Text,
 };
+use omega::{Answer, Args, Command, Percent, Ui, Widget};
 
 /// This unit's name, for the config plane to refer to it by.
 pub const UNIT: &str = "wifi";

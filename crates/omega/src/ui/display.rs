@@ -32,7 +32,7 @@ styled!(Progress);
 /// [`Progress`] answers "how much"; this answers "and before that".
 ///
 /// ```
-/// # use omega::Graph;
+/// # use omega::ui::Graph;
 /// # let latencies = vec![14.0, 19.0, 12.0, 44.0, 15.0];
 /// Graph::new(latencies);
 /// ```
@@ -43,7 +43,7 @@ styled!(Progress);
 /// the frame and look like a machine on fire:
 ///
 /// ```
-/// # use omega::Graph;
+/// # use omega::ui::Graph;
 /// # let cpu = vec![3.0, 4.0, 2.0];
 /// Graph::new(cpu).range(0.0, 100.0);
 /// ```
@@ -89,7 +89,7 @@ styled!(Graph);
 /// node draws nothing rather than reaching out.
 ///
 /// ```
-/// # use omega::Image;
+/// # use omega::ui::Image;
 /// Image::new("/home/me/.cache/art.png");
 /// ```
 ///
