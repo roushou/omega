@@ -13,6 +13,7 @@ pub mod stream;
 pub mod toml;
 pub mod topic;
 mod transport;
+pub mod ui;
 pub mod values;
 
 pub use action::ActionKind;
@@ -30,6 +31,7 @@ pub use stream::{DaemonStreams, PeerStreams};
 pub use toml::{ReadError, Table, Toml, TomlDoc, TomlError, TomlFile, TomlSchema, Validated};
 pub use topic::{SystemTopic, Topic, TopicError, TopicValue};
 pub use transport::{ReadHalf, Socket, Transport, WriteHalf};
+pub use ui::{NodeKind, Prop, PropKind};
 pub use values::{Fields, FromValue, IntoValue, Values};
 
 pub use omega::Frame;

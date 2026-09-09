@@ -13,7 +13,7 @@ Rectangle {
 
     Rectangle {
         width: track.width
-            * Math.max(0, Math.min(1, Props.fraction(track.host.model, "value", 0)))
+            * Math.max(0, Math.min(1, Props.progressValue(track.host.model)))
         height: track.height
         radius: track.radius
         color: track.host.ink

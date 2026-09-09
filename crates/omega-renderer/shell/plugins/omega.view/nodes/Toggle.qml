@@ -12,7 +12,7 @@ Rectangle {
     required property var host
 
     readonly property var bound: Props.bind(host.model, "change")
-    readonly property bool published: Props.flag(host.model, "on", false)
+    readonly property bool published: Props.toggleOn(host.model)
 
     // Null until pressed, then the state we are showing until the unit
     // publishes one of its own.

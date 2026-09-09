@@ -13,7 +13,7 @@ Rectangle {
 
     readonly property var bound: Props.bind(host.model, "change")
     readonly property real published:
-        Math.max(0, Math.min(1, Props.fraction(host.model, "value", 0)))
+        Math.max(0, Math.min(1, Props.sliderValue(host.model)))
 
     property bool dragging: false
     property real held: 0

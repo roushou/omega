@@ -17,8 +17,8 @@ Rectangle {
 
     readonly property var bound: Props.bind(host.model, "activate")
     readonly property var wanted: Props.children(host.model)
-    readonly property int gap: Props.number(host.model, "gap", 0)
-    readonly property int fixedHeight: Props.number(host.model, "height", 0)
+    readonly property int gap: Props.listGap(host.model)
+    readonly property int fixedHeight: Props.height(host.model)
 
     // Which row the cursor is on. -1 is none, which is where a list starts:
     // showing a selection nobody made would have the first Enter do something

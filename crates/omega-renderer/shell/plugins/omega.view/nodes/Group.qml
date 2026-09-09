@@ -13,7 +13,7 @@ Row {
     required property var host
 
     readonly property var bound: Props.bind(host.model, "select")
-    readonly property string chosen: Props.text(host.model, "selected", "")
+    readonly property string chosen: Props.groupSelected(host.model)
 
     spacing: 1
 

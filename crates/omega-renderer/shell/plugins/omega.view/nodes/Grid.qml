@@ -10,8 +10,8 @@ Grid {
     id: grid
     required property var host
 
-    columns: Math.max(1, Props.number(host.model, "columns", 1))
-    spacing: Props.number(host.model, "gap", 0)
+    columns: Math.max(1, Props.gridColumns(host.model))
+    spacing: Props.gridGap(host.model)
 
     Repeater {
         model: Props.children(grid.host.model)

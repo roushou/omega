@@ -12,9 +12,9 @@ Text {
 
     readonly property var bound: Props.bind(host.model, "press")
 
-    text: Props.text(host.model, "label", "")
+    text: Props.buttonLabel(host.model)
     color: host.ink
-    font.bold: Props.flag(host.model, "bold", false)
+    font.bold: Props.bold(host.model)
     verticalAlignment: Text.AlignVCenter
 
     MouseArea {

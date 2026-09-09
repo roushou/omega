@@ -5,8 +5,8 @@ import "../Props.js" as Props
 Text {
     required property var host
 
-    text: Props.text(host.model, "text", "")
+    text: Props.textText(host.model)
     color: host.ink
-    font.bold: Props.flag(host.model, "bold", false)
+    font.bold: Props.bold(host.model)
     verticalAlignment: Text.AlignVCenter
 }

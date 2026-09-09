@@ -10,9 +10,9 @@ Canvas {
     id: graph
     required property var host
 
-    readonly property var points: Props.fractions(host.model, "points")
-    readonly property real low: Props.fraction(host.model, "low", 0)
-    readonly property real high: Props.fraction(host.model, "high", 0)
+    readonly property var points: Props.graphPoints(host.model)
+    readonly property real low: Props.graphLow(host.model)
+    readonly property real high: Props.graphHigh(host.model)
 
     // Given a range, use it. Given none — or one that is not a range — scale
     // to the data, which is right for a latency and wrong for a percentage.

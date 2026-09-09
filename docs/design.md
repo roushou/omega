@@ -272,8 +272,18 @@ in its address space. Third-party data is a unit writing its own keyspace.
 This is also what keeps the broker list finite — weather, calendar, mail,
 package updates, Docker and git status are units, not brokers.
 
-**Generating the QML prop readers.** The pinning test already exists and
-works. A build-time generator is more machinery than the drift justifies.
+**Generating the QML prop readers.** Taken after all, once the pinning test's
+limit showed. It pins the shapes the _wire_ carries, which is a different
+question from whether anything reads them: `tooltip` and `pad` were published
+on every render by a shell that has never read either, and every gate stayed
+green. A name is now spelled once, in `omega-proto`'s node table —
+`NodeKind`, the third table of the shape `SystemTopic` and `ActionKind`
+already have. `Props.js` is generated from it, so a shell calls
+`Props.textText(node)` and never names a prop itself; the SDK is checked
+against it; and a prop nothing draws is a line in `NOT_DRAWN` with a reason
+or a failing test. Not a build-time generator, though — the file is checked
+in and a test regenerates and compares, because the renderer's tree travels
+inside the binary, is asserted against the directory on disk, and is linted.
 
 **A layout engine.** Quickshell has one.
 

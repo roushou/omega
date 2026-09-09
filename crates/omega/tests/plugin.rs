@@ -558,46 +558,54 @@ fn wire(ui: Ui) -> serde_json::Value {
     serde_json::to_value(ui.into_tree()).unwrap()
 }
 
+/// One of every node kind, with the props that make each one what it is.
+///
+/// Shared by the two tests below, which ask different things of it: one pins
+/// the shapes the wire carries, the other that every prop on it is a prop the
+/// vocabulary declares. Both are only as exhaustive as this is, so it is one
+/// tree rather than two that drift.
+fn every_node() -> Ui {
+    Row::new()
+        .gap(6)
+        .child(Text::new("80%").bold().color("urgent"))
+        .child(Icon::new("battery"))
+        .child(Progress::new(Percent::of(0.7)))
+        .child(Button::new("toggle").on_press("toggle"))
+        .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))
+        .child(Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output")))
+        .child(Toggle::new(true).on_change("mute"))
+        .child(
+            Field::new("Passphrase")
+                .secret()
+                .on_submit(Bind::call("connect").arg("home")),
+        )
+        .child(
+            List::new()
+                .child(Text::new("home").key("home"))
+                .on_activate("select"),
+        )
+        .child(Header::new("Networks"))
+        .child(Separator::new())
+        .child(Spacer::new().width(8))
+        .child(Button::new("Forget").on_press("forget").disabled())
+        .child(Button::new("Connecting").on_press("cancel").busy())
+        .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
+        .child(
+            Group::new()
+                .option(Text::new("Auto").key("auto"))
+                .option(Text::new("5 GHz").key("5"))
+                .selected("auto")
+                .on_select("band"),
+        )
+        .child(Grid::new(2).gap(4).child(Text::new("Sent")))
+        .child(Image::new("/tmp/art.png"))
+        .child(Image::new("https://example.invalid/art.png"))
+        .into()
+}
+
 #[test]
 fn every_node_kind_carries_the_props_the_renderer_reads() {
-    let tree = wire(
-        Row::new()
-            .gap(6)
-            .child(Text::new("80%").bold().color("urgent"))
-            .child(Icon::new("battery"))
-            .child(Progress::new(Percent::of(0.7)))
-            .child(Button::new("toggle").on_press("toggle"))
-            .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))
-            .child(Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output")))
-            .child(Toggle::new(true).on_change("mute"))
-            .child(
-                Field::new("Passphrase")
-                    .secret()
-                    .on_submit(Bind::call("connect").arg("home")),
-            )
-            .child(
-                List::new()
-                    .child(Text::new("home").key("home"))
-                    .on_activate("select"),
-            )
-            .child(Header::new("Networks"))
-            .child(Separator::new())
-            .child(Spacer::new().width(8))
-            .child(Button::new("Forget").on_press("forget").disabled())
-            .child(Button::new("Connecting").on_press("cancel").busy())
-            .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
-            .child(
-                Group::new()
-                    .option(Text::new("Auto").key("auto"))
-                    .option(Text::new("5 GHz").key("5"))
-                    .selected("auto")
-                    .on_select("band"),
-            )
-            .child(Grid::new(2).gap(4).child(Text::new("Sent")))
-            .child(Image::new("/tmp/art.png"))
-            .child(Image::new("https://example.invalid/art.png"))
-            .into(),
-    );
+    let tree = wire(every_node());
 
     let root = &tree["root"];
     assert_eq!(root["type"], "stack");
@@ -716,6 +724,60 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     // already has rather than rebuilding it.
     assert_eq!(root["key"], "root");
     assert_eq!(children[3]["key"], "root.3");
+}
+
+#[test]
+fn the_sdk_emits_only_props_the_vocabulary_declares() {
+    // The third party to an agreement the other two now keep between them.
+    // `Props.js` is generated from the node table, so a shell cannot read a
+    // name nothing publishes — which is worth nothing if the SDK publishes a
+    // name the table has never heard of. Then the prop is on the wire, no
+    // reader exists for it, and the widget draws the fallback in silence.
+    //
+    // The tree below is the one the pinning test builds, walked instead of
+    // indexed: every node in it, whatever it is.
+    let tree = wire(every_node());
+    let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+
+    walk(&tree["root"], &mut |node| {
+        let kind = node["type"].as_str().expect("a node names its kind");
+        let kind = omega_proto::NodeKind::parse(kind)
+            .unwrap_or_else(|| panic!("the SDK emits the kind {kind:?}, which the table lacks"));
+        seen.insert(kind.name());
+
+        let Some(props) = node["props"].as_object() else {
+            return;
+        };
+        for name in props.keys() {
+            assert!(
+                kind.every_prop().any(|prop| prop.name == name),
+                "the SDK sets {name:?} on a {kind}, which the table does not declare — \
+                 nothing generates a reader for it, so no shell can draw it"
+            );
+        }
+    });
+
+    // And the tree stays exhaustive, or the check above is only as good as
+    // whatever somebody last remembered to add to it.
+    for kind in omega_proto::NodeKind::ALL {
+        assert!(
+            seen.contains(kind.name()),
+            "{kind} is in the vocabulary and this tree never builds one"
+        );
+    }
+}
+
+/// Every node in a tree, parents before children.
+fn walk(node: &serde_json::Value, each: &mut impl FnMut(&serde_json::Value)) {
+    if !node.is_object() {
+        return;
+    }
+    each(node);
+    if let Some(children) = node["children"].as_array() {
+        for child in children {
+            walk(child, each);
+        }
+    }
 }
 
 #[test]

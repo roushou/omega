@@ -171,10 +171,21 @@ which compiles a scaffolded config through the real binaries.
 - `ViewNode.qml` puts one item on screen per node and recurses. An unknown
   node kind draws nothing, so a tree from a newer plugin degrades to the parts
   this shell understands.
-- Props are pinned in Rust
-  (`every_node_kind_carries_the_props_the_renderer_reads`) because QML cannot
-  compile against the SDK's types. Protobuf JSON writes int64 as a _string_:
-  `Props.js` parses, and a reader that forgets lays out a NaN.
+- The prop vocabulary is `omega-proto`'s `NodeKind` table — the third of the
+  shape `SystemTopic` and `ActionKind` have, and in that crate rather than the
+  SDK because the renderer reads it and the daemon depends on the renderer.
+  `Props.js` is _generated_ from it (`omega_renderer::Props`, checked in, with
+  a test that regenerates and compares — `OMEGA_REGENERATE=1` writes it), so a
+  shell calls `Props.textText(node)` and never spells a prop name itself. One
+  reader per (kind, prop) because one name means two things: `value` is a
+  fraction on a slider and a string on a field. Protobuf JSON writes int64 as
+  a _string_, which is why `Number` and `Fraction` are separate kinds — a
+  reader that forgets lays out a NaN.
+- Three tests hold the vocabulary and its readers together: the SDK emits only
+  props it declares, the shell calls only accessors it generates, and a prop
+  nothing draws is a line in `NOT_DRAWN` with a reason. The wire shapes are
+  still pinned separately (`every_node_kind_carries_the_props_the_renderer_reads`);
+  both read one tree, `every_node()`, so neither is more exhaustive than the other.
 - The manifest's `version` is pinned to the crate's by a test rather than
   patched at install time. A second test asserts the carried file list _is_
   the directory on disk. Installing swaps a staged directory in, which is what

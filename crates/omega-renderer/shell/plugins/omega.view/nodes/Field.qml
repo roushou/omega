@@ -16,8 +16,8 @@ Rectangle {
     required property var host
 
     readonly property var bound: Props.bind(host.model, "submit")
-    readonly property string given: Props.text(host.model, "value", "")
-    readonly property bool secret: Props.flag(host.model, "secret", false)
+    readonly property string given: Props.fieldValue(host.model)
+    readonly property bool secret: Props.fieldSecret(host.model)
 
     onGivenChanged: input.text = field.given
     Component.onCompleted: input.text = field.given
@@ -47,7 +47,7 @@ Rectangle {
         Text {
             anchors.fill: parent
             verticalAlignment: Text.AlignVCenter
-            text: Props.text(field.host.model, "placeholder", "")
+            text: Props.fieldPlaceholder(field.host.model)
             color: field.host.ink
             opacity: 0.5
             visible: input.text === ""

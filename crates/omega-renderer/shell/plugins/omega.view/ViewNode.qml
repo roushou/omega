@@ -34,16 +34,16 @@ Item {
     // Whether this node may be used. Resolved here rather than in each
     // delegate so a new one gets it by reading `host.interactive`, and so the
     // two reasons a node is unusable are drawn the same way.
-    readonly property bool disabled: Props.flag(node.model, "disabled", false)
-    readonly property bool busy: Props.flag(node.model, "busy", false)
+    readonly property bool disabled: Props.disabled(node.model)
+    readonly property bool busy: Props.busy(node.model)
     readonly property bool interactive: !node.disabled && !node.busy
 
     signal invoke(var bound, var value)
 
     // What a node asked to be, or what it draws. A panel that has to line
     // two columns up says so; everything else is its own size.
-    readonly property int fixedWidth: Props.number(node.model, "width", 0)
-    readonly property int fixedHeight: Props.number(node.model, "height", 0)
+    readonly property int fixedWidth: Props.width(node.model)
+    readonly property int fixedHeight: Props.height(node.model)
 
     implicitWidth: node.fixedWidth > 0 ? node.fixedWidth : content.implicitWidth
     implicitHeight: node.fixedHeight > 0 ? node.fixedHeight : content.implicitHeight
@@ -78,9 +78,9 @@ Item {
     // A colour a node asked for, or the one it inherited. A theme name is
     // resolved here; anything else is taken literally, so `#ff8800` works.
     function colorOf() {
-        var named = Props.text(node.model, "color", "")
+        var named = Props.color(node.model)
         var base = named === "" ? node.foreground : node.themed(named)
-        return Props.flag(node.model, "dim", false)
+        return Props.dim(node.model)
             ? Qt.rgba(base.r, base.g, base.b, 0.6)
             : base
     }

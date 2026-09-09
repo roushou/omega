@@ -14,8 +14,10 @@
 
 mod host;
 mod installed;
+mod props;
 mod renderer;
 
 pub use host::HostShell;
 pub use installed::Installed;
+pub use props::Props;
 pub use renderer::{Asset, Renderer};

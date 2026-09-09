@@ -9,7 +9,7 @@ import "../Props.js" as Props
 Text {
     required property var host
 
-    text: Props.text(host.model, "text", "")
+    text: Props.headerText(host.model)
     color: host.ink
     font.bold: true
     font.pointSize: Math.max(1, Qt.application.font.pointSize - 1)

@@ -10,7 +10,7 @@ import "../Props.js" as Props
 Image {
     required property var host
 
-    source: Props.text(host.model, "source", "")
+    source: Props.imageSource(host.model)
     visible: source !== "" && status === Image.Ready
     asynchronous: true
     cache: true

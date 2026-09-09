@@ -19,7 +19,7 @@ Loader {
     required property var host
 
     readonly property bool column:
-        Props.text(host.model, "align", "row") === "column"
+        Props.stackAlign(host.model) === "column"
 
     sourceComponent: stack.column ? columnLayout : rowLayout
 
@@ -80,7 +80,7 @@ Loader {
     Component {
         id: rowLayout
         Row {
-            spacing: Props.number(stack.host.model, "gap", 0)
+            spacing: Props.stackGap(stack.host.model)
             Repeater {
                 model: rows
                 delegate: childNode
@@ -91,7 +91,7 @@ Loader {
     Component {
         id: columnLayout
         Column {
-            spacing: Props.number(stack.host.model, "gap", 0)
+            spacing: Props.stackGap(stack.host.model)
             Repeater {
                 model: rows
                 delegate: childNode

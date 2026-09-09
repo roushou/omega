@@ -16,7 +16,7 @@ Text {
     required property var host
 
     text: {
-        var name = Props.text(host.model, "name", "")
+        var name = Props.iconName(host.model)
         var glyph = Icons.glyph(name)
         return glyph === "" ? name : glyph
     }
