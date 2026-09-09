@@ -203,13 +203,10 @@ async fn a_unit_renders_every_instance_the_document_gives_it() {
 
 /// A unit with two view surfaces: one for the slot, one for the popout.
 fn wifi_manifest() -> omega_proto::Manifest {
-    omega_proto::Manifest {
-        surfaces: vec![
-            omega_proto::Surface::new(surface("indicator"), SurfaceKind::Widget),
-            omega_proto::Surface::new(surface("details"), SurfaceKind::Widget),
-        ],
-        ..widget_manifest("wifi", "indicator")
-    }
+    widget_manifest("wifi", "indicator").exposing([
+        omega_proto::Surface::new(&surface("indicator"), SurfaceKind::Widget),
+        omega_proto::Surface::new(&surface("details"), SurfaceKind::Widget),
+    ])
 }
 
 fn wifi_provider(hub: Hub, units: UnitTable) -> BarProvider {

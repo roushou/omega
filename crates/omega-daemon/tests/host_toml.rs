@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use omega_daemon::host::cargo::{
     CargoManifest, CargoSlot, Dependencies, Dependency, DependencySpec, Package, Workspace,
 };
-use omega_proto::{Layout, UnitName};
-use omega_proto::{Table, Toml, TomlFile};
+use omega_host::Layout;
+use omega_host::{Table, Toml, TomlFile};
+use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 

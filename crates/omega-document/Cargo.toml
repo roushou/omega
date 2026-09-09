@@ -15,6 +15,7 @@ description = "Omega's configuration plane: the state document, and the API a co
 workspace = true
 
 [dependencies]
-omega-proto.workspace = true
+omega-host.workspace = true
+omega-proto = { workspace = true, features = ["json"] }
 serde_json.workspace = true
 thiserror.workspace = true

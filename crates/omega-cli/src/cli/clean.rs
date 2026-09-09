@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use omega_proto::Layout;
+use omega_host::Layout;
 
 use crate::ui::{Paint, Step, Ui};
 

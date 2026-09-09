@@ -19,22 +19,29 @@ workspace = true
 [package.metadata.cargo-shear]
 ignored = ["pbjson"]
 
+[features]
+default = []
+# The canonical protobuf JSON mapping: the observation socket's encoding, and
+# the only thing in this crate a unit never needs. Off by default so a plugin
+# binary does not carry serde impls for the whole ontology to speak a socket
+# it never opens.
+json = ["dep:pbjson", "dep:serde_json"]
+
 [dependencies]
 bytes = "1"
 futures-util = { version = "0.3", features = ["sink"] }
 hex = "0.4"
-pbjson = "0.9"
+pbjson = { version = "0.9", optional = true }
 prost = "0.14"
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, optional = true }
 sha2 = "0.10"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "time"] }
 tokio-util = { version = "0.7", features = ["codec"] }
-toml = "1"
-toml_edit = { version = "0.25", features = ["serde"] }
 
 [dev-dependencies]
+omega-proto = { path = ".", features = ["json"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [build-dependencies]

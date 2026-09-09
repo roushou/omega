@@ -13,7 +13,8 @@
 use anyhow::bail;
 
 use omega_daemon::host::cargo::{CargoManifest, CargoSlot};
-use omega_proto::{AtomicFile, Layout, UnitName};
+use omega_host::{AtomicFile, Layout};
+use omega_proto::UnitName;
 
 use crate::scaffold::Scaffold;
 use crate::ui::{Paint, Step, Ui};

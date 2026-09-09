@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package omega;
 
-// Unit ontology: the enums that appear on the wire (capabilities in Welcome)
-// or parse author-facing manifest names. The manifest itself is TOML
-// (unit.toml), never protobuf — this file only carries the enums.
+import "omega/event.proto";
+
+// Unit ontology: what a unit asks for, and the enums that grant it.
 
 enum Capability {
   CAPABILITY_UNSPECIFIED = 0;
@@ -26,6 +26,37 @@ enum SurfaceKind {
   SURFACE_KIND_UNSPECIFIED = 0;
   SURFACE_KIND_WIDGET = 1;
   SURFACE_KIND_COMMAND = 2;
-  SURFACE_KIND_SCHEDULE = 3;
-  SURFACE_KIND_AGENT_TOOL = 4;
+}
+
+// What a unit asks for, and therefore what the daemon grants it.
+//
+// Not a file anyone writes: a manifest is what a plugin's own fields add up
+// to. The plugin prints it, the build stages it beside the binary, and the
+// daemon reads it back — so the grants a unit runs under are decided before
+// it is ever spawned, and never by the unit itself at runtime.
+//
+// It is also the thing a peer proves itself against at the handshake: Hello
+// carries the sha256 of this message's canonical encoding, and the daemon
+// recomputes that from its own copy. Canonical means every repeated field
+// sorted and deduplicated, then encoded in tag order — so two builds of the
+// same plugin, in any language, agree on the hash without agreeing on a
+// serializer.
+message Manifest {
+  string name = 1;
+  string version = 2;
+  repeated Capability capabilities = 3;
+  repeated Surface surfaces = 4;
+
+  // Topic addresses: a system topic by name, or `unit.<name>.<key>` for
+  // another unit's keyspace. A string rather than an enum because the second
+  // kind is open — see Address.
+  repeated string state_topics = 5;
+
+  repeated EventKind events = 6;
+}
+
+// One face a unit exposes, and what kind of face it is.
+message Surface {
+  string id = 1;
+  SurfaceKind kind = 2;
 }

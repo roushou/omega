@@ -7,8 +7,9 @@
 
 use std::path::PathBuf;
 
-use omega_proto::{Layout, UnitName};
-use omega_proto::{TomlFile, TomlSchema};
+use omega_host::Layout;
+use omega_host::{TomlFile, TomlSchema};
+use omega_proto::UnitName;
 use serde::{Deserialize, Serialize};
 
 /// A built unit the daemon should run. Paths are relative to the state dir,

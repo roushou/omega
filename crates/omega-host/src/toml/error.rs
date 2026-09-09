@@ -60,15 +60,3 @@ impl TomlError {
         }
     }
 }
-
-/// A document that parsed but does not satisfy its schema's invariants.
-#[derive(Debug, thiserror::Error)]
-pub enum ReadError<E>
-where
-    E: std::error::Error + 'static,
-{
-    #[error(transparent)]
-    Toml(#[from] TomlError),
-    #[error(transparent)]
-    Invalid(E),
-}

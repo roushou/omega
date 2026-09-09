@@ -14,10 +14,10 @@ use common::{TempDir, widget_manifest};
 use omega_daemon::host::StateConfig;
 use omega_daemon::{Daemon, DaemonHandle};
 use omega_document::{Document, DocumentFile, Units};
-use omega_proto::Manifest;
+use omega_host::Layout;
+use omega_proto::UnitName;
 use omega_proto::omega::{RestartUnit, StateDocument, invoke, result};
 use omega_proto::{Client, Socket};
-use omega_proto::{Layout, UnitName};
 
 /// A machine as `omega build` leaves it: a state dir holding a document, the
 /// config of what was built, and one directory per unit.
@@ -44,10 +44,11 @@ impl Machine {
         std::fs::write(&binary, program).unwrap();
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        self.layout
-            .file::<Manifest>(&name)
-            .write(&widget_manifest(name.as_str(), "battery"))
-            .unwrap();
+        std::fs::write(
+            self.layout.state_unit_manifest(&name),
+            widget_manifest(name.as_str(), "battery").canonical(),
+        )
+        .unwrap();
 
         self.layout
             .file::<StateConfig>(())

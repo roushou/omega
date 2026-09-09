@@ -6,9 +6,9 @@
 //! can be compared, rather than at each call site by whoever was writing it.
 
 use omega_document::DocumentError;
+use omega_host::TomlError;
 use omega_proto::IdentError;
 use omega_proto::ManifestError;
-use omega_proto::TomlError;
 use omega_proto::{AddressError, Refusal};
 
 use crate::units::RequestError;

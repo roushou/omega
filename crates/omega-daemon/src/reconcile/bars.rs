@@ -112,19 +112,18 @@ impl BarProvider {
             return Err(format!("{unit} is not a unit of this build"));
         };
 
-        let widgets: Vec<&SurfaceId> = entry
+        let widgets: Vec<SurfaceId> = entry
             .manifest
             .surfaces
             .iter()
-            .filter(|surface| matches!(surface.kind(), Ok(SurfaceKind::Widget)))
-            .map(|surface| &surface.id)
+            .filter(|surface| matches!(surface.declared(), Ok(SurfaceKind::Widget)))
+            .filter_map(|surface| surface.surface_id().ok())
             .collect();
 
         if !named.is_empty() {
             return widgets
                 .into_iter()
                 .find(|surface| surface.as_str() == named)
-                .cloned()
                 .ok_or_else(|| format!("{unit} declares no widget surface {named:?}"));
         }
 

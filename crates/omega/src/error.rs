@@ -17,20 +17,34 @@ pub enum Error {
     /// whether the plugin was unknown, ungranted, or asked the impossible.
     #[error("the daemon refused: {0}")]
     Refused(#[from] Refusal),
-    #[error("protocol version mismatch: the daemon speaks v{0}, this plugin speaks v{1}")]
-    VersionMismatch(u32, u32),
+    #[error(
+        "protocol version mismatch: the daemon speaks v{peer}, this plugin speaks v{oldest}..=v{newest} — rebuild it against the running omega"
+    )]
+    VersionMismatch { peer: u32, oldest: u32, newest: u32 },
     /// A plugin's own name, or one of its surfaces', is not a name the
     /// system can address.
     #[error("{0:?} is not a usable name: {1}")]
     Name(String, #[source] omega_proto::IdentError),
     #[error("cannot start a runtime: {0}")]
     Runtime(#[source] std::io::Error),
+    /// The build asked this plugin what it declares and could not read the
+    /// answer.
+    #[error("cannot write the manifest: {0}")]
+    Describe(#[source] std::io::Error),
 }
 
 impl From<HandshakeError> for Error {
     fn from(e: HandshakeError) -> Self {
         match e {
-            HandshakeError::VersionMismatch { peer, ours } => Self::VersionMismatch(peer, ours),
+            HandshakeError::VersionMismatch {
+                peer,
+                oldest,
+                newest,
+            } => Self::VersionMismatch {
+                peer,
+                oldest,
+                newest,
+            },
             other => Self::Daemon(ClientError::Handshake(other)),
         }
     }

@@ -24,15 +24,3 @@ pub trait TomlSchema: Serialize + DeserializeOwned + Sized {
 
     fn locate(layout: &Layout, key: Self::Key<'_>) -> TomlFile<Self>;
 }
-
-/// A schema with invariants that parsing alone cannot establish.
-///
-/// Implementing this puts a rule in one place; every reader gets it by
-/// calling [`TomlFile::read_valid`].
-pub trait Validated: TomlSchema {
-    /// What the document is validated against (the unit it belongs to, say).
-    type Context<'a>;
-    type Invalid: std::error::Error + Send + Sync + 'static;
-
-    fn validate(&self, cx: Self::Context<'_>) -> Result<(), Self::Invalid>;
-}

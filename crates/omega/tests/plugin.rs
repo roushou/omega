@@ -7,7 +7,7 @@ use omega::{
     Spacer, Text, Toggle, Ui, UnitState, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
-use omega_proto::omega::{Lock, action, value};
+use omega_proto::omega::{Capability, Lock, SurfaceKind, action, value};
 
 // ---- the shortest plugin anyone will write ----
 
@@ -57,10 +57,13 @@ fn a_plugins_manifest_is_the_sum_of_its_fields() {
     // to read the battery topic, and asking to read is what costs the
     // capability.
     assert_eq!(manifest.state_topics, vec!["battery"]);
-    assert_eq!(manifest.capabilities, vec!["CAPABILITY_STATE_READ"]);
+    assert_eq!(manifest.granted().unwrap(), vec![Capability::StateRead]);
     assert_eq!(manifest.surfaces.len(), 1);
     assert_eq!(manifest.surfaces[0].id.as_str(), "charge");
-    assert_eq!(manifest.surfaces[0].kind, "SURFACE_KIND_WIDGET");
+    assert_eq!(
+        manifest.surfaces[0].declared().unwrap(),
+        SurfaceKind::Widget
+    );
     assert_eq!(manifest.name.as_str(), "charge");
 }
 
@@ -115,15 +118,13 @@ fn a_plugin_can_draw_and_do_at_once() {
 
     // Two surfaces, of two kinds, from one plugin — and the union of what
     // both need.
-    let kinds: Vec<&str> = manifest
-        .surfaces
-        .iter()
-        .map(|surface| surface.kind.as_str())
-        .collect();
-    assert_eq!(kinds, vec!["SURFACE_KIND_WIDGET", "SURFACE_KIND_COMMAND"]);
     assert_eq!(
-        manifest.capabilities,
-        vec!["CAPABILITY_STATE_READ", "CAPABILITY_SYSTEM_CONTROL"]
+        manifest.surface_kinds().unwrap(),
+        vec![SurfaceKind::Widget, SurfaceKind::Command]
+    );
+    assert_eq!(
+        manifest.granted().unwrap(),
+        vec![Capability::StateRead, Capability::SystemControl]
     );
 }
 
@@ -491,8 +492,8 @@ fn owning_state_declares_the_right_to_publish_it() {
     // Writing needs permission to write; reading somebody's keyspace is what
     // a manifest declares, so both ends of this plugin are in it.
     assert_eq!(
-        manifest.capabilities,
-        vec!["CAPABILITY_STATE_READ", "CAPABILITY_STATE_WRITE"]
+        manifest.granted().unwrap(),
+        vec![Capability::StateRead, Capability::StateWrite]
     );
     assert_eq!(manifest.state_topics, vec![Mode::address()]);
 }

@@ -9,7 +9,8 @@
 use anyhow::bail;
 
 use omega_daemon::host::Units;
-use omega_proto::{Layout, Profile};
+use omega_host::{Layout, Profile};
+use omega_proto::omega::Capability;
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;
@@ -124,13 +125,15 @@ impl CheckCmd {
         // Reading is already spelled out by the topics; what is left is what
         // the plugin can change.
         let effects: Vec<String> = manifest
-            .capabilities
-            .iter()
-            .filter(|capability| *capability != "CAPABILITY_STATE_READ")
+            .granted()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|capability| *capability != Capability::StateRead)
             .map(|capability| {
                 capability
+                    .as_str_name()
                     .strip_prefix("CAPABILITY_")
-                    .unwrap_or(capability)
+                    .unwrap_or_default()
                     .to_lowercase()
             })
             .collect();

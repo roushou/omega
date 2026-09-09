@@ -14,7 +14,7 @@ use anyhow::Context;
 
 use omega_brokers::Brokers;
 use omega_daemon::Daemon;
-use omega_proto::Layout;
+use omega_host::Layout;
 use omega_proto::Socket;
 
 use crate::service::{Installed, Service, ServiceManager};

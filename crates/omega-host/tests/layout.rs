@@ -1,6 +1,7 @@
 //! The on-disk contract.
 
-use omega_proto::{Layout, Profile, UnitName};
+use omega_host::{Layout, Profile};
+use omega_proto::UnitName;
 
 fn layout() -> Layout {
     Layout::at("/c", "/s", "/x")

@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use omega_proto::ActionKind;
 use omega_proto::omega::{
-    Act, Action, ErrorCode, Frame, Invoke, Lock, RunCommand, SetBacklight, StatePatch, action,
-    frame, invoke, set_backlight,
+    Act, Action, Capability, ErrorCode, Frame, Invoke, Lock, RunCommand, SetBacklight, StatePatch,
+    action, frame, invoke, set_backlight,
 };
 
 fn act(stream_id: u64, kind: action::Kind) -> Frame {
@@ -72,13 +72,7 @@ fn dim() -> action::Kind {
 }
 
 fn backlight_manifest(name: &str) -> Manifest {
-    Manifest {
-        capabilities: vec![
-            "CAPABILITY_STATE_READ".into(),
-            "CAPABILITY_BACKLIGHT".into(),
-        ],
-        ..widget_manifest(name, "battery")
-    }
+    widget_manifest(name, "battery").granting([Capability::StateRead, Capability::Backlight])
 }
 
 async fn connected(
@@ -165,13 +159,8 @@ async fn an_action_is_refused_for_its_capability_before_its_implementation() {
 
 #[tokio::test]
 async fn an_authorized_but_unperformable_action_says_so() {
-    let manifest = Manifest {
-        capabilities: vec![
-            "CAPABILITY_STATE_READ".into(),
-            "CAPABILITY_SYSTEM_CONTROL".into(),
-        ],
-        ..widget_manifest("locker", "battery")
-    };
+    let manifest = widget_manifest("locker", "battery")
+        .granting([Capability::StateRead, Capability::SystemControl]);
     let (_harness, mut transport) = connected("act-unimplemented", manifest).await;
 
     transport

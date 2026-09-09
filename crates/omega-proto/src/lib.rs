@@ -1,16 +1,14 @@
 pub mod action;
 pub mod client;
 pub mod codec;
-pub mod fs;
 pub mod handshake;
 pub mod ident;
-pub mod layout;
 pub mod manifest;
+#[cfg(feature = "json")]
 pub mod observation;
 pub mod protocol;
 pub mod refusal;
 pub mod stream;
-pub mod toml;
 pub mod topic;
 mod transport;
 pub mod ui;
@@ -19,16 +17,15 @@ pub mod values;
 pub use action::ActionKind;
 pub use client::{Client, ClientError};
 pub use codec::{CodecError, FrameCodec, MAX_FRAME_LEN};
-pub use fs::{AtomicFile, StageDir, TempPath};
 pub use handshake::{Handshake, HandshakeError};
 pub use ident::{IdentError, ModuleId, SurfaceId, UnitName};
-pub use layout::{Layout, Profile};
-pub use manifest::{Manifest, ManifestError, Surface};
+pub use manifest::ManifestError;
+#[cfg(feature = "json")]
 pub use observation::Observation;
-pub use protocol::{PROTOCOL_VERSION, omega};
+pub use omega::{Manifest, Surface};
+pub use protocol::{MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, effective_version, omega};
 pub use refusal::Refusal;
 pub use stream::{DaemonStreams, PeerStreams};
-pub use toml::{ReadError, Table, Toml, TomlDoc, TomlError, TomlFile, TomlSchema, Validated};
 pub use topic::{Address, AddressError, SystemTopic, TopicValue};
 pub use transport::{ReadHalf, Socket, Transport, WriteHalf};
 pub use ui::{NodeKind, Prop, PropKind};

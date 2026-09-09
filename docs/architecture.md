@@ -118,7 +118,7 @@ Four domains today:
 
 ~/.local/state/omega/     build output
   document.json  units.toml
-  units/<name>/           the binary and its unit.toml
+  units/<name>/           the binary and its unit.pb (the manifest)
 
 ~/.cache/omega/logs/      <unit>.log
 ```

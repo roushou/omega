@@ -21,7 +21,8 @@ libc = "0.2"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 omega-brokers.workspace = true
 omega-document.workspace = true
-omega-proto.workspace = true
+omega-host.workspace = true
+omega-proto = { workspace = true, features = ["json"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

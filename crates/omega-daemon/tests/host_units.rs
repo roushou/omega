@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use omega_daemon::host::Units;
 use omega_daemon::host::cargo::{CargoManifest, CargoSlot, Workspace};
-use omega_proto::{Layout, UnitName};
+use omega_host::Layout;
+use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 

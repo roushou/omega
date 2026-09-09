@@ -1,0 +1,22 @@
+[package]
+name = "omega-host"
+version.workspace = true
+categories = ["filesystem", "config", "os::linux-apis"]
+edition.workspace = true
+homepage.workspace = true
+keywords = ["omega", "toml", "filesystem", "layout"]
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Omega's host side: the filesystem layout, atomic writes, and TOML documents."
+
+[lints]
+workspace = true
+
+[dependencies]
+omega-proto.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml = "1"
+toml_edit = { version = "0.25", features = ["serde"] }

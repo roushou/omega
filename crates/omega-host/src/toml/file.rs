@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use super::{ReadError, TomlError};
+use super::TomlError;
 use crate::fs::AtomicFile;
-use crate::toml::schema::{TomlSchema, Validated};
+use crate::toml::schema::TomlSchema;
 use crate::toml::{Toml, TomlDoc};
 
 /// A typed address: this path holds a document of schema `S`.
@@ -107,14 +107,5 @@ impl<S: TomlSchema> TomlFile<S> {
     /// Load the document as a [`TomlDoc`], which remembers this path.
     pub fn open(&self) -> Result<TomlDoc<S>, TomlError> {
         Ok(TomlDoc::new(self.read()?, self.clone()))
-    }
-}
-
-impl<S: Validated> TomlFile<S> {
-    /// Read, then check the schema's invariants against `cx`.
-    pub fn read_valid(&self, cx: S::Context<'_>) -> Result<S, ReadError<S::Invalid>> {
-        let value = self.read()?;
-        value.validate(cx).map_err(ReadError::Invalid)?;
-        Ok(value)
     }
 }

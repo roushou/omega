@@ -9,8 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use omega_daemon::host::{BuiltUnit, StateConfig};
-use omega_proto::Toml;
-use omega_proto::{Layout, UnitName};
+use omega_host::Layout;
+use omega_host::Toml;
+use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 
@@ -177,7 +178,7 @@ fn a_schema_declares_which_tables_hold_inline_entries() {
         r#"[[units]]
 name = "a-unit"
 program = "units/a-unit/a-unit"
-manifest = "units/a-unit/unit.toml"
+manifest = "units/a-unit/unit.pb"
 "#
     );
 }

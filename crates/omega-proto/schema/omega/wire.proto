@@ -91,7 +91,6 @@ message Invoke {
     // ---- daemon -> unit: surface invocations ----
     CallCommand call_command = 10;
     RenderWidget render_widget = 11;
-    CallAgentTool call_agent_tool = 12;
   }
 }
 
@@ -180,11 +179,6 @@ message RenderWidget {
   map<string, Value> config = 3;
 }
 
-message CallAgentTool {
-  string tool = 1;
-  string input_json = 2;
-}
-
 // The response, correlated by stream_id. Streaming responses send multiple
 // Result frames; the last carries done = true.
 message Result {
@@ -192,7 +186,7 @@ message Result {
     Error error = 1;
     StatePatch state = 2;           // GetState
     ViewTree view = 3;              // RenderWidget
-    Value value = 4;                // CallAgentTool / scalar results
+    Value value = 4;                // scalar results
     CommandOutput output = 5;       // CallCommand (streaming)
     Empty ok = 6;
   }

@@ -12,9 +12,8 @@
 
 use anyhow::{Context, bail};
 
-use omega_proto::Manifest;
-use omega_proto::Validated;
-use omega_proto::{Layout, Profile, UnitName};
+use omega_host::{Layout, Profile};
+use omega_proto::{Manifest, UnitName};
 
 #[derive(Debug)]
 pub struct Describe<'a> {
@@ -50,7 +49,7 @@ impl<'a> Describe<'a> {
             );
         }
 
-        let manifest = Manifest::parse(&String::from_utf8_lossy(&output.stdout))
+        let manifest = Manifest::decode_bytes(&output.stdout)
             .with_context(|| format!("{name} did not answer with a manifest"))?;
 
         // The plugin names itself from its crate; a mismatch means the binary

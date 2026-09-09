@@ -10,7 +10,7 @@
 //! own line, so what this did stays visible and individually re-runnable.
 
 use omega_daemon::host::cargo::{CargoManifest, CargoSlot};
-use omega_proto::{AtomicFile, Layout};
+use omega_host::{AtomicFile, Layout};
 
 use crate::cli::link::LinkCmd;
 use crate::scaffold::Scaffold;

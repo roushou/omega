@@ -19,7 +19,7 @@
 
 use std::collections::BTreeSet;
 
-use omega_proto::omega::{Capability, EventKind, SurfaceKind};
+use omega_proto::omega::{EventKind, SurfaceKind};
 use omega_proto::{Address, SystemTopic};
 use omega_proto::{Manifest, Surface};
 
@@ -114,7 +114,7 @@ impl Plugin {
         for widget in &self.widgets {
             widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
-                omega_proto::SurfaceId::parse(widget.surface.clone())
+                &omega_proto::SurfaceId::parse(widget.surface.clone())
                     .map_err(|source| Error::Name(widget.surface.clone(), source))?,
                 SurfaceKind::Widget,
             ));
@@ -122,7 +122,7 @@ impl Plugin {
         for command in &self.commands {
             command.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
-                omega_proto::SurfaceId::parse(command.name.clone())
+                &omega_proto::SurfaceId::parse(command.name.clone())
                     .map_err(|source| Error::Name(command.name.clone(), source))?,
                 SurfaceKind::Command,
             ));
@@ -131,27 +131,18 @@ impl Plugin {
             reaction.declare(&mut capabilities, &mut topics, &mut keyspaces);
         }
 
-        Ok(Manifest {
-            name,
-            version: self.version.clone(),
-            capabilities: capabilities
-                .into_iter()
-                .map(|capability: Capability| capability.as_str_name().to_string())
-                .collect(),
-            surfaces,
+        Ok(Manifest::new(&name, self.version.clone())
+            .granting(capabilities)
+            .exposing(surfaces)
             // The machine's topics and the plugins' own, in one list: the
             // daemon does not distinguish, and neither should a reader.
-            state_topics: topics
-                .into_iter()
-                .map(|topic: SystemTopic| Address::System(topic).to_string())
-                .chain(keyspaces)
-                .collect(),
-            events: self
-                .reactions
-                .iter()
-                .map(|reaction| reaction.event.as_str_name().to_string())
-                .collect(),
-        })
+            .reading(
+                topics
+                    .into_iter()
+                    .map(|topic: SystemTopic| Address::System(topic).to_string())
+                    .chain(keyspaces),
+            )
+            .handling(self.reactions.iter().map(|reaction| reaction.event)))
     }
 
     /// Serve until the daemon goes away.
@@ -162,8 +153,15 @@ impl Plugin {
         // `omega build` compiles a plugin and then asks it what it declares.
         // That is why there is no manifest file to keep in step with the
         // code: the code is asked.
+        // The answer is the canonical encoding itself, on stdout: the build
+        // stages exactly these bytes, and the hash the daemon recomputes is
+        // taken over exactly these bytes. Nothing re-encodes it in between,
+        // so nothing can disagree about them.
         if std::env::args().any(|argument| argument == Manifest::DESCRIBE) {
-            print!("{}", self.manifest()?.canonical_toml());
+            use std::io::Write as _;
+            std::io::stdout()
+                .write_all(&self.manifest()?.canonical())
+                .map_err(Error::Describe)?;
             return Ok(());
         }
 

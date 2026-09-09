@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use common::{Harness, expect_refusal, unit_name, widget_manifest};
 use omega_daemon::host::StateConfig;
 use omega_daemon::manifest::ManifestStore;
-use omega_proto::Layout;
+use omega_host::Layout;
 use omega_proto::Manifest;
 use omega_proto::omega::{Capability, ErrorCode, frame};
 
@@ -29,11 +29,10 @@ impl StateDir {
         std::fs::create_dir_all(&dir).unwrap();
 
         let state = Self(dir);
-        state
-            .layout()
-            .file::<Manifest>(&manifest.name)
-            .write(manifest)
-            .unwrap();
+        let layout = state.layout();
+        let path = layout.state_unit_manifest(&manifest.unit().unwrap());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, manifest.canonical()).unwrap();
         state
     }
 
@@ -54,7 +53,7 @@ impl Drop for StateDir {
 
 fn store(state: &StateDir, manifest: &Manifest) -> ManifestStore {
     let layout = state.layout();
-    let config = StateConfig::new(&layout, [manifest.name.clone()]);
+    let config = StateConfig::new(&layout, [manifest.unit().unwrap()]);
     ManifestStore::load(&config, &layout).unwrap()
 }
 

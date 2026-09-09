@@ -42,11 +42,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_descriptor_set_path(&descriptor_path)
         .compile_protos(&protos, &[PathBuf::from("schema")])?;
 
-    // 2. Generate the serde impls (canonical protobuf JSON mapping).
-    let descriptor_set = std::fs::read(descriptor_path)?;
-    pbjson_build::Builder::new()
-        .register_descriptors(&descriptor_set)?
-        .build(&[".omega"])?;
+    // 2. Generate the serde impls (canonical protobuf JSON mapping) — only
+    //    for a build that asked for them. They are several times the size of
+    //    the types themselves, and only the daemon and the CLI speak JSON.
+    if std::env::var_os("CARGO_FEATURE_JSON").is_some() {
+        let descriptor_set = std::fs::read(descriptor_path)?;
+        pbjson_build::Builder::new()
+            .register_descriptors(&descriptor_set)?
+            .build(&[".omega"])?;
+    }
 
     println!("cargo:rerun-if-changed=schema");
     Ok(())

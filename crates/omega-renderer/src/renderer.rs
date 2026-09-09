@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 
-use omega_proto::StageDir;
+use omega_host::StageDir;
 
 use crate::installed::Installed;
 

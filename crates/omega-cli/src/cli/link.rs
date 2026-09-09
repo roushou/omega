@@ -13,7 +13,7 @@
 use anyhow::{Context, bail};
 
 use omega_daemon::host::cargo::{CargoConfig, CargoManifest, CargoSlot, Dependencies, Dependency};
-use omega_proto::{AtomicFile, Layout};
+use omega_host::{AtomicFile, Layout};
 
 use crate::scaffold::SourceTree;
 use crate::ui::{Paint, Step, Ui};

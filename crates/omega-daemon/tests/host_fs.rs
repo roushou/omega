@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use omega_daemon::host::{Changes, Recursion, StageDir};
-use omega_proto::AtomicFile;
+use omega_host::AtomicFile;
 
 struct TempDir(PathBuf);
 

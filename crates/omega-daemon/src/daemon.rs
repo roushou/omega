@@ -8,7 +8,7 @@ use tokio::net::UnixListener;
 use tokio::signal::unix::SignalKind;
 
 use crate::host::StateConfig;
-use omega_proto::Layout;
+use omega_host::Layout;
 use omega_proto::{Observation, Socket};
 
 use crate::broker::Brokerage;
@@ -23,7 +23,7 @@ use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
 use crate::watch::StateStamp;
-use omega_proto::TomlError;
+use omega_host::TomlError;
 use std::path::PathBuf;
 
 /// The Omega daemon: trust boundary, state owner, supervisor.

@@ -121,7 +121,10 @@ impl Actions {
             .surfaces
             .iter()
             .filter(|surface| {
-                matches!(surface.kind(), Ok(omega_proto::omega::SurfaceKind::Command))
+                matches!(
+                    surface.declared(),
+                    Ok(omega_proto::omega::SurfaceKind::Command)
+                )
             })
             .map(|surface| surface.id.as_str())
             .collect();

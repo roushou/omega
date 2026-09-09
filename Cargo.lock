@@ -714,6 +714,7 @@ dependencies = [
  "omega-brokers",
  "omega-daemon",
  "omega-document",
+ "omega-host",
  "omega-proto",
  "omega-renderer",
  "thiserror",
@@ -732,6 +733,7 @@ dependencies = [
  "notify",
  "omega-brokers",
  "omega-document",
+ "omega-host",
  "omega-proto",
  "serde",
  "serde_json",
@@ -754,9 +756,21 @@ dependencies = [
 name = "omega-document"
 version = "0.1.0"
 dependencies = [
+ "omega-host",
  "omega-proto",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "omega-host"
+version = "0.1.0"
+dependencies = [
+ "omega-proto",
+ "serde",
+ "thiserror",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]
@@ -766,6 +780,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "hex",
+ "omega-proto",
  "pbjson",
  "pbjson-build",
  "prost",
@@ -777,8 +792,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
- "toml",
- "toml_edit",
 ]
 
 [[package]]
@@ -786,6 +799,7 @@ name = "omega-renderer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "omega-host",
  "omega-proto",
  "serde_json",
 ]

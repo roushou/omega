@@ -8,7 +8,8 @@ use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
 use omega_daemon::host::Units;
-use omega_proto::{Layout, UnitName};
+use omega_host::Layout;
+use omega_proto::UnitName;
 
 use crate::ui::{Paint, Step, Ui};
 

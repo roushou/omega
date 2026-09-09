@@ -7,8 +7,9 @@ use anyhow::{Context, bail};
 use omega_daemon::host::{BuiltUnit, StateConfig};
 use omega_daemon::host::{Changes, Recursion, StageDir, Units};
 use omega_document::{DocumentFile, StateDocument};
+use omega_host::{Layout, Profile};
 use omega_proto::Manifest;
-use omega_proto::{Layout, Profile, UnitName};
+use omega_proto::UnitName;
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;
@@ -203,10 +204,11 @@ impl BuildPlan {
     /// deriving a manifest is that nobody typed it, so the build says what it
     /// derived.
     fn grants(&self) -> String {
-        let capabilities: std::collections::BTreeSet<&str> = self
+        let capabilities: std::collections::BTreeSet<&'static str> = self
             .units
             .iter()
-            .flat_map(|unit| unit.manifest.capabilities.iter().map(String::as_str))
+            .flat_map(|unit| unit.manifest.granted().unwrap_or_default())
+            .map(|capability| capability.as_str_name())
             .collect();
 
         if capabilities.is_empty() {
@@ -228,9 +230,9 @@ impl BuildPlan {
         for unit in &self.units {
             let entry = BuiltUnit::new(layout, unit.name.clone());
 
-            stage
-                .file::<Manifest>(&entry.manifest)
-                .write(&unit.manifest)?;
+            // The canonical bytes, not a re-encoding of them: this file is
+            // what the daemon hashes, so it must be what was hashed.
+            stage.write(&entry.manifest, &unit.manifest.canonical())?;
             stage.copy(&unit.binary, &entry.program).with_context(|| {
                 format!(
                     "unit {}: cannot copy compiled binary {} (is the crate name identical to the unit name?)",

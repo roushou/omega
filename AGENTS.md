@@ -194,7 +194,8 @@ which compiles a scaffolded config through the real binaries.
 ## Crates
 
 ```
-omega-proto    wire format, manifest, identifiers, layout, TOML, staging
+omega-proto    wire format, manifest, identifiers — what crosses a socket
+omega-host     where files live, atomic writes, staging, TOML documents
 omega          the SDK — what a unit is written against
 omega-document the desired-state document
 omega-derive   proc-macros
@@ -209,9 +210,18 @@ omega-cli      the binary
   `units.toml`).
 - A unit author's build is a design constraint. `omega` depends on
   `omega-proto` and `omega-derive` and nothing else; host machinery lives in
-  `omega-daemon::host`, which the CLI reaches through the daemon it already
-  depends on. Before putting something shared in `omega-proto`, ask what it
-  costs a unit.
+  `omega-host` and `omega-daemon::host`, and a unit compiles neither. Before
+  putting something shared in `omega-proto`, ask whether it crosses a socket
+  — if it does not, it belongs in `omega-host`.
+- `omega-proto`'s `json` feature carries the pbjson serde impls, which are
+  several times the size of the types. The daemon, the CLI and
+  `omega-document` turn it on because they speak the observation socket or
+  write `document.json`; a unit does not, and must not have to.
+- The manifest is a schema message, hashed over `Manifest::canonical` —
+  repeated fields sorted and deduplicated, then encoded in tag order. It was
+  TOML, and the hash was whatever `toml_edit` emitted, which made the one
+  value a peer must reproduce byte-for-byte the one value only Rust could
+  compute.
 
 ## CLI
 

@@ -116,18 +116,18 @@ impl Grants {
     /// The grants a manifest describes. The manifest was validated when it was
     /// loaded, so an unknown capability here is a daemon bug, not a unit's.
     fn of(manifest: &Manifest) -> Result<Self, Refusal> {
-        let capabilities = manifest.capabilities().map_err(|e| e.refusal())?;
+        let capabilities = manifest.granted().map_err(|e| e.refusal())?;
 
         let surfaces = manifest
             .surfaces
             .iter()
             .map(|surface| {
-                surface
-                    .kind()
-                    .map(|kind| (surface.id.clone(), kind))
-                    .map_err(|e| e.refusal())
+                Ok((
+                    surface.surface_id().map_err(|e| e.refusal())?,
+                    surface.declared().map_err(|e| e.refusal())?,
+                ))
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, Refusal>>()?;
 
         Ok(Self {
             capabilities,

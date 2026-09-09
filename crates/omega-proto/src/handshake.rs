@@ -6,8 +6,8 @@
 
 use std::time::Duration;
 
-use crate::PROTOCOL_VERSION;
 use crate::omega::{Frame, Hello, Welcome, frame};
+use crate::protocol::{MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, effective_version};
 
 #[derive(Debug)]
 pub struct Handshake;
@@ -38,15 +38,22 @@ impl Handshake {
         std::env::var(Self::TOKEN_ENV).unwrap_or_default()
     }
 
-    /// Validate a peer's claimed protocol version.
-    pub fn check_protocol(peer: u32) -> Result<(), HandshakeError> {
-        if peer != PROTOCOL_VERSION {
+    /// Validate a peer's claimed protocol version, and answer with the one
+    /// the two of them will actually speak.
+    ///
+    /// A peer inside the supported window is accepted at the lower of the two
+    /// versions. Outside it, the connection ends here: a peer that is too old
+    /// would be served frames it cannot parse, and one that is too new would
+    /// be answered by a daemon that cannot parse its.
+    pub fn negotiate(peer: u32) -> Result<u32, HandshakeError> {
+        if !(MIN_PROTOCOL_VERSION..=PROTOCOL_VERSION).contains(&peer) {
             return Err(HandshakeError::VersionMismatch {
                 peer,
-                ours: PROTOCOL_VERSION,
+                oldest: MIN_PROTOCOL_VERSION,
+                newest: PROTOCOL_VERSION,
             });
         }
-        Ok(())
+        Ok(effective_version(peer))
     }
 
     /// Extract and validate a [`Hello`] from a received frame.
@@ -56,7 +63,7 @@ impl Handshake {
                 body: Some(frame::Body::Hello(hello)),
                 ..
             }) => {
-                Self::check_protocol(hello.protocol_version)?;
+                Self::negotiate(hello.protocol_version)?;
                 Ok(hello)
             }
             Some(other) => Err(HandshakeError::Unexpected {
@@ -74,7 +81,7 @@ impl Handshake {
                 body: Some(frame::Body::Welcome(welcome)),
                 ..
             }) => {
-                Self::check_protocol(welcome.protocol_version)?;
+                Self::negotiate(welcome.protocol_version)?;
                 Ok(welcome)
             }
             Some(other) => Err(HandshakeError::Unexpected {
@@ -98,6 +105,6 @@ pub enum HandshakeError {
         expected: &'static str,
         got: Box<Option<frame::Body>>,
     },
-    #[error("protocol mismatch: peer speaks v{peer}, we speak v{ours}")]
-    VersionMismatch { peer: u32, ours: u32 },
+    #[error("protocol mismatch: peer speaks v{peer}, we serve v{oldest}..=v{newest}")]
+    VersionMismatch { peer: u32, oldest: u32, newest: u32 },
 }

@@ -25,7 +25,6 @@ pub enum OpKind {
     AdoptUnit,
     CallCommand,
     RenderWidget,
-    CallAgentTool,
 }
 
 impl OpKind {
@@ -42,7 +41,6 @@ impl OpKind {
             invoke::Op::AdoptUnit(_) => Self::AdoptUnit,
             invoke::Op::CallCommand(_) => Self::CallCommand,
             invoke::Op::RenderWidget(_) => Self::RenderWidget,
-            invoke::Op::CallAgentTool(_) => Self::CallAgentTool,
         }
     }
 
@@ -59,7 +57,6 @@ impl OpKind {
             Self::AdoptUnit => "AdoptUnit",
             Self::CallCommand => "CallCommand",
             Self::RenderWidget => "RenderWidget",
-            Self::CallAgentTool => "CallAgentTool",
         }
     }
 
@@ -77,8 +74,7 @@ impl OpKind {
             | invoke::Op::EmitEvent(_)
             | invoke::Op::RestartUnit(_)
             | invoke::Op::AdoptUnit(_)
-            | invoke::Op::CallCommand(_)
-            | invoke::Op::CallAgentTool(_) => None,
+            | invoke::Op::CallCommand(_) => None,
         }
     }
 }

@@ -40,13 +40,9 @@ impl Subscriptions {
     pub fn of(unit: &UnitName, manifest: &Manifest) -> Self {
         let allowed: HashSet<String> = manifest.state_topics.iter().cloned().collect();
 
-        // The manifest was validated when it was loaded, so its events parse.
-        let allowed_events: HashSet<i32> = manifest
-            .events()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|kind| kind as i32)
-            .collect();
+        // The manifest was validated when it was loaded, so every value here
+        // names an event this build knows.
+        let allowed_events: HashSet<i32> = manifest.events.iter().copied().collect();
 
         Self {
             owner: Some(unit.clone()),

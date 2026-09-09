@@ -9,7 +9,7 @@ use common::{Harness, expect_refusal, unit_name, widget_manifest};
 use omega_daemon::hub::SurfaceRef;
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::omega::{
-    CallAgentTool, ErrorCode, Frame, Invoke, PublishView, ViewNode, ViewTree, frame, invoke,
+    CallCommand, ErrorCode, Frame, Invoke, PublishView, ViewNode, ViewTree, frame, invoke,
 };
 
 fn surface(id: &str) -> omega_proto::SurfaceId {
@@ -112,15 +112,17 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
     let mut transport = harness.connect(&hash, token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
-    // Agent tools are in the schema but not yet brokered; asking is answered,
-    // not ignored.
+    // `CallCommand` is the daemon asking a unit to run one of its own
+    // commands — it travels the other way down this socket and has no policy
+    // row for a unit to reach. A unit sending one is asking to invoke its
+    // neighbours, and the answer is an answer rather than silence.
     transport
         .send(Frame {
             stream_id: 1,
             body: Some(frame::Body::Invoke(Invoke {
-                op: Some(invoke::Op::CallAgentTool(CallAgentTool {
-                    tool: "summarize".into(),
-                    input_json: "{}".into(),
+                op: Some(invoke::Op::CallCommand(CallCommand {
+                    command: "connect".into(),
+                    args: Vec::new(),
                 })),
             })),
         })
@@ -129,7 +131,7 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
 
     let refusal = expect_refusal(transport.recv().await.unwrap());
     assert_eq!(refusal.code, ErrorCode::Unimplemented);
-    assert!(refusal.message.contains("CallAgentTool"), "{refusal}");
+    assert!(refusal.message.contains("CallCommand"), "{refusal}");
 }
 
 #[tokio::test]

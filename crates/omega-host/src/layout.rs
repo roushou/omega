@@ -2,14 +2,14 @@
 //!
 //! Every path the CLI and daemon agree on — source layout, build output, and
 //! the assembled state dir — is derived here from three roots. Callers never
-//! join `units/<name>/unit.toml` by hand; they ask the [`Layout`], and for a
+//! join `units/<name>/unit.pb` by hand; they ask the [`Layout`], and for a
 //! TOML document they ask [`Layout::file`], which hands back a typed
 //! [`TomlFile`] located by the document's own schema.
 
 use std::path::{Path, PathBuf};
 
-use crate::ident::UnitName;
 use crate::toml::{TomlFile, TomlSchema};
+use omega_proto::{Manifest, UnitName};
 
 /// Which cargo profile a build produces, and so which directory its binaries
 /// land in.
@@ -216,9 +216,10 @@ impl Layout {
         self.state_unit_dir(name).join(name.as_str())
     }
 
-    /// `~/.local/state/omega/units/<name>/unit.toml` — the canonical manifest.
+    /// `~/.local/state/omega/units/<name>/unit.pb` — the canonical manifest,
+    /// as the exact bytes the plugin answered with and the daemon hashes.
     pub fn state_unit_manifest(&self, name: &UnitName) -> PathBuf {
-        self.state_unit_dir(name).join("unit.toml")
+        self.state_unit_dir(name).join(Manifest::FILE_NAME)
     }
 
     /// `~/.local/state/omega/units.toml` — the daemon's state config.
@@ -233,9 +234,11 @@ impl Layout {
         Path::new("units").join(name.as_str()).join(name.as_str())
     }
 
-    /// `units/<name>/unit.toml`, relative to the state dir.
+    /// `units/<name>/unit.pb`, relative to the state dir.
     pub fn unit_manifest_rel(&self, name: &UnitName) -> PathBuf {
-        Path::new("units").join(name.as_str()).join("unit.toml")
+        Path::new("units")
+            .join(name.as_str())
+            .join(Manifest::FILE_NAME)
     }
 
     fn resolve_dir(env_override: &str, xdg_env: &str, fallback: &str) -> PathBuf {

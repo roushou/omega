@@ -12,7 +12,7 @@ use omega_daemon::session::{Liveness, Session};
 use omega_daemon::supervisor::Supervisor;
 use omega_daemon::units::{UnitTable, UnitToken};
 use omega_proto::UnitName;
-use omega_proto::omega::{Frame, SurfaceKind};
+use omega_proto::omega::{Capability, EventKind, Frame, SurfaceKind};
 use omega_proto::{Handshake, Socket, Transport};
 use omega_proto::{Manifest, Surface};
 
@@ -119,47 +119,35 @@ pub fn unit_name(name: &str) -> UnitName {
 /// A unit that declares one widget surface and reads the battery topic — the
 /// shape of every unit in the first vertical slice.
 pub fn widget_manifest(name: &str, surface: &str) -> Manifest {
-    Manifest {
-        capabilities: vec!["CAPABILITY_STATE_READ".into()],
-        surfaces: vec![Surface::new(surface_id(surface), SurfaceKind::Widget)],
-        state_topics: vec!["battery".into()],
-        ..Manifest::new(unit_name(name), "0.1.0")
-    }
+    Manifest::new(&unit_name(name), "0.1.0")
+        .granting([Capability::StateRead])
+        .exposing([Surface::new(&surface_id(surface), SurfaceKind::Widget)])
+        .reading(["battery"])
 }
 
 /// A unit that handles power events and may run commands — the shape of a
 /// policy unit.
 pub fn policy_manifest(name: &str) -> Manifest {
-    Manifest {
-        capabilities: vec!["CAPABILITY_STATE_READ".into(), "CAPABILITY_SPAWN".into()],
-        events: vec![
-            "EVENT_AC_PLUGGED".into(),
-            "EVENT_AC_UNPLUGGED".into(),
-            "EVENT_CUSTOM".into(),
-        ],
-        ..widget_manifest(name, "battery")
-    }
+    widget_manifest(name, "battery")
+        .granting([Capability::StateRead, Capability::Spawn])
+        .handling([
+            EventKind::EventAcPlugged,
+            EventKind::EventAcUnplugged,
+            EventKind::EventCustom,
+        ])
 }
 
 /// A unit that declares a command surface — something to be asked to do.
 pub fn command_manifest(name: &str, command: &str) -> Manifest {
-    Manifest {
-        capabilities: vec!["CAPABILITY_STATE_READ".into()],
-        surfaces: vec![Surface::new(surface_id(command), SurfaceKind::Command)],
-        state_topics: vec!["battery".into()],
-        ..Manifest::new(unit_name(name), "0.1.0")
-    }
+    Manifest::new(&unit_name(name), "0.1.0")
+        .granting([Capability::StateRead])
+        .exposing([Surface::new(&surface_id(command), SurfaceKind::Command)])
+        .reading(["battery"])
 }
 
 /// The same unit, plus the capability to write its own keyspace.
 pub fn writer_manifest(name: &str) -> Manifest {
-    Manifest {
-        capabilities: vec![
-            "CAPABILITY_STATE_READ".into(),
-            "CAPABILITY_STATE_WRITE".into(),
-        ],
-        ..widget_manifest(name, "battery")
-    }
+    widget_manifest(name, "battery").granting([Capability::StateRead, Capability::StateWrite])
 }
 
 /// The next `Result` frame, skipping the state patches that arrive alongside
@@ -221,8 +209,8 @@ impl TempDir {
         &self.0
     }
 
-    pub fn layout(&self) -> omega_proto::Layout {
-        omega_proto::Layout::at(
+    pub fn layout(&self) -> omega_host::Layout {
+        omega_host::Layout::at(
             self.0.join("config"),
             self.0.join("state"),
             self.0.join("cache"),

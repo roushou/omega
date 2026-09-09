@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::host::glob::PathPattern;
 use crate::host::glob::PatternError;
-use omega_proto::Layout;
-use omega_proto::TomlSchema;
+use omega_host::Layout;
+use omega_host::TomlSchema;
+use omega_host::toml::{Table, TomlFile};
 use omega_proto::UnitName;
-use omega_proto::toml::{Table, TomlFile};
 
 /// A TOML table of Cargo dependencies, keyed by crate name.
 pub type Dependencies = Table<Dependency>;

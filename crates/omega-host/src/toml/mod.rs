@@ -27,9 +27,9 @@ mod table;
 use crate::toml::format::Formatter;
 
 pub use doc::TomlDoc;
-pub use error::{ReadError, TomlError};
+pub use error::TomlError;
 pub use file::TomlFile;
-pub use schema::{TomlSchema, Validated};
+pub use schema::TomlSchema;
 pub use table::Table;
 
 /// The TOML codec.

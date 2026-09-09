@@ -6,9 +6,10 @@
 
 use crate::host::cargo::{CargoManifest, CargoSlot};
 use crate::host::glob::PatternError;
-use omega_proto::Layout;
+use omega_host::Layout;
+use omega_host::TomlError;
+use omega_proto::IdentError;
 use omega_proto::UnitName;
-use omega_proto::{IdentError, TomlError};
 use std::path::PathBuf;
 
 /// The units of a config workspace, in deterministic (sorted) order.

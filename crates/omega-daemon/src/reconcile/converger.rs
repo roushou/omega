@@ -18,7 +18,7 @@ use tokio::sync::Notify;
 
 use crate::host::StateConfig;
 use omega_document::{DocumentFile, StateDocument};
-use omega_proto::Layout;
+use omega_host::Layout;
 
 use crate::DaemonError;
 use crate::hub::Hub;

@@ -12,8 +12,9 @@ use omega_daemon::host::cargo::{
     CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Package, Profile,
     ReleaseProfile, Workspace,
 };
-use omega_proto::{Layout, UnitName};
-use omega_proto::{Toml, TomlError};
+use omega_host::Layout;
+use omega_host::{Toml, TomlError};
+use omega_proto::UnitName;
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.
