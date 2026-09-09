@@ -4,7 +4,7 @@ use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::{
     Answer, Args, Battery, Bind, Button, Clock, Command, Field, Fields, Graph, Grid, Group, Header,
     Icon, Image, List, Network, Notify, Own, Percent, Progress, Row, Separator, Session, Slider,
-    Spacer, Text, Toggle, Topic, Ui, Values, Watch, Widget,
+    Spacer, Text, Toggle, Ui, UnitState, Values, Watch, Widget,
 };
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Lock, action, value};
@@ -436,7 +436,7 @@ async fn a_command_answers_over_the_wire() {
 
 // ---- state a plugin owns, and another plugin reads ----
 
-#[derive(omega::Topic, Default, Debug, Clone, PartialEq)]
+#[derive(omega::UnitState, Default, Debug, Clone, PartialEq)]
 struct Mode {
     focus: bool,
 }
@@ -825,7 +825,7 @@ struct AccessPoint {
 
 /// A unit's own state, which is a list — the shape most units actually have
 /// to publish, and the one that did not compile until `Vec<T>` was a value.
-#[derive(omega::Topic, Debug, Clone, Default, PartialEq)]
+#[derive(omega::UnitState, Debug, Clone, Default, PartialEq)]
 struct Scan {
     found: Vec<AccessPoint>,
     names: Vec<String>,

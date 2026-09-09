@@ -144,7 +144,7 @@ which compiles a scaffolded config through the real binaries.
   plugins it configures and a misspelled setting is a build error in the
   config rather than a default silently taken.
 - Plugins compose through state, not calls. `Own<T>` writes `unit.<name>.
-  <key>`, `Watch<T>` reads anyone's, and `#[derive(Topic)]` takes the unit
+  <key>`, `Watch<T>` reads anyone's, and `#[derive(UnitState)]` takes the unit
   from the defining crate and the key from the type — `Watch<lamp::Power>`,
   not a string a rename breaks. Writing is a `Does`; reading is not.
 - A widget may hold only state; commands and reactions may hold effects.

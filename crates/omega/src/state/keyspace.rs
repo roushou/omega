@@ -7,13 +7,14 @@
 //! either knowing the other exists at build time.
 //!
 //! The topic's address comes from the type. A state type is defined in the
-//! crate that owns it, so `#[derive(Topic)]` reads the unit's name from that
-//! crate and the key from the type — and a reader writes `Watch<lamp::Power>`
-//! rather than a string that a rename would quietly break.
+//! crate that owns it, so `#[derive(UnitState)]` reads the unit's name from
+//! that crate and the key from the type — and a reader writes
+//! `Watch<lamp::Power>` rather than a string that a rename would quietly
+//! break.
 //!
 //! ```no_run
 //! # use omega::{Own, Watch};
-//! #[derive(omega::Topic, Default, Clone)]
+//! #[derive(omega::UnitState, Default, Clone)]
 //! pub struct Power {
 //!     pub on: bool,
 //! }
@@ -30,7 +31,7 @@
 use std::marker::PhantomData;
 
 use omega_proto::omega::{Capability, SetState, invoke};
-use omega_proto::{Fields, Topic as Address};
+use omega_proto::{Fields, Topic};
 
 use crate::context::Context;
 use crate::wiring::{Does, Reads, Wiring};
@@ -39,7 +40,7 @@ use crate::wiring::{Does, Reads, Wiring};
 ///
 /// Derived. The unit is the crate that defines the type, and the key is the
 /// type's own name, so neither is a string anybody types.
-pub trait Topic: Fields + Send + Sync + 'static {
+pub trait UnitState: Fields + Send + Sync + 'static {
     /// The plugin whose keyspace this is.
     const UNIT: &'static str;
     /// The key within it.
@@ -47,7 +48,7 @@ pub trait Topic: Fields + Send + Sync + 'static {
 
     /// `unit.<unit>.<key>` — how the daemon addresses it.
     fn address() -> String {
-        Address::of_unit(Self::UNIT, Self::KEY).to_string()
+        Topic::of_unit(Self::UNIT, Self::KEY).to_string()
     }
 }
 
@@ -56,12 +57,12 @@ pub trait Topic: Fields + Send + Sync + 'static {
 /// Changing state is doing something, so this belongs to a command or a
 /// reaction. A widget that shows the same state holds a [`Watch`].
 #[derive(Debug)]
-pub struct Own<T: Topic> {
+pub struct Own<T: UnitState> {
     context: Context,
     owns: PhantomData<fn() -> T>,
 }
 
-impl<T: Topic> Wiring for Own<T> {
+impl<T: UnitState> Wiring for Own<T> {
     const CAPABILITIES: &'static [Capability] = &[Capability::StateRead, Capability::StateWrite];
 
     /// Its own keyspace needs no permission — a plugin owns it — but naming
@@ -79,9 +80,9 @@ impl<T: Topic> Wiring for Own<T> {
     }
 }
 
-impl<T: Topic> Does for Own<T> {}
+impl<T: UnitState> Does for Own<T> {}
 
-impl<T: Topic> Own<T> {
+impl<T: UnitState> Own<T> {
     /// What the daemon currently holds, or this type's default if it has
     /// never been set.
     pub fn get(&self) -> T {
@@ -111,12 +112,12 @@ impl<T: Topic> Own<T> {
 /// Reading another plugin's keyspace is what its manifest declares, so
 /// holding this is what asks for it.
 #[derive(Debug)]
-pub struct Watch<T: Topic> {
+pub struct Watch<T: UnitState> {
     context: Context,
     watches: PhantomData<fn() -> T>,
 }
 
-impl<T: Topic> Wiring for Watch<T> {
+impl<T: UnitState> Wiring for Watch<T> {
     const CAPABILITIES: &'static [Capability] = &[Capability::StateRead];
 
     /// Reading somebody's keyspace is what a manifest declares, so holding
@@ -133,9 +134,9 @@ impl<T: Topic> Wiring for Watch<T> {
     }
 }
 
-impl<T: Topic> Reads for Watch<T> {}
+impl<T: UnitState> Reads for Watch<T> {}
 
-impl<T: Topic> Watch<T> {
+impl<T: UnitState> Watch<T> {
     /// What the daemon currently holds, or this type's default if nobody has
     /// set it.
     pub fn get(&self) -> T {
@@ -144,6 +145,6 @@ impl<T: Topic> Watch<T> {
 }
 
 /// A plugin keyspace is a bag of values, whatever the type in front of it is.
-fn read<T: Topic>(context: &Context) -> T {
+fn read<T: UnitState>(context: &Context) -> T {
     T::read(&context.keyspace(&T::address()).unwrap_or_default())
 }

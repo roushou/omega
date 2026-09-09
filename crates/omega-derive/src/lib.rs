@@ -123,15 +123,15 @@ fn fields_impl(input: TokenStream) -> TokenStream {
 /// The unit is the crate this type is written in and the key is the type's
 /// own name, so `Watch<lamp::Power>` resolves to `unit.lamp.power` with no
 /// string anywhere for a rename to leave behind.
-#[proc_macro_derive(Topic, attributes(omega))]
-pub fn topic(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(UnitState, attributes(omega))]
+pub fn unit_state(input: TokenStream) -> TokenStream {
     let fields = fields_impl(input.clone());
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
     let key = kebab(&name.to_string());
 
     let identity = quote! {
-        impl ::omega::Topic for #name {
+        impl ::omega::UnitState for #name {
             const UNIT: &'static str = env!("CARGO_PKG_NAME");
             const KEY: &'static str = #key;
         }

@@ -33,7 +33,7 @@ mod network;
 mod wifi;
 
 pub use clock::Weekday;
-pub use keyspace::{Own, Topic, Watch};
+pub use keyspace::{Own, UnitState, Watch};
 pub use wifi::AccessPoint;
 
 use crate::context::Context;

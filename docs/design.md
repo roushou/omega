@@ -334,7 +334,7 @@ fixed.
 exist. It has readings.
 
 ```
-state/     mod.rs (Own, Watch, Topic, reads!) and one file per topic handle
+state/     mod.rs (Own, Watch, UnitState, reads!) and one file per topic handle
 ui/        mod.rs node.rs style.rs bind.rs
            text.rs layout.rs control.rs display.rs list.rs
 effect/    unchanged

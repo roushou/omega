@@ -77,7 +77,7 @@ impl Widget for Indicator {
 /// The daemon publishes readings, not histories — a topic that carried one
 /// would be a new revision on every sample. So a series is something a unit
 /// accumulates in its own keyspace, which outlives the process that wrote it.
-#[derive(omega::Topic, Debug, Clone, Default, PartialEq)]
+#[derive(omega::UnitState, Debug, Clone, Default, PartialEq)]
 pub struct Signal {
     pub recent: Vec<f64>,
 }

@@ -56,7 +56,7 @@ pub use error::{Error, Result};
 pub use plugin::Plugin;
 pub use state::{
     AccessPoint, Audio, Backlight, Battery, Bluetooth, Clock, Disk, Idle, Input, Media, Monitors,
-    Network, Own, Peripherals, Power, System, Topic, Units, Vpn, Watch, Weekday, Wifi, Window,
+    Network, Own, Peripherals, Power, System, UnitState, Units, Vpn, Watch, Weekday, Wifi, Window,
     Workspaces,
 };
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
@@ -66,7 +66,7 @@ pub use ui::{
 };
 pub use units::{Percent, Remaining};
 
-pub use omega_derive::{Command, Config, Reaction, Topic, Widget};
+pub use omega_derive::{Command, Config, Reaction, UnitState, Widget};
 
 /// A struct that is a map of values: what `#[derive(Config)]` implements.
 pub use omega_proto::{Fields, FromValue, IntoValue, Values};
