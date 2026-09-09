@@ -315,19 +315,44 @@ impl Hub {
 
     /// The latest view for every surface — deterministic (key-sorted) order.
     pub fn view_snapshot(&self) -> Vec<ViewUpdate> {
-        self.inner
-            .views
-            .lock()
-            .unwrap()
-            .latest
-            .values()
-            .cloned()
-            .collect()
+        self.views().latest.values().cloned().collect()
     }
 }
 
 impl Default for Hub {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_poisoned_lock_does_not_take_the_daemon_with_it() {
+        // The policy the accessors above exist to hold, asserted rather than
+        // stated: neither lock guards an invariant a panic could break, so
+        // one panicked update must not turn every later read into a second
+        // panic. `view_snapshot` took its own lock and unwrapped it, which is
+        // the observer resync path — one bad view would have ended every
+        // observer connection instead of one.
+        let hub = Hub::new();
+
+        let hushed = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _views = hub.inner.views.lock().unwrap();
+            let _store = hub.inner.store.lock().unwrap();
+            panic!("an update panicked while holding both");
+        }));
+        std::panic::set_hook(hushed);
+        assert!(panicked.is_err(), "the test did not poison anything");
+
+        // Every reader still answers.
+        let _ = hub.view_snapshot();
+        let _ = hub.snapshot();
+        let _ = hub.subscribe_views();
+        let _ = hub.subscribe_state();
     }
 }
