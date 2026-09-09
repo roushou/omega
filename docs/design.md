@@ -33,6 +33,11 @@ running at all.
 
 That is a missing noun, not a backlog of missing features.
 
+**Closed.** Every row above is served now. The table is kept because it is the
+argument for the shape of `omega-brokers`, not a list of work outstanding —
+what is still outstanding is in `architecture.md`, and
+`omega-brokers/tests/coverage.rs` is what stops the table reopening quietly.
+
 ## Brokers
 
 A **broker** owns a subsystem in both directions. It is the only thing that

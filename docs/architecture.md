@@ -158,5 +158,13 @@ reusing its shell and compositor.
   today by branching on `Host::name()` inside `system/`.
 - A declarative TOML tier for units. Every unit is a compiled Rust crate.
 - A WASM tier. Only worth it if a registry ever needs untrusted distribution.
-- Actions other than `RunCommand`, which answer `UNIMPLEMENTED`.
-- State sources other than battery.
+- `SetSetting` and `ToggleSetting`, the only two actions nothing serves. They
+  act on the state document's own settings, which no subsystem owns, so they
+  wait on something to own them rather than on a broker.
+
+Every other topic and action is brokered. That is a test rather than a claim:
+`omega-brokers/tests/coverage.rs` compares the registered brokers against
+`SystemTopic::ALL` and `ActionKind::ALL`, and `omega`'s `state::tests` asks
+the mirror question — whether a unit can name what the daemon publishes. A
+hole is a line in one of those files or a failing build, which is what keeps
+this section from rotting again.
