@@ -12,8 +12,9 @@ Rectangle {
 
     implicitWidth: horizontal ? 0 : 1
     implicitHeight: horizontal ? 1 : 0
-    Layout.fillWidth: horizontal
-    Layout.fillHeight: !horizontal
+    // No `Layout.fillWidth` here: a stack is a `Row` or a `Column`, not a
+    // layout, so the attached object does not exist and the binding was a
+    // warning on every separator drawn.
     width: horizontal ? (parent ? parent.width : 0) : 1
     height: horizontal ? 1 : (parent ? parent.height : 0)
 

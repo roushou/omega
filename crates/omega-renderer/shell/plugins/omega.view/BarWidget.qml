@@ -27,6 +27,10 @@ BarWidget {
   readonly property bool hasPanel: root.panel !== ""
   property bool opened: false
 
+  // `open`, `close` and `opened` together are what `Bar.findPanelWidget`
+  // looks for. A widget missing any of the three is skipped, so a panel that
+  // opens on a press would still not answer `omarchy shell toggle`.
+  function open() { root.opened = true }
   function close() { root.opened = false }
 
   Connection {
@@ -77,12 +81,14 @@ BarWidget {
     // Pressing the slot opens the popout — but only where the tree itself did
     // not want the press. A widget that drew a button has said what a press
     // means, and stealing it to open a panel would make the button dead.
-    MouseArea {
-      anchors.fill: parent
-      enabled: root.hasPanel
-      z: -1
-      acceptedButtons: Qt.LeftButton
-      onClicked: root.opened = !root.opened
+    //
+    // Ordering is what arranges that, rather than a second mouse area: `view`
+    // is parented to the button after the button's own, so a node that
+    // handles a click gets it and this never runs. Putting one *underneath*
+    // cannot work — `WidgetButton` fills itself with a MouseArea that accepts
+    // every button, and nothing below it is ever reached.
+    onPressed: function (mouseButton) {
+      if (root.hasPanel && mouseButton === Qt.LeftButton) root.opened = !root.opened
     }
   }
 

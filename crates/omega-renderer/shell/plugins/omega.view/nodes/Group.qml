@@ -34,12 +34,22 @@ Row {
                 : Qt.rgba(group.host.foreground.r, group.host.foreground.g,
                           group.host.foreground.b, 0.08)
 
-            ViewNode {
+            // By url, like a stack's children and a grid's cells: from
+            // `nodes/` the name `ViewNode` resolves to nothing, and naming
+            // it as a type left every option blank.
+            Loader {
                 id: label
                 anchors.centerIn: parent
-                model: segment.modelData
-                foreground: group.host.foreground
-                onInvoke: (bound, value) => group.host.invoke(bound, value)
+
+                Component.onCompleted: setSource("../ViewNode.qml", {
+                    "model": segment.modelData,
+                    "foreground": group.host.foreground
+                })
+
+                Connections {
+                    target: label.item
+                    function onInvoke(bound, value) { group.host.invoke(bound, value) }
+                }
             }
 
             MouseArea {
