@@ -11,7 +11,7 @@ Grid {
     required property var host
 
     columns: Math.max(1, Props.gridColumns(host.model))
-    spacing: Props.gridGap(host.model)
+    spacing: host.space(Props.gridGap(host.model))
 
     Repeater {
         model: Props.children(grid.host.model)

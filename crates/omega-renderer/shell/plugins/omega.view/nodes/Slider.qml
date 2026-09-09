@@ -19,10 +19,10 @@ Rectangle {
     property real held: 0
     readonly property real shown: track.dragging ? track.held : track.published
 
-    implicitWidth: 72
-    implicitHeight: 6
-    radius: height / 2
-    color: Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.2)
+    implicitWidth: host.space(72)
+    implicitHeight: host.space(6)
+    radius: host.pill(height)
+    color: track.host.trackFill
 
     Rectangle {
         width: track.width * track.shown

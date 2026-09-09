@@ -12,13 +12,20 @@ Text {
 
     readonly property var bound: Props.bind(host.model, "press")
 
+    readonly property bool hot:
+        press.containsMouse && label.bound !== null && label.host.interactive
+
     text: Props.buttonLabel(host.model)
-    color: host.ink
+    color: label.hot ? label.host.hoverInk : label.host.ink
+    font.family: host.fontFamily
+    font.pixelSize: host.fontSize
     font.bold: Props.bold(host.model)
     verticalAlignment: Text.AlignVCenter
 
     MouseArea {
+        id: press
         anchors.fill: parent
+        hoverEnabled: true
         enabled: label.bound !== null && label.host.interactive
         cursorShape: Qt.PointingHandCursor
         // A press carries nothing of its own: the binding is the whole

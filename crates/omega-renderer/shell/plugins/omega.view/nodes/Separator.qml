@@ -10,13 +10,16 @@ Rectangle {
 
     readonly property bool horizontal: parent && parent.width > parent.height
 
-    implicitWidth: horizontal ? 0 : 1
-    implicitHeight: horizontal ? 1 : 0
+    // A hairline, which on a scaled display is more than one device pixel.
+    readonly property int thickness: host.space(1)
+
+    implicitWidth: horizontal ? 0 : thickness
+    implicitHeight: horizontal ? thickness : 0
     // No `Layout.fillWidth` here: a stack is a `Row` or a `Column`, not a
     // layout, so the attached object does not exist and the binding was a
     // warning on every separator drawn.
-    width: horizontal ? (parent ? parent.width : 0) : 1
-    height: horizontal ? 1 : (parent ? parent.height : 0)
+    width: horizontal ? (parent ? parent.width : 0) : thickness
+    height: horizontal ? thickness : (parent ? parent.height : 0)
 
-    color: Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.2)
+    color: host.rule
 }

@@ -6,10 +6,10 @@ Rectangle {
     id: track
     required property var host
 
-    implicitWidth: 48
-    implicitHeight: 4
-    radius: height / 2
-    color: Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.2)
+    implicitWidth: host.space(48)
+    implicitHeight: host.space(4)
+    radius: host.pill(height)
+    color: host.trackFill
 
     Rectangle {
         width: track.width

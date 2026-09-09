@@ -30,7 +30,7 @@ Rectangle {
     // As tall as its rows, up to a point: a list of forty networks in a
     // popout that grew to fit them would be a popout taller than the screen.
     // A unit that knows better says so with `height`.
-    readonly property int cap: 400
+    readonly property int cap: host.space(400)
     implicitHeight: list.fixedHeight > 0
         ? list.fixedHeight
         : Math.min(rows.contentHeight, list.cap)
@@ -90,7 +90,7 @@ Rectangle {
         id: rows
         anchors.fill: parent
         model: held
-        spacing: list.gap
+        spacing: list.host.space(list.gap)
         clip: true
         // Only take keys when there is something to do with them; a list
         // nothing is bound to should not swallow the panel's navigation.
@@ -113,12 +113,16 @@ Rectangle {
             width: rows.width
             implicitHeight: child.item ? child.item.implicitHeight : 0
 
+            // Where the cursor is, and where the pointer is. Two states
+            // rather than one: a list that only marked the cursor gave no
+            // feedback at all to somebody using the mouse.
             Rectangle {
                 anchors.fill: parent
-                radius: 3
-                visible: row.index === list.selected
-                color: Qt.rgba(list.host.foreground.r, list.host.foreground.g,
-                               list.host.foreground.b, 0.12)
+                radius: list.host.radius
+                visible: row.index === list.selected || point.containsMouse
+                color: row.index === list.selected
+                    ? list.host.chosenFill
+                    : list.host.hoverFill
             }
 
             Loader {
@@ -144,7 +148,9 @@ Rectangle {
             }
 
             MouseArea {
+                id: point
                 anchors.fill: parent
+                hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 z: -1
                 onClicked: {

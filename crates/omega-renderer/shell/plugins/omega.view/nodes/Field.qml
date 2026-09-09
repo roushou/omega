@@ -22,19 +22,25 @@ Rectangle {
     onGivenChanged: input.text = field.given
     Component.onCompleted: input.text = field.given
 
-    implicitWidth: 160
+    implicitWidth: host.space(160)
     implicitHeight: Math.round(input.implicitHeight * 1.6)
-    radius: 4
-    color: Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.1)
+    radius: host.radius
+    // Through the kit's own function, so a focused field here looks like a
+    // focused field anywhere else in the shell.
+    color: field.host.controlFill(input.activeFocus, hover.containsMouse)
+
+    HoverHandler { id: hover }
 
     TextInput {
         id: input
         anchors.fill: parent
-        anchors.leftMargin: 6
-        anchors.rightMargin: 6
+        anchors.leftMargin: field.host.space(6)
+        anchors.rightMargin: field.host.space(6)
         verticalAlignment: TextInput.AlignVCenter
         clip: true
         color: field.host.ink
+        font.family: field.host.fontFamily
+        font.pixelSize: field.host.fontSize
         selectByMouse: true
         enabled: field.host.interactive
         echoMode: field.secret ? TextInput.Password : TextInput.Normal
@@ -48,8 +54,9 @@ Rectangle {
             anchors.fill: parent
             verticalAlignment: Text.AlignVCenter
             text: Props.fieldPlaceholder(field.host.model)
-            color: field.host.ink
-            opacity: 0.5
+            color: Qt.darker(field.host.ink, 1.4)
+            font.family: field.host.fontFamily
+            font.pixelSize: field.host.fontSize
             visible: input.text === ""
         }
     }

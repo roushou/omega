@@ -31,6 +31,56 @@ Item {
     // The colour this node draws in: what it asked for, or what it inherited.
     readonly property color ink: node.colorOf()
 
+    // ------------------------------------------------------------- tokens
+    //
+    // Every dimension, weight and tint a delegate draws with comes from here,
+    // and here reads the shell's `Style`. On `host` rather than in a file of
+    // its own for two reasons: a delegate is handed exactly one property and
+    // this keeps that true, and `colorOf` below was already doing this job
+    // for colour alone.
+    //
+    // A number off the wire is an *intent*, not a pixel count. A unit saying
+    // `gap(6)` means one comfortable gap; what that measures on a scaled
+    // display under a large theme font is the shell's to decide, and no unit
+    // can know it. `Style.space` is the exact migration Omarchy documents for
+    // its own hardcoded values.
+    function space(px) { return px > 0 ? Style.space(px) : 0 }
+
+    readonly property string fontFamily: Style.font.family
+    readonly property int fontSize: Style.font.body
+    readonly property int captionSize: Style.font.caption
+    readonly property int iconSize: Style.font.icon
+
+    // What corners do, following the theme — which follows Hyprland's
+    // `decoration:rounding`. A square theme gets square controls, the way
+    // `ToggleSwitch` decides it.
+    readonly property int radius: Style.cornerRadius
+    readonly property bool rounded: Style.cornerRadius > 0
+    function pill(size) { return node.rounded ? size / 2 : 0 }
+
+    // Control chrome, at the theme's own state alphas.
+    readonly property color idleFill: Style.normalFillFor(node.foreground, Color.accent, Color.urgent)
+    readonly property color hoverFill: Style.hoverFillFor(node.foreground, Color.accent, Color.urgent)
+    readonly property color chosenFill: Style.selectedFillFor(node.foreground, Color.accent, Color.urgent)
+    readonly property color hoverInk: Style.hoverStateColor(node.foreground, Color.accent, Color.urgent)
+
+    // A track is chrome the eye has to find — a slider's groove, the unfilled
+    // part of a bar — so it takes the selected fill. The idle one is 4%, and
+    // is meant to sit behind a border rather than stand on its own.
+    readonly property color trackFill: node.chosenFill
+
+    // What an input sits in, through the kit's own function so a focused or
+    // hovered field looks like every other focused or hovered field.
+    function controlFill(focused, hot) {
+        return Style.controlFill(focused, hot, node.foreground, Color.accent)
+    }
+
+    // The tint `PanelSeparator` draws with. A literal rather than a token
+    // because the shell's own separator carries it as one, and a rule beside
+    // Omarchy's rules has to match them rather than a scale.
+    readonly property color rule:
+        Qt.rgba(node.foreground.r, node.foreground.g, node.foreground.b, 0.12)
+
     // Whether this node may be used. Resolved here rather than in each
     // delegate so a new one gets it by reading `host.interactive`, and so the
     // two reasons a node is unusable are drawn the same way.
@@ -42,8 +92,8 @@ Item {
 
     // What a node asked to be, or what it draws. A panel that has to line
     // two columns up says so; everything else is its own size.
-    readonly property int fixedWidth: Props.width(node.model)
-    readonly property int fixedHeight: Props.height(node.model)
+    readonly property int fixedWidth: node.space(Props.width(node.model))
+    readonly property int fixedHeight: node.space(Props.height(node.model))
 
     implicitWidth: node.fixedWidth > 0 ? node.fixedWidth : content.implicitWidth
     implicitHeight: node.fixedHeight > 0 ? node.fixedHeight : content.implicitHeight

@@ -80,7 +80,7 @@ Loader {
     Component {
         id: rowLayout
         Row {
-            spacing: Props.stackGap(stack.host.model)
+            spacing: stack.host.space(Props.stackGap(stack.host.model))
             Repeater {
                 model: rows
                 delegate: childNode
@@ -91,7 +91,7 @@ Loader {
     Component {
         id: columnLayout
         Column {
-            spacing: Props.stackGap(stack.host.model)
+            spacing: stack.host.space(Props.stackGap(stack.host.model))
             Repeater {
                 model: rows
                 delegate: childNode

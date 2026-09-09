@@ -15,7 +15,7 @@ Row {
     readonly property var bound: Props.bind(host.model, "select")
     readonly property string chosen: Props.groupSelected(host.model)
 
-    spacing: 1
+    spacing: host.space(1)
 
     Repeater {
         model: Props.children(group.host.model)
@@ -26,13 +26,22 @@ Row {
 
             readonly property string key: modelData && modelData.key ? modelData.key : ""
             readonly property bool on: segment.key !== "" && segment.key === group.chosen
+            readonly property bool hot:
+                hover.containsMouse && group.bound !== null
+                && group.host.interactive && segment.key !== ""
 
-            implicitWidth: label.implicitWidth + 16
-            implicitHeight: label.implicitHeight + 8
+            implicitWidth: label.implicitWidth + group.host.space(16)
+            implicitHeight: label.implicitHeight + group.host.space(8)
+            radius: group.host.radius
+            // Chosen, being pointed at, or neither — the three states the
+            // rest of the shell's controls draw, at the theme's own alphas.
             color: segment.on
-                ? Qt.rgba(group.host.ink.r, group.host.ink.g, group.host.ink.b, 0.25)
-                : Qt.rgba(group.host.foreground.r, group.host.foreground.g,
-                          group.host.foreground.b, 0.08)
+                ? group.host.chosenFill
+                : (segment.hot ? group.host.hoverFill : group.host.idleFill)
+
+            Behavior on color {
+                ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
 
             // By url, like a stack's children and a grid's cells: from
             // `nodes/` the name `ViewNode` resolves to nothing, and naming
@@ -53,7 +62,9 @@ Row {
             }
 
             MouseArea {
+                id: hover
                 anchors.fill: parent
+                hoverEnabled: true
                 enabled: group.bound !== null && group.host.interactive && segment.key !== ""
                 cursorShape: Qt.PointingHandCursor
                 onClicked: group.host.invoke(group.bound, segment.key)

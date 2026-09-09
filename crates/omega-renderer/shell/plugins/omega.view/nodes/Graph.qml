@@ -19,8 +19,8 @@ Canvas {
     // The unit is the one that knows which it has.
     readonly property bool pinned: graph.high > graph.low
 
-    implicitWidth: 72
-    implicitHeight: 20
+    implicitWidth: host.space(72)
+    implicitHeight: host.space(20)
 
     // Repaint whenever any of it moves. A canvas does not redraw itself when
     // the data behind it changes.
@@ -78,7 +78,9 @@ Canvas {
         ctx.lineTo(graph.width, graph.height)
         ctx.lineTo(0, graph.height)
         ctx.closePath()
-        ctx.fillStyle = Qt.rgba(graph.host.ink.r, graph.host.ink.g, graph.host.ink.b, 0.18)
+        // The area under the line, at the same weight as any other filled
+        // chrome in the shell.
+        ctx.fillStyle = graph.host.chosenFill
         ctx.fill()
         ctx.restore()
 

@@ -21,5 +21,7 @@ Text {
         return glyph === "" ? name : glyph
     }
     color: host.ink
+    font.family: host.fontFamily
+    font.pixelSize: host.iconSize
     verticalAlignment: Text.AlignVCenter
 }

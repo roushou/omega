@@ -7,6 +7,8 @@ Text {
 
     text: Props.textText(host.model)
     color: host.ink
+    font.family: host.fontFamily
+    font.pixelSize: host.fontSize
     font.bold: Props.bold(host.model)
     verticalAlignment: Text.AlignVCenter
 }

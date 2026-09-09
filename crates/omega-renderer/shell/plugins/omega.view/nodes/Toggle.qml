@@ -23,19 +23,19 @@ Rectangle {
     // The unit answered; stop second-guessing it.
     onPublishedChanged: swtch.optimistic = null
 
-    implicitWidth: 28
-    implicitHeight: 16
-    radius: height / 2
-    color: swtch.checked
-        ? swtch.host.ink
-        : Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.2)
+    readonly property int inset: host.space(2)
+
+    implicitWidth: host.space(28)
+    implicitHeight: host.space(16)
+    radius: host.pill(height)
+    color: swtch.checked ? swtch.host.ink : swtch.host.trackFill
 
     Rectangle {
-        width: swtch.height - 4
+        width: swtch.height - swtch.inset * 2
         height: width
-        radius: width / 2
-        y: 2
-        x: swtch.checked ? swtch.width - width - 2 : 2
+        radius: swtch.host.pill(width)
+        y: swtch.inset
+        x: swtch.checked ? swtch.width - width - swtch.inset : swtch.inset
         color: swtch.host.foreground
 
         Behavior on x {
