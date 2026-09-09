@@ -103,7 +103,14 @@ BarWidget {
       owner: root
       bar: root.bar
       open: root.opened
-      contentWidth: fittedContentWidth(Style.space(320))
+      // As wide as what it draws, which is how the height already worked.
+      // A fixed 320 made every panel that width whatever was in it, so a
+      // narrow one sat in a wide card and read as enormous side padding —
+      // the card's own `padding` is the kit's `popupPadding` and was never
+      // the problem. The floor keeps a panel with one line in it from
+      // arriving as a sliver.
+      contentWidth: fittedContentWidth(
+        Math.max(Style.space(220), panelView.implicitWidth + padding * 2))
       contentHeight: fittedContentHeight(Math.max(Style.space(40), panelView.implicitHeight))
 
       ViewNode {
