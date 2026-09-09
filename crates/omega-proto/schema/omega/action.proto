@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package omega;
 
+import "omega/state/power.proto";
 import "omega/value.proto";
 
 // Actions are the closed taxonomy of things a keybind, command, schedule, or
@@ -33,6 +34,7 @@ message Action {
     InvokeUnit invoke_unit = 19;
     ToggleFloating toggle_floating = 20;
     ToggleFullscreen toggle_fullscreen = 21;
+    SetPowerProfile set_power_profile = 22;
   }
 }
 
@@ -149,6 +151,15 @@ message InvokeUnit {
   string unit = 1;
   string command = 2;
   repeated Value args = 3;
+}
+
+// Trade performance against power.
+//
+// The profile is the ontology's enum rather than the daemon's string: what
+// power-profiles-daemon calls each one is the broker's business, not a
+// caller's.
+message SetPowerProfile {
+  PowerProfile profile = 1;
 }
 
 message ToggleFloating {

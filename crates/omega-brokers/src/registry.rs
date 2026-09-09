@@ -6,7 +6,7 @@
 use crate::broker::Broker;
 use crate::{
     Backlight, BlueZ, Clock, Desktop, Hyprland, Logind, Mpris, NetworkManager, Notifications,
-    PipeWire, Procfs, UPower,
+    PipeWire, PowerProfiles, Procfs, UPower,
 };
 
 /// The brokers a daemon runs.
@@ -21,6 +21,7 @@ impl Brokers {
     pub fn all() -> Vec<Box<dyn Broker>> {
         vec![
             Box::new(UPower::new()),
+            Box::new(PowerProfiles::new()),
             Box::new(NetworkManager::new()),
             Box::new(Hyprland::new()),
             Box::new(Backlight::new()),

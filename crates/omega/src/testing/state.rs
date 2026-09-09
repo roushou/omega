@@ -64,6 +64,25 @@ impl State {
         self.with(omega_proto::omega::MainsState { connected })
     }
 
+    /// The profile in force, and what this machine offers.
+    ///
+    /// Two arguments because the pair is the interesting case: a desktop that
+    /// offers no performance mode should not draw a button for one.
+    pub fn power_profile(
+        self,
+        active: omega_proto::omega::PowerProfile,
+        available: impl IntoIterator<Item = omega_proto::omega::PowerProfile>,
+    ) -> Self {
+        self.with(omega_proto::omega::PowerProfileState {
+            active: active as i32,
+            available: available
+                .into_iter()
+                .map(|profile| profile as i32)
+                .collect(),
+            degraded: String::new(),
+        })
+    }
+
     /// A plugin's own state, as the daemon replicates it.
     pub fn keyspace(mut self, address: &str, values: Values) -> Self {
         self.topics.retain(|held| held.topic != address);

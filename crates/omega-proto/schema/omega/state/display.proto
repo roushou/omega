@@ -18,7 +18,7 @@ message BacklightState {
 
 // Actual state of displays, as reported by the compositor. Distinct from the
 // desired Monitor in the state document: this is reality, that is intent.
-message DisplayState {
+message MonitorsState {
   repeated MonitorInfo monitors = 1;
 }
 

@@ -37,6 +37,7 @@ mod media;
 mod monitors;
 mod network;
 mod peripherals;
+mod power_profile;
 mod supervised;
 mod system;
 mod vpn;
@@ -54,6 +55,7 @@ pub use disk::Mount;
 pub use media::{Playback, Player};
 pub use monitors::Monitor;
 pub use peripherals::{Peripheral, PeripheralKind};
+pub use power_profile::{PowerProfile, ProfileLabel};
 pub use supervised::{UnitPhase, UnitReport};
 pub use system::{Load, Memory};
 pub use vpn::Tunnel;
@@ -102,6 +104,8 @@ handles! {
     Battery: omega_proto::omega::BatteryState,
     /// Whether it is plugged in.
     Mains: omega_proto::omega::MainsState,
+    /// How it is trading performance against power.
+    PowerProfiles: omega_proto::omega::PowerProfileState,
     /// The batteries of things plugged into it.
     Peripherals: omega_proto::omega::PeripheralsState,
 
@@ -122,7 +126,7 @@ handles! {
     /// The screen's brightness.
     Backlight: omega_proto::omega::BacklightState,
     /// The monitors the compositor is driving.
-    Monitors: omega_proto::omega::DisplayState,
+    Monitors: omega_proto::omega::MonitorsState,
     /// The workspaces, and which is being looked at.
     Workspaces: omega_proto::omega::WorkspacesState,
     /// What has focus.

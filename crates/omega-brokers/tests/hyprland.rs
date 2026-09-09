@@ -93,9 +93,9 @@ async fn it_reads_the_session_it_is_running_in() {
         .iter()
         .map(|topic| topic.topic.as_str())
         .collect();
-    assert_eq!(topics, vec!["display", "workspaces", "window", "input"]);
+    assert_eq!(topics, vec!["monitors", "workspaces", "window", "input"]);
 
-    let Some(state_topic::Value::Display(display)) = patch.topics[0].value.as_ref() else {
+    let Some(state_topic::Value::Monitors(display)) = patch.topics[0].value.as_ref() else {
         panic!("expected a display reading");
     };
     assert!(

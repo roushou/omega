@@ -13,9 +13,10 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, BluetoothState, DiskState, DisplayState, IdleState,
-    InputState, MainsState, MediaState, NetworkState, PeripheralsState, SystemState, TimeState,
-    UnitsState, VpnState, WifiState, WindowState, WorkspacesState, state_topic,
+    AudioState, BacklightState, BatteryState, BluetoothState, DiskState, IdleState, InputState,
+    MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState, PowerProfileState,
+    SystemState, TimeState, UnitsState, VpnState, WifiState, WindowState, WorkspacesState,
+    state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -75,7 +76,8 @@ topics! {
     /// Whether it is plugged in. Named for the socket: a battery is a
     /// different reading, and on a desktop this is the only one there is.
     Mains => "mains": MainsState,
-    Display => "display": DisplayState,
+    /// The monitors the compositor is driving.
+    Monitors => "monitors": MonitorsState,
     /// The supervisor's report on every unit it runs.
     Units => "units": UnitsState,
     Time => "time": TimeState,
@@ -99,6 +101,8 @@ topics! {
     Vpn => "vpn": VpnState,
     /// Where it keeps things.
     Disk => "disk": DiskState,
+    /// How it is trading performance against power.
+    PowerProfile => "power-profile": PowerProfileState,
 }
 
 impl SystemTopic {

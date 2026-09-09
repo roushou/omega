@@ -17,7 +17,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use omega_proto::omega::{
-    Direction, DisplayState, InputState, MonitorInfo, StatePatch, StateTopic, WindowInfo,
+    Direction, InputState, MonitorInfo, MonitorsState, StatePatch, StateTopic, WindowInfo,
     WindowSelector, WindowState, WorkspaceInfo, WorkspacesState, action, move_to_workspace,
     state_topic, switch_workspace, window_selector,
 };
@@ -76,10 +76,10 @@ impl Monitor {
 pub struct Monitors;
 
 impl Monitors {
-    pub fn parse(json: &str) -> Result<DisplayState, BrokerError> {
+    pub fn parse(json: &str) -> Result<MonitorsState, BrokerError> {
         let monitors: Vec<Monitor> = serde_json::from_str(json)
             .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
-        Ok(DisplayState {
+        Ok(MonitorsState {
             monitors: monitors.iter().map(Monitor::info).collect(),
         })
     }
@@ -348,7 +348,7 @@ impl Link {
     /// answer is per event: a window title changing cannot have moved a
     /// monitor.
     fn affected(event: &str) -> &'static [SystemTopic] {
-        const DISPLAY: &[SystemTopic] = &[SystemTopic::Display];
+        const DISPLAY: &[SystemTopic] = &[SystemTopic::Monitors];
         const WORKSPACES: &[SystemTopic] = &[SystemTopic::Workspaces];
         const WINDOW: &[SystemTopic] = &[SystemTopic::Window];
         const INPUT: &[SystemTopic] = &[SystemTopic::Input];
@@ -358,7 +358,7 @@ impl Link {
         // A monitor arriving moves workspaces onto it and takes focus with
         // them.
         const EVERYTHING: &[SystemTopic] = &[
-            SystemTopic::Display,
+            SystemTopic::Monitors,
             SystemTopic::Workspaces,
             SystemTopic::Window,
             SystemTopic::Input,
@@ -404,8 +404,8 @@ impl Link {
 
         for topic in wanted {
             let value = match topic {
-                SystemTopic::Display => {
-                    state_topic::Value::Display(Monitors::parse(&self.ask("j/monitors").await?)?)
+                SystemTopic::Monitors => {
+                    state_topic::Value::Monitors(Monitors::parse(&self.ask("j/monitors").await?)?)
                 }
                 SystemTopic::Workspaces => {
                     // Which one is active is a second question, and asking it
@@ -552,7 +552,7 @@ impl Hyprland {
     /// Every topic this broker reports, which is what a fresh connection
     /// answers with.
     const EVERYTHING: &'static [SystemTopic] = &[
-        SystemTopic::Display,
+        SystemTopic::Monitors,
         SystemTopic::Workspaces,
         SystemTopic::Window,
         SystemTopic::Input,

@@ -32,6 +32,34 @@ message MainsState {
   reserved 2;
 }
 
+// How the machine is trading performance against power.
+//
+// `power-profiles-daemon` owns this: it is not something Omega decides, and
+// anything on the machine may change it. That is why it is a reading rather
+// than a unit remembering what it last set — a unit's memory is right until
+// somebody runs `powerprofilesctl` in a terminal, and then it is confidently
+// wrong.
+message PowerProfileState {
+  PowerProfile active = 1;
+
+  // What this machine offers. A desktop without a performance mode does not
+  // get an option that fails when pressed, so a panel draws this rather than
+  // every profile the enum can name.
+  repeated PowerProfile available = 2;
+
+  // Why performance is being held back — "lap-detected", "high-operating-
+  // temperature" — or empty when it is not. A reason rather than a flag,
+  // because "unavailable" is not worth drawing without saying why.
+  string degraded = 3;
+}
+
+enum PowerProfile {
+  POWER_PROFILE_UNSPECIFIED = 0;
+  POWER_PROFILE_SAVER = 1;
+  POWER_PROFILE_BALANCED = 2;
+  POWER_PROFILE_PERFORMANCE = 3;
+}
+
 // The batteries of things plugged into the machine, rather than the machine's
 // own: a mouse, a keyboard, a headset.
 message PeripheralsState {

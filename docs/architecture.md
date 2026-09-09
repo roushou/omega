@@ -14,7 +14,7 @@ build-time concern on the developer's machine, never a boot-time requirement.
 ## The daemon
 
 One Rust daemon is the trust boundary, state owner, supervisor, and
-reconciler. It brokers over NetworkManager, PipeWire, UPower and Hyprland and
+reconciler. It brokers over NetworkManager, PipeWire, UPower, power-profiles-daemon and Hyprland and
 never reimplements them. No user code runs in its address space.
 
 Units only ever send frames. No native modules, no FFI. That boundary is what

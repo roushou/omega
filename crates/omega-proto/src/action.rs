@@ -94,4 +94,5 @@ actions! {
     InvokeUnit => Spawn,
     ToggleFloating => None,
     ToggleFullscreen => None,
+    SetPowerProfile => SystemControl,
 }

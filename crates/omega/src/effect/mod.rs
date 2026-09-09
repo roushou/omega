@@ -17,12 +17,14 @@
 
 mod brightness;
 mod notify;
+mod power_profile;
 mod session;
 mod shell;
 mod volume;
 
 pub use brightness::Brightness;
 pub use notify::{Notification, Notify};
+pub use power_profile::SetProfile;
 pub use session::Session;
 pub use shell::Shell;
 pub use volume::Volume;
