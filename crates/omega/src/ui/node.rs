@@ -157,6 +157,42 @@ impl Node {
     }
 }
 
+/// How big a run of text is, as a role rather than a measurement.
+///
+/// A unit cannot pick a pixel size well: it does not know the theme's base
+/// font, the display's scale, or what is drawn beside it. What it does know
+/// is what the text is *for* — a caption under a figure, the figure itself —
+/// and the shell turns that into a size on its own type scale.
+///
+/// [`Header`] takes none of these: being a header is already the answer.
+///
+/// [`Header`]: crate::ui::Header
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Size {
+    /// Smaller than body. A label under a reading.
+    Caption,
+    /// What text is unless it says otherwise.
+    Body,
+    Subtitle,
+    Title,
+    Heading,
+    /// The one figure a panel was opened to read.
+    Display,
+}
+
+impl Size {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Caption => "caption",
+            Self::Body => "body",
+            Self::Subtitle => "subtitle",
+            Self::Title => "title",
+            Self::Heading => "heading",
+            Self::Display => "display",
+        }
+    }
+}
+
 /// Which way a stack's children run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Align {

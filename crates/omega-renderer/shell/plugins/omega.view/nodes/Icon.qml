@@ -22,6 +22,8 @@ Text {
     }
     color: host.ink
     font.family: host.fontFamily
-    font.pixelSize: host.iconSize
+    // Unset, an icon is drawn at the shell's icon size, which is already a
+    // little larger than body text — so the fallback is that, not body.
+    font.pixelSize: host.typeSize(Props.iconSize(host.model), host.iconSize)
     verticalAlignment: Text.AlignVCenter
 }

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Ui
 import qs.Commons
+import "Props.js" as Props
 
 // Draws the view trees an Omega unit publishes: one in the bar's slot, and
 // one in a popout anchored to it.
@@ -62,6 +63,10 @@ BarWidget {
     bar: root.bar
     // The tree draws itself; the button is the bar's chrome around it.
     labelVisible: false
+    // What the slot's own root node asked to say on hover. The bar owns the
+    // tooltip window, so this is the one node in a tree that can have one —
+    // a tooltip deeper in would need a host that follows the pointer.
+    tooltipText: link.tree && link.tree.root ? Props.tooltip(link.tree.root) : ""
     hasVisualContent: link.tree !== null
     // A button with no label is a button with no width, and the bar lays out
     // by implicit size — so the slot has to follow the tree instead.

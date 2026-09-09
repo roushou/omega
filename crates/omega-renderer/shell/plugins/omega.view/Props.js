@@ -110,10 +110,18 @@ function textText(node) {
     return readText(node, "text", "")
 }
 
+function textSize(node) {
+    return readText(node, "size", "body")
+}
+
 // ---- icon ----
 
 function iconName(node) {
     return readText(node, "name", "")
+}
+
+function iconSize(node) {
+    return readText(node, "size", "")
 }
 
 // ---- header ----

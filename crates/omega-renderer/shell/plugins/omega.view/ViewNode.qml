@@ -54,6 +54,21 @@ Item {
     // What corners do, following the theme — which follows Hyprland's
     // `decoration:rounding`. A square theme gets square controls, the way
     // `ToggleSwitch` decides it.
+    // A role on the type scale, as a unit names it. An unknown role — a
+    // tree from a newer plugin — falls back rather than laying out a NaN,
+    // which is the same bargain `delegateFor` makes for an unknown kind.
+    function typeSize(role, fallback) {
+        switch (role) {
+            case "caption":  return Style.font.caption
+            case "body":     return Style.font.body
+            case "subtitle": return Style.font.subtitle
+            case "title":    return Style.font.title
+            case "heading":  return Style.font.heading
+            case "display":  return Style.font.display
+            default:         return fallback
+        }
+    }
+
     readonly property int radius: Style.cornerRadius
     readonly property bool rounded: Style.cornerRadius > 0
     function pill(size) { return node.rounded ? size / 2 : 0 }
@@ -95,8 +110,17 @@ Item {
     readonly property int fixedWidth: node.space(Props.width(node.model))
     readonly property int fixedHeight: node.space(Props.height(node.model))
 
-    implicitWidth: node.fixedWidth > 0 ? node.fixedWidth : content.implicitWidth
-    implicitHeight: node.fixedHeight > 0 ? node.fixedHeight : content.implicitHeight
+    // Room around what this node draws. Given here rather than by each
+    // delegate because this is the item that owns the slot: the delegate is
+    // centred in it, so a larger slot is padding on every side.
+    readonly property int padding: node.space(Props.pad(node.model))
+
+    implicitWidth: node.fixedWidth > 0
+        ? node.fixedWidth
+        : content.implicitWidth + node.padding * 2
+    implicitHeight: node.fixedHeight > 0
+        ? node.fixedHeight
+        : content.implicitHeight + node.padding * 2
 
     // One reason to be unusable looks like the other. A shell with a spinner
     // would tell them apart here, and nothing above would change.

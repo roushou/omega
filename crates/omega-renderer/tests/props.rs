@@ -78,14 +78,7 @@ const HAND_WRITTEN: &[&str] = &["bind", "encode", "children", "prop"];
 /// `omega-brokers`' coverage test makes. An entry is not permission to leave
 /// it: a unit calling `.tooltip(…)` today is publishing a string on every
 /// render that nothing will ever show.
-const NOT_DRAWN: &[&str] = &[
-    // `Node::tooltip` is documented as "text to show when someone hovers it"
-    // and no host has a hover to show it on. The battery unit sets one.
-    "tooltip",
-    // `Node::pad` is documented as "space around it" and `ViewNode` has no
-    // padding to give it.
-    "pad",
-];
+const NOT_DRAWN: &[&str] = &[];
 
 #[test]
 fn the_checked_in_readers_are_what_the_table_generates() {

@@ -62,7 +62,7 @@ pub use state::{
 pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
 pub use ui::{
     Align, Bind, Button, Column, Field, Graph, Grid, Group, Header, Icon, Image, List, Node,
-    Progress, Row, Separator, Slider, Spacer, Stack, Text, Toggle, Ui,
+    Progress, Row, Separator, Size, Slider, Spacer, Stack, Text, Toggle, Ui,
 };
 pub use units::{Percent, Remaining};
 

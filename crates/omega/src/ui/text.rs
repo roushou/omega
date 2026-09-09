@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use crate::ui::node::Node;
+use crate::ui::node::{Node, Size};
 use crate::ui::style::styled;
 
 /// A run of text.
@@ -19,6 +19,12 @@ impl Text {
         Self {
             node: Node::new("text").text_prop("text", text.to_string()),
         }
+    }
+
+    /// What this text is for, which is what decides how big it is.
+    pub fn size(mut self, size: Size) -> Self {
+        self.node = self.node.text_prop("size", size.as_str());
+        self
     }
 }
 
@@ -54,6 +60,14 @@ impl Icon {
         Self {
             node: Node::new("icon").text_prop("name", name),
         }
+    }
+
+    /// Draw the glyph at a text role's size, for an icon that has to hold
+    /// its own beside a figure. Unset, it is whatever the shell draws icons
+    /// at, which is already a little larger than body text.
+    pub fn size(mut self, size: Size) -> Self {
+        self.node = self.node.text_prop("size", size.as_str());
+        self
     }
 }
 

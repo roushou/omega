@@ -178,9 +178,26 @@ nodes! {
         gap: Number,
     },
     /// A run of text.
-    Text => "text" { text: Text },
+    ///
+    /// `size` names a role on the shell's type scale — `"caption"`,
+    /// `"body"`, `"subtitle"`, `"title"`, `"heading"`, `"display"` — not a
+    /// number of pixels, which a unit has no way to choose well. A string
+    /// for the same reason `align` is one: the set is closed, the schema
+    /// cannot say so, and a shell that meets a role it does not know falls
+    /// back to body rather than refusing the tree.
+    Text => "text" {
+        text: Text,
+        size: Text = "\"body\"",
+    },
     /// A glyph from the shell's icon set.
-    Icon => "icon" { name: Text },
+    ///
+    /// Sized on the same scale as text, so a glyph beside a `display`
+    /// figure can be told to grow with it. Unset, it is whatever the shell
+    /// draws icons at, which is not the same as body text.
+    Icon => "icon" {
+        name: Text,
+        size: Text,
+    },
     /// A heading over a section of a panel.
     Header => "header" { text: Text },
     /// A rule between sections.
