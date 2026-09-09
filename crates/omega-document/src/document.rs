@@ -5,11 +5,11 @@
 //! config plane is just JSON with extra steps.
 
 use omega_proto::omega::{
-    Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting, Module,
-    NightLightSetting, Setting, StateDocument, ThemeSetting, UnitRef, WidgetModule, idle_setting,
-    module, setting,
+    Action, Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting,
+    InvokeUnit, Module, NightLightSetting, Notify, RunCommand, Schedule, Setting, StateDocument,
+    ThemeSetting, UnitRef, WidgetModule, action, idle_setting, module, setting,
 };
-use omega_proto::{Fields, Values};
+use omega_proto::{Cadence, Fields, IntoValue, Values};
 
 /// The machine's desired state, built one declaration at a time.
 ///
@@ -39,6 +39,12 @@ impl Document {
 
     pub fn setting(mut self, setting: Setting) -> Self {
         self.inner.settings.push(setting);
+        self
+    }
+
+    /// Something the daemon does on its own clock. See [`Schedules`].
+    pub fn schedule(mut self, schedule: Schedule) -> Self {
+        self.inner.schedules.push(schedule);
         self
     }
 
@@ -215,6 +221,91 @@ impl Modules {
             id: id.into(),
             kind: Some(kind),
         }
+    }
+}
+
+/// Work the machine does on its own.
+///
+/// The cadence belongs here rather than in a plugin, because how often the
+/// weather is fetched is a property of the machine and the person using it —
+/// not of the code that knows how to fetch it. A plugin author who picked
+/// ten minutes would be picking it for everybody.
+#[derive(Debug)]
+pub struct Schedules;
+
+impl Schedules {
+    /// Fire an action on a cadence.
+    ///
+    /// ```
+    /// # use omega_document::{Actions, Schedules};
+    /// # use omega_proto::Cadence;
+    /// Schedules::every(
+    ///     "refresh-weather",
+    ///     Cadence::minutes(10),
+    ///     Actions::invoke("weather", "refresh"),
+    /// );
+    /// ```
+    pub fn every(id: impl Into<String>, cadence: Cadence, action: Action) -> Schedule {
+        Schedule::new(id, cadence, action)
+    }
+
+    /// Announce a cadence and leave what to do about it to whoever is
+    /// listening — a unit with a reaction registered for
+    /// [`EventKind::EventScheduleFired`], which tells schedules apart by id.
+    ///
+    /// [`EventKind::EventScheduleFired`]: omega_proto::omega::EventKind::EventScheduleFired
+    pub fn announcing(id: impl Into<String>, cadence: Cadence) -> Schedule {
+        Schedule::announcing(id, cadence)
+    }
+}
+
+/// The things a schedule or a keybind can be told to do.
+///
+/// A thin builder over `action.proto`: the actions here are the ones a
+/// document has a reason to name. The rest of the taxonomy exists for units
+/// to ask for, where the capability check that governs it lives.
+#[derive(Debug)]
+pub struct Actions;
+
+impl Actions {
+    /// Call a unit's command surface. The daemon checks the unit declares it.
+    pub fn invoke(unit: impl Into<String>, command: impl Into<String>) -> Action {
+        Self::invoke_with(unit, command, Vec::<bool>::new())
+    }
+
+    /// The same, with arguments — the values the command reads with
+    /// `Args::get`.
+    pub fn invoke_with(
+        unit: impl Into<String>,
+        command: impl Into<String>,
+        args: impl IntoIterator<Item = impl IntoValue>,
+    ) -> Action {
+        Self::of(action::Kind::InvokeUnit(InvokeUnit {
+            unit: unit.into(),
+            command: command.into(),
+            args: args.into_iter().map(IntoValue::into_value).collect(),
+        }))
+    }
+
+    /// Run a shell command. The escape hatch, and honestly so.
+    pub fn run(command: impl Into<String>) -> Action {
+        Self::of(action::Kind::RunCommand(RunCommand {
+            command: command.into(),
+        }))
+    }
+
+    /// Say something.
+    pub fn notify(summary: impl Into<String>, body: impl Into<String>) -> Action {
+        Self::of(action::Kind::Notify(Notify {
+            summary: summary.into(),
+            body: body.into(),
+            icon: String::new(),
+            timeout_ms: 0,
+        }))
+    }
+
+    fn of(kind: action::Kind) -> Action {
+        Action { kind: Some(kind) }
     }
 }
 

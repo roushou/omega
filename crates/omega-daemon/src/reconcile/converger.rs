@@ -24,8 +24,9 @@ use crate::DaemonError;
 use crate::hub::Hub;
 use crate::manifest::ManifestStore;
 use crate::reconcile::{
-    BarProvider, ConfigProvider, EnvironmentProvider, Reconciler, UnitProvider,
+    BarProvider, ConfigProvider, EnvironmentProvider, Reconciler, ScheduleProvider, UnitProvider,
 };
+use crate::schedule::Schedules;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
@@ -121,6 +122,10 @@ pub struct Context {
     pub hub: Hub,
     pub supervisor: Supervisor,
     pub units: UnitTable,
+    /// The timers the document declares. Held here rather than built per
+    /// pass: a schedule that survives a convergence is one that keeps
+    /// ticking through it.
+    pub schedules: Schedules,
 }
 
 struct Worker {
@@ -223,6 +228,10 @@ impl Worker {
                 config.names().cloned(),
             ))
             .with(EnvironmentProvider::new(&self.context.layout))
+            // Schedules before bars, and after units: a schedule's first
+            // tick is immediate, and one that invokes a unit wants the unit
+            // already started.
+            .with(ScheduleProvider::new(self.context.schedules.clone()))
             // Bars last: a widget instance can only be rendered by a unit
             // that is already running.
             .with(BarProvider::new(
@@ -245,6 +254,8 @@ mod tests {
     use std::path::PathBuf;
 
     use omega_proto::Socket;
+
+    use crate::broker::Brokerage;
 
     #[test]
     fn triggers_that_arrive_together_are_one_pass() {
@@ -302,6 +313,7 @@ mod tests {
         fn worker(&self) -> Worker {
             let hub = Hub::new();
             let units = UnitTable::detached(hub.clone());
+            let shutdown = Shutdown::new();
 
             Worker {
                 queue: Arc::new(Queue::default()),
@@ -313,11 +325,18 @@ mod tests {
                     supervisor: Supervisor::new(
                         Socket::at(self.0.join("omega.sock")),
                         units.clone(),
-                        Shutdown::new(),
+                        shutdown.clone(),
+                    ),
+                    // Never fired: nothing here converges a document.
+                    schedules: Schedules::new(
+                        hub.clone(),
+                        units.clone(),
+                        Brokerage::new(hub, shutdown.clone()),
+                        shutdown.clone(),
                     ),
                     units,
                 },
-                shutdown: Shutdown::new(),
+                shutdown,
             }
         }
     }

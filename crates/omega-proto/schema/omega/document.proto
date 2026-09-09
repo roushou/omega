@@ -135,9 +135,22 @@ message CursorSetting {
   uint32 size = 2;
 }
 
+// Something the daemon does on its own clock.
+//
+// The action is optional: a schedule with none fires EVENT_SCHEDULE_FIRED and
+// nothing else, which is how a unit reacts to a cadence the document owns
+// without the document naming what it does about it.
 message Schedule {
   string id = 1;
-  string cron = 2;              // "0 9 * * *" or "every 5m"
+
+  // How often. `every <n><s|m|h|d>` — "every 30s", "every 10m", "every 1h".
+  //
+  // Named for what it is rather than for cron, which this does not parse: a
+  // field called `cron` holding something that is not cron is a promise the
+  // daemon cannot keep, and an expression it cannot read is refused rather
+  // than silently never fired.
+  string cadence = 2;
+
   Action action = 3;
 }
 

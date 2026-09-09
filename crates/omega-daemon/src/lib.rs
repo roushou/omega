@@ -10,6 +10,7 @@ pub mod manifest;
 pub mod process;
 pub mod reconcile;
 pub mod refusal;
+pub mod schedule;
 pub mod session;
 pub mod shell;
 pub mod shutdown;

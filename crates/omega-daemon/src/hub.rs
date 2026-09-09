@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot, StateTopic, ViewTree};
+use omega_proto::omega::{
+    Event, EventKind, ScheduleFired, StatePatch, StateSnapshot, StateTopic, ViewTree, event,
+};
 use omega_proto::{ModuleId, SurfaceId, UnitName};
 
 use crate::events::{EventStamp, PowerDetail, Transitions};
@@ -197,6 +199,17 @@ impl Hub {
     pub fn publish_event(&self, event: Event) {
         tracing::debug!(id = event.id, kind = ?EventKind::try_from(event.kind), "event");
         let _ = self.inner.events.send(event);
+    }
+
+    /// A schedule fired. The daemon's own clock speaking, so the id is the
+    /// document's and there is no peer to attribute it to.
+    pub fn publish_schedule_fired(&self, schedule_id: &str) {
+        self.publish_event(self.inner.stamp.stamp(
+            EventKind::EventScheduleFired,
+            Some(event::Detail::Schedule(ScheduleFired {
+                schedule_id: schedule_id.to_string(),
+            })),
+        ));
     }
 
     /// A unit's own event, stamped with the identity the daemon

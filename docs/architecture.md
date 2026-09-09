@@ -98,14 +98,23 @@ change can be shown before it happens. Convergence runs in one task, one pass
 at a time, and is keyed per entity id — which is what keeps the blast radius
 of an edit to the thing it names.
 
-Four domains today:
+Five domains today:
 
 | domain        | converges                                                                         |
 | ------------- | --------------------------------------------------------------------------------- |
 | `config`      | unit settings; runs first, so a unit never spawns before its settings are on file |
 | `units`       | which units run                                                                   |
-| `bars`        | surface instances placed in bars                                                  |
 | `environment` | the session environment                                                           |
+| `schedules`   | the timers the document declares                                                  |
+| `bars`        | surface instances placed in bars                                                  |
+
+A schedule is the one thing the runtime plane does that nobody asked for. Its
+cadence is `every <n><s|m|h|d>` — one grammar, in `omega-proto`, so the config
+plane that writes it and the daemon that reads it cannot drift. When one
+fires, the daemon publishes `EVENT_SCHEDULE_FIRED` and performs the action the
+document gave it, if it gave one; a schedule with no action is a cadence a
+unit reacts to. Nothing here is capability-checked, because a schedule is the
+machine's own document speaking rather than a unit asking.
 
 ## Layout
 

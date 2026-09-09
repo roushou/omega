@@ -97,6 +97,12 @@ which compiles a scaffolded config through the real binaries.
 - Events are transitions of state, derived in one place: "AC unplugged" and
   `battery.charging == false` are one fact and may not disagree. Events are
   not stored.
+- Schedules live in `Schedules`, not in `ScheduleProvider`: a reconciler is
+  rebuilt every pass, and timers rebuilt with it would fire once. A pass that
+  changed nothing must leave a running timer alone, or a ten-minute refresh
+  never reaches ten minutes. The first tick is immediate.
+- A cadence is `every <n><s|m|h|d>` and cron is refused by name. A field that
+  took `"0 9 * * *"` and never fired would be worse than one that says no.
 - Long-lived tasks select on `Shutdown`. Units are asked to exit (SIGTERM,
   then a deadline), never only killed.
 - `Changes` reports _settled_ filesystem events, Create/Modify/Remove only —

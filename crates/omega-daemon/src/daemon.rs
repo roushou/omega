@@ -16,6 +16,7 @@ use crate::hub::Hub;
 use crate::manifest::ManifestStore;
 use crate::manifest::ManifestStoreError;
 use crate::reconcile::{Context, Converger, Work};
+use crate::schedule::Schedules;
 use crate::session::Session;
 use crate::shell::ShellError;
 use crate::shell::ShellServer;
@@ -106,6 +107,12 @@ impl Daemon {
                 hub: self.hub.clone(),
                 supervisor: self.supervisor.clone(),
                 units: self.units.clone(),
+                schedules: Schedules::new(
+                    self.hub.clone(),
+                    self.units.clone(),
+                    self.brokers.clone(),
+                    self.shutdown.clone(),
+                ),
             },
             self.shutdown.clone(),
         );

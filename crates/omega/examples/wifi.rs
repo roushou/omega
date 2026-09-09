@@ -204,6 +204,13 @@ impl Command for Connect {
 /// A command rather than the widget, because writing state is doing something
 /// — a widget that recorded on every render would record on every percent the
 /// battery moved, too.
+///
+/// Nothing in this unit calls it: how often a history is sampled belongs to
+/// whoever runs the machine, so the document says it.
+///
+/// ```ignore
+/// Schedules::every("sample-wifi", Cadence::seconds(30), Actions::invoke(UNIT, "sample"))
+/// ```
 #[derive(omega::Command, Debug)]
 pub struct Sample {
     network: Network,

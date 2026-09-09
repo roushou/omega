@@ -9,6 +9,7 @@ pub mod bars;
 pub mod config;
 pub mod converger;
 pub mod environment;
+pub mod schedules;
 pub mod units;
 
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ pub use bars::BarProvider;
 pub use config::ConfigProvider;
 pub use converger::{Context, Converger, Work};
 pub use environment::EnvironmentProvider;
+pub use schedules::ScheduleProvider;
 pub use units::UnitProvider;
 
 /// What a change does to an entity.

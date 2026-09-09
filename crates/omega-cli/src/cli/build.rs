@@ -128,7 +128,14 @@ impl BuildCmd {
             ui.step(Step::Evaluated, Self::describe(&document));
         }
 
-        // 5. Assemble the daemon's state atomically.
+        // 5. Check what only the document can say. The daemon checks the
+        //    same rule when it loads this, against the same grammar — but a
+        //    schedule that will never fire should fail where somebody is
+        //    still looking at the output, not in a log at three in the
+        //    morning.
+        Self::check_cadences(&document)?;
+
+        // 6. Assemble the daemon's state atomically.
         plan.materialize(layout, &document)?;
 
         ui.step(
@@ -142,6 +149,17 @@ impl BuildCmd {
         Ok(())
     }
 
+    /// Every schedule's cadence, read with the grammar the daemon reads it
+    /// with. Neither owns a private copy of the rule.
+    fn check_cadences(document: &StateDocument) -> anyhow::Result<()> {
+        for schedule in &document.schedules {
+            schedule
+                .parsed()
+                .with_context(|| format!("schedule {:?} will never fire", schedule.id))?;
+        }
+        Ok(())
+    }
+
     /// What the config plane said, in one line: a document is the point of
     /// the build, and "it ran" is not the same as knowing what it declared.
     fn describe(document: &StateDocument) -> String {
@@ -149,6 +167,7 @@ impl BuildCmd {
             (document.units.len(), "unit"),
             (document.bars.len(), "bar"),
             (document.settings.len(), "setting"),
+            (document.schedules.len(), "schedule"),
             (document.environment.len(), "variable"),
         ];
 
