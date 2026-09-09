@@ -29,7 +29,7 @@ pub use protocol::{PROTOCOL_VERSION, omega};
 pub use refusal::Refusal;
 pub use stream::{DaemonStreams, PeerStreams};
 pub use toml::{ReadError, Table, Toml, TomlDoc, TomlError, TomlFile, TomlSchema, Validated};
-pub use topic::{SystemTopic, Topic, TopicError, TopicValue};
+pub use topic::{Address, AddressError, SystemTopic, TopicValue};
 pub use transport::{ReadHalf, Socket, Transport, WriteHalf};
 pub use ui::{NodeKind, Prop, PropKind};
 pub use values::{Fields, FromValue, IntoValue, Values};

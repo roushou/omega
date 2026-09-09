@@ -111,9 +111,10 @@ impl fmt::Display for SystemTopic {
     }
 }
 
-/// A validated topic address.
+/// A validated topic address: where a value lives, rather than what it
+/// carries — [`TopicValue`] is that.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Topic {
+pub enum Address {
     /// One of the daemon's own topics.
     System(SystemTopic),
     /// `unit.<name>.<key>` — data a unit owns and only it may write.
@@ -121,23 +122,23 @@ pub enum Topic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum TopicError {
+pub enum AddressError {
     #[error("unknown state topic {0:?}")]
     Unknown(String),
     #[error("unit topic {0:?} must be shaped unit.<name>.<key>")]
     MalformedUnitTopic(String),
 }
 
-impl Topic {
+impl Address {
     pub const UNIT_PREFIX: &'static str = "unit.";
 
-    pub fn parse(address: &str) -> Result<Self, TopicError> {
+    pub fn parse(address: &str) -> Result<Self, AddressError> {
         if let Some(rest) = address.strip_prefix(Self::UNIT_PREFIX) {
             let (unit, key) = rest
                 .split_once('.')
-                .ok_or_else(|| TopicError::MalformedUnitTopic(address.to_string()))?;
+                .ok_or_else(|| AddressError::MalformedUnitTopic(address.to_string()))?;
             if unit.is_empty() || key.is_empty() {
-                return Err(TopicError::MalformedUnitTopic(address.to_string()));
+                return Err(AddressError::MalformedUnitTopic(address.to_string()));
             }
             return Ok(Self::Unit {
                 unit: unit.to_string(),
@@ -147,7 +148,7 @@ impl Topic {
 
         SystemTopic::parse(address)
             .map(Self::System)
-            .ok_or_else(|| TopicError::Unknown(address.to_string()))
+            .ok_or_else(|| AddressError::Unknown(address.to_string()))
     }
 
     /// The address of a unit's own key.
@@ -168,7 +169,7 @@ impl Topic {
     }
 }
 
-impl fmt::Display for Topic {
+impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::System(topic) => f.write_str(topic.as_str()),

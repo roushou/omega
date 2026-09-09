@@ -20,8 +20,8 @@
 use std::collections::BTreeSet;
 
 use omega_proto::omega::{Capability, EventKind, SurfaceKind};
+use omega_proto::{Address, SystemTopic};
 use omega_proto::{Manifest, Surface};
-use omega_proto::{SystemTopic, Topic};
 
 use crate::error::Error;
 use crate::registry::{CommandEntry, ReactionEntry, WidgetEntry};
@@ -143,7 +143,7 @@ impl Plugin {
             // daemon does not distinguish, and neither should a reader.
             state_topics: topics
                 .into_iter()
-                .map(|topic: SystemTopic| Topic::System(topic).to_string())
+                .map(|topic: SystemTopic| Address::System(topic).to_string())
                 .chain(keyspaces)
                 .collect(),
             events: self

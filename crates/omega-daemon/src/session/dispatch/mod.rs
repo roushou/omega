@@ -8,8 +8,8 @@
 use omega_proto::omega::{
     Empty, Frame, Invoke, StatePatch, StateTopic, Value, frame, invoke, result, state_topic,
 };
+use omega_proto::{Address, Refusal};
 use omega_proto::{ModuleId, SurfaceId, UnitName};
-use omega_proto::{Refusal, Topic};
 
 use crate::action::Actions;
 use crate::broker::Brokerage;
@@ -262,7 +262,7 @@ impl Dispatcher {
                 // A unit writes its own keyspace and nothing else: system
                 // topics belong to the daemon, and another unit's keyspace to
                 // that unit, whatever capability the writer holds.
-                let topic = Topic::parse(&set.topic).or_refuse()?;
+                let topic = Address::parse(&set.topic).or_refuse()?;
                 if topic.owner() != Some(unit.as_str()) {
                     return Err(Refusal::denied(format!(
                         "{topic} is not in {unit}'s keyspace"

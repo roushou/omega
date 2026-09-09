@@ -9,7 +9,7 @@ use omega_document::DocumentError;
 use omega_proto::IdentError;
 use omega_proto::ManifestError;
 use omega_proto::TomlError;
-use omega_proto::{Refusal, TopicError};
+use omega_proto::{AddressError, Refusal};
 
 use crate::units::RequestError;
 
@@ -25,7 +25,7 @@ impl Refusable for IdentError {
     }
 }
 
-impl Refusable for TopicError {
+impl Refusable for AddressError {
     fn refusal(&self) -> Refusal {
         Refusal::invalid(self.to_string())
     }

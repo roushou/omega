@@ -44,7 +44,7 @@ which compiles a scaffolded config through the real binaries.
   `Refusal` with a closed `ErrorCode`. Never a silent drop or bare EOF.
 - Which `ErrorCode` a domain error becomes is declared once per error type in
   `refusal.rs`. A unit's own refusal passes through unflattened.
-- Topic and event names are validated where they enter (`Topic::parse`,
+- Topic and event names are validated where they enter (`Address::parse`,
   `EventKind::from_str_name`).
 - The observation socket carries the same `Frame`/`Invoke`/`POLICY` as the
   control socket, JSON-encoded because a shell cannot encode protobuf. A

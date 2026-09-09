@@ -31,7 +31,7 @@
 use std::marker::PhantomData;
 
 use omega_proto::omega::{Capability, SetState, invoke};
-use omega_proto::{Fields, Topic};
+use omega_proto::{Address, Fields};
 
 use crate::context::Context;
 use crate::wiring::{Does, Reads, Wiring};
@@ -48,7 +48,7 @@ pub trait UnitState: Fields + Send + Sync + 'static {
 
     /// `unit.<unit>.<key>` — how the daemon addresses it.
     fn address() -> String {
-        Topic::of_unit(Self::UNIT, Self::KEY).to_string()
+        Address::of_unit(Self::UNIT, Self::KEY).to_string()
     }
 }
 

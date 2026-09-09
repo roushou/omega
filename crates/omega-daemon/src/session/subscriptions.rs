@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use omega_proto::Manifest;
 use omega_proto::UnitName;
 use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot};
-use omega_proto::{Refusal, Topic};
+use omega_proto::{Address, Refusal};
 
 #[derive(Debug)]
 pub struct Subscriptions {
@@ -164,7 +164,7 @@ impl Subscriptions {
 
     /// A unit's own keyspace: always readable, always writable by it alone.
     pub fn owns(&self, topic: &str) -> bool {
-        let (Some(owner), Ok(parsed)) = (self.owner.as_ref(), Topic::parse(topic)) else {
+        let (Some(owner), Ok(parsed)) = (self.owner.as_ref(), Address::parse(topic)) else {
             return false;
         };
         parsed.owner() == Some(owner.as_str())

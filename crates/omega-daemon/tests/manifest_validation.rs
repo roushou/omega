@@ -1,7 +1,7 @@
 //! A manifest's strings are addresses on the wire; every one of them is
 //! checked before the daemon vouches for the unit.
 
-use omega_proto::Topic;
+use omega_proto::Address;
 use omega_proto::Validated;
 use omega_proto::omega::SurfaceKind;
 use omega_proto::{Manifest, Surface};
@@ -31,7 +31,7 @@ fn a_complete_manifest_validates() {
 
     assert_eq!(
         manifest.state_topics().unwrap(),
-        vec![Topic::parse("battery").unwrap()]
+        vec![Address::parse("battery").unwrap()]
     );
     assert_eq!(manifest.events().unwrap().len(), 1);
 }

@@ -2,32 +2,35 @@
 
 use std::collections::HashSet;
 
-use omega_proto::{SystemTopic, Topic, TopicError};
+use omega_proto::{Address, AddressError, SystemTopic};
 
 #[test]
 fn system_topics_are_a_closed_set() {
     assert_eq!(
-        Topic::parse("battery").unwrap(),
-        Topic::System(SystemTopic::Battery)
+        Address::parse("battery").unwrap(),
+        Address::System(SystemTopic::Battery)
     );
     assert_eq!(
-        Topic::parse("batery").unwrap_err(),
-        TopicError::Unknown("batery".into())
+        Address::parse("batery").unwrap_err(),
+        AddressError::Unknown("batery".into())
     );
     // Every system topic round-trips through its address.
     for topic in SystemTopic::ALL {
-        assert_eq!(Topic::parse(topic.as_str()).unwrap(), Topic::System(*topic));
+        assert_eq!(
+            Address::parse(topic.as_str()).unwrap(),
+            Address::System(*topic)
+        );
     }
 }
 
 #[test]
 fn a_unit_keyspace_address_names_its_owner() {
-    let topic = Topic::parse("unit.battery-widget.threshold").unwrap();
+    let topic = Address::parse("unit.battery-widget.threshold").unwrap();
     assert_eq!(topic.owner(), Some("battery-widget"));
     assert_eq!(topic.to_string(), "unit.battery-widget.threshold");
 
     // A system topic has no unit owner: no capability makes it writable.
-    assert_eq!(Topic::parse("battery").unwrap().owner(), None);
+    assert_eq!(Address::parse("battery").unwrap().owner(), None);
 }
 
 #[test]
@@ -35,8 +38,8 @@ fn a_malformed_unit_address_is_rejected() {
     for address in ["unit.", "unit.battery-widget", "unit..key", "unit.name."] {
         assert!(
             matches!(
-                Topic::parse(address),
-                Err(TopicError::MalformedUnitTopic(_))
+                Address::parse(address),
+                Err(AddressError::MalformedUnitTopic(_))
             ),
             "{address} should not parse"
         );
@@ -45,8 +48,8 @@ fn a_malformed_unit_address_is_rejected() {
 
 #[test]
 fn keys_may_contain_dots() {
-    let topic = Topic::parse("unit.clock.format.long").unwrap();
-    assert_eq!(topic, Topic::of_unit("clock", "format.long"));
+    let topic = Address::parse("unit.clock.format.long").unwrap();
+    assert_eq!(topic, Address::of_unit("clock", "format.long"));
 }
 
 #[test]

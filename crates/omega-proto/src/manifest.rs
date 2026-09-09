@@ -1,4 +1,4 @@
-use crate::Topic;
+use crate::Address;
 use crate::omega::{Capability, EventKind, SurfaceKind};
 use crate::toml::{Toml, TomlFile, TomlSchema, Validated};
 use crate::{Layout, SurfaceId, TomlError, UnitName};
@@ -75,10 +75,10 @@ impl Manifest {
     /// The state topics this unit declares it reads, as validated addresses.
     /// A typo is a build error, not a subscription that silently matches
     /// nothing.
-    pub fn state_topics(&self) -> Result<Vec<Topic>, ManifestError> {
+    pub fn state_topics(&self) -> Result<Vec<Address>, ManifestError> {
         self.state_topics
             .iter()
-            .map(|address| Topic::parse(address).map_err(ManifestError::from))
+            .map(|address| Address::parse(address).map_err(ManifestError::from))
             .collect()
     }
 
@@ -174,7 +174,7 @@ pub enum ManifestError {
     #[error("unknown surface kind {0:?}")]
     UnknownSurfaceKind(String),
     #[error("{0}")]
-    UnknownStateTopic(#[from] crate::TopicError),
+    UnknownStateTopic(#[from] crate::AddressError),
     #[error("unknown event {0:?}")]
     UnknownEvent(String),
     #[error("unit {expected}: manifest declares name {declared:?} — they must match")]
