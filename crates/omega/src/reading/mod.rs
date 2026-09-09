@@ -40,6 +40,7 @@ mod peripherals;
 mod power_profile;
 mod supervised;
 mod system;
+mod throughput;
 mod vpn;
 mod wifi;
 mod window;
@@ -58,6 +59,7 @@ pub use peripherals::{Peripheral, PeripheralKind};
 pub use power_profile::{PowerProfile, ProfileLabel};
 pub use supervised::{UnitPhase, UnitReport};
 pub use system::{Load, Memory};
+pub use throughput::Link;
 pub use vpn::Tunnel;
 pub use wifi::AccessPoint;
 pub use window::Focused;
@@ -142,6 +144,8 @@ handles! {
     System: omega_proto::omega::SystemState,
     /// Where it keeps things.
     Disk: omega_proto::omega::DiskState,
+    /// How much is moving over each interface.
+    Throughput: omega_proto::omega::ThroughputState,
 
     /// The supervisor's report on every unit it runs.
     Units: omega_proto::omega::UnitsState,

@@ -3,7 +3,7 @@
 //! Fixed text formats, so the whole translation is testable against captured
 //! strings — including the part that needs two readings to mean anything.
 
-use omega_brokers::procfs::{Cpu, Jiffies, Load, Memory, Mounts};
+use omega_brokers::procfs::{Counters, Cpu, Interfaces, Jiffies, Load, Memory, Mounts};
 use omega_proto::omega::Mount;
 
 const STAT: &str = "cpu  100 0 100 800 0 0 0 0 0 0
@@ -230,4 +230,54 @@ fn the_disks_are_measured_less_often_than_the_cpu() {
     assert!(first.mounts.iter().all(|mount| mount.total_bytes > 0));
 
     assert!(procfs.disks().is_none(), "and the next turn does not");
+}
+
+#[test]
+fn a_rate_is_the_change_between_two_samples() {
+    // The first sample has nothing to subtract from, so it reports nothing
+    // rather than everything since boot divided by the interval.
+    let before = Counters { rx: 1_000, tx: 500 };
+    let after = Counters {
+        rx: 3_000,
+        tx: 1_500,
+    };
+
+    assert_eq!(Counters::between(before, after, 2), (1_000, 500));
+    assert_eq!(Counters::between(before, before, 2), (0, 0));
+}
+
+#[test]
+fn counters_that_went_backwards_are_a_gap_not_a_spike() {
+    // An interface that went away and came back starts from nought. Drawing
+    // the difference would be a graph reporting several gigabytes a second.
+    let before = Counters {
+        rx: 9_000_000,
+        tx: 9_000_000,
+    };
+    let after = Counters { rx: 1_000, tx: 500 };
+
+    assert_eq!(Counters::between(before, after, 2), (0, 0));
+    // And no time passing is not an infinite rate.
+    assert_eq!(Counters::between(before, after, 0), (0, 0));
+}
+
+#[test]
+fn every_interface_in_proc_net_dev_is_read() {
+    let dev = "\
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:  318804    3924    0    0    0     0          0         0   318804    3924    0    0    0     0       0          0
+ wlan0: 1000000    1000    0    0    0     0          0         0   250000     900    0    0    0     0       0          0
+";
+    let links = Interfaces::parse(dev);
+
+    assert_eq!(links.len(), 2, "{links:?}");
+    assert_eq!(
+        links.get("wlan0").copied(),
+        Some(Counters {
+            rx: 1_000_000,
+            tx: 250_000
+        }),
+        "receive has eight columns before transmit begins"
+    );
 }

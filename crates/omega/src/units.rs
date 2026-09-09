@@ -188,6 +188,37 @@ impl fmt::Display for Uptime {
     }
 }
 
+/// Bytes per second, printed the way a monitor shows it: `1.2 MiB/s`.
+///
+/// A newtype over [`Bytes`] rather than a bare count, so a widget cannot draw
+/// a rate as a total or vice versa — they read the same and mean different
+/// things.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Rate(Bytes);
+
+impl Rate {
+    pub const ZERO: Self = Self(Bytes::ZERO);
+
+    pub const fn of(bytes_per_second: u64) -> Self {
+        Self(Bytes::of(bytes_per_second))
+    }
+
+    /// How much, without the "per second".
+    pub const fn amount(self) -> Bytes {
+        self.0
+    }
+
+    pub const fn count(self) -> u64 {
+        self.0.count()
+    }
+}
+
+impl fmt::Display for Rate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/s", self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,6 +248,13 @@ mod tests {
             Bytes::of(1 << 29).share_of(Bytes::of(1 << 30)),
             Some(Percent::of(0.5))
         );
+    }
+
+    #[test]
+    fn a_rate_is_an_amount_with_a_second_attached() {
+        assert_eq!(Rate::of(0).to_string(), "0 B/s");
+        assert_eq!(Rate::of(1536).to_string(), "1.5 KiB/s");
+        assert_eq!(Rate::of(3 << 20).amount(), Bytes::of(3 << 20));
     }
 
     #[test]

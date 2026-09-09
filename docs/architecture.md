@@ -108,6 +108,14 @@ Five domains today:
 | `schedules`   | the timers the document declares                                                  |
 | `bars`        | surface instances placed in bars                                                  |
 
+Two topics can come from one subsystem when they move at different rates:
+`network` carries the SSID and the signal, `throughput` carries bytes per
+second, because a widget drawing the network's name should not be woken twice a
+second by bytes it is not showing. A broker that reports a rate differences two
+samples itself — a counter is meaningless alone, and every widget that did its
+own subtraction would have its own idea of what to do when an interface
+disappears.
+
 A schedule is the one thing the runtime plane does that nobody asked for. Its
 cadence is `every <n><s|m|h|d>` — one grammar, in `omega-proto`, so the config
 plane that writes it and the daemon that reads it cannot drift. When one

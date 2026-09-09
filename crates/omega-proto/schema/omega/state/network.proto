@@ -40,6 +40,30 @@ message AccessPoint {
 }
 
 // The Bluetooth adapter and the devices that belong to this machine.
+// How much is moving over each interface, per second.
+//
+// Its own topic rather than fields on NetworkState, for the reason topics are
+// granular at all: an SSID changes when somebody joins a network and a rate
+// changes on every sample, so a widget drawing the network's name should not
+// be woken twice a second by bytes it is not showing.
+//
+// Rates rather than counters. A counter is meaningless alone — it is the
+// change between two samples — and every widget that wanted a rate would
+// otherwise keep its own history and do its own subtraction, each with its
+// own idea of what to do when an interface disappears.
+message ThroughputState {
+  repeated Link links = 1;
+}
+
+message Link {
+  string interface = 1;         // "wlan0", "lo"
+  uint64 rx_bytes_per_sec = 2;
+  uint64 tx_bytes_per_sec = 3;
+  // Since boot, for anything that wants a total rather than a rate.
+  uint64 rx_bytes_total = 4;
+  uint64 tx_bytes_total = 5;
+}
+
 message BluetoothState {
   // Whether the machine has an adapter at all. A desktop without one reports
   // false rather than an absent topic: BlueZ answering is a reading.

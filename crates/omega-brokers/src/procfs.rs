@@ -8,12 +8,15 @@
 //! resolution: a system monitor that updated twice a second would be a system
 //! monitor measuring itself.
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
 
 use omega_proto::SystemTopic;
-use omega_proto::omega::{DiskState, Mount, StatePatch, StateTopic, SystemState, state_topic};
+use omega_proto::omega::{
+    DiskState, Link, Mount, StatePatch, StateTopic, SystemState, ThroughputState, state_topic,
+};
 
 use crate::broker::{Broker, BrokerError, Cadence};
 
@@ -41,6 +44,60 @@ impl Jiffies {
             return 0;
         }
         (((total - idle) as f64 / total as f64) * 100.0).round() as u32
+    }
+}
+
+/// One interface's byte counters, as `/proc/net/dev` reports them.
+///
+/// Meaningless alone, like [`Jiffies`]: a rate is the change between two
+/// samples over the time between them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Counters {
+    pub rx: u64,
+    pub tx: u64,
+}
+
+impl Counters {
+    /// Bytes per second between two samples.
+    ///
+    /// Saturating, and zero when the counters went backwards — an interface
+    /// that went away and came back starts from nought, and a widget should
+    /// draw a gap rather than a spike of several gigabytes.
+    pub fn between(before: Self, after: Self, seconds: u64) -> (u64, u64) {
+        if seconds == 0 || after.rx < before.rx || after.tx < before.tx {
+            return (0, 0);
+        }
+        (
+            (after.rx - before.rx) / seconds,
+            (after.tx - before.tx) / seconds,
+        )
+    }
+}
+
+/// The interface lines of `/proc/net/dev`, by name.
+#[derive(Debug)]
+pub struct Interfaces;
+
+impl Interfaces {
+    pub fn parse(dev: &str) -> BTreeMap<String, Counters> {
+        dev.lines()
+            // Two header lines, then `name: rx_bytes rx_packets … tx_bytes …`.
+            .filter_map(|line| line.split_once(':'))
+            .filter_map(|(name, rest)| {
+                let fields: Vec<u64> = rest
+                    .split_whitespace()
+                    .map(|field| field.parse().unwrap_or(0))
+                    .collect();
+                Some((
+                    name.trim().to_string(),
+                    Counters {
+                        rx: *fields.first()?,
+                        // Receive has eight columns before transmit begins.
+                        tx: *fields.get(8)?,
+                    },
+                ))
+            })
+            .collect()
     }
 }
 
@@ -233,6 +290,9 @@ pub struct Procfs {
     /// The last `/proc/stat` sample. Utilisation is a change between two, so
     /// the first reading reports zero rather than a number it cannot know.
     last: Option<Vec<Jiffies>>,
+    /// The last `/proc/net/dev` sample, for the same reason `last` exists:
+    /// a rate is a change between two.
+    links: BTreeMap<String, Counters>,
     /// Ticks since the disks were last measured. A `statvfs` per mount is
     /// real work and free space moves in minutes, not seconds.
     since_disks: u32,
@@ -265,11 +325,40 @@ impl Procfs {
         Self {
             tick: Cadence::every(Self::INTERVAL),
             last: None,
+            links: BTreeMap::new(),
             since_disks: Self::DISKS_EVERY,
             root: std::env::var(Self::ROOT_ENV)
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::PathBuf::from("/proc")),
         }
+    }
+
+    /// What is moving over each interface, per second.
+    ///
+    /// Zero on the first pass: there is nothing to subtract from yet, and a
+    /// rate invented from a single counter would be everything since boot
+    /// divided by two seconds.
+    pub fn throughput(&mut self) -> ThroughputState {
+        let now = Interfaces::parse(&self.file("net/dev"));
+        let seconds = Self::INTERVAL.as_secs();
+
+        let links = now
+            .iter()
+            .map(|(name, after)| {
+                let before = self.links.get(name).copied().unwrap_or(*after);
+                let (rx, tx) = Counters::between(before, *after, seconds);
+                Link {
+                    interface: name.clone(),
+                    rx_bytes_per_sec: rx,
+                    tx_bytes_per_sec: tx,
+                    rx_bytes_total: after.rx,
+                    tx_bytes_total: after.tx,
+                }
+            })
+            .collect();
+
+        self.links = now;
+        ThroughputState { links }
     }
 
     /// One reading. A file that cannot be read leaves its fields at zero: a
@@ -376,7 +465,11 @@ impl Broker for Procfs {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::System, SystemTopic::Disk]
+        &[
+            SystemTopic::System,
+            SystemTopic::Disk,
+            SystemTopic::Throughput,
+        ]
     }
 
     async fn wake(&mut self) -> Result<(), BrokerError> {
@@ -385,11 +478,18 @@ impl Broker for Procfs {
     }
 
     async fn read(&mut self) -> Result<StatePatch, BrokerError> {
-        let mut topics = vec![StateTopic {
-            topic: SystemTopic::System.as_str().into(),
-            revision: 0, // the Hub assigns the real revision
-            value: Some(state_topic::Value::System(self.reading())),
-        }];
+        let mut topics = vec![
+            StateTopic {
+                topic: SystemTopic::Throughput.as_str().into(),
+                revision: 0,
+                value: Some(state_topic::Value::Throughput(self.throughput())),
+            },
+            StateTopic {
+                topic: SystemTopic::System.as_str().into(),
+                revision: 0, // the Hub assigns the real revision
+                value: Some(state_topic::Value::System(self.reading())),
+            },
+        ];
 
         if let Some(disks) = self.disks() {
             topics.push(StateTopic {
