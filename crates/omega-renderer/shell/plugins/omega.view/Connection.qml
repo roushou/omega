@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -82,10 +83,18 @@ Item {
     // this narrows what follows rather than what arrived — one snapshot, and
     // then only the views this host is here for.
     function subscribeToNothing() {
-        socket.write(JSON.stringify({
+        link.send({
             streamId: link.nextStream++,
             invoke: { subscribe: { topics: [], events: [], replace: true } }
-        }) + "\n")
+        })
+    }
+
+    // One write path, guarded: the socket is rebuilt on every retry, so there
+    // are moments when there is no object to write to.
+    function send(message) {
+        var open = socketLoader.item as Socket
+        if (!open) return
+        open.write(JSON.stringify(message) + "\n")
     }
 
     // A press is the operator asking this unit to run one of its own
@@ -108,7 +117,7 @@ Item {
             var encoded = Props.encode(value)
             if (encoded !== null) args.push(encoded)
         }
-        socket.write(JSON.stringify({
+        link.send({
             streamId: link.nextStream++,
             invoke: {
                 act: {
@@ -123,36 +132,44 @@ Item {
                     }
                 }
             }
-        }) + "\n")
+        })
     }
 
-    Socket {
-        id: socket
-        path: link.socketPath
-        parser: SplitParser {
-            onRead: function(line) { link.onLine(line) }
-        }
-        // `connected: true` as a static binding can fire before `path` is
-        // set; connect after the component is fully initialized instead.
-        Component.onCompleted: {
-            link.lastHeard = Date.now()
-            connected = true
-        }
+    Component {
+        id: socketComponent
 
-        // A daemon that went away is not a daemon still saying 91%. Holding
-        // the last tree would leave the bar showing a reading nobody is
-        // taking.
-        onConnectedChanged: {
-            if (connected) {
-                link.subscribeToNothing()
-            } else {
-                link.tree = null
-                link.drawnBy = ""
+        Socket {
+            path: link.socketPath
+            parser: SplitParser {
+                onRead: function(line) { link.onLine(line) }
+            }
+            // `connected: true` as a static binding can fire before `path` is
+            // set; connect after the component is fully initialized instead.
+            Component.onCompleted: {
+                link.lastHeard = Date.now()
+                connected = true
+            }
+
+            // A daemon that went away is not a daemon still saying 91%.
+            // Holding the last tree would leave the bar showing a reading
+            // nobody is taking.
+            onConnectedChanged: {
+                if (connected) {
+                    link.subscribeToNothing()
+                } else {
+                    link.tree = null
+                    link.drawnBy = ""
+                }
             }
         }
     }
 
-    // Recover from a daemon that restarted.
+    Loader {
+        id: socketLoader
+        sourceComponent: socketComponent
+    }
+
+    // Recover from a daemon this host cannot currently reach.
     //
     // Not by asking whether the socket is connected: a peer that goes away
     // leaves `connected` reading true, and a host that trusts it freezes on
@@ -160,8 +177,15 @@ Item {
     // because it looks like a working widget reporting a stale number.
     //
     // Silence is the signal instead. The daemon sends everything it holds the
-    // moment a connection opens, so reconnecting when nothing has been said
-    // for a while costs one snapshot and fixes every way this can break.
+    // moment a connection opens, so reconnecting after a quiet stretch costs
+    // one snapshot.
+    //
+    // The retry rebuilds the `Socket` rather than toggling `connected` on the
+    // existing one. A socket whose first connect found no file stays down
+    // through every later toggle, so a host loaded before the daemon — which
+    // is the order `omega init` installs them in — would never draw at all.
+    // Reactivation is deferred a turn so the destroy and the create cannot
+    // coalesce into no change.
     Timer {
         interval: 5000
         running: true
@@ -169,8 +193,8 @@ Item {
         onTriggered: {
             if (Date.now() - link.lastHeard < 15000) return
             link.lastHeard = Date.now()
-            socket.connected = false
-            socket.connected = true
+            socketLoader.active = false
+            Qt.callLater(function() { socketLoader.active = true })
         }
     }
 }
