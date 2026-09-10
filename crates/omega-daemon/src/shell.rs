@@ -6,13 +6,11 @@
 //! reads the `units` topic from the same stream. Reading needs no handshake
 //! and is granted to anyone who can open the socket.
 //!
-//! Asking is different, and it exists because a shell that draws a button has
-//! to be able to press it. A shell cannot encode protobuf, so a request is
-//! the same [`Frame`] carrying the same `Invoke`, written as JSON — and it is
+//! Asking is different. A shell cannot encode protobuf, so a request is the
+//! same [`Frame`] carrying the same `Invoke`, written as JSON, and is
 //! authorized the way every other request is: the peer must be the daemon's
 //! own user, and the op must be one the [`POLICY`] table serves an operator.
-//! There is no second taxonomy and no second policy; a JSON request reaches
-//! the same [`Dispatcher`] a framed one does.
+//! A JSON request reaches the same [`Dispatcher`] a framed one does.
 //!
 //! [`POLICY`]: crate::session::dispatch
 //! [`Frame`]: omega_proto::omega::Frame

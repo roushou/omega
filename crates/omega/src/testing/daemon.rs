@@ -21,9 +21,8 @@ use crate::testing::state::State;
 /// publishes exactly the state it is handed. The point is to let a plugin's
 /// own loop run so a test can watch what comes out of it.
 ///
-/// Protocol violations panic. A plugin that answers the wrong frame has
-/// failed the test, and returning an error for the test to unwrap would only
-/// move the panic.
+/// Protocol violations panic: a plugin that answers the wrong frame has
+/// failed the test.
 #[derive(Debug)]
 pub struct TestDaemon {
     transport: Transport<UnixStream>,

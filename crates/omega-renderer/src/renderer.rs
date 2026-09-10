@@ -90,8 +90,7 @@ impl Renderer {
     /// Every renderer omega ships.
     ///
     /// One today. A surface other than the bar — an OSD, a full-screen
-    /// overlay — would be a second, installed by the same command, because
-    /// what they all have to stay in step with is the same daemon.
+    /// overlay — would be a second, installed by the same command.
     pub const ALL: &'static [Renderer] = &[Self::VIEW];
 
     /// Where this renderer belongs under a shell's plugin directory.

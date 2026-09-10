@@ -1,14 +1,11 @@
 //! How often the daemon does something on its own.
 //!
-//! One grammar, read by both ends. The config plane writes a cadence into a
-//! document and the daemon reads it back out; if each had its own parser they
-//! would be two lists that have to agree, and the way they would disagree is
-//! a schedule that builds and never fires.
+//! One grammar, read by both ends: the config plane writes a cadence into a
+//! document and the daemon reads it back out, through this parser.
 //!
-//! The grammar is closed and small: `every <n><s|m|h|d>`. Cron is not in it.
-//! A field that accepted `"0 9 * * *"` and then never fired would be worse
-//! than one that refuses it, so [`Cadence::parse`] refuses it — by name,
-//! because "not a cadence" is not a useful thing to read in a log.
+//! The grammar is closed and small: `every <n><s|m|h|d>`. Cron is not in it,
+//! and [`Cadence::parse`] refuses `"0 9 * * *"` by name rather than accepting
+//! a schedule that would never fire.
 
 use std::fmt;
 use std::time::Duration;
@@ -18,10 +15,8 @@ use crate::omega::{Action, Event, Schedule, event};
 /// How often a schedule fires.
 ///
 /// A duration, not a wall-clock time: "every ten minutes" is answerable
-/// without a timezone, and "at nine" is not. The daemon publishes `time` as a
-/// topic; a schedule that must land on a particular hour is a thing to build
-/// on top of that, and pretending otherwise here would put a clock in the
-/// reconciler.
+/// without a timezone, and "at nine" is not. A schedule that must land on a
+/// particular hour builds on the `time` topic instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Cadence(Duration);
 

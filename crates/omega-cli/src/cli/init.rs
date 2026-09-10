@@ -2,9 +2,8 @@
 //!
 //! Everything a machine needs and nothing about any particular plugin: the
 //! workspace a config lives in, the service that keeps the daemon running,
-//! and the renderer that draws what plugins publish. Writing a plugin is
-//! `omega new`, and it is a different day's work — which is why founding a
-//! config used to require naming one, and why that was wrong.
+//! and the renderer that draws what plugins publish. Scaffolding a plugin is
+//! `omega new`.
 //!
 //! Each step is the same code the standalone command runs, reported on its
 //! own line, so what this did stays visible and individually re-runnable.

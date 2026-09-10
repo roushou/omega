@@ -22,9 +22,13 @@ which compiles a scaffolded config through the real binaries.
   `ModuleId`). A map keyed by `String` has not decided what it holds.
 - Paths come from `Layout`; writes go through `AtomicFile`, which fsyncs the
   file and its directory.
-- Comments state the constraint, not the story. Public API in `crates/omega`
-  gets rustdoc with doctests; internal code gets a line saying why, where why
-  is not obvious. Delete anything that restates the code.
+- Comments state the constraint, not the story. No history ("it used to be
+  TOML", "before this every widget..."), no rejected alternatives, no
+  justifying a decision the reader is not being asked to make. A constraint
+  the reader must not break is technical and stays; an argument for why the
+  code looks like this is not. Public API in `crates/omega` gets rustdoc with
+  doctests; internal code gets a line saying why, where why is not obvious.
+  Delete anything that restates the code.
 - An error type lives with the operation that raises it: `CodecError` in
   `codec.rs`, `ShellError` in `shell.rs`. A file named `error.rs` earns the
   name only for a crate's own top-level error, and a `<thing>_error.rs` is a

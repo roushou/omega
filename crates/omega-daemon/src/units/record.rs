@@ -25,10 +25,9 @@ pub struct UnitControl {
 
 /// One unit, and every fact about it that outlives a function call.
 ///
-/// These facts used to live in five maps behind five locks — the manifests,
-/// the tokens, the supervision handles, the sessions, and the phases — each
-/// keyed by the same name and each describing the same thing. Asking "what do
-/// we know about this unit" had no single answer, and every new fact wanted a
+/// One record per unit rather than a map per fact: the manifest, the token,
+/// the supervision handle, the session and the phase are all keyed by the
+/// same name and describe the same thing.
 /// sixth map.
 #[derive(Debug)]
 pub struct UnitRecord {

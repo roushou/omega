@@ -8,10 +8,8 @@
 //! change and identical trees are dropped, so an effect there fires on every
 //! percent the battery moves — the compiler says so, by way of [`Does`].
 //!
-//! Effects are queued rather than awaited. A plugin that had to `await` a
-//! notification would be a plugin whose render loop can stall on the daemon,
-//! and nothing an author could do about a refusal would be better than what
-//! the runtime already does with it: log it.
+//! Effects are queued rather than awaited, so a plugin's render loop cannot
+//! stall on the daemon. A refusal is logged by the runtime.
 //!
 //! [`Does`]: crate::wiring::Does
 

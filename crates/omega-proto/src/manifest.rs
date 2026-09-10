@@ -1,13 +1,8 @@
 //! What a unit asks for, and the hash it proves itself with.
 //!
 //! The manifest is a schema message like everything else that crosses the
-//! socket. It used to be TOML, hashed over a canonical string that only
-//! `toml_edit` could produce — which meant the one thing a peer must compute
-//! byte-for-byte to connect was the one thing no other language could
-//! compute without reimplementing a Rust crate.
-//!
-//! Now the hash is sha256 over [`Manifest::canonical`]: every repeated field
-//! sorted and deduplicated, then encoded in tag order. Any protobuf
+//! socket. The hash is sha256 over [`Manifest::canonical`]: every repeated
+//! field sorted and deduplicated, then encoded in tag order, so any protobuf
 //! implementation reaches the same bytes.
 
 use prost::Message as _;

@@ -2,25 +2,20 @@
 //!
 //! The daemon streams everything it holds — rendered views and state topics —
 //! as newline-delimited JSON on a second, read-only socket. Nothing can be
-//! *asked* of it, which is why it needs no handshake and grants nothing.
+//! *asked* of it, so it needs no handshake and grants nothing.
 //!
-//! Its address lives here rather than in the daemon because two programs have
-//! to agree on it and only one of them is the daemon: `omega status` reads
-//! this stream, and so does the shell that draws the bar. A reader that had
-//! to link the daemon to learn where the daemon listens would be linking it
-//! for a string.
+//! Its address lives here because both readers need it and neither is the
+//! daemon: `omega status` reads this stream, and so does the shell that draws
+//! the bar.
 //!
 //! The state half of the stream is [`StateTopic`] — a protocol type, so a
 //! reader parses it rather than indexing JSON by hand. The view half is not
-//! here: a view is addressed by identifiers the protocol does not own, and
-//! dragging them in to describe a line would cost more than it explains.
+//! here: a view is addressed by identifiers the protocol does not own.
 //!
-//! It also goes the other way. A shell that draws a button has to be able to
-//! press it, and it cannot encode protobuf — so a request is the *same*
-//! [`Frame`] carrying the same [`Invoke`], written as JSON. One taxonomy, two
-//! encodings: there is no second vocabulary of actions spelled as strings,
-//! and the daemon authorizes a JSON request through exactly the table it
-//! authorizes a framed one through.
+//! It also goes the other way. A shell that draws a button has to press it
+//! and cannot encode protobuf, so a request is the *same* [`Frame`] carrying
+//! the same [`Invoke`], written as JSON. The daemon authorizes a JSON request
+//! through the same table it authorizes a framed one through.
 
 use crate::omega::StateTopic;
 use crate::omega::{Frame, Invoke, frame, invoke};

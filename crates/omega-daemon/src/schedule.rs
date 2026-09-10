@@ -1,13 +1,8 @@
 //! The schedules the daemon is running, and the clock they run on.
 //!
-//! A schedule is the one thing in the runtime plane that nobody asks for. A
-//! press comes from a shell, a command comes from a caller, a state change
-//! comes from a subsystem — a schedule comes from the document alone, which
-//! is what makes it the answer to work that has to happen while nobody is
-//! looking.
-//!
-//! Two things reach a unit when one fires, and they are not two ways of doing
-//! the same thing:
+//! A schedule fires from the document alone — not from a shell, a caller, or
+//! a subsystem. Two things reach a unit when one fires, and they are not two
+//! ways of doing the same thing:
 //!
 //! - the schedule's **action**, which is what the document said to do, and
 //!   goes through the same [`Actions`] the shell and every unit go through;
@@ -20,12 +15,10 @@
 //!
 //! # Trust
 //!
-//! Nothing here is capability-checked, and that is the point rather than an
-//! omission. Capabilities bound what a *unit* may ask the daemon for; a
-//! schedule is not a unit asking, it is the machine's own document saying
-//! what the machine does — the same standing as the bars it declares and the
-//! units it enables. `Actions::authorize` is for the sessions on the far side
-//! of the socket, and there is no session here.
+//! Nothing here is capability-checked. Capabilities bound what a *unit* may
+//! ask the daemon for, and a schedule is the document speaking, not a unit
+//! asking. `Actions::authorize` applies to sessions on the far side of the
+//! socket; there is no session here.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

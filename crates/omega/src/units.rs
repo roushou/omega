@@ -91,10 +91,8 @@ impl fmt::Display for Remaining {
 
 /// A quantity of bytes, printed the way a panel shows it: `7.5 GiB`, `912 MiB`.
 ///
-/// Six fields on three topics carry byte counts, and before this every widget
-/// that drew one wrote its own divide-and-format. Binary units, because that
-/// is what `/proc/meminfo` and `statvfs` report and what every other tool on
-/// the machine prints.
+/// Binary units, because that is what `/proc/meminfo` and `statvfs` report
+/// and what every other tool on the machine prints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Bytes(u64);
 

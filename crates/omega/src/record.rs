@@ -2,9 +2,8 @@
 //!
 //! The daemon replicates more than the machine's own topics: every plugin has
 //! a keyspace of its own, `unit.<name>.<key>`, which it writes and anyone it
-//! names may read. That is what turns a set of plugins into something that
-//! composes — a plugin can publish a fact and another can draw it, without
-//! either knowing the other exists at build time.
+//! names may read. One plugin publishes a fact, another draws it, and neither
+//! needs the other at build time.
 //!
 //! The topic's address comes from the type. A state type is defined in the
 //! crate that owns it, so `#[derive(UnitState)]` reads the unit's name from

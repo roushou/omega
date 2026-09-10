@@ -15,12 +15,7 @@
 //! [`handles!`] declares one for every topic the ontology has, so a topic is
 //! reachable the day it is declared. Typed accessors are an upgrade on top —
 //! `battery.charge()` gives a [`Percent`] where `get()` gives the wire's
-//! `f64` — and a topic without them is still readable rather than published
-//! into a void.
-//!
-//! Twelve brokers were written before this, and thirteen of their topics were
-//! replicated into units that had no way to name them. Nothing caught it: the
-//! broker coverage test looks the other way down the same pipe.
+//! `f64` — and a topic without them is still readable.
 //!
 //! [`Percent`]: crate::units::Percent
 
@@ -197,8 +192,7 @@ macro_rules! reads {
             ///
             /// The floor under every handle. A topic with typed accessors has
             /// better ways to be asked — `charge()` gives a `Percent` where
-            /// this gives the wire's `f64` — but nothing is unreachable for
-            /// want of somebody writing them.
+            /// this gives the wire's `f64`.
             pub fn get(&self) -> Option<$value> {
                 self.read()
             }
@@ -221,10 +215,6 @@ mod tests {
     fn every_topic_can_be_read() {
         // The mirror of `omega-brokers`' coverage test, which asks whether
         // anything *fills* a topic. This asks whether anything can *read* one.
-        //
-        // Both directions matter and only one was checked: thirteen topics
-        // were brokered, coalesced and replicated into units that had no way
-        // to name them, and every gate stayed green the whole time.
         for topic in SystemTopic::ALL {
             assert!(
                 HANDLED.contains(topic),

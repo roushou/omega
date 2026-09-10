@@ -1,4 +1,4 @@
-//! The loop nobody writing a plugin should have to see.
+//! The plugin runtime loop.
 //!
 //! Connect, prove who we are, mirror the state the daemon replicates, build
 //! one value per instance, render when something moves, answer what is asked,

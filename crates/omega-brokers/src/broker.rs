@@ -10,28 +10,19 @@ use omega_proto::{ActionKind, SystemTopic};
 
 /// A subsystem, in both directions.
 ///
-/// One broker owns one connection to one subsystem and is the only thing
-/// that holds it. It projects that connection as topics and serves the
-/// actions that write to it, because reading the volume and setting it are
-/// one PipeWire connection — split across two components they become two
-/// connections, two discovery paths, and no shared answer to whether
-/// PipeWire is running at all.
+/// One broker owns the only connection to one subsystem: it projects that
+/// connection as topics and serves the actions that write to it.
 ///
 /// # Connect, wake, read
 ///
-/// A broker says how to do those three; the driver owns when. That is not
-/// tidiness — four rules about holding a connection used to live in each
-/// broker's own loop, written out eight times:
+/// A broker says how to do those three; the driver owns when, and holds the
+/// rules for all of them:
 ///
 ///  - open lazily, and again after the connection goes;
 ///  - take the first reading at once rather than waiting for a change;
 ///  - count a broker primed only *after* a reading succeeds, so a cancelled
 ///    wait asks again instead of waiting on a change it has already missed;
 ///  - drop the connection when whatever was being waited on closes.
-///
-/// The third is the one that bites. Get it wrong and the broker waits hours
-/// on a signal whose state it already had, silently. Eight copies is eight
-/// chances; the driver is one.
 ///
 /// The defaults are the taxonomy. Override nothing but [`act`] and this is a
 /// broker that only serves — `logind`, `desktop`. Override [`wake`] and
@@ -44,8 +35,7 @@ use omega_proto::{ActionKind, SystemTopic};
 /// [`connect`]: Self::connect
 ///
 /// [`topics`] and [`actions`] are static and declared whether or not the
-/// broker is connected: what a subsystem covers is not a runtime discovery,
-/// and the daemon has to know what nothing covers.
+/// broker is connected: the daemon has to know what nothing covers.
 ///
 /// [`topics`]: Self::topics
 /// [`actions`]: Self::actions
