@@ -125,7 +125,7 @@ which compiles a scaffolded config through the real binaries.
   **record** (`omega::record` — this unit's own memory) or an **effect**
   (`omega::effect`). That is the distinction `wiring`'s `Reads`/`Does` already
   makes; `state` named the plane instead of the thing.
-- A topic is the unit of *what wakes a widget*, so two facts that move at
+- A topic is the unit of _what wakes a widget_, so two facts that move at
   different rates are two topics: `battery` changes on every poll and `mains`
   when the cable moves. What spans them is a composite, not a wider topic.
 - The SDK's root is what every unit uses whatever it does — the three

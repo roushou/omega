@@ -219,6 +219,39 @@ impl fmt::Display for Rate {
     }
 }
 
+/// How hot something is, printed the way a bar shows it: `44°C`.
+///
+/// hwmon reports thousandths of a degree, which is three digits of precision
+/// nothing draws and a new revision on every flutter. This carries what the
+/// kernel said and rounds when it prints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Temperature(i32);
+
+impl Temperature {
+    pub const fn of_millicelsius(millicelsius: i32) -> Self {
+        Self(millicelsius)
+    }
+
+    pub fn celsius(self) -> f64 {
+        f64::from(self.0) / 1000.0
+    }
+
+    /// Whole degrees, for comparing against a threshold somebody typed.
+    pub fn whole_celsius(self) -> i32 {
+        (self.celsius()).round() as i32
+    }
+
+    pub const fn millicelsius(self) -> i32 {
+        self.0
+    }
+}
+
+impl fmt::Display for Temperature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}°C", self.whole_celsius())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +288,15 @@ mod tests {
         assert_eq!(Rate::of(0).to_string(), "0 B/s");
         assert_eq!(Rate::of(1536).to_string(), "1.5 KiB/s");
         assert_eq!(Rate::of(3 << 20).amount(), Bytes::of(3 << 20));
+    }
+
+    #[test]
+    fn a_temperature_prints_in_whole_degrees() {
+        assert_eq!(Temperature::of_millicelsius(44_000).to_string(), "44°C");
+        // Rounded, not truncated: 44.6 is nearer 45.
+        assert_eq!(Temperature::of_millicelsius(44_600).to_string(), "45°C");
+        // Signed, because a sensor outdoors can be below freezing.
+        assert_eq!(Temperature::of_millicelsius(-5_500).to_string(), "-6°C");
     }
 
     #[test]

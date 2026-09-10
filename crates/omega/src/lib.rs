@@ -89,7 +89,7 @@ pub use omega_proto::omega::{Event, EventKind};
 /// The units a reading is in. At the root because they cross every
 /// boundary — a handle hands one back, a node draws one, a setting is
 /// compared against one.
-pub use units::{Bytes, Percent, Rate, Remaining, Uptime};
+pub use units::{Bytes, Percent, Rate, Remaining, Temperature, Uptime};
 
 pub use omega_derive::{Command, Config, Reaction, UnitState, Widget};
 

@@ -30,6 +30,37 @@ message SystemState {
 }
 
 // Where the machine keeps things, and how much room is left.
+// How hot the machine is, and what is being done about it.
+//
+// From hwmon, which is a lot of sensors of varying usefulness: a laptop
+// reports the CPU die, the GPU edge, the SSD, the wireless card and half a
+// dozen ACPI zones that all read the same number. The broker reports what it
+// can read and leaves the choosing to whatever draws it.
+message ThermalsState {
+  repeated Sensor sensors = 1;
+  repeated Fan fans = 2;
+}
+
+message Sensor {
+  string chip = 1;              // "k10temp", "thinkpad", "amdgpu"
+  // The sensor's own label where it has one — "CPU", "edge", "Composite" —
+  // else its name in the chip, like "temp3". Chip and label together are the
+  // identity; neither is unique alone.
+  string label = 2;
+  // Thousandths of a degree, as hwmon reports it. Signed: an outdoor sensor
+  // can be below freezing, and a reading that wrapped would be worse than one
+  // that is negative.
+  int32 millicelsius = 3;
+}
+
+message Fan {
+  string chip = 1;
+  string label = 2;
+  // Nought is a fan that is stopped, which is a real and interesting state —
+  // unlike a temperature of nought, which is a sensor that is not there.
+  uint32 rpm = 3;
+}
+
 message DiskState {
   repeated Mount mounts = 1;
 }

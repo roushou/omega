@@ -15,8 +15,8 @@ use std::fmt;
 use crate::omega::{
     AudioState, BacklightState, BatteryState, BluetoothState, DiskState, IdleState, InputState,
     MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState, PowerProfileState,
-    SystemState, ThroughputState, TimeState, UnitsState, VpnState, WifiState, WindowState,
-    WorkspacesState, state_topic,
+    SystemState, ThermalsState, ThroughputState, TimeState, UnitsState, VpnState, WifiState,
+    WindowState, WorkspacesState, state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -105,6 +105,8 @@ topics! {
     PowerProfile => "power-profile": PowerProfileState,
     /// How much is moving over each interface, per second.
     Throughput => "throughput": ThroughputState,
+    /// How hot it is, and what the fans are doing.
+    Thermals => "thermals": ThermalsState,
 }
 
 impl SystemTopic {

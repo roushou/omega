@@ -40,6 +40,7 @@ mod peripherals;
 mod power_profile;
 mod supervised;
 mod system;
+mod thermals;
 mod throughput;
 mod vpn;
 mod wifi;
@@ -59,6 +60,7 @@ pub use peripherals::{Peripheral, PeripheralKind};
 pub use power_profile::{PowerProfile, ProfileLabel};
 pub use supervised::{UnitPhase, UnitReport};
 pub use system::{Load, Memory};
+pub use thermals::{Fan, Sensor};
 pub use throughput::Link;
 pub use vpn::Tunnel;
 pub use wifi::AccessPoint;
@@ -146,6 +148,8 @@ handles! {
     Disk: omega_proto::omega::DiskState,
     /// How much is moving over each interface.
     Throughput: omega_proto::omega::ThroughputState,
+    /// How hot it is, and what the fans are doing.
+    Thermals: omega_proto::omega::ThermalsState,
 
     /// The supervisor's report on every unit it runs.
     Units: omega_proto::omega::UnitsState,

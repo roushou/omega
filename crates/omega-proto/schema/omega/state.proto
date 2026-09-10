@@ -61,6 +61,7 @@ message StateTopic {
     DiskState disk = 29;
     PowerProfileState power_profile = 30;
     ThroughputState throughput = 31;
+    ThermalsState thermals = 32;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

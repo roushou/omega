@@ -5,8 +5,8 @@
 
 use crate::broker::Broker;
 use crate::{
-    Backlight, BlueZ, Clock, Desktop, Hyprland, Logind, Mpris, NetworkManager, Notifications,
-    PipeWire, PowerProfiles, Procfs, UPower,
+    Backlight, BlueZ, Clock, Desktop, Hwmon, Hyprland, Logind, Mpris, NetworkManager,
+    Notifications, PipeWire, PowerProfiles, Procfs, UPower,
 };
 
 /// The brokers a daemon runs.
@@ -32,6 +32,7 @@ impl Brokers {
             Box::new(Mpris::new()),
             Box::new(BlueZ::new()),
             Box::new(Procfs::new()),
+            Box::new(Hwmon::new()),
             Box::new(Desktop::new()),
         ]
     }
