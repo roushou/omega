@@ -76,6 +76,34 @@ macro_rules! styled {
                 self
             }
 
+            /// As wide as the room it is in, rather than as wide as what it
+            /// draws.
+            ///
+            /// In a row that is the width its neighbours left over, which is
+            /// how a [`Spacer`] pushes what follows it to the far end. In a
+            /// column it is the column's own width, which is how a bar spans
+            /// a panel instead of sitting in the corner of one.
+            ///
+            /// A node that asked for a [`width`] has one, and this does
+            /// nothing — a fixed size is a decision, and the room is only
+            /// what is left after those.
+            ///
+            /// For the nodes that do not already: a [`Stack`] in a column
+            /// spans it without being told, and a [`Separator`] always lies
+            /// across the stack it is in. What is left is a control or a
+            /// reading — a bar that is the panel's gauge rather than a chip
+            /// beside a label — and a stack in a *row*, where taking the
+            /// slack moves everything beside it and so is asked for.
+            ///
+            /// [`Spacer`]: crate::ui::Spacer
+            /// [`Stack`]: crate::ui::Stack
+            /// [`Separator`]: crate::ui::Separator
+            /// [`width`]: Self::width
+            pub fn fill(mut self) -> Self {
+                self.node = self.node.flag("fill", true);
+                self
+            }
+
             /// Name it, for a list whose items move.
             ///
             /// Positional keys are right until two renders disagree about

@@ -172,6 +172,15 @@ nodes! {
         busy: Flag,
         width: Number,
         height: Number,
+        /// As wide as the room it is in, rather than as wide as what it
+        /// draws. In a row that is the width its neighbours left over; in a
+        /// column it is the column's own width.
+        ///
+        /// A node that asked for a `width` has one, and this does nothing.
+        /// Nor is it how a stack in a column or a rule in either comes to
+        /// span: those are the shell's, from what the node *is*, so a tree
+        /// carries this flag only where an author chose it.
+        fill: Flag,
     }
 
     /// Children in a row or a column.

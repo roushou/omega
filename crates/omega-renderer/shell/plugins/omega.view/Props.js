@@ -94,6 +94,10 @@ function height(node) {
     return readNumber(node, "height", 0)
 }
 
+function fill(node) {
+    return readFlag(node, "fill", false)
+}
+
 // ---- stack ----
 
 function stackAlign(node) {

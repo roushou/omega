@@ -594,6 +594,7 @@ fn every_node() -> Ui {
         .child(Header::new("Networks"))
         .child(Separator::new())
         .child(Spacer::new().width(8))
+        .child(Spacer::new())
         .child(Button::new("Forget").on_press("forget").disabled())
         .child(Button::new("Connecting").on_press("cancel").busy())
         .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
@@ -686,17 +687,25 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[9]["type"], "header");
     assert_eq!(children[9]["props"]["text"]["stringValue"], "Networks");
     assert_eq!(children[10]["type"], "separator");
+
+    // A spacer takes the room going, until it is told a size — so both carry
+    // the flag, and the width is what decides between them. The shell reads
+    // the pair the same way round: a node that named a width has one.
     assert_eq!(children[11]["type"], "spacer");
     assert_eq!(children[11]["props"]["width"]["intValue"], "8");
+    assert_eq!(children[11]["props"]["fill"]["boolValue"], true);
+    assert_eq!(children[12]["type"], "spacer");
+    assert!(children[12]["props"].get("width").is_none());
+    assert_eq!(children[12]["props"]["fill"]["boolValue"], true);
 
     // Two reasons a control cannot be used, and the shell is told which:
     // one is waiting on an answer and the other is simply not available.
-    assert_eq!(children[12]["props"]["disabled"]["boolValue"], true);
-    assert_eq!(children[13]["props"]["busy"]["boolValue"], true);
+    assert_eq!(children[13]["props"]["disabled"]["boolValue"], true);
+    assert_eq!(children[14]["props"]["busy"]["boolValue"], true);
 
     // The one prop that is not a single value. `Value` has carried a list all
     // along; nothing needed one until something had to draw a series.
-    let graph = &children[14];
+    let graph = &children[15];
     assert_eq!(graph["type"], "graph");
     assert_eq!(
         graph["props"]["points"]["list"]["values"][0]["doubleValue"],
@@ -710,22 +719,22 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     // idle machine as one on fire.
     assert_eq!(graph["props"]["high"]["doubleValue"], 100.0);
 
-    assert_eq!(children[15]["type"], "group");
-    assert_eq!(children[15]["props"]["selected"]["stringValue"], "auto");
-    assert_eq!(children[15]["children"][1]["key"], "5");
+    assert_eq!(children[16]["type"], "group");
+    assert_eq!(children[16]["props"]["selected"]["stringValue"], "auto");
+    assert_eq!(children[16]["children"][1]["key"], "5");
 
-    assert_eq!(children[16]["type"], "grid");
-    assert_eq!(children[16]["props"]["columns"]["intValue"], "2");
+    assert_eq!(children[17]["type"], "grid");
+    assert_eq!(children[17]["props"]["columns"]["intValue"], "2");
 
     // A local file reaches the shell; a URL does not. Fetching what a unit
     // named would make the shell issue requests on its behalf, which no
     // capability granted — so the source is dropped and the node draws
     // nothing rather than reaching out.
     assert_eq!(
-        children[17]["props"]["source"]["stringValue"],
+        children[18]["props"]["source"]["stringValue"],
         "/tmp/art.png"
     );
-    assert!(children[18]["props"].get("source").is_none());
+    assert!(children[19]["props"].get("source").is_none());
 
     // Keys are the path to a node, and the renderer keeps a node whose key it
     // already has rather than rebuilding it.

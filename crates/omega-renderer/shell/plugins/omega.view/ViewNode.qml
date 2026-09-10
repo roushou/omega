@@ -28,6 +28,13 @@ Item {
     // its own foreground down, so a tree is themed like everything beside it.
     property color foreground: Color.foreground
 
+    // Which way the stack holding this node runs, passed down by that stack.
+    // One node cares: a rule lies across its parent, so it is horizontal in a
+    // column and vertical in a row. A node that is nobody's child — a
+    // surface's root, a grid's cell — is told nothing and reads as a column,
+    // which is the way a panel runs.
+    property string axis: "column"
+
     // The colour this node draws in: what it asked for, or what it inherited.
     readonly property color ink: node.colorOf()
 
@@ -181,6 +188,14 @@ Item {
     Loader {
         id: content
         anchors.centerIn: parent
+
+        // A node draws in the room it was given, which is its own size until
+        // a layout gives it more: a bar told to span a panel is handed the
+        // panel's width here, and a rule its length. Never less than what it
+        // draws — a node squeezed below its own size is a clipped one, and
+        // clipping a reading is worse than overflowing it.
+        width: Math.max(content.implicitWidth, node.width - node.padding * 2)
+        height: Math.max(content.implicitHeight, node.height - node.padding * 2)
 
         // Set from the type alone: the delegate reads everything else off
         // `host`, so a changed tree flows through bindings rather than

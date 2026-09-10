@@ -120,7 +120,12 @@ BarWidget {
 
       ViewNode {
         id: panelView
-        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+        // Across the card, not centred in it. The card is as wide as this
+        // tree except where the floor below makes it wider, and a tree
+        // narrower than the card it sits in is a bar that stops short of the
+        // panel it is measuring.
+        anchors.left: parent ? parent.left : undefined
+        anchors.right: parent ? parent.right : undefined
         model: panelLink.tree
         foreground: Color.popups.text
         visible: panelLink.tree !== null

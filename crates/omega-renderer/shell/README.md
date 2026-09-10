@@ -110,6 +110,25 @@ all of it by reading `host`, and the two reasons a node is unusable —
 `disabled` and `busy` — are drawn the same way in one place. A shell with a
 spinner would tell them apart there and nothing above would change.
 
+A stack is a **layout**, not a positioner, and that is what decides how wide
+a node is. A positioner places children and leaves every one at its own size,
+which top-aligns a row of mixed type sizes and cannot give a child room at
+all — a child whose width came from the width it helped decide is a binding
+loop. Three rules follow, and between them they are the whole model:
+
+- A child is centred across the way its stack runs, at the size it draws.
+- A stack inside a **column** spans that column, and a separator spans
+  whichever stack it is in — neither is asked for, because a block inside a
+  block is as wide as the block and a rule that stopped short of the panel it
+  divides is not a rule. Costing nothing: a row's slack collects at its
+  trailing edge rather than between its children, so a row that spans draws
+  what a row that hugs drew.
+- Along the way a stack **runs**, room goes only to a node carrying `fill` —
+  that is the direction where handing it out moves everything else.
+
+`ViewNode` then draws each node in the room it was given, never less than what
+it draws, so a node squeezed below its own size overflows rather than clips.
+
 Children are held by **key**, not by position. A `Repeater` over a plain
 array rebuilds every delegate whenever the array changes, which is fine for
 text and wrong for anything holding state: a row of sliders that reorders

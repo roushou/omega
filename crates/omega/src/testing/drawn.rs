@@ -59,6 +59,31 @@ impl Drawn {
         }
     }
 
+    /// Any flag of any node — `bold`, `dim`, `fill`.
+    ///
+    /// `None` where the node did not set it, which is not the same as false:
+    /// a widget that stopped publishing a flag and one that publishes it off
+    /// are different bugs, and a test that could not tell them apart would
+    /// pass for both.
+    pub fn flag(&self, key: &str, flag: &str) -> Option<bool> {
+        match self.node(key)?.props.get(flag)?.kind.as_ref()? {
+            value::Kind::BoolValue(set) => Some(*set),
+            _ => None,
+        }
+    }
+
+    /// The key of the first node of a kind, in tree order.
+    ///
+    /// For the nodes an author never named: a panel draws one bar and one
+    /// separator per section, and asking for "the progress node" is what a
+    /// test means rather than the path that happens to lead to it.
+    pub fn first(&self, kind: &str) -> Option<String> {
+        self.nodes()
+            .into_iter()
+            .find(|node| node.r#type == kind)
+            .map(|node| node.key.clone())
+    }
+
     /// The node with this key, wherever it is in the tree.
     pub fn node(&self, key: &str) -> Option<&ViewNode> {
         self.nodes().into_iter().find(|node| node.key == key)
