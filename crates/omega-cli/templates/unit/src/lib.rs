@@ -23,7 +23,7 @@ pub const UNIT: &str = env!("CARGO_PKG_NAME");
 /// What the document can configure an instance with.
 #[derive(omega::Config, Debug, Clone, PartialEq)]
 pub struct Settings {
-    /// Below this, the charge is drawn as urgent.
+    /// Below this, and going down, the charge is drawn as urgent.
     pub low: u8,
 }
 
@@ -50,7 +50,11 @@ impl Widget for BatteryWidget {
         }
 
         let charge = self.battery.charge();
-        let label = if charge < self.settings.low {
+        // Charging out of a low charge is not urgent, it is over — and red
+        // for the twenty minutes it takes to stop being low says otherwise.
+        let low = charge < self.settings.low && !self.battery.is_charging();
+
+        let label = if low {
             Text::new(charge).color(Role::Urgent).bold()
         } else {
             Text::new(charge).bold()
@@ -93,7 +97,15 @@ mod tests {
         let strict = Settings { low: 20 }.write();
 
         let drawn = Drawn::configured::<BatteryWidget>(&state, &strict);
-        assert_eq!(drawn.color_of("root").as_deref(), Some("urgent"));
+        let figure = drawn.first("text").expect("the widget draws the charge");
+        assert_eq!(drawn.color_of(&figure).as_deref(), Some("urgent"));
+    }
+
+    #[test]
+    fn a_low_charge_on_the_wall_is_not_urgent() {
+        let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.1, true));
+        let figure = drawn.first("text").expect("the widget draws the charge");
+        assert_eq!(drawn.color_of(&figure), None);
     }
 
     #[test]

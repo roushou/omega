@@ -170,6 +170,12 @@ fn a_scaffolded_config_builds_and_runs() {
         tested.contains("it_declares_only_what_it_holds"),
         "the scaffolded plugin does not check what it declares:\n{tested}"
     );
+    // The rule a widget colouring a reading has to get right, pinned so the
+    // scaffold cannot go back to teaching red for a battery that is filling.
+    assert!(
+        tested.contains("a_low_charge_on_the_wall_is_not_urgent"),
+        "the scaffolded plugin does not pin the urgent rule:\n{tested}"
+    );
 
     let _daemon = machine.daemon();
     assert!(
