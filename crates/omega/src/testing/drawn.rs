@@ -61,10 +61,8 @@ impl Drawn {
 
     /// Any flag of any node — `bold`, `dim`, `fill`.
     ///
-    /// `None` where the node did not set it, which is not the same as false:
-    /// a widget that stopped publishing a flag and one that publishes it off
-    /// are different bugs, and a test that could not tell them apart would
-    /// pass for both.
+    /// `None` where the node did not set it, which is not false: a widget that
+    /// stopped publishing a flag and one publishing it off are different bugs.
     pub fn flag(&self, key: &str, flag: &str) -> Option<bool> {
         match self.node(key)?.props.get(flag)?.kind.as_ref()? {
             value::Kind::BoolValue(set) => Some(*set),
@@ -72,11 +70,8 @@ impl Drawn {
         }
     }
 
-    /// The key of the first node of a kind, in tree order.
-    ///
-    /// For the nodes an author never named: a panel draws one bar and one
-    /// separator per section, and asking for "the progress node" is what a
-    /// test means rather than the path that happens to lead to it.
+    /// The key of the first node of a kind, in tree order — for the nodes an
+    /// author never named, where the kind is the identity a test means.
     pub fn first(&self, kind: &str) -> Option<String> {
         self.nodes()
             .into_iter()

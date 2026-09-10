@@ -3,15 +3,11 @@ import "../Props.js" as Props
 
 // Something to press.
 //
-// The binding it carries names one of the drawing unit's own commands, so a
-// press reaches that unit and no other, and carries the arguments the unit
-// asked to have handed back.
-//
-// Drawn as a filled slot at the theme's own state alphas, the way a `Group`'s
-// segments are: a button that was only its label was a word that happened to
-// be clickable, which is not something a panel's footer can be read as an
-// action. The fill is faint by design and the border is what finds it — the
-// kit's idle fill is 4% and was never meant to stand on its own.
+// The binding names one of the drawing unit's own commands, so a press reaches
+// that unit and no other. Drawn as a filled slot at the theme's state alphas,
+// like a `Group`'s segments: the idle fill is 4% and needs the border to be
+// found at all, and without one a button is a word that happens to be
+// clickable.
 Rectangle {
     id: slot
     required property var host
@@ -20,8 +16,8 @@ Rectangle {
     readonly property bool pressable: slot.bound !== null && slot.host.interactive
     readonly property bool hot: press.containsMouse && slot.pressable
 
-    // The paddings a `Group` segment uses, so the two controls a panel is
-    // made of are the same height without either naming a number.
+    // A `Group` segment's paddings, so both controls share a height without
+    // either naming a number.
     implicitWidth: label.implicitWidth + slot.host.space(16)
     implicitHeight: label.implicitHeight + slot.host.space(8)
 

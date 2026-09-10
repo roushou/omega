@@ -688,9 +688,8 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[9]["props"]["text"]["stringValue"], "Networks");
     assert_eq!(children[10]["type"], "separator");
 
-    // A spacer takes the room going, until it is told a size — so both carry
-    // the flag, and the width is what decides between them. The shell reads
-    // the pair the same way round: a node that named a width has one.
+    // Both carry the flag; the width is what decides between them, which is
+    // the same way round the shell reads the pair.
     assert_eq!(children[11]["type"], "spacer");
     assert_eq!(children[11]["props"]["width"]["intValue"], "8");
     assert_eq!(children[11]["props"]["fill"]["boolValue"], true);

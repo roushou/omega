@@ -40,17 +40,12 @@ pub use daemon::{Published, TestDaemon, manifest_of};
 pub use drawn::Drawn;
 pub use state::State;
 
-/// The topic payloads [`State::with`] takes, for the readings the shorthands
-/// on `State` do not describe.
+/// The topic payloads [`State::with`] takes, one per row of `omega-proto`'s
+/// topic table.
 ///
-/// One per row of `omega-proto`'s topic table — the same set [`SystemTopic`]
-/// closes over, because a topic a test cannot describe is a reading no widget
-/// can be tested against.
-///
-/// [`State::battery`] says a charge and a direction, which is what most tests
-/// mean. A test about the *time* left has to say the seconds, and that means
-/// naming the state itself — so the types a unit is handed to build one are
-/// here rather than in `omega-proto`, which a unit does not depend on.
+/// The shorthands on [`State`] cover what most tests mean; a test about the
+/// time left has to name the state itself. Re-exported here because a unit
+/// depends on this crate and not on `omega-proto`.
 ///
 /// ```
 /// use omega::testing::{State, topic::BatteryState};

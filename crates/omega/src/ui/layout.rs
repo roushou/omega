@@ -5,10 +5,9 @@ use crate::ui::style::styled;
 
 /// Children in a line.
 ///
-/// **A stack inside a column is as wide as that column.** A block inside a
-/// block is as wide as the block, so the panel's shape comes from the panel
-/// rather than from each row's longest word — which is what lets a [`fill`]
-/// deeper down mean anything at all:
+/// **A stack inside a column is as wide as that column**, so a panel's shape
+/// comes from the panel rather than from each row's longest word — which is
+/// what lets a [`fill`] deeper down mean anything:
 ///
 /// ```
 /// # use omega::ui::{Column, Progress, Row, Text};
@@ -20,11 +19,9 @@ use crate::ui::style::styled;
 ///     .child(Progress::new(charge).fill());
 /// ```
 ///
-/// It costs nothing to look at: a row's slack collects at its trailing edge
-/// rather than between its children, so a row that spans draws what a row
-/// that hugs drew until something inside it asks for the room. Along the way
-/// a stack *runs*, room is given only to a node that asked — [`fill`] in a
-/// row, or a [`Spacer`].
+/// A row's slack collects at its trailing edge rather than between its
+/// children, so spanning costs nothing to look at. Along the way a stack
+/// *runs*, room goes only to a node that asked — [`fill`], or a [`Spacer`].
 ///
 /// [`fill`]: Stack::fill
 #[derive(Debug, Clone)]
@@ -97,10 +94,9 @@ impl Column {
 
 /// A line between things.
 ///
-/// Draws itself across whichever way its parent runs, so the same separator
-/// is a rule in a column and a divider in a row. It spans that stack without
-/// being told to: a rule that stopped short of the panel it divides is not a
-/// rule, so there is nothing here for an author to decide.
+/// Draws itself across whichever way its parent runs — a rule in a column, a
+/// divider in a row — and spans it without being told: a rule that stopped
+/// short of the panel it divides is not a rule.
 #[derive(Debug, Clone)]
 pub struct Separator {
     node: Node,
@@ -130,25 +126,23 @@ styled!(Separator);
 /// ```
 /// # use omega::ui::{Row, Spacer, Text};
 /// Row::new()
-///     .fill()
 ///     .child(Text::new("Bose NC 700"))
 ///     .child(Spacer::new())
 ///     .child(Text::new("40%").dim());
 /// ```
 ///
-/// The row has to [`fill`] for there to be room to give away: a row as wide
-/// as what it draws has none, and the spacer is nought pixels of nothing.
+/// A row spans the column it is in, so there is room to give away; a row that
+/// hugs its contents has none, and the spacer is nought pixels wide.
 ///
 /// [`width`]: Spacer::width
 /// [`height`]: Spacer::height
-/// [`fill`]: Stack::fill
 #[derive(Debug, Clone)]
 pub struct Spacer {
     node: Node,
 }
 
 impl Spacer {
-    /// Taking the room, until it is told a size.
+    /// Takes the room going, until it is told a size.
     pub fn new() -> Self {
         Self {
             node: Node::new("spacer").flag("fill", true),

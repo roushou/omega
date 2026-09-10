@@ -172,14 +172,13 @@ nodes! {
         busy: Flag,
         width: Number,
         height: Number,
-        /// As wide as the room it is in, rather than as wide as what it
-        /// draws. In a row that is the width its neighbours left over; in a
-        /// column it is the column's own width.
+        /// As wide as the room it is in: in a row the width its neighbours
+        /// left over, in a column the column's own width. Ignored where a
+        /// `width` was named.
         ///
-        /// A node that asked for a `width` has one, and this does nothing.
-        /// Nor is it how a stack in a column or a rule in either comes to
-        /// span: those are the shell's, from what the node *is*, so a tree
-        /// carries this flag only where an author chose it.
+        /// Not how a stack in a column or a rule comes to span — those the
+        /// shell decides from the kind — so a tree carries this only where
+        /// an author chose it.
         fill: Flag,
     }
 
