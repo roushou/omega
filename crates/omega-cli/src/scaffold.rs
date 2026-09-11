@@ -18,14 +18,28 @@ use omega_proto::UnitName;
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.
-const UNIT_LIB: &str = include_str!("../templates/unit/src/lib.rs");
 const UNIT_MAIN: &str = include_str!("../templates/unit/src/main.rs");
 const SYSTEM_MAIN: &str = include_str!("../templates/system/src/main.rs");
 
-/// The token a unit's name replaces in a template. `battery-widget` is
-/// `battery_widget` to a `use`.
-const UNIT_TOKEN: &str = "{unit}";
 const CRATE_TOKEN: &str = "{unit_snake}";
+
+/// Bundled starting points for a plugin.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum Template {
+    /// A text widget with no system dependencies.
+    Minimal,
+    /// Battery charge, remaining time, and configurable low-charge styling.
+    Battery,
+}
+
+impl Template {
+    pub fn library(self) -> &'static str {
+        match self {
+            Self::Minimal => include_str!("../templates/minimal/src/lib.rs"),
+            Self::Battery => include_str!("../templates/battery/src/lib.rs"),
+        }
+    }
+}
 
 /// The edition generated crates are written against.
 const EDITION: &str = "2024";
@@ -38,8 +52,8 @@ pub enum ScaffoldError {
         #[source]
         source: io::Error,
     },
-    #[error("the bundled system template no longer contains `{token}`")]
-    SystemTemplate { token: &'static str },
+    #[error("the bundled program template no longer contains `{token}`")]
+    ProgramTemplate { token: &'static str },
     #[error("{} is not an omega checkout: it has no crates/omega", path.display())]
     NotACheckout { path: PathBuf },
     #[error("the checkout declares no workspace version")]
@@ -174,12 +188,6 @@ impl Scaffold {
         }
     }
 
-    /// `units/<name>/src/lib.rs`: the plugin, naming the unit in the command
-    /// that runs it.
-    pub fn unit_lib(&self, name: &UnitName) -> Result<String, ScaffoldError> {
-        Self::stamp(UNIT_LIB, name)
-    }
-
     /// `units/<name>/src/main.rs`: the program, which is the library and a
     /// call.
     pub fn unit_main(&self, name: &UnitName) -> Result<String, ScaffoldError> {
@@ -220,9 +228,7 @@ impl Scaffold {
     /// two together.
     pub fn placement_hint(unit: &UnitName) -> String {
         let krate = unit.as_str().replace('-', "_");
-        format!(
-            "omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::UNIT).settings(&{krate}::Settings {{ low: 15 }}).into()"
-        )
+        format!("omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::UNIT).into()")
     }
 
     /// `system/src/main.rs`: a document with an empty bar.
@@ -241,14 +247,12 @@ impl Scaffold {
     /// produces arrives commands later as a config that does not build. This
     /// is where it is caught.
     fn stamp(template: &str, name: &UnitName) -> Result<String, ScaffoldError> {
-        let stamped = template
-            .replace(UNIT_TOKEN, name.as_str())
-            .replace(CRATE_TOKEN, &name.as_str().replace('-', "_"));
+        let stamped = template.replace(CRATE_TOKEN, &name.as_str().replace('-', "_"));
 
         // A `str::replace` that matched nothing is silent, and a template
         // that still has a token in it is a file that will not compile.
         if stamped == template || stamped.contains("{unit") {
-            Err(ScaffoldError::SystemTemplate { token: UNIT_TOKEN })
+            Err(ScaffoldError::ProgramTemplate { token: CRATE_TOKEN })
         } else {
             Ok(stamped)
         }

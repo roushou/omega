@@ -112,3 +112,31 @@ impl Command {
         }
     }
 }
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+
+    #[test]
+    fn new_defaults_to_minimal_and_accepts_named_templates() {
+        use crate::scaffold::Template;
+        use clap::Parser;
+        for (args, battery) in [
+            (vec!["omega", "new", "hello"], false),
+            (
+                vec!["omega", "new", "hello", "--template", "minimal"],
+                false,
+            ),
+            (vec!["omega", "new", "hello", "--template", "battery"], true),
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            let Command::New(new) = cli.command else {
+                panic!("expected new");
+            };
+            assert_eq!(matches!(new.template, Template::Battery), battery);
+        }
+        let error =
+            Cli::try_parse_from(["omega", "new", "hello", "--template", "unknown"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+    }
+}

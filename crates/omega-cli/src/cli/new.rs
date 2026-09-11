@@ -16,13 +16,16 @@ use omega_daemon::host::cargo::{CargoManifest, CargoSlot};
 use omega_host::{AtomicFile, Layout};
 use omega_proto::UnitName;
 
-use crate::scaffold::Scaffold;
+use crate::scaffold::{Scaffold, Template};
 use crate::ui::{Paint, Step, Ui};
 
 /// Scaffold a plugin into `~/.config/omega/units/<name>`.
 #[derive(Debug, clap::Args)]
 pub struct NewCmd {
     pub name: String,
+    /// Choose the plugin's starting point.
+    #[arg(long, value_enum, default_value = "minimal")]
+    pub template: Template,
 }
 
 impl NewCmd {
@@ -48,7 +51,7 @@ impl NewCmd {
         layout
             .file::<CargoManifest>(CargoSlot::Unit(&name))
             .write(&scaffold.unit_crate_manifest(&name))?;
-        AtomicFile::at(layout.unit_lib_src(&name)).write(scaffold.unit_lib(&name)?.as_bytes())?;
+        AtomicFile::at(layout.unit_lib_src(&name)).write(self.template.library().as_bytes())?;
         AtomicFile::at(layout.unit_main_src(&name)).write(scaffold.unit_main(&name)?.as_bytes())?;
 
         // The config plane depends on every plugin it configures — that is

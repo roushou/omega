@@ -1,7 +1,7 @@
 //! What `omega init` generates, checked against the invariants that make a
 //! generated workspace build.
 
-use omega_cli::scaffold::{Published, Scaffold, SourceTree};
+use omega_cli::scaffold::{Published, Scaffold, SourceTree, Template};
 use omega_daemon::host::cargo::CargoManifest;
 use omega_host::Toml;
 use omega_proto::UnitName;
@@ -161,7 +161,7 @@ fn the_unit_crate_is_named_after_the_unit() {
 
 #[test]
 fn the_bundled_plugin_declares_by_holding() {
-    let main = Scaffold::new().unit_lib(&unit()).unwrap();
+    let main = Template::Minimal.library();
 
     // The shortest useful plugin: hold what you need, draw what you know.
     assert!(main.contains("#[derive(omega::Widget)]"), "{main}");
@@ -188,7 +188,7 @@ fn the_program_is_the_library_and_a_call() {
 
 #[test]
 fn the_scaffolded_unit_arrives_with_tests_that_pass() {
-    let main = Scaffold::new().unit_lib(&unit()).unwrap();
+    let main = Template::Minimal.library();
 
     // A plugin nobody can test is a plugin nobody changes twice. The
     // shortest way to say one is testable is to hand someone one that is.
@@ -202,17 +202,8 @@ fn the_scaffolded_unit_arrives_with_tests_that_pass() {
 }
 
 #[test]
-fn the_scaffolded_unit_names_itself_in_the_command_that_runs_it() {
-    let scaffolded = UnitName::parse("clock").unwrap();
+fn the_program_uses_the_rust_crate_identifier() {
     let scaffold = Scaffold::new();
-
-    assert!(
-        scaffold
-            .unit_lib(&scaffolded)
-            .unwrap()
-            .contains("omega dev clock"),
-        "the plugin should say how to run it"
-    );
     // Rust spells `battery-widget` as `battery_widget`, and the program has
     // to say the name the way the language does.
     let hyphenated = UnitName::parse("battery-widget").unwrap();
@@ -326,17 +317,14 @@ fn a_path_that_is_not_a_checkout_says_so() {
 #[test]
 fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
     let hint = Scaffold::placement_hint(&unit());
-    let lib = Scaffold::new().unit_lib(&unit()).unwrap();
+    let lib = Template::Minimal.library();
 
     // The hint is pasted into a Rust file and has to compile there, so every
     // name in it has to exist in the plugin it names. These are the two
     // halves, and they are edited a file apart.
     assert!(hint.contains("battery_widget::UNIT"), "{hint}");
     assert!(lib.contains("pub const UNIT"), "{lib}");
-    assert!(hint.contains("battery_widget::Settings"), "{hint}");
-    assert!(lib.contains("pub struct Settings"), "{lib}");
-    assert!(hint.contains("low: 15"), "{hint}");
-    assert!(lib.contains("pub low: u8"), "{lib}");
+    assert!(!hint.contains("Settings"), "{hint}");
 
     // Fully qualified: a hint that needs a second hint about an import is a
     // hint that failed.

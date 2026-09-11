@@ -148,7 +148,7 @@ fn a_scaffolded_config_builds_and_runs() {
     let machine = Machine::new();
 
     machine.run(&["init", "--bare"]);
-    machine.run(&["new", "battery-widget"]);
+    machine.run(&["new", "battery-widget", "--template", "battery"]);
 
     // Scaffolding from a checkout links the config to it, so what follows
     // resolves against this tree rather than a crate nobody has published.
@@ -271,4 +271,56 @@ fn a_scaffolded_config_builds_and_runs() {
         !line.contains("stopped"),
         "a cycled unit must come back: {line}"
     );
+}
+
+#[test]
+#[ignore = "compiles both scaffold templates with cargo; run with --ignored"]
+fn both_templates_build_with_their_printed_placements() {
+    let machine = Machine::new();
+    machine.run(&["init", "--bare"]);
+    let minimal = machine.omega(&["new", "hello-widget"]).output().unwrap();
+    let battery = machine
+        .omega(&["new", "power-widget", "--template", "battery"])
+        .output()
+        .unwrap();
+    let mut hints = Vec::new();
+    for (name, output) in [("hello-widget", minimal), ("power-widget", battery)] {
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty());
+        let output = String::from_utf8_lossy(&output.stderr);
+        let hint = omega_cli::scaffold::Scaffold::placement_hint(
+            &omega_proto::UnitName::parse(name).unwrap(),
+        );
+        assert!(output.contains(&hint), "{output}");
+        hints.push(hint);
+    }
+    std::fs::write(
+        machine.root.join("config/system/src/main.rs"),
+        format!(
+            "fn main() -> omega_document::Result<()> {{
+                omega_document::Document::new().shell(
+                    omega_document::shell::Shell::new().bar(
+                        omega_document::shell::Bar::top().right([{}])
+                    )
+                )?.emit()
+            }}",
+            hints.join(",")
+        ),
+    )
+    .unwrap();
+    machine.run(&["build", "--debug"]);
+    let tested = machine.cargo(&["test", "--workspace"]);
+    assert!(tested.contains("it_shows_a_greeting"), "{tested}");
+    assert!(tested.contains("it_shows_the_charge"), "{tested}");
+
+    let rejected = machine
+        .omega(&["new", "invalid-widget", "--template", "unknown"])
+        .output()
+        .unwrap();
+    assert!(!rejected.status.success());
+    assert!(!machine.root.join("config/units/invalid-widget").exists());
 }

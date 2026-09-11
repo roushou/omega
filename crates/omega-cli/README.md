@@ -42,6 +42,10 @@ a user service, and `omega daemon status` checks the installed service. Use
 `omega link /path/to/omega` to build your configuration against a source checkout,
 or `omega link --published` to return to registry dependencies.
 
+`omega new <name>` starts with a minimal text widget. Use
+`omega new power --template battery` for a battery widget with configurable
+low-charge styling. Both templates include tests and print a placement declaration.
+
 Run `omega --help` or `omega <command> --help` for the full command reference.
 
 [Project](https://github.com/roushou/omega) ·

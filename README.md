@@ -134,6 +134,10 @@ omega build
 omega build --watch --debug
 ```
 
+`omega new <name>` starts with a minimal text widget. Use
+`omega new power --template battery` for a battery widget with configurable
+low-charge styling. Both templates include tests and print a placement declaration.
+
 Plugins are ordinary Cargo projects, so their tests run with `cargo test` from
 your configuration workspace. For development against the live desktop,
 `omega dev audio` temporarily runs the plugin in your terminal in place of its

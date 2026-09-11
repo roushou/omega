@@ -9,7 +9,7 @@
 //! settings it is configured with are checked by the compiler rather than
 //! matched by name at runtime.
 //!
-//! Run it against the daemon with `omega dev {unit}`, and test it with
+//! Run it against the daemon with `omega dev <name>`, and test it with
 //! `cargo test`: a widget is a function from state to a view, and the tests
 //! at the bottom of this file call it without a daemon anywhere.
 
