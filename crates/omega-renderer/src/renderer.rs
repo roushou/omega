@@ -145,7 +145,7 @@ impl Renderer {
     ///
     /// A linked plugin is found by the scan but not *watched* — inotify does
     /// not descend through a symlink — so edits need
-    /// [`HostShell::reload_command`].
+    /// [`HostShell::reload_command`](crate::HostShell::reload_command).
     pub fn link(&self, plugins: &Path, checkout: &Path) -> anyhow::Result<PathBuf> {
         let source = checkout.join(self.source);
         if !source.join("manifest.json").is_file() {

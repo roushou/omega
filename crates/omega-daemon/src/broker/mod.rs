@@ -1,7 +1,7 @@
 //! Running brokers, and routing actions to them.
 //!
 //! A broker reports changes and serves actions. This is the half that decides
-//! which broker serves what and hands each one to a [`Driver`]; when to ask,
+//! which broker serves what and hands each one to a driver; when to ask,
 //! and what to do with a failure, is the driver's.
 //!
 //! A broker owns its connection, so nothing else may touch it: an action is a

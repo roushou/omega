@@ -5,10 +5,8 @@
 //! `unit.<name>.<key>`, the keyspace a unit owns. A typo like `"batery"` is
 //! rejected here rather than silently subscribing to nothing.
 //!
-//! The closed set is declared once, in [`topics!`]. A topic's name, its
-//! place in `SystemTopic::ALL`, and the type it carries came from four lists
-//! that had to agree; they are now one row, because a topic missing from one
-//! of those lists is a topic nothing can be checked against.
+//! The `topics!` table declares each topic's name and payload type together
+//! and generates [`SystemTopic::ALL`], keeping enumeration and lookup consistent.
 
 use std::fmt;
 

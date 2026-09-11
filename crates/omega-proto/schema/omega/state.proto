@@ -23,7 +23,7 @@ import "omega/value.proto";
 // One topic value. "topic" is the address: "battery", "network", "audio",
 // "backlight", "mains", "monitors", "units", "time", "wifi", "workspaces",
 // "window", "media", "bluetooth", "system", or
-// "unit.<name>.<key>" for
+// `unit.<name>.<key>` for
 // unit-owned data.
 //
 // A topic published with no value is the daemon saying there is nothing to

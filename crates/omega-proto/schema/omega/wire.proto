@@ -100,7 +100,7 @@ message GetState {
 }
 
 message SetState {
-  string topic = 1;                 // "unit.<name>.<key>" only
+  string topic = 1;                 // `unit.<name>.<key>` only
   Value value = 2;
 }
 
