@@ -1,66 +1,129 @@
 # Omega
 
-The desktop configuration daemon: your desktop described as a Rust program.
+_Omarchy, with Rust at the controls._
 
-A _unit_ is a Rust crate that declares what it needs by holding it — a
-`Battery` field is the battery topic and the permission to read it — and draws
-a view. Omega compiles your configuration, supervises the units it built, owns
-the state they read, and reconciles the machine against the document.
+Omega brings Rust to the widgets, controls, and automations that make a desktop
+yours. It works alongside [Omarchy](https://omarchy.org): Omarchy provides the
+desktop and shell, while Omega runs your plugins, connects them to system state,
+and displays their interfaces through that shell.
 
-## Requirements
+Write a volume control, a network panel, or a focus timer as an ordinary Rust
+program. Omega handles the shared system connections and keeps your plugins
+running. You describe what they show and what happens when someone interacts
+with them.
 
-- **Linux with a systemd user manager.** `omega daemon install` writes a
-  `systemd --user` unit bound to `graphical-session.target`.
-- **Rust 1.88+.** A runtime requirement, not just a build one: `omega build`
-  compiles your configuration with cargo whenever it changes.
-- **[Omarchy](https://omarchy.org)** to draw. Its Quickshell shell is the only
-  renderer host. Without it the daemon still runs and units still execute —
-  there is simply nowhere to draw.
+## Running Omega
 
-## Install
+Omega runs as a background daemon. Your configuration lives in `~/.config/omega`,
+a Rust workspace containing your plugins and the declaration of where they belong.
 
-Not yet published.
+Omega requires Linux with a systemd user manager, Rust 1.88 or newer, and
+Omarchy's Quickshell shell to display widgets. Some Omega crates are already
+published on crates.io; the API shown here is ahead of those releases. Install
+from this checkout to use it:
 
 ```sh
 cargo install --path crates/omega-cli
+omega init
 ```
 
-## Quickstart
+`omega init` creates the workspace, installs the renderer, and starts the daemon
+as a user service. When the source checkout is available, it also links your
+configuration to it so your plugins build against the same API. Keep the checkout
+available while using that link.
+
+You can inspect the service and its plugins from the terminal:
 
 ```sh
-omega init          # config workspace, daemon service, renderer
-omega new battery   # scaffold a unit
+omega daemon status
+omega status
 ```
 
-`omega new` prints the placement line. Paste it into
-`~/.config/omega/system/src/main.rs`:
+For foreground operation, `omega daemon` runs the daemon directly.
+
+## Writing plugins
+
+A plugin declares its dependencies through its fields. Holding `Audio` gives a
+widget access to the current audio state; holding `Volume` lets a command change
+it. Omega derives the required subscriptions and permissions from those types.
+
+Views are declarative, and controls bind directly to typed commands:
 
 ```rust
-omega_document::Modules::widget("battery", battery::UNIT, &battery::Settings { low: 15 })
+use omega::audio::{Audio, Volume};
+use omega::ui::{Section, Slider, Text};
+use omega::{Command, Percent, Ui, Widget};
+
+#[derive(omega::Widget)]
+struct Panel {
+    audio: Audio,
+}
+
+impl Widget for Panel {
+    fn render(&self) -> Ui {
+        if !self.audio.has_reading() {
+            return Text::new("Audio unavailable").into();
+        }
+
+        Section::new("Audio")
+            .child(Text::new(self.audio.volume()))
+            .child(Slider::new(self.audio.volume()).on_change(SetVolume))
+            .into()
+    }
+}
+
+#[derive(omega::Command)]
+struct SetVolume {
+    volume: Volume,
+}
+
+impl Command for SetVolume {
+    type Input = Percent;
+    type Output = ();
+
+    async fn call(&self, level: Percent) -> omega::Result<()> {
+        self.volume.set(level).await
+    }
+}
+
+fn main() -> omega::Result<()> {
+    omega::plugin!()
+        .widget::<Panel>()
+        .command::<SetVolume>()
+        .run()
+}
 ```
+
+Omega redraws the widget when its audio state changes. Moving the slider invokes
+`SetVolume` with a `Percent`. Widgets can read state; actions belong in commands
+or reactions, a distinction enforced at compile time.
+
+`omega new` creates a plugin crate and prints the declaration for placing its
+widget in `~/.config/omega/system/src/main.rs`. Build once to apply your changes,
+or keep a build running while you work:
 
 ```sh
+omega new audio
 omega build
+omega build --watch --debug
 ```
 
-## Commands
+Plugins are ordinary Cargo projects, so their tests run with `cargo test` from
+your configuration workspace. For development against the live desktop,
+`omega dev audio` temporarily runs the plugin in your terminal in place of its
+supervised process. `omega logs audio` shows its captured output.
 
-|                              |                                                          |
-| ---------------------------- | -------------------------------------------------------- |
-| `omega build`                | compile the config, stage the document and unit binaries |
-| `omega status`               | what is running, from the observation socket             |
-| `omega logs <unit>`          | a unit's own output (`~/.cache/omega/logs/`)             |
-| `omega dev <unit>`           | take over a supervised unit in your terminal             |
-| `omega run <unit> <command>` | invoke a command surface                                 |
-| `omega clean`                | remove the build cache (`--logs` for the logs too)       |
-| `omega link [path]`          | build against an omega checkout instead of the registry  |
+The [audio](crates/omega/examples/audio.rs), [Wi-Fi](crates/omega/examples/wifi.rs),
+and [focus timer](crates/omega/examples/focus.rs) examples show fuller plugins,
+including panels, forms, and plugin-owned state.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Open design questions](docs/design.md)
-- [Contributing](AGENTS.md)
+See the [architecture](docs/architecture.md) for how Omega fits together,
+[open design questions](docs/design.md) for work ahead, and
+[contributing guidelines](AGENTS.md) for working on Omega itself. `omega --help`
+lists the available commands.
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](LICENSE)

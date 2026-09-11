@@ -1,72 +1,75 @@
-# schema
+# Omega schema
 
-The single source of truth. Generated Rust types are shared by the daemon and
-every user crate — `Keybind` in the daemon is literally `Keybind` in your
-config.
+These Protobuf schemas define the messages shared by Omega's daemon, plugins,
+configuration tools, and renderer. `omega-proto` generates Rust types from them
+at build time. Edit the schemas, not generated Rust or JSON implementations.
 
-## Layout
+## Organization
 
-- `wire.proto` — the frame envelope, handshake, and bidirectional RPC.
-- `value.proto` — the generic data model (the open escape hatch).
-- `state.proto` — the topic envelope and the replicated patches. The oneof
-  in it _is_ the ontology: what a topic can carry is one list, in one place.
-- `state/*.proto` — the payloads, one file per domain. Adding a topic is a
-  message in the domain it belongs to and one arm in the envelope.
-- `action.proto` — the closed action taxonomy and keybinds.
-- `event.proto` — the closed event taxonomy.
-- `unit.proto` — manifests, surfaces, capabilities.
-- `ui.proto` — the declarative view tree.
-- `document.proto` — the state document (desired state of the machine).
+Schema paths below are relative to `schema/omega/`.
 
-## Design rules
+| Schema           | Responsibility                                   |
+| ---------------- | ------------------------------------------------ |
+| `wire.proto`     | Frames, handshake, and bidirectional requests    |
+| `value.proto`    | Generic values for settings and command payloads |
+| `state.proto`    | Topic envelope and replicated patches            |
+| `state/*.proto`  | State payloads grouped by domain                 |
+| `action.proto`   | Actions and keybindings                          |
+| `event.proto`    | Events                                           |
+| `unit.proto`     | Manifests, surfaces, and capabilities            |
+| `ui.proto`       | Declarative view trees                           |
+| `document.proto` | Desired desktop configuration                    |
 
-1. **Closed taxonomies, open escape hatches.** Actions and events are enums.
-   `RunCommand`, `Value`, `CustomEvent`, and string ids are the explicit,
-   capability-gated or SDK-narrowed escape hatches.
-2. **Desired ≠ actual.** `document.proto` is intent; `state.proto` is reality.
-   Never one type for both — that's how you get a Hyprland-shaped schema.
-3. **Strings are validated at the edge.** Key symbols, topic names, and unit
-   ids are strings on the wire; the SDK wraps them in closed enums and typed
-   accessors so config still fails at compile time.
-4. **Revisions are daemon-owned.** `StateTopic.revision` and `ViewTree.revision`
-   are assigned by the daemon (monotonic per topic/surface); producers publish
-   values, never revisions.
-5. **Absence is a value, not a silence.** A `StateTopic` published with its
-   oneof unset is the daemon saying there is nothing to report — no battery,
-   no adapter, the broker is down. Saying nothing instead is indistinguishable
-   from never having been asked, which is what a unit waits on before its
-   first render.
-6. **A field whose value is a constant is a field two readers will disagree
-   about.** `BacklightState.max_percent` was always 100; it is `reserved`.
-7. **A topic's resolution is part of its design.** `TimeState` is truncated to
-   the minute, timestamp included, because last-value-wins only coalesces a
-   value that is actually the same — a field moving every second would wake
-   every clock on the bar sixty times an hour to redraw two digits.
+## Contract
 
-## The minimal slice
+Actions, events, and state topics have closed taxonomies. Extensible values and
+custom events use explicit protocol fields. Add a state topic to its domain
+schema and to the topic envelope; keep existing field tags and enum numbers
+stable, and reserve removed fields.
 
-Three messages carry the whole first vertical slice: `Frame`, `StatePatch`,
-`ViewTree`. Inside them: `BatteryState`, one `Act`, and one `WidgetModule`.
+Desired configuration and observed state have separate messages. The daemon
+owns topic and view revisions. A topic with its payload unset explicitly reports
+absence, such as a missing battery or an unavailable broker. An unpublished topic
+is not equivalent to an absent one: plugins wait for their declared topics before
+rendering.
 
-Resource failures retain distinct codes: `UNAVAILABLE` means a required service
-or session is absent, `RESOURCE_EXHAUSTED` means aggregate/count admission failed,
-`PAYLOAD_TOO_LARGE` means one payload exceeds its limit, and `DEADLINE_EXCEEDED`
-means the wait expired without proving whether an external effect completed.
-`FAILED_PRECONDITION` remains for unmet protocol or domain prerequisites.
-Existing enum numbers must not be reassigned.
+Choose topic boundaries and update resolution around what should wake consumers.
+For example, the clock topic reports minute-resolution time. Payloads should not
+carry redundant constants or duplicate facts that can disagree.
 
-Action payload validation lives in `omega-proto::action`, separate from capability
-policy and subsystem availability. Every action kind has an exhaustive validation
-arm. Required oneofs, nonzero action enums, positive workspace indexes, finite
-volume changes, absolute volume in 0..=1, absolute backlight in 0..=100, selected
-boolean flags, identifiers, required text and NUL-free process/D-Bus strings are
-checked before execution. Missing window selectors (including empty selector
-messages) retain focused-window semantics. Signed finite volume deltas and signed
-backlight deltas remain relative changes; no arbitrary delta range is imposed.
+Identifiers and payloads are validated at their boundaries. Wire strings do not
+imply arbitrary accepted input, and generated message types alone do not establish
+domain validity.
 
-Live requests authorize first, then validate and route. Invalid payloads map to
-`INVALID_ARGUMENT` independently of handler presence. Desired documents and timer
-admission apply the same rules; event-only schedules remain valid. Document
-validation additionally checks scheduled unit/command references against the build.
-Backend-specific selector/encoding limitations and runtime availability remain
-handler responsibilities. Validation does not define escaping or shell quoting.
+## Requests and failures
+
+Every invocation receives an outcome or refusal on its own stream. Stream IDs
+are allocated by parity: daemon even, peer odd. The observation socket uses the
+same request and result vocabulary encoded as JSON.
+
+Live requests are authorized before payload validation and routing. Validation in
+`omega-proto::action` covers every action kind, including required fields, enum
+values, numeric ranges, identifiers, and process/D-Bus string constraints.
+Desired documents and scheduled actions use the same validation rules. Document
+validation also checks scheduled plugin and command references against the build.
+Backend availability and encoding restrictions remain handler responsibilities.
+
+Failure codes distinguish malformed input (`INVALID_ARGUMENT`), unmet
+prerequisites (`FAILED_PRECONDITION`), unavailable services (`UNAVAILABLE`),
+aggregate admission limits (`RESOURCE_EXHAUSTED`), and oversized individual
+payloads (`PAYLOAD_TOO_LARGE`). `DEADLINE_EXCEEDED` means the wait expired; it does
+not establish whether an external action completed.
+
+## Verification
+
+From the repository root:
+
+```sh
+cargo test -p omega-proto
+cargo test -p omega-brokers --test coverage
+```
+
+Protocol tests cover wire shapes and validation. Broker coverage checks that
+state and action declarations have implementations. Changes to UI properties
+also require regenerating the renderer's readers and running its checks; see the
+[renderer guide](https://github.com/roushou/omega/blob/main/crates/omega-renderer/shell/README.md).
