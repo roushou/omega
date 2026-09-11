@@ -13,17 +13,17 @@ build-time concern on the developer's machine, never a boot-time requirement.
 
 ## Crate boundaries
 
-| Crate | Responsibility |
-| --- | --- |
-| `omega-proto` | Schema, identifiers, wire vocabulary, codecs and socket contracts |
-| `omega-host` | Layout, durable files, TOML documents and generation ownership |
-| `omega-document` | Desired-state builders and shared validation |
-| `omega-derive` | Field-based SDK derives |
-| `omega` (`omega-rs`) | Unit-author SDK; depends on proto and derive, not host or daemon |
-| `omega-brokers` | External subsystem connections, readings and actions |
-| `omega-daemon` | Sessions, supervision, state, action routing and convergence |
-| `omega-renderer` | Embedded QML assets and their installation |
-| `omega-cli` | Build and deployment orchestration, environment resolution and terminal UI |
+| Crate                | Responsibility                                                             |
+| -------------------- | -------------------------------------------------------------------------- |
+| `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts          |
+| `omega-host`         | Layout, durable files, TOML documents and generation ownership             |
+| `omega-document`     | Desired-state builders and shared validation                               |
+| `omega-derive`       | Field-based SDK derives                                                    |
+| `omega` (`omega-rs`) | Unit-author SDK; depends on proto and derive, not host or daemon           |
+| `omega-brokers`      | External subsystem connections, readings and actions                       |
+| `omega-daemon`       | Sessions, supervision, state, action routing and convergence               |
+| `omega-renderer`     | Embedded QML assets and their installation                                 |
+| `omega-cli`          | Build and deployment orchestration, environment resolution and terminal UI |
 
 The SDK declares dependencies by fields: readings and composites read, records
 hold unit memory, and effects request changes. `Reads` excludes effects from
@@ -160,11 +160,11 @@ and completes captured effects, exposing their typed result to tests.
 
 Three kinds of peer on the control socket:
 
-| peer        | identity                        | may do                          |
-| ----------- | ------------------------------- | ------------------------------- |
-| unit        | spawn token + `SO_PEERCRED` pid | what its manifest declares      |
+| peer        | identity                        | may do                               |
+| ----------- | ------------------------------- | ------------------------------------ |
+| unit        | spawn token + `SO_PEERCRED` pid | what its manifest declares           |
 | operator    | the daemon's own uid            | lifecycle, actions and subscriptions |
-| anyone else | —                               | refused                         |
+| anyone else | —                               | refused                              |
 
 Grants are read from the daemon's copy of the manifest, never from a frame.
 Capabilities cannot be self-declared at runtime: a unit's manifest is
@@ -527,3 +527,29 @@ coverage tests keep declarations aligned with their consumers.
 
 [Open design questions](design.md) records current limitations and the decisions
 needed before adding capabilities.
+
+## Dogfooding plugins
+
+The SDK examples include audio controls, Wi-Fi and a focus timer. They are ordinary
+units with indicator/panel surfaces and explicit commands. The focus timer's `tick`
+command needs a one-second document schedule; Wi-Fi signal history uses `sample`.
+
+`Form` submits its named fields as one map argument. Drafts remain local to the
+shell and secret fields clear after successful submission. The shell correlates
+control requests by stream, disables the submitting control while pending and
+shows refusals. Timeout or disconnect reports an uncertain outcome, not cancellation.
+Renderer behavior tests run with `crates/omega-renderer/shell/test.sh` (also in CI).
+
+`WifiControl` requires network capability. Connection requests acknowledge
+NetworkManager activation admission; the Wi-Fi reading reports connecting,
+connected or failed state independently. The initial implementation uses the first
+wireless adapter, visible networks and open/personal authentication or saved
+profiles. Newly supplied credentials create a volatile NetworkManager profile,
+not a persistent saved network. Hidden networks, enterprise authentication and
+adapter selection require explicit additional APIs.
+
+The focus timer uses Linux boot time through rustix's safe API: suspend counts,
+wall-clock adjustments do not. Tick scheduling remains in the daemon and uses
+Tokio's monotonic deadlines. The timer record survives unit replacement while the
+daemon lives; daemon restart resets it. Completion is recorded before notification,
+so notification is at most once and may be lost if the unit crashes between them.

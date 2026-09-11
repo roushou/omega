@@ -41,6 +41,8 @@ Item {
     // not reliably report itself closed, so silence is what we watch instead.
     property double lastHeard: 0
     property int nextStream: 1
+    readonly property alias requests: requests
+    Requests { id: requests }
 
     function onLine(line) {
         link.lastHeard = Date.now()
@@ -56,8 +58,7 @@ Item {
         // said why, and a button that silently does nothing is the worst way
         // to find that out.
         if (msg.result) {
-            if (msg.result.error)
-                console.warn("omega:", link.drawnBy, "refused:", msg.result.error.message)
+            requests.finish(msg.streamId, msg.result)
             return
         }
 
@@ -99,8 +100,9 @@ Item {
     // are moments when there is no object to write to.
     function send(message) {
         var open = socketLoader.item as Socket
-        if (!open) return
+        if (!open || !open.connected) return false
         open.write(JSON.stringify(message) + "\n")
+        return true
     }
 
     // A press is the operator asking this unit to run one of its own
@@ -115,16 +117,19 @@ Item {
     // A control that carries a value of its own — where a slider landed,
     // which way a toggle went — appends it *after* those, so a unit reads the
     // arguments it chose by position and the user's value last.
-    function press(bound, value) {
+    function press(bound, value, key) {
         if (!bound || !bound.command || link.drawnBy === "") return
 
         var args = (bound.args || []).slice()
         if (value !== undefined) {
             var encoded = Props.encode(value)
-            if (encoded !== null) args.push(encoded)
+            if (encoded === null) { requests.error = "Unsupported control value."; return }
+            args.push(encoded)
         }
-        link.send({
-            streamId: link.allocateStream(),
+        var stream = link.allocateStream()
+        if (!requests.begin(stream, key, Date.now())) return
+        var sent = link.send({
+            streamId: stream,
             invoke: {
                 act: {
                     action: {
@@ -139,6 +144,7 @@ Item {
                 }
             }
         })
+        if (!sent) requests.disconnected()
     }
 
     Component {
@@ -163,6 +169,7 @@ Item {
                 if (connected) {
                     link.subscribeToNothing()
                 } else {
+                    requests.disconnected()
                     link.tree = null
                     link.drawnBy = ""
                 }
@@ -197,7 +204,8 @@ Item {
         running: true
         repeat: true
         onTriggered: {
-            if (Date.now() - link.lastHeard < 15000) return
+            if (Date.now() - link.lastHeard < 15000 && !requests.expire(Date.now())) return
+            requests.disconnected()
             link.lastHeard = Date.now()
             socketLoader.active = false
             Qt.callLater(function() { socketLoader.active = true })

@@ -29,13 +29,9 @@ Grid {
 
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.modelData,
+                "connection": grid.host.connection,
                 "foreground": grid.host.foreground
             })
-
-            Connections {
-                target: child.item
-                function onInvoke(bound, value) { grid.host.invoke(bound, value) }
-            }
         }
     }
 }

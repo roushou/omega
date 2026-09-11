@@ -231,7 +231,9 @@ nodes! {
     /// `value` is how it draws, not what it holds: the buffer belongs to the
     /// shell until the user commits it, so this is a string the unit sets and
     /// not the one being typed.
+    Form => "form" { label: Text },
     Field => "field" {
+        name: Text,
         placeholder: Text,
         secret: Flag,
         value: Text,

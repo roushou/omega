@@ -51,6 +51,7 @@ pub use clock::Weekday;
 pub use disk::Mount;
 pub use media::{Playback, Player};
 pub use monitors::Monitor;
+pub use omega_proto::omega::WifiPhase;
 pub use peripherals::{Peripheral, PeripheralKind};
 pub use power_profile::{PowerProfile, ProfileLabel};
 pub use supervised::{UnitPhase, UnitReport};

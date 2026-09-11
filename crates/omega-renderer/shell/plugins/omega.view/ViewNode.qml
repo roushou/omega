@@ -106,9 +106,14 @@ Item {
     // two reasons a node is unusable are drawn the same way.
     readonly property bool disabled: Props.disabled(node.model)
     readonly property bool busy: Props.busy(node.model)
-    readonly property bool interactive: !node.disabled && !node.busy
+    readonly property bool interactive: !node.disabled && !node.busy && !node.pending
 
-    signal invoke(var bound, var value)
+    property var connection: null
+    property var form: null
+    readonly property bool pending: connection !== null && connection.requests.busy(model ? model.key : "")
+    function invoke(bound, value) {
+        if (node.connection) node.connection.press(bound, value, node.model.key)
+    }
 
     // What a node asked to be, or what it draws. A panel that has to line
     // two columns up says so; everything else is its own size.
@@ -140,6 +145,7 @@ Item {
             case "button": return "nodes/Button.qml"
             case "slider": return "nodes/Slider.qml"
             case "toggle": return "nodes/Toggle.qml"
+            case "form": return "nodes/Form.qml"
             case "field": return "nodes/Field.qml"
             case "list": return "nodes/List.qml"
             case "stack": return "nodes/Stack.qml"
@@ -187,9 +193,8 @@ Item {
         id: content
         anchors.centerIn: parent
 
-        // The room the layout gave, never less than what the node draws:
-        // overflowing a reading beats clipping it.
-        width: Math.max(content.implicitWidth, node.width - node.padding * 2)
+        // Allocated width is authoritative; text wraps inside constrained panels.
+        width: Math.max(0, node.width - node.padding * 2)
         height: Math.max(content.implicitHeight, node.height - node.padding * 2)
 
         // Set from the type alone: the delegate reads everything else off

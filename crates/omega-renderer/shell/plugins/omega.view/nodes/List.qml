@@ -26,7 +26,7 @@ Rectangle {
     property int selected: -1
 
     color: "transparent"
-    implicitWidth: rows.implicitWidth
+    implicitWidth: host.space(280)
     // As tall as its rows, up to a point: a list of forty networks in a
     // popout that grew to fit them would be a popout taller than the screen.
     // A unit that knows better says so with `height`.
@@ -47,6 +47,7 @@ Rectangle {
     // kept delegate is handed the new reading through its bindings.
     function reconcile() {
         var wanted = list.wanted
+        var selectedKey = list.selected >= 0 && list.selected < held.count ? held.get(list.selected).key : null
 
         for (var i = held.count - 1; i >= 0; i--) {
             // Not `held`: `var` is function-scoped and hoisted, so a local of
@@ -76,7 +77,13 @@ Rectangle {
 
         while (held.count > wanted.length) held.remove(held.count - 1)
 
-        if (list.selected >= held.count) list.selected = held.count - 1
+        list.selected = -1
+        for (var index = 0; index < held.count; index++) {
+            if (selectedKey !== null && held.get(index).key === selectedKey) {
+                list.selected = index
+                break
+            }
+        }
     }
 
     function activate(index) {
@@ -84,10 +91,12 @@ Rectangle {
         list.host.invoke(list.bound, held.get(index).key)
     }
 
-    ListModel { id: held }
+    // Node payloads are QVariantMaps, including nested children and props.
+    ListModel { id: held; dynamicRoles: true }
 
     ListView {
         id: rows
+        objectName: "choices"
         anchors.fill: parent
         model: held
         spacing: list.host.space(list.gap)
@@ -111,7 +120,7 @@ Rectangle {
             required property var node
 
             width: rows.width
-            implicitHeight: child.item ? child.item.implicitHeight : 0
+            implicitHeight: Math.max(list.host.space(36), child.item ? child.item.implicitHeight + list.host.space(12) : 0)
 
             // Where the cursor is, and where the pointer is. Two states
             // rather than one: a list that only marked the cursor gave no
@@ -129,17 +138,15 @@ Rectangle {
                 id: child
                 anchors.left: parent.left
                 anchors.right: parent.right
+                anchors.leftMargin: list.host.space(8)
+                anchors.rightMargin: list.host.space(8)
                 anchors.verticalCenter: parent.verticalCenter
 
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": row.node,
+                    "connection": list.host.connection,
                     "foreground": list.host.foreground
                 })
-
-                Connections {
-                    target: child.item
-                    function onInvoke(bound, value) { list.host.invoke(bound, value) }
-                }
             }
 
             Connections {
@@ -151,6 +158,7 @@ Rectangle {
                 id: point
                 anchors.fill: parent
                 hoverEnabled: true
+                enabled: list.bound !== null && list.host.interactive
                 acceptedButtons: Qt.LeftButton
                 z: -1
                 onClicked: {

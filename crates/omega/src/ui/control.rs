@@ -139,6 +139,17 @@ pub struct Field {
 }
 
 impl Field {
+    /// Name this field in its enclosing form's submitted map.
+    ///
+    /// ```
+    /// use omega::ui::Field;
+    /// let network = Field::new("Network").name("ssid");
+    /// ```
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.node = self.node.text_prop("name", name);
+        self
+    }
+
     /// An empty field, with the given placeholder.
     pub fn new(placeholder: impl Display) -> Self {
         Self {
@@ -307,3 +318,33 @@ impl Default for Group {
 }
 
 styled!(Group);
+
+/// Submit named fields together. Drafts remain in the shell until submission.
+///
+/// ```
+/// use omega::ui::{Form, Field};
+/// let form = Form::new("Connect")
+///     .field(Field::new("Network").name("ssid"))
+///     .field(Field::new("Password").name("password").secret())
+///     .on_submit("connect");
+/// ```
+#[derive(Debug, Clone)]
+pub struct Form {
+    node: Node,
+}
+impl Form {
+    pub fn new(label: impl Display) -> Self {
+        Self {
+            node: Node::new("form").text_prop("label", label.to_string()),
+        }
+    }
+    pub fn field(mut self, field: Field) -> Self {
+        self.node = self.node.child(field);
+        self
+    }
+    pub fn on_submit(mut self, command: impl Into<Bind>) -> Self {
+        self.node = self.node.on("submit", command);
+        self
+    }
+}
+styled!(Form);

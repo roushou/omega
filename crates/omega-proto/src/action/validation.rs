@@ -43,6 +43,17 @@ impl action::Kind {
                     input.string("args", arg)?;
                 }
             }
+            Self::ConnectWifi(connect) => {
+                input.text("ssid", &connect.ssid)?;
+                input.require("ssid", connect.ssid.len() <= 32, "must be at most 32 bytes")?;
+                input.string("password", &connect.password)?;
+                input.require(
+                    "password",
+                    connect.password.len() <= 64,
+                    "must be at most 64 bytes",
+                )?;
+            }
+            Self::DisconnectWifi(_) => {}
             Self::RunCommand(run) => input.text("command", &run.command)?,
             Self::SetSetting(set) => {
                 input.text("setting_id", &set.setting_id)?;

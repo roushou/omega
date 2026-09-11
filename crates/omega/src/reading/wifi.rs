@@ -70,3 +70,26 @@ impl AccessPoint {
         self.active
     }
 }
+
+impl Wifi {
+    /// NetworkManager's reported connection phase; unavailable is unspecified.
+    ///
+    /// ```no_run
+    /// # fn example(wifi: &omega::reading::Wifi) {
+    /// let connecting = wifi.phase() == omega::reading::WifiPhase::Connecting;
+    /// # }
+    /// ```
+    pub fn phase(&self) -> omega_proto::omega::WifiPhase {
+        self.read()
+            .and_then(|state| omega_proto::omega::WifiPhase::try_from(state.phase).ok())
+            .unwrap_or_default()
+    }
+    /// The active or activating network, independent of the primary VPN route.
+    pub fn ssid(&self) -> String {
+        self.read().map(|state| state.ssid).unwrap_or_default()
+    }
+    /// The last failure reported by the current device state, if any.
+    pub fn failure(&self) -> String {
+        self.read().map(|state| state.failure).unwrap_or_default()
+    }
+}

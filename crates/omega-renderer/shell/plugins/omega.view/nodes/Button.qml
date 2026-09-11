@@ -18,13 +18,16 @@ Rectangle {
 
     // A `Group` segment's paddings, so both controls share a height without
     // either naming a number.
-    implicitWidth: label.implicitWidth + slot.host.space(16)
-    implicitHeight: label.implicitHeight + slot.host.space(8)
+    implicitWidth: label.implicitWidth + slot.host.space(24)
+    implicitHeight: Math.max(slot.host.space(36), label.implicitHeight + slot.host.space(16))
 
     radius: slot.host.radius
     color: slot.hot ? slot.host.hoverFill : slot.host.idleFill
     border.width: slot.host.space(1)
-    border.color: slot.host.rule
+    border.color: slot.activeFocus ? slot.host.ink : slot.host.rule
+    activeFocusOnTab: true
+    Keys.onReturnPressed: if (slot.pressable) slot.host.invoke(slot.bound, undefined)
+    Keys.onSpacePressed: if (slot.pressable) slot.host.invoke(slot.bound, undefined)
 
     Behavior on color {
         ColorAnimation { duration: 120; easing.type: Easing.OutCubic }

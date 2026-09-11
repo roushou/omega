@@ -579,6 +579,7 @@ fn every_node() -> Ui {
         .child(Toggle::new(true).on_change("mute"))
         .child(
             Field::new("Passphrase")
+                .name("password")
                 .secret()
                 .on_submit(Bind::call("connect").arg("home")),
         )
@@ -604,6 +605,11 @@ fn every_node() -> Ui {
         .child(Grid::new(2).gap(4).child(Text::new("Sent")))
         .child(Image::new("/tmp/art.png"))
         .child(Image::new("https://example.invalid/art.png"))
+        .child(
+            omega::ui::Form::new("Submit")
+                .field(Field::new("Name").name("name"))
+                .on_submit("save"),
+        )
         .into()
 }
 
@@ -1188,4 +1194,11 @@ impl Command for OversizedRecord {
 async fn oversized_record_result_is_not_committed_and_releases_its_reservation() {
     let called = Called::of::<OversizedRecord>(&State::new(), vec![]).await;
     assert_eq!(called.effects.len(), 1);
+}
+
+#[test]
+fn missing_mains_is_not_evidence_of_battery_operation() {
+    use omega::reading::SystemTopic;
+    let state = State::new().battery(0.5, false).absent(SystemTopic::Mains);
+    assert_eq!(Drawn::of::<Situation>(&state).text(), "Unknown");
 }

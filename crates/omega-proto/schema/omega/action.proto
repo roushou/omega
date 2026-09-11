@@ -35,6 +35,8 @@ message Action {
     ToggleFloating toggle_floating = 20;
     ToggleFullscreen toggle_fullscreen = 21;
     SetPowerProfile set_power_profile = 22;
+    ConnectWifi connect_wifi = 23;
+    DisconnectWifi disconnect_wifi = 24;
   }
 }
 
@@ -187,3 +189,11 @@ enum Modifier {
   MODIFIER_ALT = 3;
   MODIFIER_SHIFT = 4;
 }
+
+// Completion acknowledges NetworkManager activation admission. WifiState reports
+// the connection outcome. Passwords must never be logged or stored in unit records.
+message ConnectWifi {
+  string ssid = 1;
+  string password = 2;
+}
+message DisconnectWifi {}

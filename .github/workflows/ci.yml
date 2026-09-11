@@ -58,12 +58,15 @@ jobs:
         # with an error about the package rather than about a browser.
         run: |
           sudo apt-get update || true
-          sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools
+          sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts
 
       - name: Lint the QML
         run: crates/omega-renderer/shell/lint.sh
         env:
           QMLLINT: /usr/lib/qt6/bin/qmllint
+
+      - name: Test renderer interactions
+        run: crates/omega-renderer/shell/test.sh
 
   supply-chain:
     runs-on: ubuntu-latest

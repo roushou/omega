@@ -98,7 +98,7 @@ impl Context {
         self.inner.effects.submit(op)
     }
 
-    fn read(&self) -> std::sync::RwLockReadGuard<'_, Mirror> {
+    pub(crate) fn read(&self) -> std::sync::RwLockReadGuard<'_, Mirror> {
         self.inner
             .state
             .read()

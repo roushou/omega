@@ -11,53 +11,71 @@ import "../Props.js" as Props
 // field gets cleared after being acted on. Without one, what was typed
 // survives a re-render, which is what stops a list refreshing underneath
 // somebody mid-passphrase.
-Rectangle {
+Item {
     id: field
+    objectName: Props.fieldName(host.model)
     required property var host
 
     readonly property var bound: Props.bind(host.model, "submit")
     readonly property string given: Props.fieldValue(host.model)
+    property alias text: input.text
     readonly property bool secret: Props.fieldSecret(host.model)
 
     onGivenChanged: input.text = field.given
     Component.onCompleted: input.text = field.given
 
-    implicitWidth: host.space(160)
-    implicitHeight: Math.round(input.implicitHeight * 1.6)
-    radius: host.radius
-    // Through the kit's own function, so a focused field here looks like a
-    // focused field anywhere else in the shell.
-    color: field.host.controlFill(input.activeFocus, hover.containsMouse)
-
-    HoverHandler { id: hover }
-
-    TextInput {
-        id: input
-        anchors.fill: parent
-        anchors.leftMargin: field.host.space(6)
-        anchors.rightMargin: field.host.space(6)
-        verticalAlignment: TextInput.AlignVCenter
-        clip: true
+    implicitWidth: host.space(240)
+    implicitHeight: labelHeight + Math.max(host.space(36), input.implicitHeight + host.space(16))
+    readonly property real labelHeight: fieldLabel.visible ? fieldLabel.implicitHeight + host.space(6) : 0
+    Text {
+        id: fieldLabel
+        width: parent.width
+        text: Props.fieldPlaceholder(field.host.model)
+        visible: !!field.host.form && text !== ""
+        wrapMode: Text.Wrap
         color: field.host.ink
         font.family: field.host.fontFamily
         font.pixelSize: field.host.fontSize
-        selectByMouse: true
-        enabled: field.host.interactive
-        echoMode: field.secret ? TextInput.Password : TextInput.Normal
+    }
+    Rectangle {
+        anchors.fill: parent
+        anchors.topMargin: field.labelHeight
+        radius: host.radius
+        // Through the kit's own function, so a focused field here looks like a
+        // focused field anywhere else in the shell.
+        color: field.host.controlFill(input.activeFocus, hover.containsMouse)
 
-        onAccepted: {
-            if (field.bound === null) return
-            field.host.invoke(field.bound, input.text)
-        }
+        HoverHandler { id: hover }
 
-        Text {
+        TextInput {
+            id: input
             anchors.fill: parent
-            verticalAlignment: Text.AlignVCenter
-            text: Props.fieldPlaceholder(field.host.model)
-            color: Qt.darker(field.host.ink, 1.4)
+            anchors.leftMargin: field.host.space(10)
+            anchors.rightMargin: field.host.space(10)
+            verticalAlignment: TextInput.AlignVCenter
+            clip: true
+            color: field.host.ink
             font.family: field.host.fontFamily
             font.pixelSize: field.host.fontSize
-            visible: input.text === ""
+            selectByMouse: true
+            enabled: field.host.interactive && (!field.host.form || field.host.form.host.interactive)
+            echoMode: field.secret ? TextInput.Password : TextInput.Normal
+
+            onAccepted: {
+                if (field.host.form) { field.host.form.submit(); return }
+                if (field.bound === null) return
+                field.host.invoke(field.bound, input.text)
+            }
+
+            Text {
+                anchors.fill: parent
+                verticalAlignment: Text.AlignVCenter
+                text: Props.fieldPlaceholder(field.host.model)
+                color: Qt.darker(field.host.ink, 1.4)
+                font.family: field.host.fontFamily
+                font.pixelSize: field.host.fontSize
+                visible: input.text === "" && !fieldLabel.visible
+            }
         }
     }
 }

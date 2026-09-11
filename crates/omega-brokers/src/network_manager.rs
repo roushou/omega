@@ -15,13 +15,14 @@ use futures_util::StreamExt;
 use std::time::Duration;
 use zbus::fdo::PropertiesProxy;
 use zbus::zvariant::OwnedObjectPath;
-use zbus::{Connection, Proxy};
+use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
-use omega_proto::SystemTopic;
 use omega_proto::omega::{
     AccessPoint, NetworkState, NetworkType, StatePatch, StateTopic, Tunnel, VpnState, WifiState,
     state_topic,
 };
+use omega_proto::omega::{WifiPhase, action};
+use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
 use crate::dbus;
@@ -170,6 +171,7 @@ impl Scan {
         });
         WifiState {
             access_points: best,
+            ..Default::default()
         }
     }
 }
@@ -228,6 +230,9 @@ struct Link {
     connection: Connection,
     manager: Proxy<'static>,
     changes: zbus::fdo::PropertiesChangedStream,
+    device_changes: MessageStream,
+    wireless_path: Option<OwnedObjectPath>,
+    failure: Option<u32>,
 }
 
 impl Link {
@@ -268,10 +273,25 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
+        let rule = MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender(Self::SERVICE)
+            .map_err(BrokerError::unreadable)?
+            .interface(Self::DEVICE_IFACE)
+            .map_err(BrokerError::unreadable)?
+            .member("StateChanged")
+            .map_err(BrokerError::unreadable)?
+            .build();
+        let device_changes = MessageStream::for_match_rule(rule, &connection, Some(64))
+            .await
+            .map_err(BrokerError::unreadable)?;
         Ok(Self {
             connection,
             manager,
             changes,
+            device_changes,
+            wireless_path: None,
+            failure: None,
         })
     }
 
@@ -396,6 +416,160 @@ impl Link {
         found
     }
 
+    async fn connection_state(&mut self, wifi: &mut WifiState) -> Result<(), BrokerError> {
+        let Some(wireless) = self.wireless().await else {
+            self.wireless_path = None;
+            self.failure = None;
+            return Ok(());
+        };
+        if self.wireless_path.as_ref().map(|path| path.as_str()) != Some(wireless.path().as_str()) {
+            self.failure = None;
+        }
+        self.wireless_path = Some(wireless.path().clone().into());
+        let device = self.proxy(wireless.path(), Self::DEVICE_IFACE).await?;
+        let (state, reason): (u32, u32) = device
+            .get_property("StateReason")
+            .await
+            .map_err(BrokerError::unreadable)?;
+        wifi.phase = Self::phase(state) as i32;
+        self.failure = Self::failure_after(self.failure, state, reason);
+        if let Some(reason) = self.failure {
+            wifi.phase = WifiPhase::Failed as i32;
+            wifi.failure = format!("Wi-Fi activation failed (NetworkManager reason {reason})");
+        }
+        if let Some(point) = self.path(&wireless, "ActiveAccessPoint").await {
+            let point = self.proxy(&point, Self::AP_IFACE).await?;
+            let ssid: Vec<u8> = point
+                .get_property("Ssid")
+                .await
+                .map_err(BrokerError::unreadable)?;
+            wifi.ssid = String::from_utf8_lossy(&ssid).into_owned();
+        }
+        for point in &mut wifi.access_points {
+            point.active = state == 100 && point.ssid == wifi.ssid;
+        }
+        Ok(())
+    }
+
+    fn failure_after(previous: Option<u32>, state: u32, reason: u32) -> Option<u32> {
+        match state {
+            120 => Some(reason),
+            40..=100 => None,
+            _ => previous,
+        }
+    }
+
+    fn device_changed(&mut self, message: zbus::Message) -> Result<(), BrokerError> {
+        if message.header().path().map(|path| path.as_str())
+            != self.wireless_path.as_ref().map(|path| path.as_str())
+        {
+            return Ok(());
+        }
+        let (state, _previous, reason): (u32, u32, u32) = message
+            .body()
+            .deserialize()
+            .map_err(BrokerError::unreadable)?;
+        self.failure = Self::failure_after(self.failure, state, reason);
+        Ok(())
+    }
+
+    fn phase(state: u32) -> WifiPhase {
+        match state {
+            30 | 110 => WifiPhase::Disconnected,
+            40..=90 => WifiPhase::Connecting,
+            100 => WifiPhase::Connected,
+            120 => WifiPhase::Failed,
+            _ => WifiPhase::Unspecified,
+        }
+    }
+
+    async fn join(&self, ssid: &str, password: &str) -> Result<(), BrokerError> {
+        use std::collections::HashMap;
+        use zbus::zvariant::{ObjectPath, Value};
+        let wireless = self
+            .wireless()
+            .await
+            .ok_or_else(|| BrokerError::unreadable("no Wi-Fi device"))?;
+        let paths: Vec<OwnedObjectPath> = wireless
+            .get_property("AccessPoints")
+            .await
+            .map_err(BrokerError::unreadable)?;
+        let mut found = None;
+        for path in paths {
+            let point = self.proxy(&path, Self::AP_IFACE).await?;
+            let bytes: Vec<u8> = point
+                .get_property("Ssid")
+                .await
+                .map_err(BrokerError::unreadable)?;
+            if bytes == ssid.as_bytes() {
+                found = Some(path);
+                break;
+            }
+        }
+        let point =
+            found.ok_or_else(|| BrokerError::unreadable("network is not in the current scan"))?;
+        let proxy = self.proxy(&point, Self::AP_IFACE).await?;
+        let flags: u32 = proxy
+            .get_property("Flags")
+            .await
+            .map_err(BrokerError::unreadable)?;
+        if password.is_empty() && flags & 1 != 0 {
+            let _: OwnedObjectPath = self
+                .manager
+                .call(
+                    "ActivateConnection",
+                    &(ObjectPath::try_from("/").unwrap(), wireless.path(), &point),
+                )
+                .await
+                .map_err(BrokerError::unreadable)?;
+            return Ok(());
+        }
+        let mut settings: HashMap<&str, HashMap<&str, Value<'_>>> = HashMap::new();
+        settings.insert(
+            "connection",
+            HashMap::from([
+                ("id", Value::from(ssid)),
+                ("type", Value::from("802-11-wireless")),
+                ("autoconnect", Value::from(false)),
+            ]),
+        );
+        if !password.is_empty() {
+            settings.insert(
+                "802-11-wireless-security",
+                HashMap::from([
+                    ("key-mgmt", Value::from("wpa-psk")),
+                    ("psk", Value::from(password)),
+                ]),
+            );
+        }
+        let options = HashMap::from([("persist", Value::from("volatile"))]);
+        let _: (
+            OwnedObjectPath,
+            OwnedObjectPath,
+            HashMap<String, zbus::zvariant::OwnedValue>,
+        ) = self
+            .manager
+            .call(
+                "AddAndActivateConnection2",
+                &(settings, wireless.path(), &point, options),
+            )
+            .await
+            .map_err(BrokerError::unreadable)?;
+        Ok(())
+    }
+
+    async fn leave(&self) -> Result<(), BrokerError> {
+        let wireless = self
+            .wireless()
+            .await
+            .ok_or_else(|| BrokerError::unreadable("no Wi-Fi device"))?;
+        let device = self.proxy(wireless.path(), Self::DEVICE_IFACE).await?;
+        device
+            .call::<_, _, ()>("Disconnect", &())
+            .await
+            .map_err(BrokerError::unreadable)
+    }
+
     /// The first wireless device, if the machine has one.
     async fn wireless(&self) -> Option<Proxy<'static>> {
         let devices: Vec<OwnedObjectPath> = dbus::property(&self.manager, "Devices").await?;
@@ -493,6 +667,21 @@ impl Broker for NetworkManager {
         &[SystemTopic::Network, SystemTopic::Wifi, SystemTopic::Vpn]
     }
 
+    fn actions(&self) -> &'static [ActionKind] {
+        &[ActionKind::ConnectWifi, ActionKind::DisconnectWifi]
+    }
+
+    async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
+        let link = self.link.as_mut().ok_or_else(BrokerError::gone)?;
+        link.failure = None;
+        match action {
+            action::Kind::ConnectWifi(request) => link.join(&request.ssid, &request.password).await,
+            action::Kind::DisconnectWifi(_) => link.leave().await,
+            other => Err(BrokerError::Unserved(ActionKind::of(other))),
+        }?;
+        Ok(Some(self.read().await?))
+    }
+
     fn disconnect(&mut self) {
         self.link = None;
     }
@@ -512,16 +701,43 @@ impl Broker for NetworkManager {
                 Some(_) => Ok(()),
                 None => Err(BrokerError::gone()),
             },
+            change = link.device_changes.next() => match change {
+                Some(Ok(message)) => link.device_changed(message),
+                Some(Err(error)) => Err(BrokerError::unreadable(error)),
+                None => Err(BrokerError::gone()),
+            },
             _ = tick.wait() => Ok(()),
         }
     }
 
     async fn read(&mut self) -> Result<StatePatch, BrokerError> {
-        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        let link = self.link.as_mut().ok_or_else(BrokerError::gone)?;
         let reading = link.read().await?;
         let network = reading.state();
         let scan = link.scan(network.ssid.clone()).await;
         let active = link.active().await;
-        Ok(Self::patch(network, scan.state(), Tunnels::state(&active)))
+        let mut wifi = scan.state();
+        link.connection_state(&mut wifi).await?;
+        Ok(Self::patch(network, wifi, Tunnels::state(&active)))
+    }
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::*;
+    #[test]
+    fn failure_survives_the_return_to_disconnected_until_a_new_attempt() {
+        let failed = Link::failure_after(None, 120, 7);
+        assert_eq!(Link::failure_after(failed, 30, 0), Some(7));
+        assert_eq!(Link::failure_after(failed, 40, 0), None);
+        assert_eq!(Link::failure_after(failed, 100, 0), None);
+    }
+    #[test]
+    fn activation_is_not_reported_as_connectivity() {
+        assert_eq!(Link::phase(40), WifiPhase::Connecting);
+        assert_eq!(Link::phase(90), WifiPhase::Connecting);
+        assert_eq!(Link::phase(100), WifiPhase::Connected);
+        assert_eq!(Link::phase(120), WifiPhase::Failed);
+        assert_eq!(Link::phase(20), WifiPhase::Unspecified);
     }
 }

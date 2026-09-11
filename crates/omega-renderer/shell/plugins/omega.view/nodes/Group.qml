@@ -52,13 +52,9 @@ Row {
 
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": segment.modelData,
-                    "foreground": group.host.foreground
+                    "connection": group.host.connection,
+                "foreground": group.host.foreground
                 })
-
-                Connections {
-                    target: label.item
-                    function onInvoke(bound, value) { group.host.invoke(bound, value) }
-                }
             }
 
             MouseArea {

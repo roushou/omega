@@ -162,7 +162,17 @@ function toggleOn(node) {
     return readFlag(node, "on", false)
 }
 
+// ---- form ----
+
+function formLabel(node) {
+    return readText(node, "label", "")
+}
+
 // ---- field ----
+
+function fieldName(node) {
+    return readText(node, "name", "")
+}
 
 function fieldPlaceholder(node) {
     return readText(node, "placeholder", "")
@@ -240,6 +250,16 @@ function encode(value) {
         case "boolean": return { "boolValue": value }
         case "number": return { "doubleValue": value }
         case "string": return { "stringValue": value }
+        case "object": {
+            if (value === null || Array.isArray(value)) return null
+            var fields = Object.create(null)
+            for (var key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+                if (typeof value[key] !== "string") return null
+                fields[key] = { stringValue: value[key] }
+            }
+            return { map: { entries: fields } }
+        }
         default: return null
     }
 }

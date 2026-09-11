@@ -10,5 +10,6 @@ Text {
     font.family: host.fontFamily
     font.pixelSize: host.typeSize(Props.textSize(host.model), host.fontSize)
     font.bold: Props.bold(host.model)
+    wrapMode: Text.Wrap
     verticalAlignment: Text.AlignVCenter
 }

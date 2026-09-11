@@ -95,6 +95,8 @@ actions! {
     ToggleFloating => None,
     ToggleFullscreen => None,
     SetPowerProfile => SystemControl,
+    ConnectWifi => Network,
+    DisconnectWifi => Network,
 }
 
 mod validation;

@@ -21,7 +21,8 @@ Loader {
 
     // Mirrors this stack's children, updated in place so a delegate survives
     // its neighbours changing. Rebuilt wholesale only when nothing matches.
-    ListModel { id: rows }
+    // Node payloads are QVariantMaps, including nested children and props.
+    ListModel { id: rows; dynamicRoles: true }
 
     readonly property var wanted: Props.children(stack.host.model)
 
@@ -116,19 +117,16 @@ Loader {
             id: child
             required property var node
 
-            // A rule lies across its stack. A stack inside a column spans it
-            // unasked, because a `fill` chain down every level of a panel is a
-            // chain nobody writes. Along the axis a stack runs, room goes only
-            // to a node that asked; a node with a width of its own has said
-            // what it wants instead of either.
+            // Block content spans a column unless it declares a fixed width.
             readonly property bool rule: child.node && child.node.type === "separator"
-            readonly property bool block: stack.column && child.node && child.node.type === "stack"
+            readonly property bool block: stack.column && child.node && ["stack", "form", "field", "slider", "progress", "graph", "list", "text", "header"].indexOf(child.node.type) !== -1
             readonly property bool spans:
                 child.rule
                     ? stack.column
                     : ((child.block || Props.fill(child.node))
                         && Props.width(child.node) === 0)
 
+            Layout.minimumWidth: 0
             Layout.fillWidth: child.spans
             Layout.fillHeight: child.rule && !stack.column
             // Centred across the axis, at the size it draws. A spanning child
@@ -140,16 +138,12 @@ Loader {
 
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.node,
+                "connection": stack.host.connection,
                 "foreground": stack.host.foreground,
                 "axis": stack.column ? "column" : "row"
             })
 
             onNodeChanged: if (child.item) child.item.model = child.node
-
-            Connections {
-                target: child.item
-                function onInvoke(bound, value) { stack.host.invoke(bound, value) }
-            }
         }
     }
 }

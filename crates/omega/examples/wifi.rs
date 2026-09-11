@@ -1,12 +1,13 @@
-//! A Wi-Fi indicator, panel and commands using readings, records and awaited effects.
-//! Enter a network name and submit it before submitting its passphrase.
-//! Network changes use nmcli; awaiting Shell confirms launch, not connectivity.
+//! Wi-Fi readings and connection controls. Forms submit once; passwords stay out
+//! of records. Requests acknowledge activation, and Wifi reports its outcome.
 
-use omega::effect::Shell;
-use omega::reading::{AccessPoint, Network, Wifi};
+use omega::config::Values;
+use omega::effect::WifiControl;
+use omega::reading::{AccessPoint, Network, Wifi, WifiPhase};
 use omega::record::{Own, Watch};
 use omega::ui::{
-    Bind, Button, Column, Field, Glyph, Graph, Icon, List, Progress, Role, Row, Stack, Text,
+    Bind, Button, Column, Field, Form, Glyph, Graph, Icon, List, Progress, Role, Row, Size, Stack,
+    Text,
 };
 use omega::{Args, Command, Percent, Ui, Widget};
 
@@ -98,28 +99,51 @@ pub struct Panel {
 
 impl Widget for Panel {
     fn render(&self) -> Ui {
-        let mut panel = Column::new().gap(8);
+        let state = match self.wifi.phase() {
+            WifiPhase::Connecting => "Connecting…".to_string(),
+            WifiPhase::Connected => format!("Connected to {}", self.wifi.ssid()),
+            WifiPhase::Failed => self.wifi.failure(),
+            WifiPhase::Disconnected => "Wi-Fi disconnected".to_string(),
+            WifiPhase::Unspecified => "Wi-Fi unavailable".to_string(),
+        };
+        let mut panel = Column::new()
+            .gap(12)
+            .child(Text::new("Wi-Fi").size(Size::Title).bold())
+            .child(Text::new(state));
 
         if self.network.is_connected() {
             let name = self.network.ssid().unwrap_or_else(|| "Wired".to_string());
             panel = panel
-                .child(Text::new(&name).bold())
                 .child(
                     Row::new()
                         .gap(6)
                         .child(Icon::new(Glyph::Wifi).dim())
-                        .child(Progress::new(self.network.strength()))
+                        .child(Progress::new(self.network.strength()).fill())
                         .child(Text::new(self.network.strength()).dim()),
                 )
                 // Pinned to the whole range: a signal wobbling between 70 and
                 // 74 would otherwise fill the frame and read as a collapse.
-                .child(Graph::new(self.signal.get().recent).range(0.0, 100.0))
+                .child(
+                    Graph::new(self.signal.get().recent)
+                        .range(0.0, 100.0)
+                        .height(32),
+                )
                 .child(Button::new("Disconnect").on_press(Bind::call("disconnect").arg(name)));
         } else {
             panel = panel.child(Text::new("Not connected").dim());
         }
 
-        panel.child(networks(&self.wifi)).child(join()).into()
+        panel
+            .child(Text::new("Available networks").bold())
+            .child(
+                Text::new("Select a saved or open network to connect.")
+                    .size(Size::Caption)
+                    .dim(),
+            )
+            .child(networks(&self.wifi))
+            .child(Text::new("Join with a password").bold())
+            .child(join())
+            .into()
     }
 }
 
@@ -131,7 +155,6 @@ impl Widget for Panel {
 fn networks(wifi: &Wifi) -> List {
     List::new()
         .gap(2)
-        .height(180)
         .children(wifi.networks().iter().map(row))
         .on_activate(Bind::call("join"))
 }
@@ -145,7 +168,7 @@ fn row(point: &AccessPoint) -> Stack {
     Row::new()
         .gap(6)
         .key(point.ssid())
-        .child(name)
+        .child(name.fill())
         .child(Text::new(point.strength()).dim())
         .child(if point.is_secured() {
             Icon::new(Glyph::Lock).dim()
@@ -154,67 +177,34 @@ fn row(point: &AccessPoint) -> Stack {
         })
 }
 
-/// Somewhere to type a network and its passphrase.
-///
-/// Submitting the network name stores it; submitting the passphrase connects
-/// that network. The passphrase is never written to a record.
-fn join() -> Stack {
-    Column::new()
-        .gap(4)
-        .child(Text::new("Join another").dim())
-        .child(Field::new("Network (press Enter)").on_submit("remember"))
-        .child(
-            Field::new("Passphrase")
-                .secret()
-                .on_submit(Bind::call("connect")),
+/// The shell owns drafts until both fields are submitted together.
+fn join() -> Form {
+    Form::new("Connect")
+        .field(Field::new("Network").name("ssid"))
+        .field(
+            Field::new("Password (blank for saved/open)")
+                .name("password")
+                .secret(),
         )
+        .on_submit("connect")
 }
 
-#[derive(omega::UnitState, Debug, Clone, Default)]
-pub struct SelectedNetwork {
-    pub ssid: String,
-}
-
-#[derive(omega::Command, Debug)]
-pub struct Remember {
-    selected: Own<SelectedNetwork>,
-}
-
-impl Command for Remember {
-    type Output = ();
-
-    async fn call(&self, args: Args) -> Result<(), omega::Error> {
-        let ssid = args
-            .get::<String>(0)
-            .filter(|ssid| !ssid.is_empty())
-            .ok_or_else(|| omega::Error::invalid("no network"))?;
-        self.selected.set(&SelectedNetwork { ssid }).await
-    }
-}
-
-/// Join a network. Called with the passphrase the field carried.
 #[derive(omega::Command, Debug)]
 pub struct Connect {
-    shell: Shell,
-    selected: Own<SelectedNetwork>,
+    wifi: WifiControl,
 }
-
 impl Command for Connect {
     type Output = ();
-    async fn call(&self, args: Args) -> Result<(), omega::Error> {
-        let Some(secret) = args.get::<String>(0) else {
-            return Err(omega::Error::invalid("no passphrase"));
-        };
-        let ssid = self.selected.get().ssid;
-        if ssid.is_empty() {
-            return Err(omega::Error::invalid("submit a network name first"));
-        }
-        self.shell
-            .run_with_args(
-                "nmcli",
-                ["device", "wifi", "connect", &ssid, "password", &secret],
-            )
-            .await
+    async fn call(&self, args: Args) -> omega::Result<()> {
+        let fields = args
+            .get::<Values>(0)
+            .ok_or_else(|| omega::Error::invalid("expected network fields"))?;
+        let ssid = fields
+            .get::<String>("ssid")
+            .filter(|ssid| !ssid.is_empty())
+            .ok_or_else(|| omega::Error::invalid("enter a network name"))?;
+        let password = fields.get::<String>("password").unwrap_or_default();
+        self.wifi.connect(ssid, password).await
     }
 }
 
@@ -249,7 +239,7 @@ impl Command for Sample {
 /// Join the row that was chosen. Called with its key, which is the SSID.
 #[derive(omega::Command, Debug)]
 pub struct Join {
-    shell: Shell,
+    wifi: WifiControl,
 }
 
 impl Command for Join {
@@ -258,27 +248,20 @@ impl Command for Join {
         let Some(ssid) = args.get::<String>(0) else {
             return Err(omega::Error::invalid("no network"));
         };
-        self.shell
-            .run_with_args("nmcli", ["device", "wifi", "connect", &ssid])
-            .await
+        self.wifi.connect(ssid, "").await
     }
 }
 
 /// Leave the network named in the binding.
 #[derive(omega::Command, Debug)]
 pub struct Disconnect {
-    shell: Shell,
+    wifi: WifiControl,
 }
 
 impl Command for Disconnect {
     type Output = ();
-    async fn call(&self, args: Args) -> Result<(), omega::Error> {
-        let Some(name) = args.get::<String>(0) else {
-            return Err(omega::Error::invalid("no network"));
-        };
-        self.shell
-            .run_with_args("nmcli", ["connection", "down", "id", &name])
-            .await
+    async fn call(&self, _: Args) -> omega::Result<()> {
+        self.wifi.disconnect().await
     }
 }
 
@@ -291,14 +274,41 @@ fn bars(_strength: Percent) -> Glyph {
     Glyph::Wifi
 }
 
-fn main() -> omega::Result<()> {
-    omega::Plugin::named(UNIT, "0.1.0")
+pub fn plugin() -> omega::Plugin {
+    omega::Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
-        .command::<Remember>("remember")
         .command::<Connect>("connect")
         .command::<Join>("join")
         .command::<Sample>("sample")
         .command::<Disconnect>("disconnect")
-        .run()
+}
+
+fn main() -> omega::Result<()> {
+    plugin().run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega::config::IntoValue;
+    use omega::testing::{Called, State, manifest_of};
+    #[tokio::test]
+    async fn form_fields_become_one_network_request_without_recording_the_password() {
+        let fields = Values::new()
+            .with("ssid", "Home")
+            .with("password", "private");
+        let called = Called::of::<Connect>(&State::new(), vec![fields.into_value()]).await;
+        assert!(called.answer.is_ok());
+        assert_eq!(called.effects.len(), 1);
+        let invalid = Called::of::<Connect>(&State::new(), vec![]).await;
+        assert!(invalid.answer.is_err());
+        assert!(invalid.effects.is_empty());
+    }
+    #[test]
+    fn network_controls_do_not_need_process_spawning() {
+        let grants = manifest_of(&plugin()).granted().unwrap();
+        assert!(grants.contains(&omega::internal::Capability::Network));
+        assert!(!grants.contains(&omega::internal::Capability::Spawn));
+    }
 }

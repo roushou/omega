@@ -24,6 +24,8 @@ mod power_profile;
 mod session;
 mod shell;
 mod volume;
+mod wifi;
+pub use wifi::WifiControl;
 
 pub use brightness::Brightness;
 pub use notify::{Notification, Notify};

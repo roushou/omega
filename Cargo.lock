@@ -814,6 +814,7 @@ version = "0.1.0"
 dependencies = [
  "omega-derive",
  "omega-proto",
+ "rustix",
  "serde_json",
  "thiserror",
  "tokio",

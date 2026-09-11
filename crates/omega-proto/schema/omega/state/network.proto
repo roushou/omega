@@ -27,6 +27,17 @@ enum NetworkType {
 // wake every indicator that only ever wanted the SSID.
 message WifiState {
   repeated AccessPoint access_points = 1;
+  WifiPhase phase = 2;
+  string ssid = 3;
+  string failure = 4;
+}
+
+enum WifiPhase {
+  WIFI_PHASE_UNSPECIFIED = 0;
+  WIFI_PHASE_DISCONNECTED = 1;
+  WIFI_PHASE_CONNECTING = 2;
+  WIFI_PHASE_CONNECTED = 3;
+  WIFI_PHASE_FAILED = 4;
 }
 
 // One network on the air. Deduplicated by SSID — a single network is often

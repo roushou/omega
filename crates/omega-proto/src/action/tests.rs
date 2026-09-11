@@ -6,6 +6,11 @@ struct Fixture;
 impl Fixture {
     fn valid() -> Vec<action::Kind> {
         vec![
+            action::Kind::ConnectWifi(ConnectWifi {
+                ssid: "home".into(),
+                password: String::new(),
+            }),
+            action::Kind::DisconnectWifi(DisconnectWifi {}),
             action::Kind::LaunchApp(LaunchApp {
                 desktop_id: "org.example.App.desktop".into(),
                 args: vec!["".into(), "a file".into()],
@@ -220,4 +225,29 @@ fn zero_values_deltas_and_implicit_focus_remain_valid() {
     ] {
         action.validate().unwrap();
     }
+}
+
+#[test]
+fn wifi_requests_require_network_authority_and_validate_without_echoing_secrets() {
+    use crate::omega::{ConnectWifi, DisconnectWifi};
+    let request = action::Kind::ConnectWifi(ConnectWifi {
+        ssid: "home".into(),
+        password: "private".into(),
+    });
+    assert_eq!(
+        ActionKind::of(&request).cost(),
+        Some(crate::omega::Capability::Network)
+    );
+    assert!(request.validate().is_ok());
+    let invalid = action::Kind::ConnectWifi(ConnectWifi {
+        ssid: "".into(),
+        password: "private".into(),
+    });
+    let error = invalid.validate().unwrap_err().to_string();
+    assert!(!error.contains("private"));
+    let leave = action::Kind::DisconnectWifi(DisconnectWifi {});
+    assert_eq!(
+        ActionKind::of(&leave).cost(),
+        Some(crate::omega::Capability::Network)
+    );
 }

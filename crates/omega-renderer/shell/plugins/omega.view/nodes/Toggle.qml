@@ -22,6 +22,10 @@ Rectangle {
 
     // The unit answered; stop second-guessing it.
     onPublishedChanged: swtch.optimistic = null
+    Connections {
+        target: swtch.host
+        function onPendingChanged() { if (!swtch.host.pending) swtch.optimistic = null }
+    }
 
     readonly property int inset: host.space(2)
 

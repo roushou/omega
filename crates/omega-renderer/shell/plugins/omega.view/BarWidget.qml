@@ -66,7 +66,7 @@ BarWidget {
     // What the slot's own root node asked to say on hover. The bar owns the
     // tooltip window, so this is the one node in a tree that can have one —
     // a tooltip deeper in would need a host that follows the pointer.
-    tooltipText: link.tree && link.tree.root ? Props.tooltip(link.tree.root) : ""
+    tooltipText: link.requests.error || (link.tree ? Props.tooltip(link.tree) : "")
     hasVisualContent: link.tree !== null
     // A button with no label is a button with no width, and the bar lays out
     // by implicit size — so the slot has to follow the tree instead.
@@ -80,7 +80,7 @@ BarWidget {
       model: link.tree
       foreground: button.foreground
       visible: link.tree !== null
-      onInvoke: (bound, value) => link.press(bound, value)
+      connection: link
     }
 
     // Pressing the slot opens the popout — but only where the tree itself did
@@ -108,26 +108,40 @@ BarWidget {
       owner: root
       bar: root.bar
       open: root.opened
-      // As wide as what it draws, which is how the height already worked.
-      // A fixed 320 made every panel that width whatever was in it, so a
-      // narrow one sat in a wide card and read as enormous side padding —
-      // the card's own `padding` is the kit's `popupPadding` and was never
-      // the problem. The floor keeps a panel with one line in it from
-      // arriving as a sliver.
       contentWidth: fittedContentWidth(
-        Math.max(Style.space(220), panelView.implicitWidth + padding * 2))
-      contentHeight: fittedContentHeight(Math.max(Style.space(40), panelView.implicitHeight))
+        Math.max(Style.space(320), panelView.implicitWidth + padding * 2), Style.space(480))
+      contentHeight: fittedContentHeight(Math.max(Style.space(40), panelContents.implicitHeight))
 
-      ViewNode {
-        id: panelView
-        // Across the card, not centred in it: under the floor above, a tree
-        // narrower than its card is a bar stopping short of what it measures.
-        anchors.left: parent ? parent.left : undefined
-        anchors.right: parent ? parent.right : undefined
-        model: panelLink.tree
-        foreground: Color.popups.text
-        visible: panelLink.tree !== null
-        onInvoke: (bound, value) => panelLink.press(bound, value)
+      Flickable {
+        id: viewport
+        contentWidth: width
+        anchors.fill: parent
+        contentHeight: panelContents.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        Column {
+          id: panelContents
+          width: viewport.width
+          spacing: Style.space(8)
+          Text {
+            width: parent.width
+            visible: text !== ""
+            text: panelLink.requests.error
+            color: Color.urgent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            wrapMode: Text.Wrap
+          }
+          ViewNode {
+            id: panelView
+            width: parent.width
+            model: panelLink.tree
+            foreground: Color.popups.text
+            visible: panelLink.tree !== null
+            connection: panelLink
+          }
+        }
       }
     }
   }

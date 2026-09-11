@@ -4,13 +4,13 @@ use omega_proto::SystemTopic;
 use omega_proto::omega::Capability;
 
 use crate::context::Context;
-use crate::reading::{Battery, Mains};
 use crate::units::{Percent, Remaining};
 use crate::wiring::{Reads, Wiring};
+use omega_proto::omega::{BatteryState, MainsState};
 
 /// The machine's power situation, in one word.
 ///
-/// An enum rather than a string because these are four states and not four
+/// An enum rather than a string because these are states and not
 /// sentences: a widget may want to colour them, and a shell may want to
 /// translate them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,8 +24,7 @@ pub enum Status {
     OnMains,
     /// Running down.
     OnBattery,
-    /// No battery at all, and no cable reported either — a desktop before
-    /// anything has been said about it.
+    /// Available readings do not establish the power source.
     Unknown,
 }
 
@@ -55,8 +54,7 @@ impl Status {
 /// two topics and so wakes on either.
 #[derive(Debug)]
 pub struct Power {
-    battery: Battery,
-    mains: Mains,
+    context: Context,
 }
 
 impl Wiring for Power {
@@ -65,8 +63,7 @@ impl Wiring for Power {
 
     fn build(context: &Context) -> Self {
         Self {
-            battery: Battery::build(context),
-            mains: Mains::build(context),
+            context: context.clone(),
         }
     }
 }
@@ -83,49 +80,71 @@ impl Power {
     /// Whether this machine has a battery at all. False on a desktop, and
     /// false while the broker that reports it is down.
     pub fn has_battery(&self) -> bool {
-        self.battery.has_reading()
+        self.context.read().get::<BatteryState>().is_some()
     }
 
     /// Whether the cable is in.
     pub fn on_mains(&self) -> bool {
-        self.mains.is_connected()
+        self.context
+            .read()
+            .get::<MainsState>()
+            .is_some_and(|mains| mains.connected)
     }
 
     pub fn is_charging(&self) -> bool {
-        self.battery.is_charging()
+        self.context
+            .read()
+            .get::<BatteryState>()
+            .is_some_and(|battery| battery.charging)
     }
 
     /// The charge, or `None` on a machine with no battery — which is not a
     /// charge of nought, and a widget that drew it as one would colour a
     /// desktop as flat.
     pub fn charge(&self) -> Option<Percent> {
-        self.has_battery().then(|| self.battery.charge())
+        self.context
+            .read()
+            .get::<BatteryState>()
+            .map(|battery| Percent::of(battery.level))
     }
 
     /// How long is left, whichever direction it is going.
     pub fn remaining(&self) -> Option<Remaining> {
-        self.battery.remaining()
+        let state = self.context.read();
+        let battery = state.get::<BatteryState>()?;
+        Remaining::seconds(if battery.charging {
+            battery.seconds_to_full
+        } else {
+            battery.seconds_to_empty
+        })
     }
 
-    /// What the machine is doing about power.
+    /// Interpret the battery and mains from one replicated snapshot.
+    /// Missing mains data never implies that the cable is disconnected.
     ///
-    /// The one thing a composite is for. Charging and on-mains are different
-    /// questions, and a full battery on the wall is answering no to the first
-    /// and yes to the second — which is the case every hand-written version
-    /// of this got wrong.
+    /// ```no_run
+    /// # fn example(power: &omega::composite::Power) {
+    /// if power.status() == omega::composite::Status::Unknown {
+    ///     // Show an unavailable state rather than claiming battery operation.
+    /// }
+    /// # }
+    /// ```
     pub fn status(&self) -> Status {
-        let Some(charge) = self.charge() else {
-            return match self.on_mains() {
-                true => Status::OnMains,
-                false => Status::Unknown,
-            };
-        };
-
-        match (self.is_charging(), self.on_mains()) {
-            (true, _) => Status::Charging,
-            (false, true) if charge >= Self::FULL => Status::FullyCharged,
-            (false, true) => Status::OnMains,
-            (false, false) => Status::OnBattery,
+        let state = self.context.read();
+        let battery = state.get::<BatteryState>();
+        let mains = state.get::<MainsState>();
+        if battery.is_some_and(|battery| battery.charging) {
+            return Status::Charging;
+        }
+        match mains.map(|mains| mains.connected) {
+            Some(true)
+                if battery.is_some_and(|battery| Percent::of(battery.level) >= Self::FULL) =>
+            {
+                Status::FullyCharged
+            }
+            Some(true) => Status::OnMains,
+            Some(false) if battery.is_some() => Status::OnBattery,
+            _ => Status::Unknown,
         }
     }
 }
