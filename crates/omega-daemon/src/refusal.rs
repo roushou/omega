@@ -116,6 +116,16 @@ impl Refusable for omega_proto::action::ActionError {
     }
 }
 
+impl Refusable for crate::reconcile::shell::ShellApplyError {
+    fn refusal(&self) -> Refusal {
+        use crate::reconcile::shell::ShellApplyError;
+        match self {
+            ShellApplyError::Io(_) => Refusal::unavailable(self.to_string()),
+            _ => Refusal::precondition(self.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

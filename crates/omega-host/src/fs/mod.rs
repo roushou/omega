@@ -9,3 +9,6 @@ pub use atomic::AtomicFile;
 pub use directory::Directory;
 pub use stage::StageDir;
 pub use temp::TempPath;
+
+mod lock;
+pub(crate) use lock::FileLock;

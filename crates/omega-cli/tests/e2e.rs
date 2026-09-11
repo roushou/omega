@@ -54,7 +54,8 @@ impl Machine {
             .env("OMEGA_STATE_DIR", self.root.join("state"))
             .env("OMEGA_CACHE_DIR", self.root.join("cache"))
             .env("OMEGA_SOCKET", self.control())
-            .env("OMEGA_SHELL_SOCKET", self.observation());
+            .env("OMEGA_SHELL_SOCKET", self.observation())
+            .env("OMEGA_SHELL_CONFIG", self.root.join("omarchy/shell.json"));
         command
     }
 
@@ -156,8 +157,28 @@ fn a_scaffolded_config_builds_and_runs() {
         "init should link a config it can see a checkout for"
     );
 
+    // Adopt an existing mixed layout, then compile the generated Rust itself.
+    let shell_path = machine.root.join("omarchy/shell.json");
+    std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &shell_path,
+        r#"{
+        "version":1,
+        "idle":{"screensaver":150,"lock":300},
+        "bar":{"position":"top","transparent":false,"layout":{
+            "left":[{"id":"omarchy.menu"}],"center":[{"id":"omarchy.clock","format":"HH:mm"}],
+            "right":[{"id":"omega.view","unit":"battery-widget","module":"battery-widget"}]
+        }},
+        "plugins":[],
+        "future":{"message":"preserved"}
+    }"#,
+    )
+    .unwrap();
+    machine.run(&["shell", "adopt"]);
+    std::fs::write(machine.root.join("config/system/src/main.rs"),
+        "mod shell_import;\nfn main() -> anyhow::Result<()> { omega_document::Document::new().shell(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
     machine.run(&["check"]);
-    machine.run(&["build"]);
+    machine.run(&["build", "--debug"]);
 
     // The plugin `omega new` writes arrives with tests, and they pass. A
     // scaffold whose own tests fail teaches its reader that tests fail.
@@ -189,6 +210,54 @@ fn a_scaffolded_config_builds_and_runs() {
         status.contains("battery-widget"),
         "status did not report the unit:\n{status}"
     );
+
+    machine.run(&["shell", "apply"]);
+    let first = std::fs::read(&shell_path).unwrap();
+    assert!(String::from_utf8_lossy(&first).contains("preserved"));
+    let changed = String::from_utf8(first.clone())
+        .unwrap()
+        .replace("HH:mm", "HH:mm:ss");
+    std::fs::write(&shell_path, &changed).unwrap();
+    let refused = machine.omega(&["shell", "apply"]).output().unwrap();
+    assert!(
+        !refused.status.success(),
+        "external edits must require acknowledgement"
+    );
+    assert_eq!(std::fs::read_to_string(&shell_path).unwrap(), changed);
+    machine.run(&["shell", "apply", "--overwrite"]);
+    assert_eq!(std::fs::read(&shell_path).unwrap(), first);
+
+    let source_path = machine.root.join("config/system/src/shell_import.rs");
+    let source = std::fs::read_to_string(&source_path).unwrap();
+    std::fs::write(&source_path, source.replace("HH:mm", "HH:mm:ss")).unwrap();
+    machine.run(&["build", "--debug"]);
+    machine.run(&["shell", "apply"]);
+    assert!(
+        std::fs::read_to_string(&shell_path)
+            .unwrap()
+            .contains("HH:mm:ss")
+    );
+    // Explicitly select the first generation, independent of activation timing.
+    let layout = omega_host::Layout::at(
+        machine.root.join("config"),
+        machine.root.join("state"),
+        machine.root.join("cache"),
+    );
+    let store = omega_host::Generations::new(&layout);
+    let first_generation = store
+        .recovery_ids()
+        .unwrap()
+        .into_iter()
+        .find(|id| {
+            let pinned = store.pin(id).unwrap();
+            std::fs::read_to_string(pinned.layout().compiled_shell())
+                .unwrap()
+                .contains("\"HH:mm\"")
+        })
+        .expect("first configuration is retained");
+    machine.run(&["rollback", first_generation.as_str()]);
+    machine.run(&["shell", "apply"]);
+    assert_eq!(std::fs::read(&shell_path).unwrap(), first);
 
     machine.run(&["restart", "battery-widget"]);
 

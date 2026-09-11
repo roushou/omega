@@ -87,6 +87,7 @@ message Invoke {
     // ---- operator -> daemon: lifecycle ----
     RestartUnit restart_unit = 8;
     AdoptUnit adopt_unit = 9;
+    ApplyShell apply_shell = 13;
 
     // ---- daemon -> unit: surface invocations ----
     CallCommand call_command = 10;
@@ -246,3 +247,6 @@ message RemoveWidget {
   string surface_id = 1;
   string module_id = 2;
 }
+
+// Explicitly apply the published generation; overwrite acknowledges external edits.
+message ApplyShell { bool overwrite = 1; }

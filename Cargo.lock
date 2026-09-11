@@ -717,6 +717,7 @@ dependencies = [
  "omega-host",
  "omega-proto",
  "omega-renderer",
+ "serde_json",
  "thiserror",
  "tokio",
  "toml",
@@ -760,6 +761,7 @@ version = "0.2.0"
 dependencies = [
  "omega-host",
  "omega-proto",
+ "serde",
  "serde_json",
  "thiserror",
 ]
@@ -771,6 +773,8 @@ dependencies = [
  "libc",
  "omega-proto",
  "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "toml",
  "toml_edit",

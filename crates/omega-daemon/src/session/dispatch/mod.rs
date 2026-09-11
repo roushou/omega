@@ -62,17 +62,24 @@ pub struct Dispatcher {
     units: UnitTable,
     brokers: Brokerage,
     adopted: Adoptions,
+    layout: Option<omega_host::Layout>,
 }
 
 impl Dispatcher {
     pub fn new(hub: Hub, supervisor: Supervisor, units: UnitTable, brokers: Brokerage) -> Self {
         Self {
             hub,
+            layout: None,
             adopted: Adoptions::new(supervisor.clone()),
             supervisor,
             units,
             brokers,
         }
+    }
+
+    pub fn with_layout(mut self, layout: Option<omega_host::Layout>) -> Self {
+        self.layout = layout;
+        self
     }
 
     /// Authorize, then serve. Every refusal is returned, never swallowed.
@@ -278,6 +285,22 @@ impl Dispatcher {
                 Ok(Response::Ok)
             }
 
+            invoke::Op::ApplyShell(apply) => {
+                let layout = self
+                    .layout
+                    .as_ref()
+                    .ok_or_else(|| Refusal::precondition("shell application is not configured"))?
+                    .clone();
+                let overwrite = apply.overwrite;
+                let _handover = self.supervisor.handover().await;
+                tokio::task::spawn_blocking(move || {
+                    crate::reconcile::shell::ShellApplication::apply(&layout, overwrite)
+                })
+                .await
+                .map_err(|error| Refusal::unavailable(error.to_string()))?
+                .or_refuse()?;
+                Ok(Response::Ok)
+            }
             invoke::Op::AdoptUnit(adopt) => {
                 let name = UnitName::parse(adopt.unit.clone()).or_refuse()?;
 

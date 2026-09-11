@@ -8,24 +8,24 @@ use std::sync::Arc;
 
 /// The kernel releases the lock when its final file descriptor closes.
 #[derive(Debug)]
-pub(super) struct FileLock {
+pub(crate) struct FileLock {
     _file: File,
 }
 
 impl FileLock {
-    pub(super) fn exclusive(path: &Path) -> io::Result<Self> {
+    pub(crate) fn exclusive(path: &Path) -> io::Result<Self> {
         let file = Self::open(path)?;
         Self::acquire(&file, libc::LOCK_EX)?;
         Ok(Self { _file: file })
     }
 
-    pub(super) fn shared(path: &Path) -> io::Result<Self> {
+    pub(crate) fn shared(path: &Path) -> io::Result<Self> {
         let file = Self::open(path)?;
         Self::acquire(&file, libc::LOCK_SH)?;
         Ok(Self { _file: file })
     }
 
-    pub(super) fn try_exclusive(path: &Path) -> io::Result<Option<Self>> {
+    pub(crate) fn try_exclusive(path: &Path) -> io::Result<Option<Self>> {
         let file = Self::open(path)?;
         match Self::acquire(&file, libc::LOCK_EX | libc::LOCK_NB) {
             Ok(()) => Ok(Some(Self { _file: file })),
@@ -34,7 +34,7 @@ impl FileLock {
         }
     }
 
-    pub(super) fn protect_child(self: &Arc<Self>, command: &mut std::process::Command) {
+    pub(crate) fn protect_child(self: &Arc<Self>, command: &mut std::process::Command) {
         let lease = self.clone();
         // pre_exec runs after fork. fcntl is async-signal-safe, and descriptor
         // flags are private to the child; the parent's descriptor stays CLOEXEC.

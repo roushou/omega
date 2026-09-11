@@ -40,6 +40,12 @@ impl Document {
         self
     }
 
+    /// Own Omarchy's shell configuration. Do not also declare legacy bars.
+    pub fn shell(mut self, shell: crate::shell::Shell) -> Result<Self, crate::shell::ShellError> {
+        self.inner.shell_json = shell.encode()?;
+        Ok(self)
+    }
+
     pub fn setting(mut self, setting: Setting) -> Self {
         self.inner.settings.push(setting);
         self

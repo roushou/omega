@@ -175,3 +175,23 @@ fn empty_selection_cannot_read_another_units_state() {
     assert!(subscriptions.select(&invalid).is_err());
     assert!(!subscriptions.wants("battery"));
 }
+
+#[tokio::test]
+async fn units_cannot_apply_host_shell_configuration() {
+    let (harness, hash, token) = harness("shell-operator-only").await;
+    let mut transport = harness.connect(&hash, token.as_str()).await;
+    transport.recv().await.unwrap().unwrap();
+    transport
+        .send(Frame {
+            stream_id: 7,
+            body: Some(frame::Body::Invoke(Invoke {
+                op: Some(invoke::Op::ApplyShell(omega_proto::omega::ApplyShell {
+                    overwrite: true,
+                })),
+            })),
+        })
+        .await
+        .unwrap();
+    let refusal = expect_refusal(transport.recv().await.unwrap());
+    assert_eq!(refusal.code, ErrorCode::PermissionDenied);
+}

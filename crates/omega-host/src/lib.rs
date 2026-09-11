@@ -12,6 +12,7 @@
 pub mod fs;
 pub mod generation;
 pub mod layout;
+pub mod shell;
 pub mod state;
 pub mod toml;
 

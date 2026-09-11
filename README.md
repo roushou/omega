@@ -18,6 +18,8 @@ while your code describes what to display and what interactions should do.
 
 Omega runs as a background daemon. Your configuration lives in `~/.config/omega`,
 a Rust workspace containing your plugins and the declaration of where they belong.
+A Rust shell layout can include both native Omarchy widgets and Omega plugins;
+Omega generates the shell configuration and matching plugin instances from it.
 
 ### Requirements
 
@@ -33,7 +35,8 @@ omega init
 ```
 
 `omega init` creates the workspace, installs the renderer, and starts the daemon
-as a user service.
+as a user service. On an existing desktop, it imports the shell layout into Rust
+without changing its appearance.
 
 You can inspect the service and its plugins from the terminal:
 
@@ -102,7 +105,7 @@ Omega redraws the widget when its audio state changes. Moving the slider invokes
 or reactions, a distinction enforced at compile time.
 
 `omega new` creates a plugin crate and prints the declaration for placing its
-widget in `~/.config/omega/system/src/main.rs`. Build once to apply your changes,
+widget in your Rust shell layout. Build once to apply your changes,
 or keep a build running while you work:
 
 ```sh

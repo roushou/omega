@@ -150,6 +150,7 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
         hub.clone(),
         peer,
         Some(Gateway {
+            layout: None,
             supervisor,
             units,
             brokers: brokers.clone(),

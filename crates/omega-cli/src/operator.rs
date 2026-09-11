@@ -37,6 +37,14 @@ impl Operator {
         Self { socket }
     }
 
+    pub async fn apply_shell(&self, overwrite: bool) -> Result<(), OperatorError> {
+        self.invoke(invoke::Op::ApplyShell(omega_proto::omega::ApplyShell {
+            overwrite,
+        }))
+        .await
+        .map(|_| ())
+    }
+
     /// Ask the daemon to cycle a unit's process.
     pub async fn restart(&self, unit: &str) -> Result<(), OperatorError> {
         self.invoke(invoke::Op::RestartUnit(omega_proto::omega::RestartUnit {

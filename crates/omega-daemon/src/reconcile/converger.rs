@@ -275,6 +275,11 @@ impl Worker {
                 .map(|name| (name.clone(), build.settings(name)))
                 .collect(),
         );
+        // Shell conflicts must not stop otherwise valid plugins. Explicit apply reports
+        // failures to the operator; routine convergence never rewrites external edits.
+        if let Err(error) = build.apply_shell(&self.context.layout, false) {
+            tracing::error!(%error, "shell configuration was not applied; use omega shell diff");
+        }
         self.build = Some(build);
         Ok(())
     }

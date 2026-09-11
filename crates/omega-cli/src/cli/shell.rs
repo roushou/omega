@@ -23,6 +23,16 @@ pub struct ShellCmd {
 enum Action {
     /// Put the renderer where the shell will find it.
     Install(Install),
+    /// Import the existing configuration into a reviewable Rust module and establish ownership.
+    Adopt,
+    /// Compare the published shell configuration with Omarchy's file.
+    Diff,
+    /// Ask the daemon to apply the published shell configuration.
+    Apply {
+        /// Acknowledge external edits and replace them with the Rust configuration.
+        #[arg(long)]
+        overwrite: bool,
+    },
     /// What is installed, and whether it matches this omega.
     Status,
     /// Take it away again.
@@ -39,7 +49,23 @@ struct Install {
 }
 
 impl ShellCmd {
-    pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
+    pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
+        let action = self.action.unwrap_or(Action::Status);
+        match action {
+            Action::Adopt => return Self::adopt(ui),
+            Action::Diff => return Self::diff(ui),
+            Action::Apply { overwrite } => {
+                crate::operator::Operator::new()
+                    .apply_shell(overwrite)
+                    .await?;
+                ui.step(
+                    Step::Installed,
+                    "shell configuration from the published generation",
+                );
+                return Ok(());
+            }
+            _ => {}
+        }
         let shell = HostShell::detect().with_context(|| {
             format!(
                 "no shell to install into — omega draws through a host shell's plugins, and this machine has none omega knows. Name the directory with {}",
@@ -47,7 +73,7 @@ impl ShellCmd {
             )
         })?;
 
-        match self.action.unwrap_or(Action::Status) {
+        match action {
             Action::Install(install) => {
                 Self::install(install, shell, ui)?;
                 // Where a widget sits in the bar is the person's layout, and
@@ -58,7 +84,52 @@ impl ShellCmd {
             }
             Action::Status => Self::status(shell, ui),
             Action::Uninstall => Self::uninstall(shell, ui),
+            Action::Adopt | Action::Diff | Action::Apply { .. } => unreachable!("handled above"),
         }
+    }
+
+    fn adopt(ui: &mut Ui) -> anyhow::Result<()> {
+        let layout = omega_host::Layout::resolve();
+        let source = std::fs::read_to_string(&layout.shell_config)?;
+        let shell = omega_document::shell::Shell::from_omarchy(&source)?;
+        let target = layout.shell_import();
+        anyhow::ensure!(
+            !target.exists(),
+            "{} already exists; review or rename it before importing again",
+            target.display()
+        );
+        omega_host::AtomicFile::at(&target).write(shell.rust_source()?.as_bytes())?;
+        omega_host::shell::ShellInstallation::new(&layout)
+            .adopt(&serde_json::from_str(&source)?)?;
+        ui.step(Step::Created, Paint::path(&target));
+        ui.next("add mod shell_import; and .shell(shell_import::shell()?)? to your document, replacing legacy .bar(...) declarations");
+        ui.detail("The desktop is unchanged. Review the import, then run omega build.");
+        Ok(())
+    }
+
+    fn diff(ui: &mut Ui) -> anyhow::Result<()> {
+        let layout = omega_host::Layout::resolve();
+        let installer = omega_host::shell::ShellInstallation::new(&layout);
+        ui.step(
+            Step::Checking,
+            format!("shell ownership: {:?}", installer.inspect()?),
+        );
+        let generation = omega_host::Generations::new(&layout)
+            .pin_current()?
+            .context("nothing built")?;
+        let document = omega_document::DocumentFile::of(generation.layout()).read()?;
+        let compiled = omega_document::shell::CompiledShell::of(&document)?
+            .context("this generation declares no shell")?;
+        let current = installer.read()?;
+        if current.as_ref() == Some(compiled.config()) {
+            ui.step(Step::Checked, "shell configuration matches");
+        } else {
+            ui.step(Step::Checking, "current shell configuration");
+            ui.detail(serde_json::to_string_pretty(&current)?);
+            ui.step(Step::Checking, "generated shell configuration");
+            ui.detail(compiled.encode()?);
+        }
+        Ok(())
     }
 
     /// Install the renderer as part of setting omega up, and put it on the
@@ -74,13 +145,7 @@ impl ShellCmd {
 
         Self::install(Install { link: None }, shell, ui)?;
 
-        match shell.enable(Renderer::VIEW.id) {
-            Ok(output) if output.status.success() => ui.step(
-                Step::Enabled,
-                format!("{} in the bar", Paint::name(Renderer::VIEW.id)),
-            ),
-            _ => ui.next(&shell.enable_command(Renderer::VIEW.id)),
-        }
+        ui.next("declare widget placements in your Rust shell layout, then run omega build");
         Ok(())
     }
 

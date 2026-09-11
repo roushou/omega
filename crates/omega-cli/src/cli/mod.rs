@@ -107,7 +107,7 @@ impl Command {
             Self::Restart(cmd) => cmd.run(ui).await,
             Self::Rollback(cmd) => cmd.run(ui),
             Self::Run(cmd) => cmd.run(ui).await,
-            Self::Shell(cmd) => cmd.run(ui),
+            Self::Shell(cmd) => cmd.run(ui).await,
             Self::Status(cmd) => cmd.run(ui).await,
         }
     }

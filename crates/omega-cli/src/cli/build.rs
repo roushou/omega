@@ -156,7 +156,10 @@ impl BuildCmd {
     fn describe(document: &StateDocument) -> String {
         let counts = [
             (document.units.len(), "unit"),
-            (document.bars.len(), "bar"),
+            (
+                document.bars.len() + usize::from(!document.shell_json.is_empty()),
+                "bar",
+            ),
             (document.settings.len(), "setting"),
             (document.schedules.len(), "schedule"),
             (document.environment.len(), "variable"),
@@ -262,6 +265,11 @@ impl BuildPlan {
         // not at all.
         DocumentFile::at(stage.path().join(DocumentFile::FILE_NAME)).write(document)?;
 
+        if let Some(shell) = omega_document::shell::CompiledShell::of(document)? {
+            let staged = Layout::at(&layout.config, stage.path(), &layout.cache);
+            omega_host::AtomicFile::at(staged.compiled_shell())
+                .write(shell.encode()?.as_bytes())?;
+        }
         self.generation.commit()?;
         Ok(())
     }

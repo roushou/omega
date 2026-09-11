@@ -67,9 +67,15 @@ impl DocumentValidation {
                 return Err(Self::error("empty or duplicate schedule id"));
             }
         }
+        let compiled = crate::shell::CompiledShell::of(document).map_err(Self::error)?;
+        let shell_bars: Vec<_> = compiled
+            .as_ref()
+            .map(|shell| shell.bar().clone())
+            .into_iter()
+            .collect();
         let mut bars = BTreeSet::new();
         let mut modules = BTreeSet::new();
-        for bar in &document.bars {
+        for bar in document.bars.iter().chain(&shell_bars) {
             if bar.id.is_empty() || !bars.insert(&bar.id) {
                 return Err(Self::error("empty or duplicate bar id"));
             }

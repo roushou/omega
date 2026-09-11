@@ -46,6 +46,7 @@ struct Gateway {
     supervisor: Supervisor,
     units: UnitTable,
     brokers: Brokerage,
+    layout: Option<omega_host::Layout>,
 }
 
 /// Streams each surface's latest view as a JSON line over a dedicated socket,
@@ -86,7 +87,15 @@ impl ShellServer {
             supervisor,
             units,
             brokers,
+            layout: None,
         });
+        self
+    }
+
+    pub fn with_layout(mut self, layout: omega_host::Layout) -> Self {
+        if let Some(gateway) = &mut self.gateway {
+            gateway.layout = Some(layout);
+        }
         self
     }
 
@@ -214,6 +223,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                 gateway.units.clone(),
                 gateway.brokers.clone(),
             )
+            .with_layout(gateway.layout.clone())
         });
         let dispatcher = dispatcher.map(Arc::new);
         let mut operations = Operations::new();

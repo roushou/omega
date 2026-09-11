@@ -35,6 +35,19 @@ impl ValidatedBuild {
             manifests.iter().map(|(_, entry)| &entry.manifest),
         )
         .map_err(|error| crate::reconcile::ProviderError::new("document", error.to_string()))?;
+        if let Some(shell) =
+            omega_document::shell::CompiledShell::of(&document).map_err(std::io::Error::other)?
+        {
+            let staged: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(layout.compiled_shell())?)
+                    .map_err(std::io::Error::other)?;
+            if &staged != shell.config() {
+                return Err(std::io::Error::other(
+                    "staged shell configuration differs from its document",
+                )
+                .into());
+            }
+        }
         let mut names = BTreeSet::new();
         for unit in &config.units {
             if !names.insert(&unit.name)
@@ -62,6 +75,22 @@ impl ValidatedBuild {
             manifests,
             document,
         })
+    }
+
+    /// Apply the shell belonging to this validated generation.
+    pub fn apply_shell(
+        &self,
+        root: &Layout,
+        overwrite: bool,
+    ) -> Result<(), super::shell::ShellApplyError> {
+        if let Some(shell) = omega_document::shell::CompiledShell::of(&self.document)? {
+            omega_host::shell::ShellInstallation::new(root).apply(
+                shell.config(),
+                self.generation.id(),
+                overwrite,
+            )?;
+        }
+        Ok(())
     }
 
     pub(super) fn changed_units(

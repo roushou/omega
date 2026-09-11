@@ -28,6 +28,15 @@ impl InitCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let layout = Layout::resolve();
         let scaffold = Scaffold::new();
+        // Validate an import before creating a workspace that depends on it.
+        let imported =
+            if !self.bare && !layout.system_manifest().exists() && layout.shell_config.exists() {
+                let source = std::fs::read_to_string(&layout.shell_config)?;
+                let shell = omega_document::shell::Shell::from_omarchy(&source)?;
+                Some((source, shell.rust_source()?))
+            } else {
+                None
+            };
 
         // Never rewritten: they are the author's files once they exist, so a
         // second `omega init` sets the machine up again and leaves the config
@@ -38,7 +47,22 @@ impl InitCmd {
         let system = layout.file::<CargoManifest>(CargoSlot::System);
         let plane = system.create_new(&scaffold.system_manifest())?;
         if plane {
-            AtomicFile::at(layout.system_main()).write(scaffold.system_main().as_bytes())?;
+            if let Some((source, rust)) = imported {
+                AtomicFile::at(layout.shell_import()).write(rust.as_bytes())?;
+                omega_host::shell::ShellInstallation::new(&layout)
+                    .adopt(&serde_json::from_str(&source)?)?;
+                AtomicFile::at(layout.system_main()).write(
+                    b"mod shell_import;
+
+fn main() -> anyhow::Result<()> {
+    omega_document::Document::new().shell(shell_import::shell()?)?.emit()?;
+    Ok(())
+}
+",
+                )?;
+            } else {
+                AtomicFile::at(layout.system_main()).write(scaffold.system_main().as_bytes())?;
+            }
         }
 
         if founded {

@@ -223,7 +223,7 @@ impl Scaffold {
     pub fn placement_hint(unit: &UnitName) -> String {
         let krate = unit.as_str().replace('-', "_");
         format!(
-            "omega_document::Modules::widget(\"{unit}\", {krate}::UNIT, &{krate}::Settings {{ low: 15 }})"
+            "omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::UNIT).settings(&{krate}::Settings {{ low: 15 }}).into()"
         )
     }
 

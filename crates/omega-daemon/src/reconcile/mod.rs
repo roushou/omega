@@ -10,6 +10,7 @@ mod build;
 pub mod converger;
 pub mod environment;
 pub mod schedules;
+pub mod shell;
 pub mod units;
 
 pub use bars::BarProvider;

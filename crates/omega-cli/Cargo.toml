@@ -15,6 +15,7 @@ description = "The `omega` command line: scaffold, build, run, and inspect a con
 workspace = true
 
 [dependencies]
+serde_json.workspace = true
 anstream = "1"
 anstyle = "1"
 anyhow = "1"

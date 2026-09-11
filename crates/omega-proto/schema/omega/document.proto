@@ -23,6 +23,9 @@ message StateDocument {
   repeated Policy policies = 8;
   repeated UnitRef units = 9;
   repeated EnvironmentVariable environment = 10;
+
+  // omega-document owns this host-specific declaration; units do not interpret it.
+  string shell_json = 11;
 }
 
 // Desired display layout. Distinct from MonitorInfo (actual state).

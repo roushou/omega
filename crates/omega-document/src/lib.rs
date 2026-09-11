@@ -13,6 +13,7 @@ mod document;
 mod error;
 mod file;
 mod keys;
+pub mod shell;
 mod validation;
 
 pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};

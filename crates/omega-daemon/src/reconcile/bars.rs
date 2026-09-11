@@ -34,7 +34,13 @@ impl BarProvider {
         document: &StateDocument,
     ) -> Result<BTreeMap<SurfaceRef, HashMap<String, Value>>, ProviderError> {
         let mut instances = BTreeMap::new();
-        for bar in &document.bars {
+        let compiled = omega_document::shell::CompiledShell::of(document).map_err(Self::error)?;
+        let shell_bars: Vec<_> = compiled
+            .as_ref()
+            .map(|shell| shell.bar().clone())
+            .into_iter()
+            .collect();
+        for bar in document.bars.iter().chain(&shell_bars) {
             for module in &bar.modules {
                 let widget = match &module.kind {
                     Some(module::Kind::Widget(widget)) => widget,

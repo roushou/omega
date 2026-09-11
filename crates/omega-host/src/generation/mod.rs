@@ -2,12 +2,11 @@
 
 mod history;
 mod id;
-mod lock;
 mod stage;
 
+use crate::fs::FileLock;
 use crate::{AtomicFile, Directory, Layout, StageDir, TempPath};
 use history::History;
-use lock::FileLock;
 use std::{collections::BTreeSet, io, sync::Arc};
 
 pub use id::GenerationId;

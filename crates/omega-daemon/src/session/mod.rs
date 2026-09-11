@@ -47,6 +47,7 @@ pub struct Session {
     /// every brokered action `UNIMPLEMENTED` — right for a session that is
     /// not a daemon, and for a test that is only exercising the protocol.
     brokers: Brokerage,
+    layout: Option<omega_host::Layout>,
 }
 
 impl Session {
@@ -54,12 +55,18 @@ impl Session {
         let shutdown = Shutdown::new();
         Self {
             supervisor,
+            layout: None,
             brokers: Brokerage::new(hub.clone(), shutdown.clone()),
             units: UnitTable::detached(hub.clone()),
             hub,
             liveness: Liveness::new(),
             shutdown,
         }
+    }
+
+    pub fn with_layout(mut self, layout: omega_host::Layout) -> Self {
+        self.layout = Some(layout);
+        self
     }
 
     /// Join the brokers the daemon runs, so an action can reach one.
@@ -178,12 +185,15 @@ impl Session {
         let mut streams = DaemonStreams::new();
         let mut pending: HashMap<u64, PendingRequest> = HashMap::new();
 
-        let dispatcher = std::sync::Arc::new(Dispatcher::new(
-            self.hub.clone(),
-            self.supervisor.clone(),
-            self.units.clone(),
-            self.brokers.clone(),
-        ));
+        let dispatcher = std::sync::Arc::new(
+            Dispatcher::new(
+                self.hub.clone(),
+                self.supervisor.clone(),
+                self.units.clone(),
+                self.brokers.clone(),
+            )
+            .with_layout(self.layout.clone()),
+        );
         let mut executing = Operations::new();
         let mut liveness = self.liveness.clone();
         let mut keepalive = tokio::time::interval(liveness.interval());

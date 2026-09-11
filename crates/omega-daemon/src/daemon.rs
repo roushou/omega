@@ -249,6 +249,7 @@ impl Daemon {
                 accepted = self.listener.accept(), if sessions.len() < Self::CONNECTION_LIMIT => {
                     let (stream, _) = accepted?;
                     let session = Session::new(self.supervisor.clone(), self.hub.clone())
+                        .with_layout(self.layout.clone())
                         .with_brokers(self.brokers.clone())
                         .with_shutdown(self.shutdown.clone())
                         .with_units(self.units.clone());
@@ -304,7 +305,8 @@ impl DaemonBuilder {
         )?
         // A shell draws what a plugin publishes, so it has to be able to
         // press what it drew.
-        .serving(supervisor.clone(), units.clone(), brokers.clone());
+        .serving(supervisor.clone(), units.clone(), brokers.clone())
+        .with_layout(self.layout.clone());
 
         Ok(Daemon {
             brokers,

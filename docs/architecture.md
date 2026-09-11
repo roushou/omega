@@ -601,3 +601,46 @@ protocol kinds. `Emphasis` (primary, secondary, muted) describes importance;
 when choosing semantic colors, and neither property changes interactivity.
 The Rust API uses `Choice`, `fill_width`, `padding` and `muted`; established wire
 identifiers such as `group`, `fill` and `pad` remain unchanged.
+
+
+## Generated Omarchy configuration
+
+The configuration plane's `Shell` owns the entire Omarchy `shell.json` document.
+One ordered layout contains native widgets and Omega plugin placements. Each
+plugin placement generates both its shell entry and its render-instance
+declaration; unit, surface, placement identity, panel, and settings cannot drift
+between independently authored layouts.
+
+The host-specific shell declaration is carried opaquely in `StateDocument`;
+`omega-document` owns its interpretation and compilation. Plugin SDK consumers
+do not acquire Omarchy configuration dependencies. Compilation is pure and
+validates the supported version-1 JSON format. Extension fields cannot overwrite
+typed fields. The daemon validates widget references against the generation's
+manifests and checks staged `shell.json` against the compiled declaration.
+
+Shell output is staged with the existing build generation. Application uses
+`ShellInstallation` and `AtomicFile`, with an advisory lock between Omega writers.
+Its receipt stores the last installed semantic configuration and an in-progress
+target, allowing recovery after interruption between target and receipt writes.
+The first adoption keeps a backup. Paths come from `Layout`; `OMEGA_SHELL_CONFIG`
+selects an isolated target for tests or alternate installations.
+
+Generation activation applies the shell once; ordinary unit convergence does
+not rewrite it. A shell conflict does not prevent valid plugins from starting.
+`omega shell diff` compares live and generated configuration, and the
+operator-only `ApplyShell` request applies a validated published generation.
+`--overwrite` acknowledges external changes, but does not implicitly adopt an
+unmanaged file. Rollback uses the same generation and application path.
+
+Omarchy can persist inline widget settings itself. These writes become external
+changes: Omega neither translates them back into Rust nor silently removes them.
+Concurrent writes by programs that ignore Omega's lock cannot be fully
+serialized; the installer rechecks the file immediately before replacement.
+Installation across shell files, generation acceptance, and process lifecycles is
+not an all-or-nothing transaction. Diagnostics distinguish accepted builds from
+shell application failures.
+
+Adoption emits a Rust module for review and never rewrites arbitrary Rust source.
+Fresh non-bare initialization imports an existing shell configuration before
+taking ownership. Unknown settings are preserved through explicit extensions;
+ambiguous Omega entries and unsupported layout shapes fail rather than disappear.

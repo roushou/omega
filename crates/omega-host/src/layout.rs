@@ -52,6 +52,7 @@ pub struct Layout {
     pub config: PathBuf,
     pub state: PathBuf,
     pub cache: PathBuf,
+    pub shell_config: PathBuf,
 }
 
 impl Layout {
@@ -66,6 +67,12 @@ impl Layout {
     /// Resolve the three roots (env-overridable, XDG defaults).
     pub fn resolve() -> Self {
         Self {
+            shell_config: std::env::var_os("OMEGA_SHELL_CONFIG")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                        .join(".config/omarchy/shell.json")
+                }),
             config: Self::resolve_dir("OMEGA_CONFIG_DIR", "XDG_CONFIG_HOME", ".config"),
             state: Self::resolve_dir("OMEGA_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
             cache: Self::resolve_dir("OMEGA_CACHE_DIR", "XDG_CACHE_HOME", ".cache"),
@@ -78,8 +85,10 @@ impl Layout {
         state: impl Into<PathBuf>,
         cache: impl Into<PathBuf>,
     ) -> Self {
+        let config = config.into();
         Self {
-            config: config.into(),
+            shell_config: config.join("host/omarchy/shell.json"),
+            config,
             state: state.into(),
             cache: cache.into(),
         }
@@ -91,6 +100,28 @@ impl Layout {
     /// name a document.
     pub fn file<S: TomlSchema>(&self, key: S::Key<'_>) -> TomlFile<S> {
         S::locate(self, key)
+    }
+
+    /// Select the external shell explicitly for isolated configurations.
+    pub fn with_shell_config(mut self, path: impl Into<PathBuf>) -> Self {
+        self.shell_config = path.into();
+        self
+    }
+
+    pub fn compiled_shell(&self) -> PathBuf {
+        self.state.join("shell.json")
+    }
+    pub fn shell_receipt(&self) -> PathBuf {
+        self.generations_dir().join("shell-receipt.json")
+    }
+    pub fn shell_lock(&self) -> PathBuf {
+        self.generations_dir().join("shell.lock")
+    }
+    pub fn shell_backup(&self) -> PathBuf {
+        self.generations_dir().join("shell-before-omega.json")
+    }
+    pub fn shell_import(&self) -> PathBuf {
+        self.system_dir().join("src/shell_import.rs")
     }
 
     // ---- source ----

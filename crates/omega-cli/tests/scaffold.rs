@@ -124,7 +124,10 @@ fn a_founded_config_names_no_plugin() {
         "a token was left unstamped: {main}"
     );
     assert!(!main.contains("battery"), "{main}");
-    assert!(main.contains("vec![]"), "the bar starts empty: {main}");
+    assert!(
+        !main.contains("PluginWidget::"),
+        "the initial layout contains only native widgets: {main}"
+    );
 }
 
 #[test]
@@ -337,5 +340,8 @@ fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
 
     // Fully qualified: a hint that needs a second hint about an import is a
     // hint that failed.
-    assert!(hint.contains("omega_document::Modules::widget"), "{hint}");
+    assert!(
+        hint.contains("omega_document::shell::PluginWidget::new"),
+        "{hint}"
+    );
 }
