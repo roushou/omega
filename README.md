@@ -2,9 +2,8 @@
 
 _Omarchy, with Rust at the controls._
 
-Omega brings Rust to the widgets, controls, and automations that make a desktop
-yours. It works alongside [Omarchy](https://omarchy.org): Omarchy provides the
-desktop and shell, while Omega runs your plugins, connects them to system state,
+Omega brings Rust to the widgets, controls, and automations of [Omarchy](https://omarchy.org)
+which provides the desktop and shell, while Omega runs your plugins, connects them to system state,
 and displays their interfaces through that shell.
 
 Write a volume control, a network panel, or a focus timer as an ordinary Rust
@@ -17,20 +16,21 @@ with them.
 Omega runs as a background daemon. Your configuration lives in `~/.config/omega`,
 a Rust workspace containing your plugins and the declaration of where they belong.
 
-Omega requires Linux with a systemd user manager, Rust 1.88 or newer, and
-Omarchy's Quickshell shell to display widgets. Some Omega crates are already
-published on crates.io; the API shown here is ahead of those releases. Install
-from this checkout to use it:
+### Requirements
+
+- Linux with a systemd user manager
+- Omarchy
+- Rust 1.88+
+
+Install the [Omega CLI from crates.io](https://crates.io/crates/omega-cli):
 
 ```sh
-cargo install --path crates/omega-cli
+cargo install omega-cli --locked
 omega init
 ```
 
 `omega init` creates the workspace, installs the renderer, and starts the daemon
-as a user service. When the source checkout is available, it also links your
-configuration to it so your plugins build against the same API. Keep the checkout
-available while using that link.
+as a user service.
 
 You can inspect the service and its plugins from the terminal:
 
