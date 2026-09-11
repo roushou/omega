@@ -36,6 +36,18 @@ pub use compiler::CompiledShell;
 pub enum ShellError {
     #[error("invalid shell configuration: {0}")]
     Invalid(String),
+    #[error("duplicate placement {id}: {first} and {second}")]
+    DuplicatePlacement {
+        id: omega_proto::ModuleId,
+        first: String,
+        second: String,
+    },
+    #[error("cannot parse shell.json: {source}")]
+    Parse {
+        input: String,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }

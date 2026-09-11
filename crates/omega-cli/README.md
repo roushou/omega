@@ -32,6 +32,11 @@ to apply. `omega build --watch --debug` rebuilds as you edit. `omega dev audio`
 temporarily replaces the supervised plugin with a development process in your
 terminal.
 
+Configuration errors identify duplicate placement locations and list available
+widget surfaces. When `omega shell adopt` encounters malformed JSON, it shows
+the offending source location. Diagnostics go to stderr, keeping command results
+on stdout available for scripts.
+
 `omega daemon` runs the daemon in the foreground. `omega daemon install` makes it
 a user service, and `omega daemon status` checks the installed service. Use
 `omega link /path/to/omega` to build your configuration against a source checkout,

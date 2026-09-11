@@ -8,7 +8,8 @@ runs them as separate processes, and renders their declarative interfaces throug
 
 Your configuration is an ordinary Cargo workspace.
 Plugins are Rust crates, settings and command bindings are typed,
-and reusable behavior can live in libraries.
+and reusable behavior can live in libraries. Rust can also describe the shell
+itself: its layout, native widgets, plugin placements, and idle settings.
 
 Each plugin runs as its own binary, so a plugin crash does not bring down the shell.
 Omega supervises those processes and brokers shared system integrations,
@@ -35,8 +36,10 @@ omega init
 ```
 
 `omega init` creates the workspace, installs the renderer, and starts the daemon
-as a user service. On an existing desktop, it imports the shell layout into Rust
-without changing its appearance.
+as a user service. When creating a fresh configuration, it imports the existing
+shell layout into Rust without changing its appearance. Existing Omega
+configurations can use `omega shell adopt` to back up the current shell configuration
+and generate a Rust module to review and include in their document.
 
 You can inspect the service and its plugins from the terminal:
 
@@ -46,6 +49,23 @@ omega status
 ```
 
 For foreground operation, `omega daemon` runs the daemon directly.
+
+### Configuring the shell
+
+Once adopted, the Rust declaration becomes the source of truth for the entire
+`~/.config/omarchy/shell.json` file. `omega build` generates it alongside the
+plugins, and the daemon applies it. Omarchy still provides and runs the shell;
+Omega supplies its configuration. Native Omarchy widgets and Omega plugins share
+one layout, and settings without dedicated Rust types can be preserved through
+explicit extensions.
+
+This means shell changes belong in Rust. Editing `shell.json` directly, or changing
+settings through a shell control that writes to it, creates a conflict with the
+generated configuration. Omega preserves those edits and reports the conflict.
+Use `omega shell diff` to inspect it and carry any changes you want to keep into
+Rust. After rebuilding, `omega shell apply --overwrite` explicitly replaces the
+edited file with the built configuration. External edits are never translated
+back into your Rust source automatically.
 
 ## Writing plugins
 

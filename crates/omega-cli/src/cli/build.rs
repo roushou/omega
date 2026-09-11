@@ -121,7 +121,7 @@ impl BuildCmd {
 
         // 4. Evaluate the configuration plane into a document. It runs in the
         //    user's own shell at build time, never in the daemon.
-        let document = System::new(layout).evaluate(profile, &plan.names()).await?;
+        let document = System::new(layout).evaluate(profile).await?;
         if layout.system_dir().exists() {
             ui.step(Step::Evaluated, Self::describe(&document));
         }
@@ -236,10 +236,6 @@ impl BuildPlan {
         } else {
             Paint::count(capabilities.len(), "capability")
         }
-    }
-
-    fn names(&self) -> Vec<UnitName> {
-        self.units.iter().map(|unit| unit.name.clone()).collect()
     }
 
     /// Complete and durably publish the generation containing the described binaries.

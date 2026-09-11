@@ -3,7 +3,11 @@ use super::*;
 /// Import preserves unsupported fields. Ambiguous Omega placements are refused.
 impl Shell {
     pub fn from_omarchy(source: &str) -> Result<Self, ShellError> {
-        let mut root: serde_json::Map<String, Value> = serde_json::from_str(source)?;
+        let mut root: serde_json::Map<String, Value> =
+            serde_json::from_str(source).map_err(|error| ShellError::Parse {
+                input: source.into(),
+                source: error,
+            })?;
         if root.remove("version") != Some(Value::from(1)) {
             return Err(ShellError::Invalid(
                 "only Omarchy shell version 1 is supported".into(),

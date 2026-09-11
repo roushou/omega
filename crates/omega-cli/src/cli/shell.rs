@@ -91,7 +91,8 @@ impl ShellCmd {
     fn adopt(ui: &mut Ui) -> anyhow::Result<()> {
         let layout = omega_host::Layout::resolve();
         let source = std::fs::read_to_string(&layout.shell_config)?;
-        let shell = omega_document::shell::Shell::from_omarchy(&source)?;
+        let shell = omega_document::shell::Shell::from_omarchy(&source)
+            .with_context(|| format!("cannot import {}", layout.shell_config.display()))?;
         let target = layout.shell_import();
         anyhow::ensure!(
             !target.exists(),

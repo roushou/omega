@@ -34,7 +34,12 @@ fn duplicate_placements_and_competing_bars_are_rejected() {
         PluginWidget::new("same", "audio").into(),
         PluginWidget::new("same", "audio").into(),
     ]));
-    assert!(shell.compile().is_err());
+    let ShellError::DuplicatePlacement { id, first, second } = shell.compile().unwrap_err() else {
+        panic!("expected duplicate placement");
+    };
+    assert_eq!(id.as_str(), "same");
+    assert_eq!(first, "bar.layout.right[0]");
+    assert_eq!(second, "bar.layout.right[1]");
     let document = StateDocument {
         shell_json: Shell::new().encode().unwrap(),
         bars: vec![Default::default()],

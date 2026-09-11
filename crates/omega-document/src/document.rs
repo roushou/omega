@@ -91,8 +91,11 @@ impl Document {
     /// A `system/` crate is one entry point with no side effects: it computes
     /// a document and says it. Anything else it writes to stdout would be
     /// part of the document, so there is nothing else to write.
-    pub fn emit(self) -> Result<(), crate::DocumentError> {
-        print!("{}", crate::DocumentFile::encode(&self.inner)?);
+    pub fn emit(self) -> crate::Result<()> {
+        use std::io::Write;
+        std::io::stdout()
+            .lock()
+            .write_all(crate::DocumentFile::encode(&self.inner)?.as_bytes())?;
         Ok(())
     }
 }

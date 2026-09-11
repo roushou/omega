@@ -219,3 +219,67 @@ fn a_size_reads_as_a_disk_is_sold() {
     assert_eq!(Paint::size(9_900_000_000), "9.9 GB");
     assert_eq!(Paint::size(12_000_000_000), "12 GB");
 }
+
+#[test]
+fn malformed_shell_json_has_a_source_snippet_and_keeps_context() {
+    let input = "{\n  \"version\": !\n}";
+    let error = omega_document::shell::Shell::from_omarchy(input).unwrap_err();
+    let error = anyhow::Error::new(error).context("cannot adopt the desktop configuration");
+    let (mut ui, transcript) = Ui::recording();
+    ui.error(&error);
+    let output = transcript.err();
+    assert!(output.contains("cannot adopt the desktop configuration"));
+    assert!(output.contains("omega::shell::json"));
+    assert!(output.contains("shell.json:2"));
+    assert!(output.contains("\"version\": !"));
+    assert!(output.contains("invalid JSON"));
+    assert!(output.contains("omega shell adopt"));
+    assert!(transcript.out().is_empty());
+    assert!(!output.contains('\u{1b}'));
+}
+
+#[test]
+fn widget_errors_list_the_available_surfaces_through_configuration_errors() {
+    let error = omega_document::Error::from(omega_document::ValidationError::MissingSurface {
+        unit: "audio".into(),
+        requested: "missing".into(),
+        available: vec![omega_proto::SurfaceId::parse("indicator").unwrap()],
+    });
+    let (mut ui, transcript) = Ui::recording();
+    ui.error(&anyhow::Error::new(error));
+    let output = transcript.err();
+    assert!(output.contains("audio declares no widget"));
+    assert!(output.contains("indicator"));
+    assert!(output.contains("omega::document::widget_surface"));
+    assert!(transcript.out().is_empty());
+}
+
+#[test]
+fn duplicate_placement_diagnostics_identify_both_locations() {
+    use omega_document::shell::{Bar, PluginWidget, Shell};
+    let error = Shell::new()
+        .bar(
+            Bar::top()
+                .left([PluginWidget::new("audio", "audio").into()])
+                .right([PluginWidget::new("audio", "audio").into()]),
+        )
+        .compile()
+        .unwrap_err();
+    let (mut ui, transcript) = Ui::recording();
+    ui.error(&anyhow::Error::new(error));
+    let output = transcript.err();
+    assert!(output.contains("bar.layout.left[0]"));
+    assert!(output.contains("bar.layout.right[0]"));
+    assert!(output.contains("distinct placement IDs"));
+    assert!(transcript.out().is_empty());
+}
+
+#[test]
+fn invalid_json_at_eof_or_after_unicode_can_be_reported() {
+    for input in ["", "{", "{\"界\": !}", "{\n"] {
+        let error = omega_document::shell::Shell::from_omarchy(input).unwrap_err();
+        let (mut ui, transcript) = Ui::recording();
+        ui.error(&anyhow::Error::new(error));
+        assert!(transcript.err().contains("omega::shell::json"));
+    }
+}

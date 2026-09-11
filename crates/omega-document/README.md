@@ -11,7 +11,7 @@ The document describes desired state. Constructing it does not change the deskto
 use omega_document::Document;
 use omega_document::shell::{Bar, Native, PluginWidget, Shell};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> omega_document::Result<()> {
     Document::new()
         .shell(Shell::new().bar(
             Bar::top()
@@ -48,6 +48,10 @@ Legacy `Document::bar` declares render instances only. It cannot be combined wit
 `Document::shell`. `Units` configures lifecycle and settings; `Schedules` and
 `Actions` describe recurring work. The daemon validates references against the
 plugins in the build.
+
+Configuration authors can use `omega_document::Result` directly; no error-reporting
+crate is required. The concrete errors also integrate with application-selected
+error libraries through `std::error::Error`.
 
 Use [omega-rs](https://crates.io/crates/omega-rs) to implement plugins and
 [omega-cli](https://crates.io/crates/omega-cli) to create and build the workspace.

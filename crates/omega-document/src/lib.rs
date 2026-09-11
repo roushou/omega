@@ -17,8 +17,8 @@ pub mod shell;
 mod validation;
 
 pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};
-pub use error::DocumentError;
-pub use file::DocumentFile;
+pub use error::{Error, Result};
+pub use file::{DocumentError, DocumentFile};
 pub use keys::Key;
 pub use validation::{DocumentValidation, ValidationError};
 

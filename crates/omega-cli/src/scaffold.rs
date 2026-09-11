@@ -98,10 +98,8 @@ impl Scaffold {
     /// both made every unit declare the authoring API it never calls, and the
     /// config plane declare an async runtime for a program that computes a
     /// value and exits.
-    pub(crate) const SYSTEM_DEPENDENCIES: &'static [DependencySpec] = &[
-        DependencySpec::registry("anyhow", "1"),
-        DependencySpec::omega("omega-document"),
-    ];
+    pub(crate) const SYSTEM_DEPENDENCIES: &'static [DependencySpec] =
+        &[DependencySpec::omega("omega-document")];
 
     pub fn new() -> Self {
         Self::from_source(Published::matching_this_cli())

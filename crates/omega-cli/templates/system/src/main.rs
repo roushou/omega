@@ -2,7 +2,7 @@
 use omega_document::shell::{Bar, Native, Shell};
 use omega_document::{Document, Host};
 
-fn main() -> anyhow::Result<()> {
+fn main() -> omega_document::Result<()> {
     System::document()?.emit()?;
     Ok(())
 }
@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
 struct System;
 
 impl System {
-    fn document() -> anyhow::Result<Document> {
+    fn document() -> omega_document::Result<Document> {
         Ok(Document::new()
             .env("OMEGA_HOST", Host::name())
             .shell(

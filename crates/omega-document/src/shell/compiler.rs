@@ -45,7 +45,7 @@ impl Shell {
             }
         }
         let mut modules = Vec::new();
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeMap::new();
         let mut layout = serde_json::Map::new();
         for (section, entries) in [
             ("left", &self.bar.left),
@@ -53,11 +53,14 @@ impl Shell {
             ("right", &self.bar.right),
         ] {
             let mut output = Vec::new();
-            for entry in entries {
+            for (index, entry) in entries.iter().enumerate() {
                 output.push(match entry {
                     BarItem::Native(native) => native.compile()?,
                     BarItem::Plugin(plugin) => {
-                        if !seen.insert(&plugin.id) { return Err(ShellError::Invalid(format!("duplicate placement {}", plugin.id))); }
+                        let path = format!("bar.layout.{section}[{index}]");
+                        if let Some(first) = seen.insert(&plugin.id, path.clone()) {
+                            return Err(ShellError::DuplicatePlacement { id: plugin.id.clone(), first, second: path });
+                        }
                         if !plugin.surface.is_empty() {
                             omega_proto::SurfaceId::parse(&plugin.surface).map_err(|e| ShellError::Invalid(e.to_string()))?;
                         }

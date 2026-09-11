@@ -104,7 +104,7 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
     // machine should be and never names the protocol.
     assert_eq!(
         system.dependencies.names().collect::<Vec<_>>(),
-        vec!["anyhow", "omega-document"]
+        vec!["omega-document"]
     );
 
     let main = scaffold.system_main();
@@ -256,7 +256,7 @@ fn a_config_names_the_published_crates_whoever_scaffolded_it() {
     );
 
     // Registry dependencies do not care where omega comes from.
-    assert_eq!(dependencies.get("anyhow").unwrap().version(), Some("1"));
+    assert!(dependencies.get("anyhow").is_none());
 
     let encoded = Toml::encode(&manifest).unwrap();
     assert_eq!(Toml::decode::<CargoManifest>(&encoded).unwrap(), manifest);

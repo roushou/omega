@@ -54,7 +54,7 @@ impl InitCmd {
                 AtomicFile::at(layout.system_main()).write(
                     b"mod shell_import;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> omega_document::Result<()> {
     omega_document::Document::new().shell(shell_import::shell()?)?.emit()?;
     Ok(())
 }

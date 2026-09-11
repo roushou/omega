@@ -10,6 +10,7 @@
 //! rail width, the colours, the glyphs and the shortening of paths are
 //! decided once, here, which is what makes them consistent everywhere.
 
+mod diagnostic;
 mod paint;
 mod step;
 mod table;
@@ -140,6 +141,16 @@ impl Ui {
     /// it that says what to do, so printing only the top line throws that
     /// away.
     pub fn error(&mut self, error: &anyhow::Error) {
+        if let Some(rendered) = diagnostic::CliDiagnostic::render(error, self.glyphs) {
+            let mut lines = rendered.lines();
+            if let Some(first) = lines.next() {
+                self.step(Step::Error, first);
+            }
+            for line in lines {
+                self.detail(line);
+            }
+            return;
+        }
         self.step(Step::Error, error);
         for cause in error.chain().skip(1) {
             self.detail(Paint::dim(format_args!("{} {cause}", self.glyphs.bullet())));

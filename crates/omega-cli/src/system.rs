@@ -10,7 +10,6 @@ use anyhow::{Context, bail};
 
 use omega_document::{DocumentFile, StateDocument};
 use omega_host::{Layout, Profile};
-use omega_proto::UnitName;
 
 #[derive(Debug)]
 pub struct System<'a> {
@@ -25,11 +24,7 @@ impl<'a> System<'a> {
     /// The document this config declares, or an empty one when the config has
     /// no `system/` crate — a workspace of units and nothing else is a valid
     /// config, and every unit in it runs.
-    pub async fn evaluate(
-        &self,
-        profile: Profile,
-        built: &[UnitName],
-    ) -> anyhow::Result<StateDocument> {
+    pub async fn evaluate(&self, profile: Profile) -> anyhow::Result<StateDocument> {
         if !self.layout.system_dir().exists() {
             return Ok(StateDocument::default());
         }
@@ -52,27 +47,6 @@ impl<'a> System<'a> {
         let document = DocumentFile::parse(&String::from_utf8_lossy(&output.stdout))
             .context("the config plane did not emit a state document")?;
 
-        Self::validate(&document, built)?;
         Ok(document)
-    }
-
-    /// A document that names a unit this build does not contain is a typo
-    /// with consequences: it would silently do nothing at runtime.
-    fn validate(document: &StateDocument, built: &[UnitName]) -> anyhow::Result<()> {
-        let unknown: Vec<&str> = document
-            .units
-            .iter()
-            .map(|unit| unit.name.as_str())
-            .filter(|name| !built.iter().any(|built| built.as_str() == *name))
-            .collect();
-
-        if unknown.is_empty() {
-            Ok(())
-        } else {
-            bail!(
-                "the config plane names unit(s) this workspace does not build: {}",
-                unknown.join(", ")
-            )
-        }
     }
 }

@@ -33,6 +33,20 @@ handshake, with placement settings layered over unit settings for widget instanc
 The protocol's optional `json` feature is used by observation/document consumers;
 a standalone unit does not compile the generated JSON implementations.
 
+Configuration entry points can return `omega_document::Result<()>`. Its error
+enum wraps document, shell, validation and I/O failures; config authors can also
+use their own error library. Generated workspaces require neither `anyhow` nor
+`miette` as a direct dependency. Build publication and daemon adoption use the
+same document validator. Validation retains underlying error sources, available
+widget surfaces and duplicate placement locations for callers to inspect.
+
+Terminal diagnostics belong to `omega-cli::ui::Ui`. Its `miette` adapter renders
+shell-import JSON snippets and suggestions for duplicate placements or invalid
+widget surfaces to stderr, preserving outer operation context. Other failures
+retain the ordinary error-chain display. Internal orchestration still uses
+`anyhow`; neither the SDK nor the document API depends on `miette`. Errors from
+the separate configuration process arrive as stderr text, not typed diagnostics.
+
 ## The plugin API
 
 Public modules follow the domain an author works with. `audio` contains both
@@ -601,7 +615,6 @@ protocol kinds. `Emphasis` (primary, secondary, muted) describes importance;
 when choosing semantic colors, and neither property changes interactivity.
 The Rust API uses `Choice`, `fill_width`, `padding` and `muted`; established wire
 identifiers such as `group`, `fill` and `pad` remain unchanged.
-
 
 ## Generated Omarchy configuration
 

@@ -1,36 +1,26 @@
-use std::path::PathBuf;
+//! Errors exposed to configuration authors.
+use crate::{DocumentError, ValidationError, shell::ShellError};
 
-/// Why a state document could not be read, written, or understood.
+/// The result of constructing or emitting an Omega configuration.
+///
+/// ```no_run
+/// use omega_document::{Document, Result};
+/// use omega_document::shell::Shell;
+/// fn main() -> Result<()> {
+///     Document::new().shell(Shell::new())?.emit()
+/// }
+/// ```
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Concrete causes remain available to callers and diagnostic frontends.
 #[derive(Debug, thiserror::Error)]
-pub enum DocumentError {
-    #[error("cannot read the state document {}: {source}", path.display())]
-    Read {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("cannot parse the state document {}: {source}", path.display())]
-    Parse {
-        path: PathBuf,
-        #[source]
-        source: serde_json::Error,
-    },
-    #[error("cannot write the state document {}: {source}", path.display())]
-    Write {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("cannot decode a state document: {0}")]
-    Decode(#[source] serde_json::Error),
-    #[error("cannot encode a state document: {0}")]
-    Encode(#[source] serde_json::Error),
-}
-
-impl DocumentError {
-    /// True when there simply is no document — a config that has not declared
-    /// one yet, which is not an error to the daemon.
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::Read { source, .. } if source.kind() == std::io::ErrorKind::NotFound)
-    }
+pub enum Error {
+    #[error(transparent)]
+    Document(#[from] DocumentError),
+    #[error(transparent)]
+    Shell(#[from] ShellError),
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }

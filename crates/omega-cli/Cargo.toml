@@ -15,17 +15,18 @@ description = "The `omega` command line: scaffold, build, run, and inspect a con
 workspace = true
 
 [dependencies]
-serde_json.workspace = true
 anstream = "1"
 anstyle = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+miette = { version = "7.6", features = ["fancy-no-backtrace"] }
 omega-brokers.workspace = true
 omega-daemon = { path = "../omega-daemon", version = "0.2.0" }
 omega-document.workspace = true
 omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
 omega-renderer.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = [
   "rt-multi-thread",

@@ -176,7 +176,7 @@ fn a_scaffolded_config_builds_and_runs() {
     .unwrap();
     machine.run(&["shell", "adopt"]);
     std::fs::write(machine.root.join("config/system/src/main.rs"),
-        "mod shell_import;\nfn main() -> anyhow::Result<()> { omega_document::Document::new().shell(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
+        "mod shell_import;\nfn main() -> omega_document::Result<()> { omega_document::Document::new().shell(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
     machine.run(&["check"]);
     machine.run(&["build", "--debug"]);
 
