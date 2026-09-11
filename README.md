@@ -1,15 +1,18 @@
 # Omega
 
-_Omarchy, with Rust at the controls._
+_A typed, declarative way to extend Omarchy in Rust._
 
-Omega brings Rust to the widgets, controls, and automations of [Omarchy](https://omarchy.org)
-which provides the desktop and shell, while Omega runs your plugins, connects them to system state,
-and displays their interfaces through that shell.
+Omega lets you write [Omarchy](https://omarchy.org)’s widgets, controls, and automations in Rust.
+Omarchy provides the desktop and shell; Omega connects your plugins to system state,
+runs them as separate processes, and renders their declarative interfaces through that shell.
 
-Write a volume control, a network panel, or a focus timer as an ordinary Rust
-program. Omega handles the shared system connections and keeps your plugins
-running. You describe what they show and what happens when someone interacts
-with them.
+Your configuration is an ordinary Cargo workspace.
+Plugins are Rust crates, settings and command bindings are typed,
+and reusable behavior can live in libraries.
+
+Each plugin runs as its own binary, so a plugin crash does not bring down the shell.
+Omega supervises those processes and brokers shared system integrations,
+while your code describes what to display and what interactions should do.
 
 ## Running Omega
 
