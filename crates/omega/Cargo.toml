@@ -21,7 +21,7 @@ workspace = true
 name = "omega"
 
 [dependencies]
-omega-derive = { path = "../omega-derive", version = "0.1.0" }
+omega-derive = { path = "../omega-derive", version = "0.2.0" }
 omega-proto.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "time", "rt", "sync", "macros"] }

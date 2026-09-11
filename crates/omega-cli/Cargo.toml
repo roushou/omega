@@ -20,7 +20,7 @@ anstyle = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 omega-brokers.workspace = true
-omega-daemon = { path = "../omega-daemon", version = "0.1.0" }
+omega-daemon = { path = "../omega-daemon", version = "0.2.0" }
 omega-document.workspace = true
 omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }

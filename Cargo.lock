@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "omega-brokers"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "omega-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anstream",
  "anstyle",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "omega-daemon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "omega-derive"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "omega-document"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "omega-host",
  "omega-proto",
@@ -766,7 +766,7 @@ dependencies = [
 
 [[package]]
 name = "omega-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libc",
  "omega-proto",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "omega-proto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "omega-renderer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "omega-host",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "omega-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "omega-derive",
  "omega-proto",
