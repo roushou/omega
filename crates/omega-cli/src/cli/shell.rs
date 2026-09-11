@@ -111,10 +111,8 @@ impl ShellCmd {
     fn diff(ui: &mut Ui) -> anyhow::Result<()> {
         let layout = omega_host::Layout::resolve();
         let installer = omega_host::shell::ShellInstallation::new(&layout);
-        ui.step(
-            Step::Checking,
-            format!("shell ownership: {:?}", installer.inspect()?),
-        );
+        let ownership = installer.inspect()?;
+        ui.step(Step::Checking, format!("shell ownership: {ownership:?}"));
         let generation = omega_host::Generations::new(&layout)
             .pin_current()?
             .context("nothing built")?;
@@ -125,10 +123,23 @@ impl ShellCmd {
         if current.as_ref() == Some(compiled.config()) {
             ui.step(Step::Checked, "shell configuration matches");
         } else {
-            ui.step(Step::Checking, "current shell configuration");
-            ui.detail(serde_json::to_string_pretty(&current)?);
-            ui.step(Step::Checking, "generated shell configuration");
-            ui.detail(compiled.encode()?);
+            ui.shell_diff(current.as_ref(), compiled.config());
+            ui.detail("Changes shown from the current file to the built configuration.");
+        }
+        use omega_host::shell::InstallationState;
+        match ownership {
+            InstallationState::Unmanaged if current.is_some() => {
+                ui.detail(
+                    "Adopt the existing shell configuration before applying a generated one.",
+                );
+                ui.next("omega shell adopt");
+            }
+            InstallationState::ModifiedExternally => {
+                ui.detail("To keep external edits, copy them into Rust and rebuild first.");
+                ui.next("omega shell apply --overwrite");
+            }
+            _ if current.as_ref() != Some(compiled.config()) => ui.next("omega shell apply"),
+            _ => {}
         }
         Ok(())
     }

@@ -46,6 +46,7 @@ You can inspect the service and its plugins from the terminal:
 ```sh
 omega daemon status
 omega status
+omega status --versions
 ```
 
 For foreground operation, `omega daemon` runs the daemon directly.
@@ -62,7 +63,8 @@ explicit extensions.
 This means shell changes belong in Rust. Editing `shell.json` directly, or changing
 settings through a shell control that writes to it, creates a conflict with the
 generated configuration. Omega preserves those edits and reports the conflict.
-Use `omega shell diff` to inspect it and carry any changes you want to keep into
+Use `omega shell diff` to inspect changed fields and their current and built
+values, and carry any changes you want to keep into
 Rust. After rebuilding, `omega shell apply --overwrite` explicitly replaces the
 edited file with the built configuration. External edits are never translated
 back into your Rust source automatically.

@@ -752,6 +752,7 @@ dependencies = [
  "omega-host",
  "omega-proto",
  "omega-renderer",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",

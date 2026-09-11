@@ -13,13 +13,20 @@ use crate::ui::{Cell, Column, Paint, Step, Table, Ui};
 
 /// Report the daemon's view of every unit.
 #[derive(Debug, clap::Args)]
-pub struct StatusCmd;
+pub struct StatusCmd {
+    /// Show CLI, daemon, renderer, and resolved config dependency versions.
+    #[arg(long)]
+    pub versions: bool,
+}
 
 impl StatusCmd {
     /// How long to wait for the daemon's opening snapshot.
     const TIMEOUT: Duration = Duration::from_secs(2);
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
+        if self.versions {
+            Self::versions(ui).await;
+        }
         let socket = Observation::socket();
         if !socket.is_live() {
             bail!(
@@ -39,6 +46,88 @@ impl StatusCmd {
             ui.table(&Self::table(&units));
         }
         Ok(())
+    }
+
+    async fn versions(ui: &mut Ui) {
+        let version = env!("CARGO_PKG_VERSION");
+        ui.step(Step::Checking, format!("CLI {version}"));
+        match std::env::current_exe() {
+            Ok(path) => ui.detail(format!("executable: {}", Paint::path(path))),
+            Err(error) => ui.warn(format!("CLI executable path unavailable: {error}")),
+        }
+        match tokio::time::timeout(
+            Self::TIMEOUT,
+            crate::operator::Operator::new().daemon_version(),
+        )
+        .await
+        {
+            Ok(Ok(daemon)) if daemon == version => {
+                ui.step(Step::Checked, format!("daemon {daemon}"))
+            }
+            Ok(Ok(daemon)) => ui.warn(format!("daemon {daemon}; CLI {version}")),
+            Ok(Err(error)) => ui.warn(format!("daemon version unavailable: {error}")),
+            Err(_) => ui.warn("daemon version request timed out"),
+        }
+        if let Some(shell) = omega_renderer::HostShell::detect() {
+            for renderer in omega_renderer::Renderer::ALL {
+                use omega_renderer::Installed;
+                match renderer.installed(&shell.plugins()) {
+                    Installed::Current => ui.step(
+                        Step::Checked,
+                        format!(
+                            "{} {} matches this CLI",
+                            renderer.id,
+                            omega_renderer::Renderer::VERSION
+                        ),
+                    ),
+                    Installed::Missing => ui.warn(format!("{} is not installed", renderer.id)),
+                    Installed::Linked(path) => ui.step(
+                        Step::Linked,
+                        format!("{} from {}", renderer.id, Paint::path(path)),
+                    ),
+                    installed @ Installed::Stale { .. } => ui.warn(format!(
+                        "{}: {}",
+                        renderer.id,
+                        installed
+                            .difference()
+                            .expect("stale renderer has a difference")
+                    )),
+                }
+            }
+        } else {
+            ui.detail("No supported shell detected; installed renderer unavailable.");
+        }
+        let layout = omega_host::Layout::resolve();
+        if !layout.workspace_manifest().exists() {
+            ui.detail("No configuration workspace.");
+            return;
+        }
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            crate::cargo::Cargo::new(&layout).packages(),
+        )
+        .await
+        {
+            Ok(Ok(mut packages)) => {
+                ui.step(Step::Checking, "resolved configuration dependencies");
+                packages.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
+                for package in packages
+                    .into_iter()
+                    .filter(|p| p.name.starts_with("omega-"))
+                {
+                    let source = match package.source {
+                        Some(source) => source,
+                        None => format!("path {}", Paint::path(package.manifest_path)),
+                    };
+                    ui.step(
+                        Step::Checking,
+                        format!("{} {} — {source}", package.name, package.version),
+                    );
+                }
+            }
+            Ok(Err(error)) => ui.warn(format!("config dependency versions unavailable: {error}")),
+            Err(_) => ui.warn("config dependency version lookup timed out"),
+        }
     }
 
     /// Read the observation socket until the `units` topic arrives. The

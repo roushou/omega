@@ -283,3 +283,49 @@ fn invalid_json_at_eof_or_after_unicode_can_be_reported() {
         assert!(transcript.err().contains("omega::shell::json"));
     }
 }
+
+#[test]
+fn shell_diff_reports_only_changed_fields_and_preserves_direction() {
+    let (mut ui, transcript) = Ui::recording();
+    let current =
+        serde_json::json!({"version":1,"bar":{"transparent":false,"layout":["clock","tray"]}});
+    let built =
+        serde_json::json!({"version":1,"bar":{"transparent":true,"layout":["tray","clock"]}});
+    ui.shell_diff(Some(&current), &built);
+    let output = transcript.err();
+    assert!(output.contains("/bar/transparent"));
+    assert!(output.contains("current: false"));
+    assert!(output.contains("built:   true"));
+    assert!(output.contains("/bar/layout/0"));
+    assert!(output.contains("/bar/layout/1"));
+    assert!(!output.contains("version"));
+    assert!(transcript.out().is_empty());
+}
+
+#[test]
+fn shell_diff_distinguishes_absent_null_and_escaped_keys() {
+    let (mut ui, transcript) = Ui::recording();
+    ui.shell_diff(
+        Some(&serde_json::json!({"removed":null,"a/b~c":0})),
+        &serde_json::json!({"added":null,"a/b~c":1}),
+    );
+    let output = transcript.err();
+    assert!(output.contains("/a~1b~0c"));
+    assert!(output.contains("/removed"));
+    assert!(output.contains("/added"));
+    assert!(output.contains("current: (absent)"));
+    assert!(output.contains("built:   (absent)"));
+    assert!(output.contains("current: null"));
+    assert!(output.contains("built:   null"));
+}
+
+#[test]
+fn identical_shells_produce_no_changes_and_missing_files_are_explicit() {
+    let current = serde_json::json!({"version":1});
+    let (mut ui, transcript) = Ui::recording();
+    ui.shell_diff(Some(&current), &current);
+    assert!(transcript.err().is_empty());
+    ui.shell_diff(None, &current);
+    assert!(transcript.err().contains("(document)"));
+    assert!(transcript.err().contains("current: (absent)"));
+}

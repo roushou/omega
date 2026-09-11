@@ -24,6 +24,7 @@ its placement declaration for `system/src/main.rs`. The
 ```sh
 omega build
 omega status
+omega status --versions
 omega logs audio
 ```
 
@@ -53,6 +54,16 @@ place its widget on screen.
 validates its placements and schedules without publishing a generation.
 Configurations containing only native Omarchy widgets can be checked and built
 without creating any Omega plugins.
+
+Use `omega status --versions` to inspect the CLI executable, the running daemon's
+version, renderer installation, and resolved Omega dependency versions and sources.
+Dependency inspection is offline and leaves the lockfile unchanged. It describes
+the current config workspace; running plugins retain their last published build.
+These details go to stderr alongside the usual plugin table on stdout.
+
+`omega shell diff` shows changed JSON paths and their current and built values,
+then suggests adoption, application, or explicit overwrite as appropriate.
+Array paths use positions so widget ordering remains visible.
 
 Run `omega --help` or `omega <command> --help` for the full command reference.
 

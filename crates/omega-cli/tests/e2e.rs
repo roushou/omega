@@ -228,6 +228,28 @@ fn a_scaffolded_config_builds_and_runs() {
         "status did not report the unit:\n{status}"
     );
 
+    let lock_path = machine.root.join("config/Cargo.lock");
+    let lock_before = std::fs::read(&lock_path).unwrap();
+    let provenance = machine.omega(&["status", "--versions"]).output().unwrap();
+    assert!(
+        provenance.status.success(),
+        "{}",
+        String::from_utf8_lossy(&provenance.stderr)
+    );
+    let details = String::from_utf8_lossy(&provenance.stderr);
+    assert!(
+        details.contains(&format!("CLI {}", env!("CARGO_PKG_VERSION"))),
+        "{details}"
+    );
+    assert!(
+        details.contains(&format!("daemon {}", env!("CARGO_PKG_VERSION"))),
+        "{details}"
+    );
+    assert!(details.contains("omega-rs"), "{details}");
+    assert!(details.contains("path "), "{details}");
+    assert!(details.contains("omega-document"), "{details}");
+    assert_eq!(std::fs::read(&lock_path).unwrap(), lock_before);
+    assert!(String::from_utf8_lossy(&provenance.stdout).contains("battery-widget"));
     machine.run(&["shell", "apply"]);
     let first = std::fs::read(&shell_path).unwrap();
     assert!(String::from_utf8_lossy(&first).contains("preserved"));
@@ -235,6 +257,21 @@ fn a_scaffolded_config_builds_and_runs() {
         .unwrap()
         .replace("HH:mm", "HH:mm:ss");
     std::fs::write(&shell_path, &changed).unwrap();
+    let diff = machine.omega(&["shell", "diff"]).output().unwrap();
+    assert!(diff.status.success());
+    assert!(diff.stdout.is_empty());
+    let differences = String::from_utf8_lossy(&diff.stderr);
+    assert!(
+        differences.contains("/bar/layout/center/0/format"),
+        "{differences}"
+    );
+    assert!(
+        differences.contains("current: \"HH:mm:ss\""),
+        "{differences}"
+    );
+    assert!(differences.contains("built:   \"HH:mm\""), "{differences}");
+    assert!(!differences.contains("preserved"), "{differences}");
+    assert!(differences.contains("apply --overwrite"), "{differences}");
     let refused = machine.omega(&["shell", "apply"]).output().unwrap();
     assert!(
         !refused.status.success(),

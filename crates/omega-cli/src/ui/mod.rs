@@ -12,6 +12,7 @@
 
 mod diagnostic;
 mod paint;
+mod shell;
 mod step;
 mod table;
 

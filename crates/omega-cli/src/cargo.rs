@@ -7,6 +7,10 @@ use omega_proto::UnitName;
 pub enum CargoError {
     #[error("cannot run cargo: {0}")]
     Spawn(#[from] std::io::Error),
+    #[error("cargo metadata failed: {0}")]
+    Metadata(String),
+    #[error("invalid cargo metadata: {0}")]
+    Decode(#[from] serde_json::Error),
     #[error("cargo build failed")]
     Failed,
 }
@@ -34,6 +38,23 @@ impl<'a> Cargo<'a> {
         self.run(profile, &["--package", unit.as_str()]).await
     }
 
+    /// Resolve dependency provenance without fetching or updating the lockfile.
+    pub async fn packages(&self) -> Result<Vec<Package>, CargoError> {
+        let output = tokio::process::Command::new("cargo")
+            .current_dir(&self.layout.config)
+            .args(["metadata", "--format-version=1", "--offline", "--locked"])
+            .kill_on_drop(true)
+            .output()
+            .await?;
+        if !output.status.success() {
+            return Err(CargoError::Metadata(
+                String::from_utf8_lossy(&output.stderr).trim().into(),
+            ));
+        }
+        let metadata: Metadata = serde_json::from_slice(&output.stdout)?;
+        Ok(metadata.packages)
+    }
+
     async fn run(&self, profile: Profile, extra: &[&str]) -> Result<(), CargoError> {
         let mut command = tokio::process::Command::new("cargo");
         command
@@ -58,4 +79,18 @@ impl<'a> Cargo<'a> {
         let status = command.status().await?;
         status.success().then_some(()).ok_or(CargoError::Failed)
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Metadata {
+    packages: Vec<Package>,
+}
+
+/// A resolved Cargo package; a missing source identifies a local path dependency.
+#[derive(Debug, serde::Deserialize)]
+pub struct Package {
+    pub name: String,
+    pub version: String,
+    pub source: Option<String>,
+    pub manifest_path: std::path::PathBuf,
 }

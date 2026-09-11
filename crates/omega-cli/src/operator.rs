@@ -37,6 +37,11 @@ impl Operator {
         Self { socket }
     }
 
+    pub async fn daemon_version(&self) -> Result<String, OperatorError> {
+        let (_client, welcome) = Client::connect(&self.socket, "", "").await?;
+        Ok(welcome.daemon_version)
+    }
+
     pub async fn apply_shell(&self, overwrite: bool) -> Result<(), OperatorError> {
         self.invoke(invoke::Op::ApplyShell(omega_proto::omega::ApplyShell {
             overwrite,
