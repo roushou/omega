@@ -16,7 +16,7 @@ pub trait CommandName {
 /// use omega::{Command, Percent};
 /// use omega::ui::Slider;
 /// #[derive(omega::Command)]
-/// struct SetVolume { volume: omega::effect::Volume }
+/// struct SetVolume { volume: omega::audio::Volume }
 /// impl Command for SetVolume {
 ///     type Input = Percent;
 ///     type Output = ();

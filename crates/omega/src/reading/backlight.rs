@@ -10,7 +10,7 @@ use crate::units::Percent;
 /// [`has_reading`](Backlight::has_reading) answers.
 ///
 /// ```no_run
-/// # use omega::reading::Backlight;
+/// # use omega::desktop::Backlight;
 /// # use omega::ui::Text;
 /// # use omega::{Ui, Widget};
 /// #[derive(omega::Widget)]

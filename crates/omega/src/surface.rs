@@ -55,7 +55,7 @@ pub trait Widget: Wired {
 /// ```no_run
 /// use omega::Command;
 /// #[derive(omega::Command)]
-/// struct Lock { session: omega::effect::Session }
+/// struct Lock { session: omega::session::Session }
 /// impl Command for Lock {
 ///     type Input = ();
 ///     type Output = ();

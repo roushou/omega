@@ -5,7 +5,7 @@
 //! Completion is notified at most once; a crash between recording completion
 //! and notification may lose that notification.
 use omega::config::{Fields, Values};
-use omega::effect::Notify;
+use omega::notification::Notify;
 use omega::record::{Own, UnitState, Watch};
 use omega::ui::{Button, Metric, Row, Section, Text};
 use omega::{Command, Plugin, Ui, Widget};

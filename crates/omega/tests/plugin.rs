@@ -1,10 +1,13 @@
 //! What a plugin author writes, and what it costs them.
 
 use omega::config::{Fields, Values};
-use omega::effect::{Notify, Session};
-use omega::reading::{Battery, Clock, Network};
+use omega::network::Network;
+use omega::notification::Notify;
+use omega::power::Battery;
 use omega::record::{Own, UnitState, Watch};
+use omega::session::Session;
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
+use omega::time::Clock;
 use omega::ui::{
     Button, Choice, Field, Glyph, Graph, Grid, Header, Icon, Image, List, Progress, Row, Separator,
     Slider, Spacer, Text, Toggle,
@@ -956,7 +959,7 @@ fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
 /// Reading a topic that has no typed accessors, only the floor `get()` gives.
 #[derive(omega::Widget)]
 struct Devices {
-    bluetooth: omega::reading::Bluetooth,
+    bluetooth: omega::bluetooth::Bluetooth,
 }
 
 impl Widget for Devices {
@@ -1016,7 +1019,7 @@ fn a_handle_declares_the_topic_its_type_names() {
 /// A widget holding a composite rather than its two parts.
 #[derive(omega::Widget)]
 struct Situation {
-    power: omega::composite::Power,
+    power: omega::power::Power,
 }
 
 impl Widget for Situation {
@@ -1222,7 +1225,7 @@ async fn oversized_record_result_is_not_committed_and_releases_its_reservation()
 
 #[test]
 fn missing_mains_is_not_evidence_of_battery_operation() {
-    use omega::reading::SystemTopic;
+    use omega::testing::SystemTopic;
     let state = State::new().battery(0.5, false).absent(SystemTopic::Mains);
     assert_eq!(Drawn::of::<Situation>(&state).text(), "Unknown");
 }

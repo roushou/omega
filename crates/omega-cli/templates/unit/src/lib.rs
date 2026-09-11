@@ -13,7 +13,7 @@
 //! `cargo test`: a widget is a function from state to a view, and the tests
 //! at the bottom of this file call it without a daemon anywhere.
 
-use omega::reading::Battery;
+use omega::power::Battery;
 use omega::ui::{Row, Text};
 use omega::{Plugin, Ui, Widget};
 
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn a_machine_with_no_battery_draws_nothing() {
-        let state = State::new().absent(omega::reading::SystemTopic::Battery);
+        let state = State::new().absent(omega::testing::SystemTopic::Battery);
         assert!(Drawn::of::<BatteryWidget>(&state).is_empty());
     }
 

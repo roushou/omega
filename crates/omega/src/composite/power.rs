@@ -123,8 +123,8 @@ impl Power {
     /// Missing mains data never implies that the cable is disconnected.
     ///
     /// ```no_run
-    /// # fn example(power: &omega::composite::Power) {
-    /// if power.status() == omega::composite::Status::Unknown {
+    /// # fn example(power: &omega::power::Power) {
+    /// if power.status() == omega::power::Status::Unknown {
     ///     // Show an unavailable state rather than claiming battery operation.
     /// }
     /// # }

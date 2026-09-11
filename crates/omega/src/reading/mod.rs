@@ -8,8 +8,6 @@
 //! render is always of the current picture and never of a snapshot taken at
 //! construction.
 //!
-//! A unit's own state lives here too — see [`Own`] and [`Watch`].
-//!
 //! # One handle per topic, always
 //!
 //! [`handles!`] declares one for every topic the ontology has, so a topic is
@@ -41,10 +39,6 @@ mod vpn;
 mod wifi;
 mod window;
 mod workspaces;
-
-/// Naming a topic, for a test that describes a machine which has none of
-/// it. Reading one is a field like [`Battery`], never this.
-pub use omega_proto::SystemTopic;
 
 pub use bluetooth::BluetoothDevice;
 pub use clock::Weekday;

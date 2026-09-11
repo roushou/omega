@@ -309,7 +309,7 @@ pub trait FormInput: Input {
 ///     password: String,
 /// }
 /// #[derive(omega::Command)]
-/// struct Connect { wifi: omega::effect::WifiControl }
+/// struct Connect { wifi: omega::network::WifiControl }
 /// impl Command for Connect {
 ///     type Input = Credentials;
 ///     type Output = ();

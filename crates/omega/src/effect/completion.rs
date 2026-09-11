@@ -48,7 +48,7 @@ impl Receipt {
     /// Wait without blocking the SDK's connection loop.
     ///
     /// ```no_run
-    /// # async fn example(notify: &omega::effect::Notify) -> Result<(), omega::effect::EffectError> {
+    /// # async fn example(notify: &omega::notification::Notify) -> Result<(), omega::effect::EffectError> {
     /// notify.send("Finished").receipt()?.wait().await?;
     /// # Ok(()) }
     /// ```
@@ -60,7 +60,7 @@ impl Receipt {
     /// A receipt is consumed logically by its first completed poll.
     ///
     /// ```no_run
-    /// # fn example(notify: &omega::effect::Notify) -> Result<(), omega::effect::EffectError> {
+    /// # fn example(notify: &omega::notification::Notify) -> Result<(), omega::effect::EffectError> {
     /// let mut receipt = notify.send("Started").receipt()?;
     /// if let Some(result) = receipt.try_complete() { result?; }
     /// # Ok(()) }
@@ -76,7 +76,7 @@ impl Receipt {
     /// Leave failure reporting to the runtime. This does not cancel execution.
     ///
     /// ```no_run
-    /// # fn example(notify: &omega::effect::Notify) -> Result<(), omega::effect::EffectError> {
+    /// # fn example(notify: &omega::notification::Notify) -> Result<(), omega::effect::EffectError> {
     /// notify.send("Started").receipt()?.detach();
     /// # Ok(()) }
     /// ```
@@ -87,7 +87,7 @@ impl Receipt {
 /// Admission happens when the handle is called, including local record updates.
 ///
 /// ```no_run
-/// # async fn example(session: &omega::effect::Session) -> Result<(), omega::Error> {
+/// # async fn example(session: &omega::session::Session) -> Result<(), omega::Error> {
 /// session.lock().await?;
 /// # Ok(()) }
 /// ```
@@ -105,7 +105,7 @@ impl Effect {
     /// Take admission and completion ownership for manual polling or detachment.
     ///
     /// ```no_run
-    /// # fn example(session: &omega::effect::Session) -> Result<(), omega::effect::EffectError> {
+    /// # fn example(session: &omega::session::Session) -> Result<(), omega::effect::EffectError> {
     /// session.lock().receipt()?.detach();
     /// # Ok(()) }
     /// ```

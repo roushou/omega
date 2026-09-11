@@ -1,8 +1,7 @@
 //! Wi-Fi readings and connection controls. Forms submit once; passwords stay out
 //! of records. Requests acknowledge activation, and Wifi reports its outcome.
 
-use omega::effect::WifiControl;
-use omega::reading::{AccessPoint, Network, Wifi, WifiPhase};
+use omega::network::{AccessPoint, Network, Wifi, WifiControl, WifiPhase};
 use omega::record::{Own, Watch};
 use omega::ui::{
     Button, Form, Glyph, Graph, Icon, List, Progress, Row, Section, Size, Stack, Text,

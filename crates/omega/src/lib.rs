@@ -7,7 +7,7 @@
 //! the code: `omega build` compiles a plugin and asks it what it declares.
 //!
 //! ```no_run
-//! use omega::reading::Battery;
+//! use omega::power::Battery;
 //! use omega::ui::Text;
 //! use omega::{Ui, Widget};
 //!
@@ -32,6 +32,12 @@
 //! }
 //! ```
 //!
+//! Find state and control handles by domain: [`audio`], [`power`], [`network`],
+//! [`bluetooth`], [`desktop`], [`time`], [`system`], and [`session`].
+//! [`notification`] and [`process`] provide notifications and process execution.
+//! Build views with [`ui`], supply settings with [`config`], and share plugin
+//! memory through [`record`]. Shared units such as [`Percent`] live at the root.
+//!
 //! Three kinds of surface, and which one you are writing decides what you may
 //! hold. A [`Widget`] renders, so it may hold state and nothing else — an
 //! effect there would fire on every change the machine reports. A [`Command`]
@@ -41,48 +47,38 @@
 #[cfg(test)]
 extern crate self as omega;
 
+mod composite;
 mod context;
 mod error;
 mod input;
 mod mirror;
 mod plugin;
+mod reading;
 mod registry;
 mod runtime;
 mod surface;
 mod units;
+mod wiring;
 
-pub mod composite;
+pub mod audio;
+pub mod bluetooth;
+pub mod desktop;
 pub mod effect;
-pub mod reading;
+pub mod network;
+pub mod notification;
+pub mod power;
+pub mod process;
 pub mod record;
+pub mod session;
+pub mod system;
 pub mod testing;
+pub mod time;
 pub mod ui;
-pub mod wiring;
-
-// ---- what a plugin is -------------------------------------------------
-//
-// The root is the vocabulary every unit uses whatever it does: the three
-// surfaces, what they are called with, what they answer, and the readings
-// that pass through both.
-//
-// Everything else is in a module named for the *kind of field* it holds,
-// because that is the distinction `wiring` already makes and the one that
-// decides what a surface may hold:
-//
-// - `reading`   — what is true of the machine. Safe on anything.
-// - `composite` — a reading that takes more than one topic to answer.
-// - `record`  — what this unit remembers. Reading one is; writing is not.
-// - `effect`  — what this unit can change. Never on a widget.
-// - `ui`      — what a widget draws with. Not a field at all.
-//
-// `state` was none of these. It named the plane the value lives in rather
-// than the thing being imported, which is why `omega::reading::Battery` read
-// oddly where `omega::ui::Row` does not.
 
 pub use error::{Error, Result};
 pub use input::Input;
 pub use plugin::Plugin;
-pub use surface::{Args, Command, Reaction, Widget, Wired};
+pub use surface::{Args, Command, Reaction, Widget};
 
 /// What `Widget::render` hands back. Part of the surface's contract, so it
 /// lives beside the trait rather than with the nodes it is built from.

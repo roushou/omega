@@ -7,7 +7,7 @@ use omega_proto::omega::{ConnectWifi, DisconnectWifi, action};
 /// Completion acknowledges the request; `reading::Wifi` reports its outcome.
 ///
 /// ```no_run
-/// # async fn example(wifi: &omega::effect::WifiControl) -> omega::Result<()> {
+/// # async fn example(wifi: &omega::network::WifiControl) -> omega::Result<()> {
 /// wifi.connect("Home", "password").await?;
 /// # Ok(()) }
 /// ```

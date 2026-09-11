@@ -58,7 +58,7 @@ impl Notification {
     /// an enum because the set belongs to whichever icon theme is installed,
     /// and Omega does not own it.
     ///
-    /// [`Glyph`]: crate::Glyph
+    /// [`Glyph`]: crate::ui::Glyph
     pub fn icon(mut self, icon: impl Into<String>) -> Self {
         self.icon = icon.into();
         self

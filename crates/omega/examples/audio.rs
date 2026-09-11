@@ -1,6 +1,5 @@
 //! Output volume and mute controls. Run as a unit or place `indicator` and `panel`.
-use omega::effect::Volume;
-use omega::reading::Audio;
+use omega::audio::{Audio, Volume};
 use omega::ui::{Button, Metric, Section, Slider, Text};
 use omega::{Command, Percent, Plugin, Ui, Widget};
 
@@ -104,7 +103,7 @@ mod tests {
     use omega::testing::{Called, Drawn, State};
     #[test]
     fn absent_audio_is_not_zero_volume() {
-        let state = State::new().absent(omega::reading::SystemTopic::Audio);
+        let state = State::new().absent(omega::testing::SystemTopic::Audio);
         assert_eq!(Drawn::of::<Panel>(&state).text(), "Audio unavailable");
     }
     #[tokio::test]

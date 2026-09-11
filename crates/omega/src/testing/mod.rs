@@ -6,7 +6,7 @@
 //!
 //! ```
 //! use omega::testing::{Drawn, State};
-//! use omega::reading::Battery;
+//! use omega::power::Battery;
 //! use omega::ui::Text;
 //! use omega::{Ui, Widget};
 //!
@@ -34,6 +34,9 @@ mod called;
 mod daemon;
 mod drawn;
 mod state;
+
+/// A system topic to mark absent in a test fixture.
+pub use omega_proto::SystemTopic;
 
 pub use called::Called;
 pub use daemon::{Published, TestDaemon, manifest_of};

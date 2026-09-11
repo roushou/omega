@@ -6,7 +6,7 @@ use omega::{Args, Command, Input, Percent, Plugin, Ui, Widget};
 #[derive(omega::Command)]
 #[omega(name = "volume")]
 struct SetVolume {
-    volume: omega::effect::Volume,
+    volume: omega::audio::Volume,
 }
 impl Command for SetVolume {
     type Input = Percent;
@@ -48,7 +48,14 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
             .iter()
             .any(|surface| surface.id == "volume")
     );
-    assert!(<Controls as omega::Wired>::capabilities().is_empty());
+    assert!(
+        Plugin::named("controls", "1")
+            .widget::<Controls>()
+            .manifest()
+            .unwrap()
+            .capabilities
+            .is_empty()
+    );
     let drawn = Drawn::of::<Controls>(&State::new());
     let binding = &drawn.node("volume").unwrap().events["change"];
     assert_eq!(binding.command, "volume");

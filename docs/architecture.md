@@ -33,6 +33,28 @@ handshake, with placement settings layered over unit settings for widget instanc
 The protocol's optional `json` feature is used by observation/document consumers;
 a standalone unit does not compile the generated JSON implementations.
 
+## The plugin API
+
+Public modules follow the domain an author works with. `audio` contains both
+`Audio` and `Volume`; `power` contains battery and mains readings, their `Power`
+interpretation, and profile control. `network` groups connectivity, Wi-Fi and
+traffic; `desktop` groups displays, brightness, workspaces and keyboard state.
+`bluetooth`, `time`, `system`, `session`, `notification` and `process` expose the
+remaining domains. These are export boundaries over shared topic and capability
+machinery, not additional runtime layers.
+
+The root contains surface contracts, derives, errors and shared values such as
+`Percent`. `ui` builds views, `config` describes construction settings, `record`
+holds plugin memory, and `testing` builds fixtures. `effect` defines the operation
+returned by a control, its receipt and failure semantics. Device controls belong
+to their domains. Reading/composite implementation modules and wiring traits are
+private; macro expansion accesses the required contracts through `internal`.
+
+Module placement does not grant capabilities. A domain may expose both read and
+control handles, but the `Reads` bound still prevents a widget holding a control.
+Public examples and doctests use domain paths; there are no parallel public
+reading/effect handle paths to keep in sync.
+
 ## The daemon
 
 The daemon authorizes sessions, supervises units and converges the document.

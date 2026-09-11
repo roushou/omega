@@ -450,7 +450,7 @@ async fn oversized_pull_results_are_refused_without_installing_or_caching_the_in
 #[derive(crate::Command)]
 #[omega(name = "forward")]
 struct Sequence {
-    notify: crate::effect::Notify,
+    notify: crate::notification::Notify,
 }
 impl crate::Command for Sequence {
     type Input = Args;
@@ -509,7 +509,7 @@ async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
 #[derive(crate::Command)]
 #[omega(name = "forward")]
 struct Delayed {
-    notify: crate::effect::Notify,
+    notify: crate::notification::Notify,
 }
 impl crate::Command for Delayed {
     type Input = Args;

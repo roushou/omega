@@ -12,8 +12,8 @@ use crate::effect::does;
 /// [`Session`] locks the screen, [`Volume`] changes the volume — and reach
 /// for this when the machine has no word for what you want.
 ///
-/// [`Session`]: crate::Session
-/// [`Volume`]: crate::Volume
+/// [`Session`]: crate::session::Session
+/// [`Volume`]: crate::audio::Volume
 #[derive(Debug)]
 pub struct Shell {
     context: Context,
@@ -33,7 +33,7 @@ impl Shell {
     /// Completion confirms launch, not the program's eventual exit.
     ///
     /// ```no_run
-    /// # async fn example(shell: &omega::effect::Shell) -> Result<(), omega::Error> {
+    /// # async fn example(shell: &omega::process::Shell) -> Result<(), omega::Error> {
     /// shell.run_with_args("printf", ["%s", "a name with spaces"]).await?;
     /// # Ok(()) }
     /// ```

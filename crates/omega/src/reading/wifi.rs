@@ -10,7 +10,7 @@ use crate::units::Percent;
 /// draws is what keeps an indicator from waking every time a signal jitters
 /// three rooms away.
 ///
-/// [`Network`]: crate::Network
+/// [`Network`]: crate::network::Network
 impl Wifi {
     /// Every network, strongest first. One entry per name: a network is often
     /// several radios, and the daemon has already folded them.
@@ -75,8 +75,8 @@ impl Wifi {
     /// NetworkManager's reported connection phase; unavailable is unspecified.
     ///
     /// ```no_run
-    /// # fn example(wifi: &omega::reading::Wifi) {
-    /// let connecting = wifi.phase() == omega::reading::WifiPhase::Connecting;
+    /// # fn example(wifi: &omega::network::Wifi) {
+    /// let connecting = wifi.phase() == omega::network::WifiPhase::Connecting;
     /// # }
     /// ```
     pub fn phase(&self) -> omega_proto::omega::WifiPhase {
