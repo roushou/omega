@@ -1,3 +1,13 @@
+## What's Changed in 0.2.1
+* feat: improve config errors and CLI diagnostics
+* feat(shell): generate Omarchy configuration from Rust
+* docs: update README
+* fix(renderer): improve failure feedback and keyboard interaction
+* docs: update README
+* chore: exclude generated changelog from formatting
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.2.0...v0.2.1
+
 ## What's Changed in 0.2.0
 * docs: fix rustdoc links and schema formatting
 * docs: update README files

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omega.view",
   "name": "Omega View",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Omega",
   "description": "Renders a declarative view tree published by an Omega unit",
   "kinds": [
