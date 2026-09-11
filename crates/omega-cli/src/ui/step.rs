@@ -30,6 +30,8 @@ pub enum Step {
     Changed,
     /// A unit was cycled.
     Restarted,
+    /// A retained build was selected for activation.
+    Restored,
     /// A config was pointed at where its crates come from.
     Linked,
     /// A renderer was put where the host shell will find it.
@@ -67,6 +69,7 @@ impl Step {
             Self::Watching => "Watching",
             Self::Changed => "Changed",
             Self::Restarted => "Restarted",
+            Self::Restored => "Restored",
             Self::Linked => "Linked",
             Self::Installed => "Installed",
             Self::Removed => "Removed",
@@ -90,6 +93,7 @@ impl Step {
             | Self::Built
             | Self::Checked
             | Self::Restarted
+            | Self::Restored
             | Self::Linked
             | Self::Installed
             | Self::Removed

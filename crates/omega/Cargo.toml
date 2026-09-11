@@ -33,4 +33,4 @@ tokio = { workspace = true, features = ["net", "time", "rt", "sync", "macros"] }
 # than telling them anything.
 omega-proto = { workspace = true, features = ["json"] }
 serde_json.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

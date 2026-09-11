@@ -1,8 +1,8 @@
 //! The observation stream: where to find it, and how to read a state line.
 //!
 //! The daemon streams everything it holds — rendered views and state topics —
-//! as newline-delimited JSON on a second, read-only socket. Nothing can be
-//! *asked* of it, so it needs no handshake and grants nothing.
+//! as newline-delimited JSON on a second socket. Reading needs no handshake;
+//! requests require the daemon owner's identity and the operator policy.
 //!
 //! Its address lives here because both readers need it and neither is the
 //! daemon: `omega status` reads this stream, and so does the shell that draws
@@ -17,11 +17,11 @@
 //! the same [`Invoke`], written as JSON. The daemon authorizes a JSON request
 //! through the same table it authorizes a framed one through.
 
+use crate::Socket;
 use crate::omega::StateTopic;
 use crate::omega::{Frame, Invoke, frame, invoke};
-use crate::transport::Socket;
 
-/// The daemon's read-only stream of everything it currently holds.
+/// The daemon's observation endpoint and JSON frame encoding.
 #[derive(Debug)]
 pub struct Observation;
 

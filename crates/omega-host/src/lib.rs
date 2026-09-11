@@ -10,9 +10,13 @@
 //! says a reader never sees half of one.
 
 pub mod fs;
+pub mod generation;
 pub mod layout;
+pub mod state;
 pub mod toml;
 
-pub use fs::{AtomicFile, StageDir, TempPath};
+pub use fs::{AtomicFile, Directory, StageDir, TempPath};
+pub use generation::{Generation, GenerationId, GenerationStage, Generations, Rollback};
 pub use layout::{Layout, Profile};
+pub use state::{BuiltUnit, StateConfig};
 pub use toml::{Table, Toml, TomlDoc, TomlError, TomlFile, TomlSchema};

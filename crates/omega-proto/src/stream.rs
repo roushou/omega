@@ -25,7 +25,7 @@ impl DaemonStreams {
 
     /// Whether a `Result` on this stream answers something the daemon asked.
     pub fn is_ours(stream_id: u64) -> bool {
-        stream_id != 0 && stream_id % 2 == 0
+        stream_id != 0 && stream_id.is_multiple_of(2)
     }
 }
 

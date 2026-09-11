@@ -16,16 +16,11 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
 
-use crate::host::StateConfig;
-use omega_document::{DocumentFile, StateDocument};
 use omega_host::Layout;
 
+use super::build::ValidatedBuild;
 use crate::DaemonError;
-use crate::hub::Hub;
-use crate::manifest::ManifestStore;
-use crate::reconcile::{
-    BarProvider, ConfigProvider, EnvironmentProvider, Reconciler, ScheduleProvider, UnitProvider,
-};
+use crate::reconcile::{BarProvider, EnvironmentProvider, ScheduleProvider, UnitProvider};
 use crate::schedule::Schedules;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
@@ -81,31 +76,50 @@ impl Queue {
     }
 }
 
-/// A handle on the converger. Cloneable, and never blocks the caller.
-#[derive(Debug, Clone)]
+/// Owns the convergence task; requesting work never blocks the caller.
+#[derive(Debug)]
 pub struct Converger {
     queue: Arc<Queue>,
+    task: tokio::task::JoinHandle<()>,
 }
 
 impl Converger {
     /// Start converging in the background.
     pub fn spawn(context: Context, shutdown: Shutdown) -> Self {
-        let converger = Self {
-            queue: Arc::new(Queue::default()),
-        };
-
+        let queue = Arc::new(Queue::default());
         let worker = Worker {
-            queue: converger.queue.clone(),
-            document: StateDocument::default(),
+            queue: queue.clone(),
+            build: None,
             context,
-            shutdown,
+            shutdown: shutdown.clone(),
         };
-        tokio::spawn(worker.run());
+        let task = tokio::spawn(async move {
+            shutdown
+                .supervise("convergence".into(), async {
+                    tokio::select! {
+                        biased;
+                        _ = shutdown.wait() => {}
+                        _ = worker.run() => {}
+                    }
+                })
+                .await;
+        });
+        let converger = Self { queue, task };
 
         // Everything the daemon runs comes from the built state, so the first
         // pass reads it.
         converger.request(Work::REBUILD);
         converger
+    }
+
+    /// Cancel any in-progress pass and wait for its resources to be released.
+    pub async fn stop(mut self) {
+        self.task.abort();
+        if let Err(error) = (&mut self.task).await
+            && !error.is_cancelled()
+        {
+            tracing::error!(%error, "convergence task failed");
+        }
     }
 
     /// Ask for a pass. Returns immediately: whether one is running, pending,
@@ -115,11 +129,16 @@ impl Converger {
     }
 }
 
+impl Drop for Converger {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 /// Everything a pass needs to converge with.
 #[derive(Debug, Clone)]
 pub struct Context {
     pub layout: Layout,
-    pub hub: Hub,
     pub supervisor: Supervisor,
     pub units: UnitTable,
     /// The timers the document declares. Held here rather than built per
@@ -130,41 +149,57 @@ pub struct Context {
 
 struct Worker {
     queue: Arc<Queue>,
-    document: StateDocument,
+    build: Option<ValidatedBuild>,
     context: Context,
     shutdown: Shutdown,
 }
 
 impl Worker {
     async fn run(mut self) {
+        let mut retry = false;
+        let mut reload_pending = false;
         loop {
-            let Some(work) = self.next().await else {
+            let Some(work) = self.next(retry).await else {
                 return;
             };
 
-            if work.reload {
+            if work.reload || reload_pending {
                 match self.reload() {
-                    Ok(Some(document)) => self.document = document,
+                    Ok(Some(build)) => {
+                        reload_pending = match self.activate(build).await {
+                            Ok(()) => false,
+                            Err(error) => {
+                                tracing::warn!(%error, "build activation remains pending");
+                                true
+                            }
+                        };
+                    }
                     // A fresh machine, not a broken one. The daemon keeps
                     // running with nothing to converge toward, and the build
                     // that lands triggers the pass that adopts it.
-                    Ok(None) => tracing::info!("nothing built yet; run `omega build`"),
+                    Ok(None) => {
+                        reload_pending = false;
+                        tracing::info!("nothing built yet; run `omega build`");
+                    }
                     // A half-written or broken build must not take down a
                     // daemon that is running the last good one.
                     Err(e) => {
+                        reload_pending = false;
                         tracing::error!(error = %e, "cannot adopt the new build; keeping the running one")
                     }
                 }
             }
 
+            retry = reload_pending;
             if let Err(e) = self.converge().await {
-                tracing::warn!(error = %e, "cannot converge");
+                tracing::warn!(error = %e, "convergence remains pending");
+                retry = true;
             }
         }
     }
 
     /// The next pass to run, or `None` when the daemon is stopping.
-    async fn next(&self) -> Option<Work> {
+    async fn next(&self, retry: bool) -> Option<Work> {
         loop {
             if let Some(work) = self.queue.take() {
                 return Some(work);
@@ -172,6 +207,7 @@ impl Worker {
 
             tokio::select! {
                 _ = self.queue.wake.notified() => continue,
+                _ = tokio::time::sleep(std::time::Duration::from_secs(2)), if retry => return Some(Work::CONVERGE),
                 _ = self.shutdown.wait() => return None,
             }
         }
@@ -180,67 +216,97 @@ impl Worker {
     /// Re-read everything derived from the state dir. The manifests the
     /// daemon vouches for are replaced together with the document that says
     /// what to do with them.
-    fn reload(&self) -> Result<Option<StateDocument>, DaemonError> {
-        let Some(config) = self.built()? else {
-            return Ok(None);
-        };
-        let manifests = ManifestStore::load(&config, &self.context.layout)?;
-        self.context.supervisor.adopt(Arc::new(manifests));
-
-        Ok(Some(
-            DocumentFile::of(&self.context.layout).read_or_default()?,
-        ))
+    fn reload(&self) -> Result<Option<ValidatedBuild>, DaemonError> {
+        let candidate = ValidatedBuild::load(&self.context.layout);
+        if self.build.is_some() || matches!(candidate, Ok(Some(_))) {
+            return candidate;
+        }
+        let store = omega_host::Generations::new(&self.context.layout);
+        for id in store.recovery_ids()? {
+            match store
+                .pin(&id)
+                .map_err(DaemonError::from)
+                .and_then(ValidatedBuild::read)
+            {
+                Ok(build) => {
+                    if let Err(error) = &candidate {
+                        tracing::warn!(%error, "published generation rejected at startup");
+                    }
+                    tracing::warn!(generation = %id, "recovering accepted generation");
+                    return Ok(Some(build));
+                }
+                Err(error) => {
+                    tracing::error!(generation = %id, %error, "recovery generation rejected")
+                }
+            }
+        }
+        candidate
     }
 
-    /// What the last build produced, or `None` where none has run.
-    ///
-    /// A state dir with no unit config is a machine `omega build` has never
-    /// been run on, which is the ordinary first boot rather than a fault —
-    /// reporting it as one makes every fresh install look broken. Every
-    /// other way of failing to read it still is one.
-    fn built(&self) -> Result<Option<StateConfig>, DaemonError> {
-        match self.context.layout.file::<StateConfig>(()).read() {
-            Ok(config) => Ok(Some(config)),
-            Err(e) if e.is_not_found() => Ok(None),
-            Err(e) => Err(e.into()),
+    async fn activate(&mut self, build: ValidatedBuild) -> Result<(), DaemonError> {
+        let _handover = self.context.supervisor.handover().await;
+        let changed = match &self.build {
+            Some(previous) => previous.changed_units(&build)?,
+            None => Vec::new(),
+        };
+        for name in &changed {
+            if self.context.units.is_adopted(name) {
+                return Err(std::io::Error::other(format!(
+                    "{name} is held by omega dev; disconnect it before activating this build"
+                ))
+                .into());
+            }
         }
+        for name in &changed {
+            self.context.supervisor.stop(name).await;
+            if self.context.units.is_supervised(name) {
+                return Err(
+                    std::io::Error::other(format!("{name} has not finished stopping")).into(),
+                );
+            }
+            self.context.units.revoke(name);
+        }
+        build.generation.accept()?;
+        self.context.units.activate(
+            &build.manifests,
+            build
+                .config
+                .names()
+                .map(|name| (name.clone(), build.settings(name)))
+                .collect(),
+        );
+        self.build = Some(build);
+        Ok(())
     }
 
     async fn converge(&self) -> Result<(), DaemonError> {
-        // Nothing built is nothing to converge toward. Tearing down what is
-        // running because the config went missing is the opposite of what a
-        // daemon owes a desktop.
-        let Some(config) = self.built()? else {
+        let Some(build) = &self.build else {
             return Ok(());
         };
-        let manifests = Arc::new(ManifestStore::load(&config, &self.context.layout)?);
 
-        Reconciler::new()
-            // Config first: a unit must not be started before the settings
-            // its own handshake will carry are on file.
-            .with(ConfigProvider::new(
-                self.context.units.clone(),
-                self.context.supervisor.clone(),
-            ))
-            .with(UnitProvider::new(
-                self.context.supervisor.clone(),
-                &self.context.layout,
-                config.names().cloned(),
-            ))
-            .with(EnvironmentProvider::new(&self.context.layout))
-            // Schedules before bars, and after units: a schedule's first
-            // tick is immediate, and one that invokes a unit wants the unit
-            // already started.
-            .with(ScheduleProvider::new(self.context.schedules.clone()))
-            // Bars last: a widget instance can only be rendered by a unit
-            // that is already running.
-            .with(BarProvider::new(
-                self.context.hub.clone(),
-                self.context.units.clone(),
-                manifests,
-            ))
-            .converge(&self.document)
-            .await;
+        let units = UnitProvider::new(
+            self.context.supervisor.clone(),
+            build.generation.clone(),
+            build.config.names().cloned(),
+        );
+        let environment = EnvironmentProvider::new(&self.context.layout);
+        let schedules = ScheduleProvider::new(self.context.schedules.clone());
+        let bars = BarProvider::new(self.context.units.clone(), build.manifests.clone());
+
+        // Validate every plan before the first effect. A failed application
+        // stops the pass; the retry plans again against actual ownership.
+        let unit_changes = units.plan(&build.document)?;
+        let environment_change = environment.plan(&build.document)?;
+        let schedule_changes = schedules.plan(&build.document)?;
+        let instance_changes = bars.plan(&build.document)?;
+
+        units.apply(&unit_changes).await?;
+        if let Some(change) = environment_change {
+            environment.apply(&change)?;
+        }
+        // The first tick is immediate, so units must be supervised first.
+        schedules.apply(&schedule_changes).await?;
+        bars.apply(&instance_changes).await?;
 
         self.context.supervisor.publish_status();
         Ok(())
@@ -250,6 +316,9 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hub::Hub;
+    use omega_document::DocumentFile;
+    use omega_host::{Generations, StateConfig};
 
     use std::path::PathBuf;
 
@@ -309,6 +378,42 @@ mod tests {
             )
         }
 
+        fn publish_unit(&self, contents: &[u8]) -> Layout {
+            use std::os::unix::fs::PermissionsExt;
+            let root = self.layout();
+            let generation = Generations::new(&root).stage().unwrap();
+            let layout = Layout::at(&root.config, generation.files().path(), &root.cache);
+            let name = omega_proto::UnitName::parse("example").unwrap();
+            let manifest =
+                omega_proto::Manifest::new(&name, "1").exposing([omega_proto::Surface::new(
+                    &omega_proto::SurfaceId::parse("view").unwrap(),
+                    omega_proto::omega::SurfaceKind::Widget,
+                )]);
+            generation
+                .files()
+                .write(layout.unit_program_rel(&name), contents)
+                .unwrap();
+            std::fs::set_permissions(
+                layout.state_unit_program(&name),
+                std::fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+            generation
+                .files()
+                .write(layout.unit_manifest_rel(&name), &manifest.canonical())
+                .unwrap();
+            generation
+                .files()
+                .file::<StateConfig>(StateConfig::FILE_NAME)
+                .write(&StateConfig::new(&layout, [name]))
+                .unwrap();
+            generation
+                .files()
+                .write(DocumentFile::FILE_NAME, b"{}")
+                .unwrap();
+            generation.commit().unwrap()
+        }
+
         /// A worker over this dir, with nothing built in it yet.
         fn worker(&self) -> Worker {
             let hub = Hub::new();
@@ -317,10 +422,9 @@ mod tests {
 
             Worker {
                 queue: Arc::new(Queue::default()),
-                document: StateDocument::default(),
+                build: None,
                 context: Context {
                     layout: self.layout(),
-                    hub: hub.clone(),
                     // Never bound: nothing here spawns a unit.
                     supervisor: Supervisor::new(
                         Socket::at(self.0.join("omega.sock")),
@@ -347,6 +451,36 @@ mod tests {
         }
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_cancels_activation_waiting_for_handover() {
+        let dir = TempDir::new("converger-shutdown");
+        dir.publish_unit(b"unused");
+        let worker = dir.worker();
+        let supervisor = worker.context.supervisor.clone();
+        let _handover = supervisor.handover().await;
+        let shutdown = worker.shutdown.clone();
+        let mut converger = Converger::spawn(worker.context, shutdown.clone());
+        tokio::task::yield_now().await;
+        assert!(!converger.task.is_finished());
+        shutdown.trigger();
+        tokio::time::timeout(std::time::Duration::from_secs(1), &mut converger.task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(converger.task.is_finished());
+    }
+
+    #[tokio::test]
+    async fn dropping_the_owner_cancels_convergence() {
+        let dir = TempDir::new("converger-drop");
+        let worker = dir.worker();
+        let converger = Converger::spawn(worker.context, worker.shutdown);
+        let task = converger.task.abort_handle();
+        drop(converger);
+        tokio::task::yield_now().await;
+        assert!(task.is_finished());
+    }
+
     #[test]
     fn a_machine_with_no_build_has_nothing_to_adopt() {
         // The ordinary first boot. `omega build` has not run, so there is no
@@ -356,7 +490,6 @@ mod tests {
         let dir = TempDir::new("unbuilt");
         let worker = dir.worker();
 
-        assert!(worker.built().unwrap().is_none());
         assert!(matches!(worker.reload(), Ok(None)));
     }
 
@@ -366,6 +499,194 @@ mod tests {
         let worker = dir.worker();
 
         assert!(worker.converge().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn accepted_inputs_survive_a_broken_reload() {
+        let dir = TempDir::new("accepted-build");
+        let layout = dir.layout();
+        let generation = Generations::new(&layout).stage().unwrap();
+        generation
+            .files()
+            .file::<StateConfig>(StateConfig::FILE_NAME)
+            .write(&StateConfig::default())
+            .unwrap();
+        generation
+            .files()
+            .write(DocumentFile::FILE_NAME, b"{}")
+            .unwrap();
+        let accepted = generation.commit().unwrap();
+        let mut worker = dir.worker();
+        worker.build = worker.reload().unwrap();
+        let generation = Generations::new(&layout).stage().unwrap();
+        generation
+            .files()
+            .file::<StateConfig>(StateConfig::FILE_NAME)
+            .write(&StateConfig::default())
+            .unwrap();
+        generation
+            .files()
+            .write(DocumentFile::FILE_NAME, b"broken JSON")
+            .unwrap();
+        generation.commit().unwrap();
+        assert!(worker.reload().is_err());
+        assert_eq!(
+            worker.build.as_ref().unwrap().generation.layout().state,
+            accepted.state
+        );
+        assert!(worker.converge().await.is_ok());
+        assert!(worker.build.as_ref().unwrap().manifests.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_development_lease_blocks_changed_builds_until_released() {
+        let dir = TempDir::new("generation-dev-hold");
+        let first = dir.publish_unit(b"first");
+        let mut worker = dir.worker();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        let name = omega_proto::UnitName::parse("example").unwrap();
+        let token = worker.context.units.adopt_unit(&name);
+        let second = dir.publish_unit(b"second");
+        assert!(
+            worker
+                .activate(worker.reload().unwrap().unwrap())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            worker.build.as_ref().unwrap().generation.layout().state,
+            first.state
+        );
+        worker.context.units.release_adoption(&name, &token);
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            worker.build.as_ref().unwrap().generation.layout().state,
+            second.state
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_acceptance_keeps_live_inputs_and_retries_after_repair() {
+        let dir = TempDir::new("acceptance-failure");
+        let first = dir.publish_unit(b"first");
+        let mut worker = dir.worker();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        let history = dir.layout().generation_history();
+        let saved = std::fs::read(&history).unwrap();
+        let second = dir.publish_unit(b"second");
+        omega_host::AtomicFile::at(&history)
+            .write(b"invalid history {")
+            .unwrap();
+        assert!(
+            worker
+                .activate(worker.reload().unwrap().unwrap())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            worker.build.as_ref().unwrap().generation.layout().state,
+            first.state
+        );
+        omega_host::AtomicFile::at(&history).write(&saved).unwrap();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            worker.build.as_ref().unwrap().generation.layout().state,
+            second.state
+        );
+        assert_eq!(
+            Generations::new(&dir.layout())
+                .recovery_ids()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_held_disabled_unit_blocks_dependents_until_release_and_retry() {
+        let dir = TempDir::new("convergence-retry");
+        dir.publish_unit(b"unused");
+        let mut worker = dir.worker();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        let name = omega_proto::UnitName::parse("example").unwrap();
+        let token = worker.context.units.adopt_unit(&name);
+        let document = &mut worker.build.as_mut().unwrap().document;
+        *document = omega_document::Document::new()
+            .unit(omega_document::Units::disabled("example"))
+            .env("EDITOR", "hx")
+            .into_inner();
+        document
+            .schedules
+            .push(omega_proto::omega::Schedule::announcing(
+                "tick",
+                omega_proto::Cadence::seconds(10),
+            ));
+        let environment = dir.layout().environment();
+        assert!(worker.converge().await.is_err());
+        assert!(!environment.exists());
+        assert!(worker.context.schedules.declared().is_empty());
+
+        worker.context.units.release_adoption(&name, &token);
+        let hub = Hub::new();
+        worker.context.schedules = Schedules::new(
+            hub.clone(),
+            worker.context.units.clone(),
+            Brokerage::new(hub.clone(), worker.shutdown.clone()),
+            worker.shutdown.clone(),
+        );
+        let mut events = hub.subscribe_events();
+        worker.converge().await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&environment).unwrap(),
+            "EDITOR=hx\n"
+        );
+        events.recv().await.unwrap();
+        tokio::time::advance(std::time::Duration::from_secs(5)).await;
+        worker.converge().await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(matches!(
+            events.try_recv(),
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+        ));
+        tokio::time::advance(std::time::Duration::from_secs(5)).await;
+        tokio::task::yield_now().await;
+        assert_eq!(events.try_recv().unwrap().schedule(), Some("tick"));
+        worker.context.schedules.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn a_plan_failure_starts_no_units_and_can_be_retried_after_repair() {
+        let dir = TempDir::new("convergence-plan-failure");
+        dir.publish_unit(b"unused");
+        let mut worker = dir.worker();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        let path = dir.layout().environment();
+        std::fs::create_dir(&path).unwrap();
+        assert!(worker.converge().await.is_err());
+        assert!(worker.context.supervisor.running().is_empty());
+        std::fs::remove_dir(&path).unwrap();
+        worker.build.as_mut().unwrap().document = omega_document::Document::new()
+            .unit(omega_document::Units::disabled("example"))
+            .into_inner();
+        worker.converge().await.unwrap();
     }
 
     #[test]
@@ -378,7 +699,6 @@ mod tests {
         std::fs::write(&path, "this is not toml {").unwrap();
 
         let worker = dir.worker();
-        assert!(worker.built().is_err());
         assert!(worker.reload().is_err());
     }
 }

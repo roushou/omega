@@ -47,3 +47,26 @@ config.
 
 Three messages carry the whole first vertical slice: `Frame`, `StatePatch`,
 `ViewTree`. Inside them: `BatteryState`, one `Act`, and one `WidgetModule`.
+
+Resource failures retain distinct codes: `UNAVAILABLE` means a required service
+or session is absent, `RESOURCE_EXHAUSTED` means aggregate/count admission failed,
+`PAYLOAD_TOO_LARGE` means one payload exceeds its limit, and `DEADLINE_EXCEEDED`
+means the wait expired without proving whether an external effect completed.
+`FAILED_PRECONDITION` remains for unmet protocol or domain prerequisites.
+Existing enum numbers must not be reassigned.
+
+Action payload validation lives in `omega-proto::action`, separate from capability
+policy and subsystem availability. Every action kind has an exhaustive validation
+arm. Required oneofs, nonzero action enums, positive workspace indexes, finite
+volume changes, absolute volume in 0..=1, absolute backlight in 0..=100, selected
+boolean flags, identifiers, required text and NUL-free process/D-Bus strings are
+checked before execution. Missing window selectors (including empty selector
+messages) retain focused-window semantics. Signed finite volume deltas and signed
+backlight deltas remain relative changes; no arbitrary delta range is imposed.
+
+Live requests authorize first, then validate and route. Invalid payloads map to
+`INVALID_ARGUMENT` independently of handler presence. Desired documents and timer
+admission apply the same rules; event-only schedules remain valid. Document
+validation additionally checks scheduled unit/command references against the build.
+Backend-specific selector/encoding limitations and runtime availability remain
+handler responsibilities. Validation does not define escaping or shell quoting.

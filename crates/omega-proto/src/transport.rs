@@ -1,13 +1,12 @@
-//! The transport: a framed byte stream carrying [`Frame`]s, plus the daemon's
-//! control [`Socket`].
+//! Framed byte streams and bounded duplex I/O carrying [`Frame`]s.
 
+use prost::Message;
+use std::collections::VecDeque;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::Framed;
 
 use crate::codec::FrameCodec;
@@ -37,6 +36,18 @@ impl<S> Transport<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    /// A connection that continues receiving while a write is pending.
+    pub fn duplex(self) -> Duplex<S> {
+        let (reader, writer) = self.split();
+        Duplex {
+            reader,
+            writer,
+            incoming: VecDeque::new(),
+            bytes: 0,
+            interrupted: false,
+        }
+    }
+
     /// Split into independent read and write halves, so a caller can `select!`
     /// over reads while writing from another branch.
     pub fn split(self) -> (ReadHalf<S>, WriteHalf<S>) {
@@ -50,7 +61,14 @@ where
     S: AsyncWrite + Unpin,
 {
     pub async fn send(&mut self, frame: Frame) -> Result<(), CodecError> {
-        self.inner.send(frame).await
+        tokio::time::timeout(crate::Handshake::TIMEOUT, self.inner.send(frame))
+            .await
+            .map_err(|_| {
+                crate::CodecError::Io(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "socket write deadline exceeded",
+                ))
+            })?
     }
 }
 
@@ -65,6 +83,68 @@ where
             Some(Err(e)) => Err(e),
             None => Ok(None),
         }
+    }
+}
+
+/// A framed connection with bounded receive progress during writes.
+///
+/// A cancelled or failed write poisons the connection: its partially written
+/// frame cannot be followed safely by another frame.
+#[derive(Debug)]
+pub struct Duplex<S> {
+    reader: ReadHalf<S>,
+    writer: WriteHalf<S>,
+    incoming: VecDeque<(Frame, usize)>,
+    bytes: usize,
+    interrupted: bool,
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Duplex<S> {
+    const INBOX_COUNT: usize = 32;
+    const INBOX_BYTES: usize = 8 * 1024 * 1024;
+
+    pub async fn send(&mut self, frame: Frame) -> Result<(), CodecError> {
+        if self.interrupted {
+            return Err(CodecError::InterruptedWrite);
+        }
+        self.interrupted = true;
+        let writing = self.writer.send(frame);
+        tokio::pin!(writing);
+        let result = loop {
+            tokio::select! {
+                biased;
+                result = &mut writing => break result,
+                received = self.reader.recv() => {
+                    match received {
+                        Ok(Some(frame)) => {
+                            let size = frame.encoded_len();
+                            if self.incoming.len() >= Self::INBOX_COUNT || self.bytes + size > Self::INBOX_BYTES {
+                                break Err(CodecError::ReceiveCapacity);
+                            }
+                            self.bytes += size;
+                            self.incoming.push_back((frame, size));
+                        }
+                        Ok(None) => break Err(CodecError::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "peer closed during a write"))),
+                        Err(error) => break Err(error),
+                    }
+                }
+            }
+        };
+        if result.is_ok() {
+            self.interrupted = false;
+        }
+        result
+    }
+
+    pub async fn recv(&mut self) -> Result<Option<Frame>, CodecError> {
+        if self.interrupted {
+            return Err(CodecError::InterruptedWrite);
+        }
+        if let Some((frame, size)) = self.incoming.pop_front() {
+            self.bytes -= size;
+            return Ok(Some(frame));
+        }
+        self.reader.recv().await
     }
 }
 
@@ -98,78 +178,100 @@ where
     S: AsyncWrite + Unpin,
 {
     pub async fn send(&mut self, frame: Frame) -> Result<(), CodecError> {
-        self.inner.send(frame).await
+        tokio::time::timeout(crate::Handshake::TIMEOUT, self.inner.send(frame))
+            .await
+            .map_err(|_| {
+                crate::CodecError::Io(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "socket write deadline exceeded",
+                ))
+            })?
     }
 }
 
-/// The daemon's control socket: the protocol endpoint both peers agree on.
-#[derive(Clone, Debug)]
-pub struct Socket {
-    path: PathBuf,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
 
-impl Socket {
-    /// The control socket: `$OMEGA_SOCKET`, else `$XDG_RUNTIME_DIR/omega.sock`.
-    pub fn resolve() -> Self {
-        Self::resolve_named("omega.sock", "OMEGA_SOCKET")
-    }
-
-    /// A named socket under the runtime dir (e.g. the shell socket).
-    pub fn resolve_named(name: &str, env: &str) -> Self {
-        let path = std::env::var(env)
-            .map(PathBuf::from)
-            .or_else(|_| std::env::var("XDG_RUNTIME_DIR").map(|d| PathBuf::from(d).join(name)))
-            .unwrap_or_else(|_| {
-                std::env::temp_dir().join(format!("{name}.{}", std::process::id()))
-            });
-        Self { path }
-    }
-
-    /// An explicit path (tests, unusual deployments).
-    pub fn at(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Bind a listener, creating parent directories.
-    ///
-    /// A socket file left by a crashed process is cleared, but one that is
-    /// still being served is not: unlinking it would silently steal the
-    /// endpoint from a running daemon, and every unit connecting afterwards
-    /// would reach the wrong one. The difference is whether anybody answers.
-    pub fn bind(&self) -> io::Result<UnixListener> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
+    struct Fixture;
+    impl Fixture {
+        fn frame(stream: u64, size: usize) -> Frame {
+            Frame::reply(
+                stream,
+                crate::omega::result::Outcome::Value(crate::IntoValue::into_value(
+                    "x".repeat(size),
+                )),
+            )
         }
+    }
 
-        if self.path.exists() {
-            if self.is_live() {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    format!("{} is already served", self.path.display()),
-                ));
+    #[tokio::test(start_paused = true)]
+    async fn simultaneous_large_writes_keep_both_read_halves_moving() {
+        let (a, b) = tokio::io::duplex(64);
+        let mut a = Transport::new(a).duplex();
+        let mut b = Transport::new(b).duplex();
+        let first = Fixture::frame(1, 600_000);
+        let second = Fixture::frame(2, 900_000);
+        let (received_a, received_b) = tokio::join!(
+            async {
+                a.send(first.clone()).await.unwrap();
+                a.recv().await.unwrap().unwrap()
+            },
+            async {
+                b.send(second.clone()).await.unwrap();
+                b.recv().await.unwrap().unwrap()
+            },
+        );
+        assert_eq!(received_a, second);
+        assert_eq!(received_b, first);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cancelling_a_partial_write_prevents_reuse_of_the_connection() {
+        let (a, _b) = tokio::io::duplex(64);
+        let mut a = Transport::new(a).duplex();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), a.send(Fixture::frame(1, 600_000)))
+                .await
+                .is_err()
+        );
+        assert!(matches!(a.recv().await, Err(CodecError::InterruptedWrite)));
+        assert!(matches!(
+            a.send(Fixture::frame(3, 1)).await,
+            Err(CodecError::InterruptedWrite)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn receive_count_is_bounded_while_a_peer_refuses_to_read() {
+        let (a, b) = tokio::io::duplex(64);
+        let mut a = Transport::new(a).duplex();
+        let mut b = Transport::new(b);
+        let (result, _) = tokio::join!(a.send(Fixture::frame(1, 600_000)), async {
+            for stream in 0..33 {
+                b.send(Fixture::frame(stream, 0)).await.unwrap();
             }
-            std::fs::remove_file(&self.path)?;
-        }
-
-        UnixListener::bind(&self.path)
+        },);
+        assert!(matches!(result, Err(CodecError::ReceiveCapacity)));
+        assert_eq!(
+            a.incoming.len(),
+            Duplex::<tokio::io::DuplexStream>::INBOX_COUNT
+        );
     }
 
-    /// Whether something is listening on this path right now.
-    pub fn is_live(&self) -> bool {
-        std::os::unix::net::UnixStream::connect(&self.path).is_ok()
-    }
-
-    /// Connect a raw byte stream (no framing).
-    pub async fn connect_stream(&self) -> io::Result<UnixStream> {
-        UnixStream::connect(&self.path).await
-    }
-
-    /// Connect a protobuf-framed transport.
-    pub async fn connect(&self) -> io::Result<Transport<UnixStream>> {
-        Ok(Transport::new(self.connect_stream().await?))
+    #[tokio::test(start_paused = true)]
+    async fn receive_bytes_are_bounded_independently_of_frame_count() {
+        let (a, b) = tokio::io::duplex(64);
+        let mut a = Transport::new(a).duplex();
+        let mut b = Transport::new(b);
+        let (result, _) = tokio::join!(a.send(Fixture::frame(1, 600_000)), async {
+            for stream in 0..3 {
+                b.send(Fixture::frame(stream, 3_000_000)).await.unwrap();
+            }
+        },);
+        assert!(matches!(result, Err(CodecError::ReceiveCapacity)));
+        assert!(a.bytes <= Duplex::<tokio::io::DuplexStream>::INBOX_BYTES);
+        assert_eq!(a.incoming.len(), 2);
     }
 }

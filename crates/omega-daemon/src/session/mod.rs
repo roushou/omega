@@ -3,6 +3,8 @@
 pub mod admission;
 pub mod dispatch;
 pub mod liveness;
+pub(crate) mod operations;
+use operations::Operations;
 pub mod subscriptions;
 
 use std::collections::HashMap;
@@ -11,9 +13,7 @@ use tokio::net::UnixStream;
 use tokio::sync::{broadcast, oneshot};
 
 use omega_proto::omega::{Event, Frame, Hello, Ping, Pong, StatePatch, Welcome, frame, result};
-use omega_proto::{
-    Handshake, HandshakeError, PROTOCOL_VERSION, ReadHalf, Refusal, Transport, WriteHalf,
-};
+use omega_proto::{Handshake, HandshakeError, PROTOCOL_VERSION, Refusal, Transport};
 
 use crate::broker::Brokerage;
 use crate::hub::Hub;
@@ -26,6 +26,13 @@ pub use admission::{Peer, Role};
 pub use dispatch::{Dispatcher, OpKind, Response};
 pub use liveness::{Health, Liveness};
 pub use subscriptions::Subscriptions;
+
+// Caller cancellation does not cancel execution in the unit. Keep admission
+// bytes and a pending slot until a terminal reply or connection teardown.
+struct PendingRequest {
+    answer: oneshot::Sender<Result<result::Outcome, Refusal>>,
+    _bytes: tokio::sync::OwnedSemaphorePermit,
+}
 
 /// Serves a single connection: admission, then the state-mirror loop.
 #[derive(Debug)]
@@ -85,27 +92,37 @@ impl Session {
     /// before the socket closes, so a unit can report why it was rejected
     /// instead of seeing an unexplained EOF.
     pub async fn serve(self, stream: UnixStream) -> Result<(), SessionError> {
+        let shutdown = self.shutdown.clone();
+        tokio::select! {
+            biased;
+            _ = shutdown.wait() => Ok(()),
+            result = self.serve_until_closed(stream) => result,
+        }
+    }
+
+    async fn serve_until_closed(self, stream: UnixStream) -> Result<(), SessionError> {
         // The kernel's word on who this is: a pid the peer cannot forge, and
         // the uid that decides whether it may be the operator.
         let credentials = stream.peer_cred().ok();
         let pid = credentials.as_ref().and_then(|c| c.pid()).unwrap_or(0);
         let uid = credentials.map(|c| c.uid()).unwrap_or(u32::MAX);
-        let (mut reader, mut writer) = Transport::new(stream).split();
+        let mut connection = Transport::new(stream).duplex();
 
-        let hello = match Self::hello(&mut reader).await {
+        let hello = match Self::hello(&mut connection).await {
             Ok(hello) => hello,
             Err(e) => {
                 let refusal = Refusal::precondition(e.to_string());
-                let _ = writer.send(refusal.frame(0)).await;
+                let _ = connection.send(refusal.frame(0)).await;
                 return Err(e);
             }
         };
 
+        let handover = self.supervisor.handover().await;
         let peer = match self.admit(pid, uid, &hello) {
             Ok(peer) => peer,
             Err(refusal) => {
                 tracing::warn!(pid, code = ?refusal.code, "connection refused: {}", refusal.message);
-                let _ = writer.send(refusal.frame(0)).await;
+                let _ = connection.send(refusal.frame(0)).await;
                 return Err(SessionError::Refused(refusal));
             }
         };
@@ -117,6 +134,8 @@ impl Session {
             "handshake complete"
         );
 
+        let peer = std::sync::Arc::new(peer);
+
         // What this peer may see, fixed at admission from its manifest.
         let mut subscriptions = self.subscriptions(&peer);
 
@@ -126,7 +145,19 @@ impl Session {
         let snapshot = subscriptions.filter_snapshot(snapshot);
         let mut events = self.hub.subscribe_events();
 
-        writer
+        // A unit is reachable by name for as long as this session lasts.
+        let (outbound, mut requests) = tokio::sync::mpsc::channel::<Request>(16);
+        let registered = peer
+            .unit_name()
+            .map(|name| self.units.connected(name, outbound));
+
+        let settings = peer
+            .unit_name()
+            .map(|name| self.units.config(name))
+            .unwrap_or_default();
+        drop(handover);
+
+        connection
             .send(Frame {
                 stream_id: 0,
                 body: Some(frame::Body::Welcome(Welcome {
@@ -139,30 +170,21 @@ impl Session {
                     // at the handshake because a plugin's fields are built out
                     // of it: there is no moment later than construction at
                     // which handing it over would mean anything.
-                    config: peer
-                        .unit_name()
-                        .map(|name| self.units.config(name))
-                        .unwrap_or_default(),
+                    config: settings,
                 })),
             })
             .await?;
 
-        // A unit is reachable by name for as long as this session lasts.
-        let (outbound, mut requests) = tokio::sync::mpsc::channel::<Request>(16);
-        let _registered = peer
-            .unit_name()
-            .map(|name| self.units.connected(name, outbound));
-
         let mut streams = DaemonStreams::new();
-        let mut pending: HashMap<u64, oneshot::Sender<Result<result::Outcome, Refusal>>> =
-            HashMap::new();
+        let mut pending: HashMap<u64, PendingRequest> = HashMap::new();
 
-        let dispatcher = Dispatcher::new(
+        let dispatcher = std::sync::Arc::new(Dispatcher::new(
             self.hub.clone(),
             self.supervisor.clone(),
             self.units.clone(),
             self.brokers.clone(),
-        );
+        ));
+        let mut executing = Operations::new();
         let mut liveness = self.liveness.clone();
         let mut keepalive = tokio::time::interval(liveness.interval());
         keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -177,7 +199,7 @@ impl Session {
                         // the machine.
                         Ok(patch) => {
                             if let Some(patch) = subscriptions.filter(&patch) {
-                                writer.send(Self::patch_frame(patch)).await?;
+                                connection.send(Self::patch_frame(patch)).await?;
                             }
                         }
                         // The mirror is now behind by an unknown amount, and a
@@ -185,8 +207,10 @@ impl Session {
                         // the whole truth rather than let it drift forever.
                         Err(broadcast::error::RecvError::Lagged(missed)) => {
                             tracing::warn!(unit = %peer.label(), missed, "state subscriber lagged; resyncing");
-                            if let Some(patch) = subscriptions.filter(&self.snapshot_patch()) {
-                                writer.send(Self::patch_frame(patch)).await?;
+                            let (snapshot, receiver) = self.hub.subscribe_state();
+                            state = receiver;
+                            if let Some(patch) = subscriptions.filter(&StatePatch { topics: snapshot.topics }) {
+                                connection.send(Self::patch_frame(patch)).await?;
                             }
                         }
                         Err(broadcast::error::RecvError::Closed) => return Ok(()),
@@ -198,7 +222,10 @@ impl Session {
                         // not listening missed it, and there is nothing to
                         // resend.
                         Ok(event) if subscriptions.wants_event(&event) => {
-                            writer.send(Self::event_frame(event)).await?;
+                            if let Some(patch) = subscriptions.filter(&self.snapshot_patch()) {
+                                connection.send(Self::patch_frame(patch)).await?;
+                            }
+                            connection.send(Self::event_frame(event)).await?;
                         }
                         Ok(_) => {}
                         Err(broadcast::error::RecvError::Lagged(missed)) => {
@@ -207,40 +234,62 @@ impl Session {
                         Err(broadcast::error::RecvError::Closed) => return Ok(()),
                     }
                 }
+                completed = executing.next(), if !executing.is_empty() => {
+                    let frame = completed.map_err(|error| SessionError::Transport(CodecError::Io(std::io::Error::other(error))))?;
+                    connection.send(frame).await?;
+                }
                 // The daemon asking this unit for something.
                 Some(request) = requests.recv() => {
+                    if request.answer.is_closed() { continue; }
+                    if pending.len() >= 16 {
+                        let _ = request.answer.send(Err(Refusal::exhausted("too many pending requests")));
+                        continue;
+                    }
                     let stream_id = streams.allocate();
-                    pending.insert(stream_id, request.answer);
-                    writer.send(Frame {
+                    pending.insert(stream_id, PendingRequest { answer: request.answer, _bytes: request._bytes });
+                    connection.send(Frame {
                         stream_id,
                         body: Some(frame::Body::Invoke(omega_proto::omega::Invoke {
                             op: Some(request.op),
                         })),
                     }).await?;
                 }
-                received = reader.recv() => {
+                received = connection.recv() => {
                     match received {
                         Ok(Some(frame)) => {
                             liveness.seen();
                             if Self::answers_daemon(&frame, &mut pending) {
                                 continue;
                             }
-                            self.handle(&dispatcher, &peer, &mut subscriptions, &frame, &mut writer).await?;
+                            if let Some(frame::Body::Invoke(invoke)) = &frame.body
+                                && Operations::deferred(invoke)
+                            {
+                                if let Err(refusal) = executing.start(
+                                    dispatcher.clone(), peer.clone(), subscriptions.clone(),
+                                    frame.stream_id, invoke.clone(),
+                                ) {
+                                    connection.send(refusal.frame(frame.stream_id)).await?;
+                                }
+                                continue;
+                            }
+                            self.handle(&dispatcher, &peer, &mut subscriptions, &frame, &mut connection).await?;
                         }
                         Ok(None) => return Ok(()),
                         Err(e) => return Err(SessionError::Transport(e)),
                     }
                 }
-                _ = self.shutdown.wait() => {
-                    tracing::debug!(unit = %peer.label(), "daemon shutting down; closing session");
-                    return Ok(());
-                }
+                _ = async {
+                    match &registered {
+                        Some(guard) => guard.cancelled().await,
+                        None => std::future::pending().await,
+                    }
+                } => return Ok(()),
                 _ = keepalive.tick() => {
                     if liveness.health() == Health::Unresponsive {
                         tracing::warn!(unit = %peer.label(), "peer stopped answering; closing");
                         return Err(SessionError::Unresponsive(peer.label()));
                     }
-                    writer.send(Self::ping()).await?;
+                    connection.send(Self::ping()).await?;
                 }
             }
         }
@@ -257,8 +306,10 @@ impl Session {
     }
 
     /// The peer's opening frame, or why it is not one.
-    async fn hello(reader: &mut ReadHalf<UnixStream>) -> Result<Hello, SessionError> {
-        let frame = tokio::time::timeout(Handshake::TIMEOUT, reader.recv())
+    async fn hello(
+        connection: &mut omega_proto::Duplex<UnixStream>,
+    ) -> Result<Hello, SessionError> {
+        let frame = tokio::time::timeout(Handshake::TIMEOUT, connection.recv())
             .await
             .map_err(|_| HandshakeError::Timeout("Hello"))??;
         Ok(Handshake::expect_hello(frame)?)
@@ -305,17 +356,19 @@ impl Session {
     /// Route a `Result` back to whatever asked for it. Only streams the
     /// daemon allocated are its own answers; a unit's `Result` on an odd
     /// stream is a reply to nothing it asked.
-    fn answers_daemon(
-        frame: &Frame,
-        pending: &mut HashMap<u64, oneshot::Sender<Result<result::Outcome, Refusal>>>,
-    ) -> bool {
+    fn answers_daemon(frame: &Frame, pending: &mut HashMap<u64, PendingRequest>) -> bool {
         if !DaemonStreams::is_ours(frame.stream_id) {
             return false;
         }
-        let Some(answer) = pending.remove(&frame.stream_id) else {
+        let Some(frame::Body::Result(result)) = &frame.body else {
             return false;
         };
-
+        if !result.done {
+            return pending.contains_key(&frame.stream_id);
+        }
+        let Some(request) = pending.remove(&frame.stream_id) else {
+            return false;
+        };
         let outcome = match Refusal::of(frame) {
             Some(refusal) => Err(refusal),
             None => match frame.body.as_ref() {
@@ -327,7 +380,7 @@ impl Session {
             },
         };
 
-        let _ = answer.send(outcome);
+        let _ = request.answer.send(outcome);
         true
     }
 
@@ -358,7 +411,7 @@ impl Session {
         peer: &Peer,
         subscriptions: &mut Subscriptions,
         frame: &Frame,
-        writer: &mut WriteHalf<UnixStream>,
+        connection: &mut omega_proto::Duplex<UnixStream>,
     ) -> Result<(), SessionError> {
         let answer = match frame.body.as_ref() {
             Some(frame::Body::Invoke(invoke)) => {
@@ -367,7 +420,7 @@ impl Session {
             Some(frame::Body::Hello(_)) => Err(Refusal::invalid("Hello after the handshake")),
             // A peer may check on the daemon too.
             Some(frame::Body::Ping(ping)) => {
-                writer
+                connection
                     .send(Frame {
                         stream_id: frame.stream_id,
                         body: Some(frame::Body::Pong(Pong { nonce: ping.nonce })),
@@ -384,14 +437,14 @@ impl Session {
         };
 
         match answer {
-            Ok(response) => writer.send(response.frame(frame.stream_id)).await?,
+            Ok(response) => connection.send(response.frame(frame.stream_id)).await?,
             Err(refusal) => {
                 tracing::warn!(
                     unit = %peer.label(),
                     code = ?refusal.code,
                     "refused: {}", refusal.message
                 );
-                writer.send(refusal.frame(frame.stream_id)).await?;
+                connection.send(refusal.frame(frame.stream_id)).await?;
             }
         }
         Ok(())

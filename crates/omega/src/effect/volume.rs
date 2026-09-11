@@ -16,22 +16,22 @@ does!(Volume, Audio);
 
 impl Volume {
     /// Set it outright.
-    pub fn set(&self, level: Percent) {
-        self.change(set_volume::Change::Absolute(level.fraction()));
+    pub fn set(&self, level: Percent) -> crate::effect::Effect {
+        self.change(set_volume::Change::Absolute(level.fraction()))
     }
 
     /// Move it by a signed fraction: `0.05` is five percent louder.
-    pub fn adjust(&self, delta: f64) {
-        self.change(set_volume::Change::Delta(delta));
+    pub fn adjust(&self, delta: f64) -> crate::effect::Effect {
+        self.change(set_volume::Change::Delta(delta))
     }
 
-    pub fn toggle_mute(&self) {
-        self.change(set_volume::Change::ToggleMute(true));
+    pub fn toggle_mute(&self) -> crate::effect::Effect {
+        self.change(set_volume::Change::ToggleMute(true))
     }
 
-    fn change(&self, change: set_volume::Change) {
+    fn change(&self, change: set_volume::Change) -> crate::effect::Effect {
         self.act(action::Kind::SetVolume(SetVolume {
             change: Some(change),
-        }));
+        }))
     }
 }

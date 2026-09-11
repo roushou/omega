@@ -1,8 +1,6 @@
 //! The machine a test describes.
 
-use omega_proto::omega::{
-    BatteryState, NetworkState, StatePatch, StateSnapshot, StateTopic, invoke,
-};
+use omega_proto::omega::{BatteryState, NetworkState, StatePatch, StateSnapshot, StateTopic};
 use omega_proto::{TopicValue, Values};
 
 use crate::context::Context;
@@ -120,8 +118,8 @@ impl State {
     }
 
     /// A context holding this state, with effects collected rather than sent.
-    pub(super) fn context(&self) -> (Context, tokio::sync::mpsc::UnboundedReceiver<invoke::Op>) {
-        let (sender, effects) = tokio::sync::mpsc::unbounded_channel();
+    pub(super) fn context(&self) -> (Context, crate::effect::queue::Effects) {
+        let (sender, effects) = crate::effect::queue::Effects::channel();
         (Context::new(&self.snapshot(), sender), effects)
     }
 }

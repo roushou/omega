@@ -19,6 +19,8 @@
 
 use std::fmt;
 use std::ops::ControlFlow;
+use std::time::Duration;
+use tokio::time::{Instant, timeout, timeout_at};
 
 use tokio::sync::mpsc;
 
@@ -121,6 +123,7 @@ pub(super) struct Driver {
 }
 
 impl Driver {
+    const IO_TIMEOUT: Duration = Duration::from_secs(10);
     pub(super) fn new(
         broker: Box<dyn Broker>,
         requests: mpsc::Receiver<Request>,
@@ -139,7 +142,15 @@ impl Driver {
 
     /// Drive the broker until the daemon stops.
     pub(super) async fn run(mut self) {
-        while self.step().await.is_continue() {}
+        let shutdown = self.shutdown.clone();
+        loop {
+            tokio::select! {
+                biased;
+                () = shutdown.wait() => break,
+                progress = self.step() => if progress.is_break() { break; },
+            }
+        }
+        self.broker.disconnect();
         tracing::debug!(broker = self.broker.name(), "broker stopped");
     }
 
@@ -154,10 +165,7 @@ impl Driver {
 
         match self.turn().await {
             Turn::Stop => ControlFlow::Break(()),
-            Turn::Serve(request) => {
-                self.serve(request).await;
-                ControlFlow::Continue(())
-            }
+            Turn::Serve(request) => self.serve(request).await,
             Turn::Read => self.read().await,
             Turn::Reopen(error) => self.pause(error).await,
         }
@@ -179,9 +187,6 @@ impl Driver {
         let contact = *contact;
 
         tokio::select! {
-            // Shutdown first, so stopping does not depend on which of several
-            // ready branches the runtime picks.
-            biased;
             () = shutdown.wait() => Turn::Stop,
             request = inbox.next() => Turn::Serve(request),
             due = contact.due(broker.as_mut()) => match due {
@@ -193,7 +198,10 @@ impl Driver {
 
     /// Open whatever the broker holds.
     async fn open(&mut self) -> ControlFlow<()> {
-        match self.broker.connect().await {
+        match timeout(Self::IO_TIMEOUT, self.broker.connect())
+            .await
+            .unwrap_or(Err(BrokerError::Timeout))
+        {
             Ok(()) => {
                 self.contact = Contact::Opened;
                 ControlFlow::Continue(())
@@ -204,14 +212,19 @@ impl Driver {
 
     /// Take a reading and publish what it changed.
     async fn read(&mut self) -> ControlFlow<()> {
-        match self.broker.read().await {
+        match timeout(Self::IO_TIMEOUT, self.broker.read())
+            .await
+            .unwrap_or(Err(BrokerError::Timeout))
+        {
             Ok(patch) => {
                 self.backoff.reset();
                 // Only once a reading has worked: a read that failed or was
                 // cancelled leaves the broker asking again rather than
                 // waiting on a change it has already missed the state of.
                 self.contact = Contact::Primed;
-                self.hub.publish_state(patch);
+                if let Err(error) = self.hub.publish_state(patch) {
+                    return self.pause(BrokerError::unreadable(error)).await;
+                }
                 ControlFlow::Continue(())
             }
             Err(error) => self.pause(error).await,
@@ -219,13 +232,31 @@ impl Driver {
     }
 
     /// One action, and the answer to whoever asked.
-    async fn serve(&mut self, request: Request) {
-        let outcome = self.broker.act(&request.action).await;
+    async fn serve(&mut self, request: Request) -> ControlFlow<()> {
+        if request.answer.is_closed() {
+            return ControlFlow::Continue(());
+        }
+        if request.deadline <= Instant::now() {
+            let _ = request.answer.send(Err(BrokerError::Timeout));
+            return ControlFlow::Continue(());
+        }
+        let mut outcome = timeout_at(request.deadline, self.broker.act(&request.action))
+            .await
+            .unwrap_or(Err(BrokerError::Timeout));
 
         if let Ok(Some(patch)) = &outcome {
             // What the action changed, without waiting for the next wake to
             // notice it.
-            self.hub.publish_state(patch.clone());
+            if let Err(error) = self.hub.publish_state(patch.clone()) {
+                tracing::error!(%error, "broker action changed state that could not be retained");
+                outcome = Err(match error {
+                    crate::hub::PublishError::TooLarge
+                    | crate::hub::PublishError::State(crate::state::StateError::TooLarge) => {
+                        BrokerError::TooLarge
+                    }
+                    _ => BrokerError::Full,
+                });
+            }
         }
         if let Err(error) = &outcome {
             tracing::warn!(
@@ -236,7 +267,26 @@ impl Driver {
             );
         }
         // The caller may have given up; that is not this broker's problem.
-        let _ = request.answer.send(outcome.map(|_| ()));
+        let reconnect = matches!(
+            &outcome,
+            Err(BrokerError::Timeout
+                | BrokerError::Io(_)
+                | BrokerError::Unreadable(_)
+                | BrokerError::Full
+                | BrokerError::TooLarge)
+        );
+        match outcome {
+            Err(error) if reconnect => {
+                // Reply before backoff, but reset even when the caller has left.
+                let message = error.to_string();
+                let _ = request.answer.send(Err(error));
+                self.pause(BrokerError::unreadable(message)).await
+            }
+            outcome => {
+                let _ = request.answer.send(outcome.map(|_| ()));
+                ControlFlow::Continue(())
+            }
+        }
     }
 
     /// Wait out a failure, with the connection closed behind it.
@@ -249,7 +299,22 @@ impl Driver {
     /// the driver knows which broker it is driving, and an error that named
     /// itself would name whichever broker it was copied from.
     async fn pause(&mut self, error: BrokerError) -> ControlFlow<()> {
+        self.broker.disconnect();
         self.contact = Contact::Closed;
+        self.hub
+            .publish_state(omega_proto::omega::StatePatch {
+                topics: self
+                    .broker
+                    .topics()
+                    .iter()
+                    .map(|topic| omega_proto::omega::StateTopic {
+                        topic: topic.as_str().to_owned(),
+                        revision: 0,
+                        value: None,
+                    })
+                    .collect(),
+            })
+            .unwrap_or_else(|error| tracing::error!(%error, "broker retraction refused"));
 
         let delay = self.backoff.delay();
         tracing::error!(
@@ -313,7 +378,263 @@ mod tests {
         Request {
             action: action::Kind::Lock(Lock {}),
             answer,
+            deadline: tokio::time::Instant::now() + super::super::Brokerage::ACTION_TIMEOUT,
+            _bytes: std::sync::Arc::new(tokio::sync::Semaphore::new(1))
+                .try_acquire_owned()
+                .unwrap(),
         }
+    }
+
+    struct Counting(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+    #[async_trait::async_trait]
+    impl Broker for Counting {
+        fn name(&self) -> &'static str {
+            "counting"
+        }
+        fn topics(&self) -> &'static [SystemTopic] {
+            &[]
+        }
+        async fn act(
+            &mut self,
+            _: &action::Kind,
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn abandoned_requests_do_not_start_external_actions() {
+        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (_sender, receiver) = mpsc::channel(1);
+        let mut driver = super::Driver::new(
+            Box::new(Counting(count.clone())),
+            receiver,
+            crate::hub::Hub::new(),
+            crate::shutdown::Shutdown::new(),
+        );
+        assert!(driver.serve(request()).await.is_continue());
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let (answer, receive) = oneshot::channel();
+        assert!(
+            driver
+                .serve(Request {
+                    action: action::Kind::Lock(Lock {}),
+                    answer,
+                    deadline: tokio::time::Instant::now() + super::super::Brokerage::ACTION_TIMEOUT,
+                    _bytes: std::sync::Arc::new(tokio::sync::Semaphore::new(1))
+                        .try_acquire_owned()
+                        .unwrap(),
+                })
+                .await
+                .is_continue()
+        );
+        receive.await.unwrap().unwrap();
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    struct Disconnected;
+
+    #[async_trait::async_trait]
+    impl Broker for Disconnected {
+        fn name(&self) -> &'static str {
+            "disconnected"
+        }
+        fn topics(&self) -> &'static [SystemTopic] {
+            &[SystemTopic::Battery]
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failure_retracts_the_brokers_readings() {
+        let hub = crate::hub::Hub::new();
+        hub.publish_state(omega_proto::omega::StatePatch {
+            topics: vec![omega_proto::omega::StateTopic {
+                topic: "battery".into(),
+                revision: 0,
+                value: Some(omega_proto::omega::state_topic::Value::Battery(
+                    Default::default(),
+                )),
+            }],
+        })
+        .unwrap();
+        let (_sender, receiver) = mpsc::channel(1);
+        let mut driver = super::Driver::new(
+            Box::new(Disconnected),
+            receiver,
+            hub.clone(),
+            crate::shutdown::Shutdown::new(),
+        );
+        assert!(
+            driver
+                .pause(omega_brokers::BrokerError::unreadable("lost connection"))
+                .await
+                .is_continue()
+        );
+        assert!(hub.snapshot().topics[0].value.is_none());
+    }
+
+    #[derive(Clone)]
+    struct Recovery {
+        opens: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        live: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        block: &'static str,
+    }
+
+    impl Recovery {
+        fn new(block: &'static str) -> Self {
+            Self {
+                opens: Default::default(),
+                live: Default::default(),
+                block,
+            }
+        }
+        fn driver(&self) -> super::Driver {
+            let (_sender, receiver) = mpsc::channel(1);
+            super::Driver::new(
+                Box::new(self.clone()),
+                receiver,
+                crate::hub::Hub::new(),
+                crate::shutdown::Shutdown::new(),
+            )
+        }
+        fn is_live(&self) -> bool {
+            self.live.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Broker for Recovery {
+        fn name(&self) -> &'static str {
+            "recovery"
+        }
+        fn topics(&self) -> &'static [SystemTopic] {
+            &[SystemTopic::Battery]
+        }
+        fn disconnect(&mut self) {
+            self.live.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        async fn connect(&mut self) -> Result<(), omega_brokers::BrokerError> {
+            assert!(!self.is_live(), "reconnect retained old connection");
+            self.live.store(true, std::sync::atomic::Ordering::SeqCst);
+            let attempt = self.opens.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.block == "connect" && attempt == 0 {
+                std::future::pending().await
+            } else {
+                Ok(())
+            }
+        }
+        async fn read(
+            &mut self,
+        ) -> Result<omega_proto::omega::StatePatch, omega_brokers::BrokerError> {
+            if self.block == "read" && self.opens.load(std::sync::atomic::Ordering::SeqCst) == 1 {
+                std::future::pending().await
+            } else {
+                Ok(Default::default())
+            }
+        }
+        async fn act(
+            &mut self,
+            _: &action::Kind,
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+            std::future::pending().await
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connection_deadline_releases_partial_connection_and_retries() {
+        let broker = Recovery::new("connect");
+        let mut driver = broker.driver();
+        assert!(driver.open().await.is_continue());
+        assert!(!broker.is_live());
+        assert_eq!(driver.contact, Contact::Closed);
+        assert!(driver.open().await.is_continue());
+        assert!(broker.is_live());
+        assert_eq!(driver.contact, Contact::Opened);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reading_deadline_reconnects_before_reading_again() {
+        let broker = Recovery::new("read");
+        let mut driver = broker.driver();
+        assert!(driver.open().await.is_continue());
+        assert!(driver.read().await.is_continue());
+        assert!(!broker.is_live());
+        assert_eq!(driver.contact, Contact::Closed);
+        assert!(driver.open().await.is_continue());
+        assert!(driver.read().await.is_continue());
+        assert_eq!(driver.contact, Contact::Primed);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn action_deadline_answers_and_discards_the_connection() {
+        let broker = Recovery::new("action");
+        let mut driver = broker.driver();
+        assert!(driver.open().await.is_continue());
+        let (answer, receive) = oneshot::channel();
+        let mut request = request();
+        request.answer = answer;
+        let started = tokio::time::Instant::now();
+        assert!(driver.serve(request).await.is_continue());
+        assert!(matches!(
+            receive.await.unwrap(),
+            Err(omega_brokers::BrokerError::Timeout)
+        ));
+        assert!(tokio::time::Instant::now() - started >= super::super::Brokerage::ACTION_TIMEOUT);
+        assert!(!broker.is_live());
+        assert_eq!(driver.contact, Contact::Closed);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_expired_queued_action_is_answered_without_touching_the_broker() {
+        let broker = Recovery::new("action");
+        let mut driver = broker.driver();
+        assert!(driver.open().await.is_continue());
+        let (answer, receive) = oneshot::channel();
+        let mut request = request();
+        request.answer = answer;
+        tokio::time::advance(super::super::Brokerage::ACTION_TIMEOUT).await;
+        assert!(driver.serve(request).await.is_continue());
+        assert!(matches!(
+            receive.await.unwrap(),
+            Err(omega_brokers::BrokerError::Timeout)
+        ));
+        assert!(broker.is_live());
+    }
+
+    struct Wedged;
+
+    #[async_trait::async_trait]
+    impl Broker for Wedged {
+        fn name(&self) -> &'static str {
+            "wedged"
+        }
+        fn topics(&self) -> &'static [SystemTopic] {
+            &[]
+        }
+        async fn connect(&mut self) -> Result<(), omega_brokers::BrokerError> {
+            std::future::pending().await
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_interrupts_a_broker_stuck_connecting() {
+        let shutdown = crate::shutdown::Shutdown::new();
+        let (_sender, receiver) = mpsc::channel(1);
+        let driver = super::Driver::new(
+            Box::new(Wedged),
+            receiver,
+            crate::hub::Hub::new(),
+            shutdown.clone(),
+        );
+        let task = tokio::spawn(driver.run());
+        tokio::task::yield_now().await;
+        shutdown.trigger();
+        timeout(Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test(start_paused = true)]

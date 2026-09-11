@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::MissedTickBehavior;
 
 use omega_proto::CadenceError;
@@ -50,26 +50,49 @@ struct Inner {
     units: UnitTable,
     brokers: Brokerage,
     shutdown: Shutdown,
-    running: Mutex<HashMap<String, Running>>,
+    timers: Mutex<Timers>,
+    changes: tokio::sync::Mutex<()>,
 }
 
-/// One schedule that is firing, and the declaration it is firing from.
-///
-/// The declaration is kept so a pass can tell a schedule that changed from
-/// one that did not: the reconciler compares what the document says against
-/// this, not against a timer it cannot read.
+#[derive(Debug, Default)]
+struct Timers {
+    closed: bool,
+    running: HashMap<String, Arc<Running>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ScheduleError {
+    #[error(transparent)]
+    Action(#[from] omega_proto::action::ActionError),
+    #[error(transparent)]
+    Cadence(#[from] CadenceError),
+    #[error("schedule period exceeds the monotonic clock range")]
+    PeriodOutOfRange,
+    #[error("schedules are shutting down")]
+    Stopped,
+}
+
 #[derive(Debug)]
 struct Running {
     declared: Schedule,
-    task: JoinHandle<()>,
+    task: tokio::sync::Mutex<JoinHandle<()>>,
+    abort: AbortHandle,
+}
+
+impl Running {
+    async fn stop(&self) {
+        self.abort.abort();
+        if let Err(error) = (&mut *self.task.lock().await).await
+            && !error.is_cancelled()
+        {
+            tracing::error!(schedule = %self.declared.id, %error, "schedule task failed");
+        }
+    }
 }
 
 impl Drop for Running {
-    /// Dropping the entry stops the timer. A schedule is deleted by being
-    /// taken out of the map — in one place, so there is no way to remove one
-    /// and leave it ticking.
     fn drop(&mut self) {
-        self.task.abort();
+        self.abort.abort();
     }
 }
 
@@ -81,20 +104,22 @@ impl Schedules {
                 units,
                 brokers,
                 shutdown,
-                running: Mutex::new(HashMap::new()),
+                timers: Mutex::new(Timers::default()),
+                changes: tokio::sync::Mutex::new(()),
             }),
         }
     }
 
-    fn running(&self) -> std::sync::MutexGuard<'_, HashMap<String, Running>> {
-        self.inner.running.lock().unwrap_or_else(|e| e.into_inner())
+    fn timers(&self) -> std::sync::MutexGuard<'_, Timers> {
+        self.inner.timers.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// What is firing right now, as it was declared. Sorted, because a plan
     /// is read by a person.
     pub fn declared(&self) -> Vec<Schedule> {
         let mut schedules: Vec<Schedule> = self
-            .running()
+            .timers()
+            .running
             .values()
             .map(|running| running.declared.clone())
             .collect();
@@ -108,8 +133,22 @@ impl Schedules {
     /// period would leave whatever it feeds empty until then — ten minutes of
     /// a blank weather widget on every login — and "run this every ten
     /// minutes" is not usually a request to start in ten minutes.
-    pub fn start(&self, schedule: &Schedule) -> Result<(), CadenceError> {
+    pub async fn start(&self, schedule: &Schedule) -> Result<(), ScheduleError> {
         let cadence = schedule.parsed()?;
+        tokio::time::Instant::now()
+            .checked_add(cadence.period())
+            .ok_or(ScheduleError::PeriodOutOfRange)?;
+        if let Some(action) = &schedule.action {
+            action.validate()?;
+        }
+        let _change = self.inner.changes.lock().await;
+        if self.timers().closed || self.inner.shutdown.is_triggered() {
+            return Err(ScheduleError::Stopped);
+        }
+        self.remove(&schedule.id).await;
+        if self.inner.shutdown.is_triggered() {
+            return Err(ScheduleError::Stopped);
+        }
 
         let firing = Firing {
             hub: self.inner.hub.clone(),
@@ -119,17 +158,21 @@ impl Schedules {
             schedule: schedule.clone(),
         };
 
-        let task = tokio::spawn(firing.run(cadence.period()));
+        let shutdown = self.inner.shutdown.clone();
+        let task_name = format!("schedule {}", schedule.id);
+        let task = tokio::spawn(async move {
+            shutdown
+                .supervise(task_name, firing.run(cadence.period()))
+                .await;
+        });
 
-        // Insert replaces, and the entry it displaces aborts its own timer as
-        // it drops — so a schedule whose cadence changed does not end up
-        // firing on both.
-        self.running().insert(
+        self.timers().running.insert(
             schedule.id.clone(),
-            Running {
+            Arc::new(Running {
                 declared: schedule.clone(),
-                task,
-            },
+                abort: task.abort_handle(),
+                task: tokio::sync::Mutex::new(task),
+            }),
         );
         Ok(())
     }
@@ -137,8 +180,30 @@ impl Schedules {
     /// Stop firing a schedule. Silent on one that is not running: a document
     /// that no longer declares a schedule the daemon never started is already
     /// converged.
-    pub fn stop(&self, id: &str) {
-        self.running().remove(id);
+    pub async fn stop(&self, id: &str) {
+        let _change = self.inner.changes.lock().await;
+        self.remove(id).await;
+    }
+
+    // The mutation gate stays held, and the registry retains ownership across
+    // the join: cancelling the caller must not detach the old task.
+    async fn remove(&self, id: &str) {
+        let running = self.timers().running.get(id).cloned();
+        if let Some(running) = running {
+            running.stop().await;
+            self.timers().running.remove(id);
+        }
+    }
+
+    /// Close admission and join every timer, including any action it awaits.
+    pub async fn shutdown(&self) {
+        let _change = self.inner.changes.lock().await;
+        self.timers().closed = true;
+        loop {
+            let id = self.timers().running.keys().next().cloned();
+            let Some(id) = id else { return };
+            self.remove(&id).await;
+        }
     }
 }
 
@@ -163,8 +228,14 @@ impl Firing {
 
         loop {
             tokio::select! {
-                _ = ticks.tick() => self.fire().await,
+                biased;
                 _ = self.shutdown.wait() => return,
+                _ = ticks.tick() => {}
+            }
+            tokio::select! {
+                biased;
+                _ = self.shutdown.wait() => return,
+                _ = self.fire() => {}
             }
         }
     }
@@ -175,7 +246,9 @@ impl Firing {
         // Announced first, and whatever the action does. An event is what
         // happened, and the firing happened even if what it asked for could
         // not be done.
-        self.hub.publish_schedule_fired(&self.schedule.id);
+        if let Err(error) = self.hub.publish_schedule_fired(&self.schedule.id) {
+            tracing::error!(%error, schedule = %self.schedule.id, "schedule event refused");
+        }
 
         let Some(action) = self
             .schedule
@@ -200,5 +273,169 @@ impl Firing {
                 "the schedule's action was refused",
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_proto::Cadence;
+
+    struct Fixture {
+        schedules: Schedules,
+        shutdown: Shutdown,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let hub = Hub::new();
+            let shutdown = Shutdown::new();
+            let units = UnitTable::detached(hub.clone());
+            let schedules = Schedules::new(
+                hub.clone(),
+                units,
+                Brokerage::new(hub, shutdown.clone()),
+                shutdown.clone(),
+            );
+            Self {
+                schedules,
+                shutdown,
+            }
+        }
+    }
+
+    struct BlockedAction(Arc<tokio::sync::Notify>);
+
+    #[async_trait::async_trait]
+    impl omega_brokers::Broker for BlockedAction {
+        fn name(&self) -> &'static str {
+            "blocked-action"
+        }
+        fn topics(&self) -> &'static [omega_proto::SystemTopic] {
+            &[]
+        }
+        fn actions(&self) -> &'static [omega_proto::ActionKind] {
+            &[omega_proto::ActionKind::Lock]
+        }
+        async fn act(
+            &mut self,
+            _: &omega_proto::omega::action::Kind,
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+            self.0.notify_one();
+            std::future::pending().await
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_interrupts_a_timer_awaiting_an_action() {
+        let hub = Hub::new();
+        let broker_shutdown = Shutdown::new();
+        let brokers = Brokerage::new(hub.clone(), broker_shutdown.clone());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        brokers.add(Box::new(BlockedAction(entered.clone())));
+        let shutdown = Shutdown::new();
+        let firing = Firing {
+            units: UnitTable::detached(hub.clone()),
+            hub,
+            brokers: brokers.clone(),
+            shutdown: shutdown.clone(),
+            schedule: Schedule::new(
+                "lock",
+                Cadence::seconds(1),
+                omega_proto::omega::Action {
+                    kind: Some(omega_proto::omega::action::Kind::Lock(
+                        omega_proto::omega::Lock {},
+                    )),
+                },
+            ),
+        };
+        let task = tokio::spawn(firing.run(std::time::Duration::from_secs(1)));
+        tokio::time::timeout(std::time::Duration::from_secs(1), entered.notified())
+            .await
+            .unwrap();
+        shutdown.trigger();
+        tokio::time::timeout(std::time::Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
+        broker_shutdown.trigger();
+        brokers.stop().await;
+    }
+
+    #[tokio::test]
+    async fn cancelling_replacement_retains_the_old_task_until_joined() {
+        let fixture = Fixture::new();
+        let schedules = &fixture.schedules;
+        let old = Schedule::announcing("tick", Cadence::seconds(1));
+        schedules.start(&old).await.unwrap();
+        let running = schedules.timers().running["tick"].clone();
+        let task = running.task.lock().await;
+        let replacement = Schedule::announcing("tick", Cadence::seconds(2));
+        {
+            let start = schedules.start(&replacement);
+            tokio::pin!(start);
+            tokio::select! {
+                biased;
+                result = &mut start => panic!("replacement completed before joining: {result:?}"),
+                _ = tokio::task::yield_now() => {}
+            }
+        }
+        assert_eq!(schedules.declared(), vec![old]);
+        drop(task);
+        schedules.start(&replacement).await.unwrap();
+        assert!(running.abort.is_finished());
+        assert_eq!(schedules.declared(), vec![replacement]);
+        schedules.shutdown().await;
+        assert!(schedules.declared().is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_joins_timers_and_closes_admission_on_every_handle() {
+        let fixture = Fixture::new();
+        let schedule = Schedule::announcing("tick", Cadence::seconds(1));
+        fixture.schedules.start(&schedule).await.unwrap();
+        let running = fixture.schedules.timers().running["tick"].clone();
+        let other = fixture.schedules.clone();
+        fixture.schedules.shutdown().await;
+        assert!(running.abort.is_finished());
+        assert!(other.declared().is_empty());
+        assert!(matches!(
+            other.start(&schedule).await,
+            Err(ScheduleError::Stopped)
+        ));
+        other.shutdown().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_unrepresentable_period_preserves_the_existing_timer() {
+        let fixture = Fixture::new();
+        let original = Schedule::announcing("tick", Cadence::seconds(1));
+        fixture.schedules.start(&original).await.unwrap();
+        let replacement = Schedule {
+            id: "tick".into(),
+            cadence: format!("every {}s", u64::MAX),
+            action: None,
+        };
+        assert!(matches!(
+            fixture.schedules.start(&replacement).await,
+            Err(ScheduleError::PeriodOutOfRange)
+        ));
+        assert_eq!(fixture.schedules.declared(), vec![original]);
+        tokio::time::advance(std::time::Duration::from_secs(2)).await;
+        assert!(!fixture.shutdown.is_triggered());
+        fixture.schedules.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn a_triggered_shutdown_refuses_new_timers() {
+        let fixture = Fixture::new();
+        fixture.shutdown.trigger();
+        assert!(matches!(
+            fixture
+                .schedules
+                .start(&Schedule::announcing("tick", Cadence::seconds(1)))
+                .await,
+            Err(ScheduleError::Stopped)
+        ));
     }
 }

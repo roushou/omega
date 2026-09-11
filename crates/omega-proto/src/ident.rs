@@ -34,7 +34,7 @@ impl Ident {
 /// A unit's identity: lowercase letters, digits, and hyphens, starting with a
 /// letter (matching cargo's crate-name rules). Serializes transparently as a
 /// plain string so `units.toml` keeps its current shape.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct UnitName(String);
 
@@ -57,7 +57,7 @@ impl fmt::Display for UnitName {
 
 /// A surface's id within its unit: what a unit calls one of the faces it
 /// exposes. Unique only within the unit that declares it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct SurfaceId(String);
 
@@ -79,7 +79,7 @@ impl fmt::Display for SurfaceId {
 
 /// A bar module's id: one instance of a surface, named by the state document
 /// so the same widget can appear twice.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct ModuleId(String);
 
@@ -107,4 +107,22 @@ pub enum IdentError {
     InvalidCharacters { kind: &'static str, name: String },
     #[error("{kind} must start with a lowercase letter: {name:?}")]
     InvalidStart { kind: &'static str, name: String },
+}
+
+impl<'de> Deserialize<'de> for UnitName {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for SurfaceId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for ModuleId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
 }

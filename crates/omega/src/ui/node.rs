@@ -130,18 +130,11 @@ impl Node {
     /// Depth-first, parent before children, so a node's key is the path to
     /// it: `0`, `0.1`, `0.1.0`. Stable across renders for as long as the
     /// shape is, which is exactly when positional identity is the truth.
-    pub(crate) fn assign_keys(&mut self, prefix: &str) {
-        if self.key.is_none() {
-            self.key = Some(if prefix.is_empty() {
-                "root".to_string()
-            } else {
-                prefix.to_string()
-            });
-        }
-
-        let parent = self.key.clone().unwrap_or_default();
+    pub(crate) fn assign_keys(&mut self) {
+        let parent = self.key.get_or_insert_with(|| "root".to_string());
         for (index, child) in self.children.iter_mut().enumerate() {
-            child.assign_keys(&format!("{parent}.{index}"));
+            child.key.get_or_insert_with(|| format!("{parent}.{index}"));
+            child.assign_keys();
         }
     }
 

@@ -344,6 +344,10 @@ impl Broker for UPower {
         ]
     }
 
+    fn disconnect(&mut self) {
+        self.link = None;
+    }
+
     async fn connect(&mut self) -> Result<(), BrokerError> {
         self.link = Some(Link::open().await?);
         Ok(())

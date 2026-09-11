@@ -38,6 +38,9 @@
 //! is asked to do something, and a [`Reaction`] runs when something happened;
 //! both may hold effects, because both run when there is a reason to.
 
+#[cfg(test)]
+extern crate self as omega;
+
 mod context;
 mod error;
 mod mirror;
@@ -77,7 +80,7 @@ pub mod wiring;
 
 pub use error::{Error, Result};
 pub use plugin::Plugin;
-pub use surface::{Answer, Args, Command, Reaction, Widget, Wired};
+pub use surface::{Args, Command, Reaction, Widget, Wired};
 
 /// What `Widget::render` hands back. Part of the surface's contract, so it
 /// lives beside the trait rather than with the nodes it is built from.

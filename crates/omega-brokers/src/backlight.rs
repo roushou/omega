@@ -39,8 +39,8 @@ impl Sysfs {
     /// The first device, if the machine has one. A laptop has `intel_backlight`
     /// or `amdgpu_bl0`; a desktop with an external monitor has none, because
     /// DDC/CI is not a sysfs backlight.
-    fn discover() -> Option<Self> {
-        let dir = std::fs::read_dir(Self::root())
+    fn discover(root: &std::path::Path) -> Option<Self> {
+        let dir = std::fs::read_dir(root)
             .ok()?
             .flatten()
             .map(|entry| entry.path())
@@ -91,6 +91,7 @@ impl Sysfs {
 
 #[derive(Debug)]
 pub struct Backlight {
+    root: PathBuf,
     sysfs: Option<Sysfs>,
     tick: Cadence,
 }
@@ -113,8 +114,18 @@ impl Backlight {
 
     pub fn every(interval: Duration) -> Self {
         Self {
+            root: Sysfs::root(),
             sysfs: None,
             tick: Cadence::every(interval),
+        }
+    }
+
+    /// Discover devices under an explicit sysfs root.
+    pub fn at(root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            sysfs: None,
+            tick: Cadence::every(Self::DEFAULT_INTERVAL),
         }
     }
 
@@ -131,7 +142,7 @@ impl Backlight {
     /// The device, rediscovering it until one appears.
     fn sysfs(&mut self) -> Option<&Sysfs> {
         if self.sysfs.is_none() {
-            self.sysfs = Sysfs::discover();
+            self.sysfs = Sysfs::discover(&self.root);
         }
         self.sysfs.as_ref()
     }

@@ -151,3 +151,27 @@ async fn an_operator_cannot_publish_as_a_unit() {
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
     assert!(harness.hub.view_snapshot().is_empty());
 }
+
+#[test]
+fn empty_selection_cannot_read_another_units_state() {
+    use omega_daemon::session::Subscriptions;
+    use omega_proto::omega::{StateSnapshot, StateTopic, Subscribe};
+    let manifest = widget_manifest("reader", "widget");
+    let mut subscriptions =
+        Subscriptions::of(&omega_proto::UnitName::parse("reader").unwrap(), &manifest);
+    subscriptions.subscribe(&[], true).unwrap();
+    let snapshot = StateSnapshot {
+        topics: vec![StateTopic {
+            topic: "unit.other.private".into(),
+            ..Default::default()
+        }],
+    };
+    assert!(subscriptions.read(snapshot, &[]).unwrap().topics.is_empty());
+    let invalid = Subscribe {
+        topics: vec!["battery".into()],
+        events: vec![i32::MAX],
+        replace: true,
+    };
+    assert!(subscriptions.select(&invalid).is_err());
+    assert!(!subscriptions.wants("battery"));
+}

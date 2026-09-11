@@ -28,4 +28,4 @@ zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "test-util"] }

@@ -7,8 +7,8 @@
 
 use std::path::PathBuf;
 
-use omega_host::Layout;
-use omega_host::{TomlFile, TomlSchema};
+use crate::Layout;
+use crate::{TomlFile, TomlSchema};
 use omega_proto::UnitName;
 use serde::{Deserialize, Serialize};
 

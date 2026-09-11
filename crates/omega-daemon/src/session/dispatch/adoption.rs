@@ -13,30 +13,28 @@ use crate::supervisor::Supervisor;
 #[derive(Debug)]
 pub(super) struct Adoptions {
     supervisor: Supervisor,
-    taken: std::sync::Mutex<Vec<UnitName>>,
+    taken: std::sync::Mutex<std::collections::BTreeMap<UnitName, crate::units::UnitToken>>,
 }
 
 impl Adoptions {
     pub(super) fn new(supervisor: Supervisor) -> Self {
         Self {
             supervisor,
-            taken: std::sync::Mutex::new(Vec::new()),
+            taken: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         }
     }
 
-    pub(super) fn taken(&self, name: UnitName) {
+    pub(super) fn taken(&self, name: UnitName, token: crate::units::UnitToken) {
         let mut taken = self.taken.lock().unwrap_or_else(|e| e.into_inner());
-        if !taken.contains(&name) {
-            taken.push(name);
-        }
+        taken.insert(name, token);
     }
 }
 
 impl Drop for Adoptions {
     fn drop(&mut self) {
-        for name in self.taken.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        for (name, token) in self.taken.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             tracing::info!(unit = %name, "adoption ended; returning the unit to the supervisor");
-            self.supervisor.release_unit(name);
+            self.supervisor.release_unit(name, token);
         }
     }
 }

@@ -157,7 +157,7 @@ async fn calling_a_unit_that_is_not_connected_is_refused() {
     let refusal = expect_refusal(next_result(&mut operator).await);
     // Not a bad request: the caller asked for something reasonable of a unit
     // that is not there yet.
-    assert_eq!(refusal.code, ErrorCode::FailedPrecondition);
+    assert_eq!(refusal.code, ErrorCode::Unavailable);
     assert!(refusal.message.contains("not connected"), "{refusal}");
 }
 
@@ -212,4 +212,179 @@ async fn a_unit_needs_a_capability_to_invoke_another() {
     let refusal = expect_refusal(next_result(&mut caller_unit).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
     assert!(refusal.message.contains("CAPABILITY_SPAWN"), "{refusal}");
+}
+
+#[tokio::test]
+async fn a_unit_can_receive_its_own_command_while_waiting_for_the_answer() {
+    let manifest = command_manifest("lamp", "toggle").granting([
+        omega_proto::omega::Capability::StateRead,
+        omega_proto::omega::Capability::Spawn,
+    ]);
+    let harness = Harness::new(
+        "self-call",
+        ManifestStore::from_manifests([manifest.clone()]),
+    );
+    let mut unit = connected_unit(&harness, &manifest).await;
+    unit.send(call(1, "lamp", "toggle")).await.unwrap();
+    let request = tokio::time::timeout(Duration::from_secs(1), unit.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(matches!(request.body, Some(frame::Body::Invoke(_))));
+    unit.send(Frame {
+        stream_id: request.stream_id,
+        body: Some(frame::Body::Result(omega_proto::omega::Result {
+            outcome: Some(result::Outcome::Ok(Default::default())),
+            done: true,
+        })),
+    })
+    .await
+    .unwrap();
+    let answer = next_result(&mut unit).await.unwrap();
+    assert_eq!(answer.stream_id, 1);
+    common::expect_ok(Some(answer));
+}
+
+struct PendingCalls;
+impl PendingCalls {
+    fn op(bytes: usize) -> invoke::Op {
+        invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            command: "toggle".into(),
+            args: vec![Value {
+                kind: Some(value::Kind::StringValue("x".repeat(bytes))),
+            }],
+        })
+    }
+
+    fn start(
+        harness: &Harness,
+        bytes: usize,
+    ) -> tokio::task::JoinHandle<Result<result::Outcome, omega_daemon::units::RequestError>> {
+        let units = harness.units.clone();
+        tokio::spawn(async move {
+            units
+                .request(
+                    &omega_proto::UnitName::parse("lamp").unwrap(),
+                    Self::op(bytes),
+                )
+                .await
+        })
+    }
+
+    async fn barrier(unit: &mut omega_proto::Transport<tokio::net::UnixStream>) {
+        unit.send(Frame {
+            stream_id: 1,
+            body: Some(frame::Body::Ping(Default::default())),
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            unit.recv().await.unwrap().unwrap().body,
+            Some(frame::Body::Pong(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn abandoned_wire_requests_keep_byte_capacity_until_terminal_reply_or_disconnect() {
+    let manifest = command_manifest("lamp", "toggle");
+    let harness = Harness::new(
+        "pending-bytes",
+        ManifestStore::from_manifests([manifest.clone()]),
+    );
+    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut streams = Vec::new();
+    for _ in 0..2 {
+        let call = PendingCalls::start(&harness, 3 * 1024 * 1024);
+        streams.push(unit.recv().await.unwrap().unwrap().stream_id);
+        call.abort();
+        assert!(call.await.unwrap_err().is_cancelled());
+    }
+    assert!(matches!(
+        PendingCalls::start(&harness, 3 * 1024 * 1024)
+            .await
+            .unwrap(),
+        Err(omega_daemon::units::RequestError::Full(_))
+    ));
+    unit.send(Frame::reply(
+        streams[0],
+        result::Outcome::Ok(Default::default()),
+    ))
+    .await
+    .unwrap();
+    PendingCalls::barrier(&mut unit).await;
+    let admitted = PendingCalls::start(&harness, 3 * 1024 * 1024);
+    assert!(matches!(
+        unit.recv().await.unwrap().unwrap().body,
+        Some(frame::Body::Invoke(_))
+    ));
+    drop(unit);
+    assert!(matches!(
+        admitted.await.unwrap(),
+        Err(omega_daemon::units::RequestError::Absent(_))
+    ));
+    let mut unit = connected_unit(&harness, &manifest).await;
+    for _ in 0..2 {
+        let call = PendingCalls::start(&harness, 3 * 1024 * 1024);
+        assert!(matches!(
+            unit.recv().await.unwrap().unwrap().body,
+            Some(frame::Body::Invoke(_))
+        ));
+        call.abort();
+        assert!(call.await.unwrap_err().is_cancelled());
+    }
+}
+
+#[tokio::test]
+async fn streamed_results_and_cancelled_callers_do_not_release_pending_slots_early() {
+    let manifest = command_manifest("lamp", "toggle");
+    let harness = Harness::new(
+        "pending-count",
+        ManifestStore::from_manifests([manifest.clone()]),
+    );
+    let mut unit = connected_unit(&harness, &manifest).await;
+    let first = PendingCalls::start(&harness, 0);
+    let stream = unit.recv().await.unwrap().unwrap().stream_id;
+    unit.send(Frame {
+        stream_id: stream,
+        body: Some(frame::Body::Result(omega_proto::omega::Result {
+            done: false,
+            outcome: Some(result::Outcome::Value(Default::default())),
+        })),
+    })
+    .await
+    .unwrap();
+    PendingCalls::barrier(&mut unit).await;
+    assert!(!first.is_finished());
+    first.abort();
+    assert!(first.await.unwrap_err().is_cancelled());
+    for _ in 1..16 {
+        let call = PendingCalls::start(&harness, 0);
+        assert!(matches!(
+            unit.recv().await.unwrap().unwrap().body,
+            Some(frame::Body::Invoke(_))
+        ));
+        call.abort();
+        assert!(call.await.unwrap_err().is_cancelled());
+    }
+    assert!(
+        matches!(PendingCalls::start(&harness, 0).await.unwrap(), Err(omega_daemon::units::RequestError::Refused { source, .. }) if source.code == ErrorCode::ResourceExhausted)
+    );
+    unit.send(Frame::reply(
+        stream,
+        result::Outcome::Ok(Default::default()),
+    ))
+    .await
+    .unwrap();
+    PendingCalls::barrier(&mut unit).await;
+    let admitted = PendingCalls::start(&harness, 0);
+    let stream = unit.recv().await.unwrap().unwrap().stream_id;
+    unit.send(Frame::reply(
+        stream,
+        result::Outcome::Ok(Default::default()),
+    ))
+    .await
+    .unwrap();
+    assert!(admitted.await.unwrap().is_ok());
 }

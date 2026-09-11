@@ -58,8 +58,11 @@ impl Refusable for RequestError {
             // messenger, and flattening its code would lose why.
             Self::Refused { source, .. } => source.clone(),
             // The caller asked for something reasonable of a unit that is not
-            // there yet — a precondition, not a bad request.
-            Self::Absent(_) | Self::Timeout(_) => Refusal::precondition(self.to_string()),
+            // there yet. Availability is distinct from malformed arguments.
+            Self::Absent(_) => Refusal::unavailable(self.to_string()),
+            Self::Timeout(_) => Refusal::deadline(self.to_string()),
+            Self::Full(_) => Refusal::exhausted(self.to_string()),
+            Self::TooLarge(_) => Refusal::too_large(self.to_string()),
         }
     }
 }
@@ -72,5 +75,67 @@ pub trait RefusableResult<T> {
 impl<T, E: Refusable> RefusableResult<T> for Result<T, E> {
     fn or_refuse(self) -> Result<T, Refusal> {
         self.map_err(|e| e.refusal())
+    }
+}
+
+impl Refusable for omega_brokers::BrokerError {
+    fn refusal(&self) -> Refusal {
+        match self {
+            Self::Unserved(_) => Refusal::unimplemented(self.to_string()),
+            Self::Io(_) | Self::Unreadable(_) => Refusal::unavailable(self.to_string()),
+            Self::Timeout => Refusal::deadline(self.to_string()),
+            Self::Full => Refusal::exhausted(self.to_string()),
+            Self::TooLarge => Refusal::too_large(self.to_string()),
+        }
+    }
+}
+
+impl Refusable for crate::state::StateError {
+    fn refusal(&self) -> Refusal {
+        match self {
+            Self::Address(error) => error.refusal(),
+            Self::TooLarge => Refusal::too_large(self.to_string()),
+            Self::Full | Self::RevisionExhausted => Refusal::exhausted(self.to_string()),
+        }
+    }
+}
+
+impl Refusable for crate::hub::PublishError {
+    fn refusal(&self) -> Refusal {
+        match self {
+            Self::State(error) => error.refusal(),
+            Self::TooLarge => Refusal::too_large(self.to_string()),
+            Self::Full | Self::RevisionExhausted => Refusal::exhausted(self.to_string()),
+        }
+    }
+}
+
+impl Refusable for omega_proto::action::ActionError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn broker_operation_failures_are_not_missing_handlers() {
+        use omega_brokers::BrokerError;
+        use omega_proto::omega::ErrorCode;
+        for (error, code) in [
+            (BrokerError::Timeout, ErrorCode::DeadlineExceeded),
+            (BrokerError::Full, ErrorCode::ResourceExhausted),
+            (BrokerError::TooLarge, ErrorCode::PayloadTooLarge),
+            (BrokerError::gone(), ErrorCode::Unavailable),
+        ] {
+            assert_eq!(error.refusal().code, code);
+        }
+        assert_eq!(
+            BrokerError::Unserved(omega_proto::ActionKind::Lock)
+                .refusal()
+                .code,
+            ErrorCode::Unimplemented
+        );
     }
 }

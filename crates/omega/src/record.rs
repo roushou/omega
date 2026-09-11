@@ -29,7 +29,7 @@
 
 use std::marker::PhantomData;
 
-use omega_proto::omega::{Capability, SetState, invoke};
+use omega_proto::omega::Capability;
 use omega_proto::{Address, Fields};
 
 use crate::context::Context;
@@ -82,27 +82,44 @@ impl<T: UnitState> Wiring for Own<T> {
 impl<T: UnitState> Does for Own<T> {}
 
 impl<T: UnitState> Own<T> {
-    /// What the daemon currently holds, or this type's default if it has
-    /// never been set.
+    /// The local record, initialized from the handshake snapshot or its default.
+    /// Local writes are visible immediately; replication does not roll them back.
     pub fn get(&self) -> T {
-        read::<T>(&self.context)
+        self.context.record::<T>()
     }
 
-    /// Publish a new value. The daemon owns it from here on and replicates it
-    /// like any other topic, so it outlives this process.
-    pub fn set(&self, value: &T) {
-        self.context.act(invoke::Op::SetState(SetState {
-            topic: T::address(),
-            value: Some(omega_proto::IntoValue::into_value(value.write())),
-        }));
+    /// Admit a new value for publication. Admission failure leaves local state
+    /// unchanged. The receipt reports whether the daemon accepted publication.
+    /// Accepted state survives this unit restarting while the daemon runs.
+    ///
+    /// ```no_run
+    /// # #[derive(omega::UnitState, Default, Clone)]
+    /// # struct Power { on: bool }
+    /// # async fn save(power: &omega::record::Own<Power>) -> Result<(), omega::Error> {
+    /// power.set(&Power { on: true }).await
+    /// # }
+    /// ```
+    pub fn set(&self, value: &T) -> crate::effect::Effect {
+        crate::effect::Effect::new(
+            self.context
+                .update_record::<T>(|current| *current = T::read(&value.write())),
+        )
     }
 
-    /// Read, change, publish — for a value that moves rather than is
-    /// replaced.
-    pub fn update(&self, change: impl FnOnce(&mut T)) {
-        let mut value = self.get();
-        change(&mut value);
-        self.set(&value);
+    /// Admit, read, change and publish under the local record lock. A rejected
+    /// capacity reservation does not run `change`. An oversized result is rejected
+    /// after `change`, leaving the local record unchanged. Once admitted, writes stay visible
+    /// even if completion fails; rolling back could overwrite a newer write.
+    ///
+    /// ```no_run
+    /// # #[derive(omega::UnitState, Default, Clone)]
+    /// # struct Power { on: bool }
+    /// # async fn toggle(power: &omega::record::Own<Power>) -> Result<(), omega::Error> {
+    /// power.update(|value| value.on = !value.on).await
+    /// # }
+    /// ```
+    pub fn update(&self, change: impl FnOnce(&mut T)) -> crate::effect::Effect {
+        crate::effect::Effect::new(self.context.update_record(change))
     }
 }
 

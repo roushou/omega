@@ -124,7 +124,7 @@ impl fmt::Display for Cadence {
         let seconds = self.0.as_secs();
         let (unit, size) = Self::UNITS
             .iter()
-            .find(|(_, size)| seconds % size == 0)
+            .find(|(_, size)| seconds.is_multiple_of(*size))
             .copied()
             // `s` divides everything, so the search cannot come up empty.
             .unwrap_or(('s', 1));

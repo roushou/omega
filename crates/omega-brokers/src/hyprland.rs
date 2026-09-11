@@ -243,20 +243,26 @@ impl Dispatch {
     /// Hyprland does not understand is answered "ok" by the socket, so
     /// guessing would report a window closed that is still open.
     pub fn of(action: &action::Kind) -> Option<String> {
+        action.validate().ok()?;
         match action {
             action::Kind::SwitchWorkspace(switch) => Some(format!(
                 "workspace {}",
-                Self::workspace(switch.target.as_ref()?)
+                Self::workspace(switch.target.as_ref()?)?
             )),
             action::Kind::MoveToWorkspace(move_to) => Some(format!(
                 "movetoworkspace {},{}",
-                Self::destination(move_to.target.as_ref()?),
+                Self::destination(move_to.target.as_ref()?)?,
                 Self::window(move_to.window.as_ref())?
             )),
-            action::Kind::MoveToMonitor(move_to) => Some(format!(
-                "movewindow mon:{}",
-                Self::named(&move_to.monitor_id)?
-            )),
+            action::Kind::MoveToMonitor(move_to) => {
+                if !Self::is_focused(move_to.window.as_ref()) {
+                    return None;
+                }
+                Some(format!(
+                    "movewindow mon:{}",
+                    Self::named(&move_to.monitor_id)?
+                ))
+            }
             action::Kind::CloseWindow(close) => {
                 Some(if Self::is_focused(close.window.as_ref()) {
                     // The focused window has its own dispatcher, and it is the
@@ -280,24 +286,23 @@ impl Dispatch {
         }
     }
 
-    fn workspace(target: &switch_workspace::Target) -> String {
+    fn workspace(target: &switch_workspace::Target) -> Option<String> {
         match target {
-            switch_workspace::Target::Index(index) => index.to_string(),
-            switch_workspace::Target::Name(name) => format!("name:{name}"),
-            // Hyprland's relative form, which wraps within the monitor.
-            switch_workspace::Target::Direction(direction) => {
-                match Direction::try_from(*direction) {
-                    Ok(Direction::Previous) => "e-1".to_string(),
-                    _ => "e+1".to_string(),
-                }
-            }
+            switch_workspace::Target::Index(index) => Some(index.to_string()),
+            switch_workspace::Target::Name(name) => Some(format!("name:{}", Self::named(name)?)),
+            switch_workspace::Target::Direction(direction) => match Direction::try_from(*direction)
+            {
+                Ok(Direction::Next) => Some("e+1".into()),
+                Ok(Direction::Previous) => Some("e-1".into()),
+                Ok(Direction::Unspecified) | Err(_) => None,
+            },
         }
     }
 
-    fn destination(target: &move_to_workspace::Target) -> String {
+    fn destination(target: &move_to_workspace::Target) -> Option<String> {
         match target {
-            move_to_workspace::Target::Index(index) => index.to_string(),
-            move_to_workspace::Target::Name(name) => format!("name:{name}"),
+            move_to_workspace::Target::Index(index) => Some(index.to_string()),
+            move_to_workspace::Target::Name(name) => Some(format!("name:{}", Self::named(name)?)),
         }
     }
 
@@ -326,7 +331,7 @@ impl Dispatch {
     /// make the rest of it a second dispatch — so both are refused rather
     /// than sent.
     fn named(name: &str) -> Option<&str> {
-        if name.is_empty() || name.contains(['\n', '\r', ';']) {
+        if name.is_empty() || name.contains(['\0', '\n', '\r', ';', ',']) {
             None
         } else {
             Some(name)
@@ -337,7 +342,7 @@ impl Dispatch {
 /// Where Hyprland listens, and the event stream held open to it.
 struct Link {
     dir: PathBuf,
-    events: BufReader<UnixStream>,
+    events: tokio::io::Lines<BufReader<UnixStream>>,
 }
 
 impl Link {
@@ -394,7 +399,7 @@ impl Link {
             .map_err(BrokerError::unreadable)?;
         Ok(Self {
             dir,
-            events: BufReader::new(events),
+            events: BufReader::new(events).lines(),
         })
     }
 
@@ -490,20 +495,16 @@ impl Link {
 
     /// Wait for an event that changes the displays, ignoring the rest.
     ///
-    /// `read_line` is cancel-safe only in the sense that it may lose a partial
-    /// line, which for a stream of complete events means losing one wake-up —
-    /// and the next event re-reads everything anyway, because a reading is the
-    /// whole set of monitors rather than a delta.
+    /// The line decoder retains partial input when an action interrupts the wait.
     async fn wait(&mut self) -> Result<&'static [SystemTopic], BrokerError> {
         loop {
-            let mut line = String::new();
-            match self.events.read_line(&mut line).await {
-                Ok(0) => {
+            match self.events.next_line().await {
+                Ok(None) => {
                     return Err(BrokerError::Unreadable(
                         "the compositor closed the event socket".into(),
                     ));
                 }
-                Ok(_) => {
+                Ok(Some(line)) => {
                     let name = line.split(">>").next().unwrap_or("").trim();
                     let affected = Self::affected(name);
                     if !affected.is_empty() {
@@ -584,6 +585,10 @@ impl Broker for Hyprland {
         ]
     }
 
+    fn disconnect(&mut self) {
+        self.link = None;
+    }
+
     async fn connect(&mut self) -> Result<(), BrokerError> {
         self.link = Some(Link::open().await?);
         self.affected = Self::EVERYTHING;
@@ -619,5 +624,30 @@ impl Broker for Hyprland {
         // Moving a window changes no display. What did change arrives on the
         // event socket if it is anything this broker reports.
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test(start_paused = true)]
+    async fn event_wait_is_idle_until_a_complete_relevant_event_and_survives_cancellation() {
+        let (mut source, receiver) = UnixStream::pair().unwrap();
+        let mut link = Link {
+            dir: PathBuf::new(),
+            events: BufReader::new(receiver).lines(),
+        };
+        let pause = Duration::from_millis(500);
+        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
+        source
+            .write_all(b"unrelated>>ignored\nactivewin")
+            .await
+            .unwrap();
+        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
+        source.write_all(b"dow>>terminal,title\n").await.unwrap();
+        assert_eq!(link.wait().await.unwrap(), &[SystemTopic::Window]);
+        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
     }
 }

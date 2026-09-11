@@ -728,6 +728,7 @@ name = "omega-daemon"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "getrandom",
  "libc",
  "notify",
@@ -735,6 +736,7 @@ dependencies = [
  "omega-document",
  "omega-host",
  "omega-proto",
+ "prost",
  "serde",
  "serde_json",
  "thiserror",
@@ -766,6 +768,7 @@ dependencies = [
 name = "omega-host"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "omega-proto",
  "serde",
  "thiserror",
@@ -789,6 +792,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "socket2",
  "thiserror",
  "tokio",
  "tokio-util",

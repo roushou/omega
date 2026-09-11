@@ -194,19 +194,4 @@ impl Plugin {
     pub(crate) fn reactions(&self) -> &[ReactionEntry] {
         &self.reactions
     }
-
-    /// Every topic any surface reads: what the runtime waits for before the
-    /// first render.
-    pub(crate) fn topics(&self) -> Vec<SystemTopic> {
-        let mut topics = BTreeSet::new();
-        let mut capabilities = BTreeSet::new();
-        let mut keyspaces = BTreeSet::new();
-        for widget in &self.widgets {
-            widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
-        }
-        // Keyspaces are not waited for: a plugin's state has a default until
-        // somebody sets it, and waiting for one nobody has written yet would
-        // be waiting forever.
-        topics.into_iter().collect()
-    }
 }

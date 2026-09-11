@@ -34,6 +34,11 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+      - name: Minimum supported Rust
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 check --workspace --all-targets --locked
+
   renderer:
     runs-on: ubuntu-latest
     steps:

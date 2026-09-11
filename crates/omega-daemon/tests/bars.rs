@@ -1,260 +1,178 @@
-//! Bar composition: a surface, instantiated as many times as the document
-//! says, each instance its own view.
-
-mod common;
-
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
-use common::{Harness, widget_manifest};
-use omega_daemon::hub::{Hub, SurfaceRef, ViewUpdate};
+use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::reconcile::{Action, BarProvider, Provider};
-use omega_daemon::units::UnitTable;
+use omega_daemon::reconcile::{Action, BarProvider};
+use omega_daemon::units::{Request, UnitTable};
 use omega_document::{Bars, Document, Modules};
-use omega_proto::UnitName;
-use omega_proto::omega::{StateDocument, SurfaceKind, ViewNode, ViewTree};
+use omega_proto::omega::{StateDocument, SurfaceKind, ViewTree, invoke, module, result};
+use omega_proto::{Manifest, Surface, SurfaceId, UnitName};
 
-fn surface(id: &str) -> omega_proto::SurfaceId {
-    omega_proto::SurfaceId::parse(id).unwrap()
+struct Fixture {
+    hub: Hub,
+    units: UnitTable,
+    provider: BarProvider,
 }
 
-fn module(id: &str) -> omega_proto::ModuleId {
-    omega_proto::ModuleId::parse(id).unwrap()
-}
+impl Fixture {
+    fn new() -> Self {
+        let hub = Hub::new();
+        let units = UnitTable::detached(hub.clone());
+        let manifest = Manifest::new(&Self::name(), "0.1.0").exposing([
+            Surface::new(&SurfaceId::parse("indicator").unwrap(), SurfaceKind::Widget),
+            Surface::new(&SurfaceId::parse("details").unwrap(), SurfaceKind::Widget),
+        ]);
+        let provider = BarProvider::new(
+            units.clone(),
+            Arc::new(ManifestStore::from_manifests([manifest])),
+        );
+        Self {
+            hub,
+            units,
+            provider,
+        }
+    }
 
-fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
-}
+    fn name() -> UnitName {
+        UnitName::parse("wifi").unwrap()
+    }
 
-fn view() -> ViewTree {
-    ViewTree {
-        root: Some(ViewNode {
-            key: "clock".into(),
-            r#type: "text".into(),
-            props: HashMap::new(),
-            children: Vec::new(),
-            ..Default::default()
-        }),
-        revision: 0,
+    fn document() -> StateDocument {
+        Document::new()
+            .bar(Bars::top(
+                "main",
+                vec![Modules::panel(
+                    Modules::surface(Modules::plain_widget("slot", "wifi"), "indicator"),
+                    "details",
+                )],
+            ))
+            .into_inner()
+    }
+
+    async fn answer(
+        mut inbox: tokio::sync::mpsc::Receiver<Request>,
+        count: usize,
+    ) -> Vec<invoke::Op> {
+        let mut observed = Vec::new();
+        for _ in 0..count {
+            let request = inbox.recv().await.unwrap();
+            let outcome = match &request.op {
+                invoke::Op::RenderWidget(_) => result::Outcome::View(ViewTree::default()),
+                invoke::Op::RemoveWidget(_) => result::Outcome::Ok(Default::default()),
+                other => panic!("unexpected {other:?}"),
+            };
+            observed.push(request.op);
+            request.answer.send(Ok(outcome)).unwrap();
+        }
+        observed
     }
 }
 
-/// A bar with the same widget unit in it twice, which is the case the module
-/// dimension exists for.
-fn two_clocks() -> StateDocument {
-    Document::new()
+#[tokio::test]
+async fn both_surfaces_are_configured_updated_and_removed() {
+    let fixture = Fixture::new();
+    let (requests, inbox) = tokio::sync::mpsc::channel(8);
+    let _guard = fixture.units.connected(&Fixture::name(), requests);
+    let responder = tokio::spawn(Fixture::answer(inbox, 6));
+    let mut document = Fixture::document();
+    let plan = fixture.provider.plan(&document).unwrap();
+    assert_eq!(plan.len(), 2);
+    fixture.provider.apply(&plan).await.unwrap();
+    assert!(fixture.provider.plan(&document).unwrap().is_empty());
+    assert_eq!(fixture.hub.view_snapshot().len(), 2);
+
+    let module::Kind::Widget(widget) = document.bars[0].modules[0].kind.as_mut().unwrap() else {
+        panic!()
+    };
+    widget
+        .config
+        .insert("expanded".into(), omega_proto::IntoValue::into_value(true));
+    let plan = fixture.provider.plan(&document).unwrap();
+    assert_eq!(plan.len(), 2);
+    assert!(plan.iter().all(|change| change.action == Action::Update));
+    fixture.provider.apply(&plan).await.unwrap();
+
+    let (_, mut views) = fixture.hub.subscribe_views();
+    let plan = fixture.provider.plan(&StateDocument::default()).unwrap();
+    fixture.provider.apply(&plan).await.unwrap();
+    assert!(fixture.units.instances().is_empty());
+    assert!(fixture.hub.view_snapshot().is_empty());
+    for _ in 0..2 {
+        assert!(views.recv().await.unwrap().view.root.is_none());
+    }
+    let operations = responder.await.unwrap();
+    let surfaces: Vec<_> = operations[..2]
+        .iter()
+        .map(|op| match op {
+            invoke::Op::RenderWidget(render) => render.surface_id.as_str(),
+            _ => panic!(),
+        })
+        .collect();
+    assert_eq!(surfaces, ["details", "indicator"]);
+    assert!(
+        operations[4..]
+            .iter()
+            .all(|op| matches!(op, invoke::Op::RemoveWidget(_)))
+    );
+}
+
+#[tokio::test]
+async fn disconnected_instances_remain_pending() {
+    let fixture = Fixture::new();
+    let plan = fixture.provider.plan(&Fixture::document()).unwrap();
+    assert!(fixture.provider.apply(&plan).await.is_err());
+    assert_eq!(
+        fixture.provider.plan(&Fixture::document()).unwrap().len(),
+        2
+    );
+}
+
+#[test]
+fn ambiguous_surface_is_a_validation_error() {
+    let fixture = Fixture::new();
+    let document = Document::new()
         .bar(Bars::top(
             "main",
-            vec![
-                Modules::plain_widget("clock-left", "clock-widget"),
-                Modules::plain_widget("clock-right", "clock-widget"),
-            ],
+            vec![Modules::plain_widget("slot", "wifi")],
         ))
-        .into_inner()
-}
-
-fn provider(hub: Hub, units: UnitTable) -> BarProvider {
-    BarProvider::new(
-        hub,
-        units,
-        Arc::new(ManifestStore::from_manifests([widget_manifest(
-            "clock-widget",
-            "clock",
-        )])),
-    )
-}
-
-#[test]
-fn each_declared_instance_is_planned_separately() {
-    let hub = Hub::new();
-    let provider = provider(hub.clone(), UnitTable::detached(Hub::new()));
-
-    let plan = provider.plan(&two_clocks());
-
-    assert_eq!(plan.len(), 2, "one clock unit, two instances");
-    assert_eq!(plan[0].target, "clock-left");
-    assert_eq!(plan[1].target, "clock-right");
-    assert!(plan.iter().all(|change| change.action == Action::Create));
-}
-
-#[test]
-fn an_instance_that_has_a_view_is_already_converged() {
-    let hub = Hub::new();
-    hub.publish_view(ViewUpdate {
-        surface: SurfaceRef::module(unit("clock-widget"), surface("clock"), module("clock-left")),
-        view: view(),
-    });
-
-    let plan = provider(hub, UnitTable::detached(Hub::new())).plan(&two_clocks());
-
-    assert_eq!(plan.len(), 1);
-    assert_eq!(plan[0].target, "clock-right");
+        .into_inner();
+    assert!(fixture.provider.plan(&document).is_err());
 }
 
 #[tokio::test]
-async fn an_instance_no_bar_declares_is_dropped() {
-    let hub = Hub::new();
-    hub.publish_view(ViewUpdate {
-        surface: SurfaceRef::module(unit("clock-widget"), surface("clock"), module("clock-gone")),
-        view: view(),
-    });
-
-    let provider = provider(hub.clone(), UnitTable::detached(Hub::new()));
-    let document = Document::new().into_inner();
-
-    let plan = provider.plan(&document);
-    assert_eq!(plan[0].action, Action::Delete);
-    assert_eq!(plan[0].target, "clock-gone");
-
-    provider.apply(&document, &plan).await.unwrap();
-    assert!(
-        hub.view_snapshot().is_empty(),
-        "the shell should stop being told about it"
-    );
-}
-
-#[tokio::test]
-async fn a_unit_that_is_not_connected_does_not_fail_the_convergence() {
-    let hub = Hub::new();
-    let provider = provider(hub.clone(), UnitTable::detached(Hub::new()));
-    let document = two_clocks();
-
-    // Nothing is connected: rendering cannot happen, and that is a warning
-    // rather than a failed convergence — the unit may still be starting.
-    let plan = provider.plan(&document);
-    provider.apply(&document, &plan).await.unwrap();
-    assert!(hub.view_snapshot().is_empty());
-}
-
-#[tokio::test]
-async fn a_unit_renders_every_instance_the_document_gives_it() {
-    let manifest = widget_manifest("clock-widget", "clock");
-    let harness = Harness::new(
-        "bars-render",
-        ManifestStore::from_manifests([manifest.clone()]),
-    );
-    let token = harness.register_unit("clock-widget");
-
-    let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
-    transport.recv().await.unwrap().unwrap(); // Welcome
-
-    // The daemon asks; a real unit would answer through the SDK.
-    let sessions = harness.units.clone();
-    let asked = tokio::spawn(async move {
-        let provider = BarProvider::new(
-            harness.hub.clone(),
-            sessions,
-            Arc::new(ManifestStore::from_manifests([widget_manifest(
-                "clock-widget",
-                "clock",
-            )])),
-        );
-        let document = two_clocks();
-        let plan = provider.plan(&document);
-        provider.apply(&document, &plan).await.unwrap();
-        provider
-    });
-
-    // Answer both RenderWidget requests the way the SDK does.
-    let mut answered = Vec::new();
-    while answered.len() < 2 {
-        let frame = tokio::time::timeout(Duration::from_secs(2), transport.recv())
+async fn an_old_render_cannot_install_into_a_new_session() {
+    let fixture = Fixture::new();
+    let (requests, mut inbox) = tokio::sync::mpsc::channel(1);
+    let old = fixture.units.connected(&Fixture::name(), requests);
+    let change = fixture
+        .provider
+        .plan(&Fixture::document())
+        .unwrap()
+        .remove(0);
+    let units = fixture.units.clone();
+    let configure = tokio::spawn(async move {
+        units
+            .configure_instance(&change.address, change.config)
             .await
-            .expect("the daemon should ask")
-            .unwrap()
-            .unwrap();
-
-        let Some(omega_proto::omega::frame::Body::Invoke(invoke)) = frame.body else {
-            continue;
-        };
-        let Some(omega_proto::omega::invoke::Op::RenderWidget(render)) = invoke.op else {
-            continue;
-        };
-
-        // Every request names the instance being rendered, and the daemon
-        // allocates even stream ids for its own requests.
-        assert_eq!(render.surface_id, "clock");
-        assert!(frame.stream_id % 2 == 0, "{}", frame.stream_id);
-        answered.push(render.module_id.clone());
-
-        transport
-            .send(omega_proto::omega::Frame {
-                stream_id: frame.stream_id,
-                body: Some(omega_proto::omega::frame::Body::Result(
-                    omega_proto::omega::Result {
-                        outcome: Some(omega_proto::omega::result::Outcome::View(view())),
-                        done: true,
-                    },
-                )),
-            })
-            .await
-            .unwrap();
-    }
-
-    let provider = asked.await.unwrap();
-    answered.sort();
-    assert_eq!(answered, vec!["clock-left", "clock-right"]);
-
-    // Both instances now exist as separate views of one surface.
-    assert!(provider.plan(&two_clocks()).is_empty());
-}
-
-/// A unit with two view surfaces: one for the slot, one for the popout.
-fn wifi_manifest() -> omega_proto::Manifest {
-    widget_manifest("wifi", "indicator").exposing([
-        omega_proto::Surface::new(&surface("indicator"), SurfaceKind::Widget),
-        omega_proto::Surface::new(&surface("details"), SurfaceKind::Widget),
-    ])
-}
-
-fn wifi_provider(hub: Hub, units: UnitTable) -> BarProvider {
-    BarProvider::new(
-        hub,
-        units,
-        Arc::new(ManifestStore::from_manifests([wifi_manifest()])),
-    )
-}
-
-fn wifi_bar(module: omega_proto::omega::Module) -> StateDocument {
-    Document::new()
-        .bar(Bars::top("bar", vec![module]))
-        .into_inner()
+    });
+    let request = inbox.recv().await.unwrap();
+    let _new = fixture
+        .units
+        .connected(&Fixture::name(), tokio::sync::mpsc::channel(1).0);
+    drop(old);
+    request
+        .answer
+        .send(Ok(result::Outcome::View(ViewTree::default())))
+        .unwrap();
+    assert!(configure.await.unwrap().is_err());
+    assert!(fixture.units.instances().is_empty());
+    assert!(fixture.hub.view_snapshot().is_empty());
 }
 
 #[test]
-fn a_placement_with_a_panel_renders_both_of_its_surfaces() {
-    let placed = Modules::panel(
-        Modules::surface(Modules::plain_widget("wifi", "wifi"), "indicator"),
-        "details",
-    );
-    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new())).plan(&wifi_bar(placed));
-
-    // One placement, two views: the document placed one thing, and it draws
-    // in two. They are rendered separately because they are separate views.
-    assert_eq!(plan.len(), 2, "the slot and the popout");
-    assert!(plan.iter().all(|change| change.target == "wifi"));
-}
-
-#[test]
-fn a_placement_without_a_panel_renders_one_surface() {
-    let placed = Modules::surface(Modules::plain_widget("wifi", "wifi"), "indicator");
-    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new())).plan(&wifi_bar(placed));
-
-    assert_eq!(plan.len(), 1);
-}
-
-#[test]
-fn a_unit_with_several_surfaces_must_be_told_which_one_is_placed() {
-    // Naming the unit alone was enough while a unit had one surface. It
-    // cannot be once it has two, and the daemon reports that rather than
-    // picking whichever the manifest happened to list first.
-    let plan = wifi_provider(Hub::new(), UnitTable::detached(Hub::new()))
-        .plan(&wifi_bar(Modules::plain_widget("wifi", "wifi")));
-
-    assert!(
-        plan.is_empty(),
-        "nothing is planned from an ambiguous placement"
-    );
+fn unsupported_modules_are_refused_instead_of_omitted() {
+    let fixture = Fixture::new();
+    let mut document = Fixture::document();
+    document.bars[0].modules[0].kind = Some(module::Kind::Clock(Default::default()));
+    assert!(fixture.provider.plan(&document).is_err());
 }

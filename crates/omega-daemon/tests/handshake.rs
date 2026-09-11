@@ -31,18 +31,21 @@ async fn a_spawned_unit_is_admitted_and_mirrors_state() {
         other => panic!("expected Welcome, got {other:?}"),
     }
 
-    harness.hub.publish_state(StatePatch {
-        topics: vec![StateTopic {
-            topic: "battery".into(),
-            revision: 0,
-            value: Some(state_topic::Value::Battery(BatteryState {
-                level: 0.75,
-                charging: true,
-                seconds_to_empty: 0,
-                seconds_to_full: 0,
-            })),
-        }],
-    });
+    harness
+        .hub
+        .publish_state(StatePatch {
+            topics: vec![StateTopic {
+                topic: "battery".into(),
+                revision: 0,
+                value: Some(state_topic::Value::Battery(BatteryState {
+                    level: 0.75,
+                    charging: true,
+                    seconds_to_empty: 0,
+                    seconds_to_full: 0,
+                })),
+            }],
+        })
+        .unwrap();
 
     let patch = tokio::time::timeout(Duration::from_secs(2), transport.recv())
         .await

@@ -55,22 +55,31 @@ async fn next_event(
     }
 }
 
+fn mains(connected: bool) -> StatePatch {
+    StatePatch {
+        topics: vec![StateTopic {
+            topic: "mains".into(),
+            revision: 0,
+            value: Some(state_topic::Value::Mains(omega_proto::omega::MainsState {
+                connected,
+            })),
+        }],
+    }
+}
+
 #[test]
-fn an_event_is_a_transition_not_a_reading() {
+fn cable_events_follow_mains_not_battery_charging() {
     let mut transitions = Transitions::new();
-
-    // The first reading is the state of the world, not a change in it.
-    assert!(transitions.of(&battery(0.5, false)).is_empty());
-    // The same reading again is not news either.
-    assert!(transitions.of(&battery(0.5, false)).is_empty());
-
+    assert!(transitions.of(&mains(true)).is_empty());
+    assert!(transitions.of(&battery(0.9, true)).is_empty());
+    assert!(transitions.of(&battery(1.0, false)).is_empty());
     assert_eq!(
-        transitions.of(&battery(0.5, true)),
-        vec![EventKind::EventAcPlugged]
+        transitions.of(&mains(false)),
+        vec![EventKind::EventAcUnplugged]
     );
     assert_eq!(
-        transitions.of(&battery(0.5, false)),
-        vec![EventKind::EventAcUnplugged]
+        transitions.of(&mains(true)),
+        vec![EventKind::EventAcPlugged]
     );
 }
 
@@ -92,10 +101,7 @@ fn a_battery_threshold_fires_on_the_way_down_and_only_once() {
     );
 
     // Charging back up past the threshold does not fire it again...
-    assert_eq!(
-        transitions.of(&battery(0.5, true)),
-        vec![EventKind::EventAcPlugged]
-    );
+    assert!(transitions.of(&battery(0.5, true)).is_empty());
     // ...but the next fall does.
     assert_eq!(
         transitions.of(&battery(0.1, true)),
@@ -107,8 +113,8 @@ fn a_battery_threshold_fires_on_the_way_down_and_only_once() {
 async fn a_unit_receives_the_events_its_manifest_declares() {
     let (harness, mut transport) = connected("events-declared", policy_manifest("policy")).await;
 
-    harness.hub.publish_state(battery(0.5, false));
-    harness.hub.publish_state(battery(0.5, true));
+    harness.hub.publish_state(mains(false)).unwrap();
+    harness.hub.publish_state(mains(true)).unwrap();
 
     let event = next_event(&mut transport).await;
     assert_eq!(event.kind, EventKind::EventAcPlugged as i32);
@@ -123,8 +129,8 @@ async fn a_unit_is_not_woken_for_events_it_never_declared() {
     let (harness, mut transport) =
         connected("events-undeclared", widget_manifest("reader", "battery")).await;
 
-    harness.hub.publish_state(battery(0.5, false));
-    harness.hub.publish_state(battery(0.5, true));
+    harness.hub.publish_state(mains(false)).unwrap();
+    harness.hub.publish_state(mains(true)).unwrap();
 
     // The state patches arrive; the event does not.
     let deadline = tokio::time::Instant::now() + Duration::from_millis(400);

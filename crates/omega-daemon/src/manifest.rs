@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::host::StateConfig;
 use omega_host::Layout;
+use omega_host::StateConfig;
 use omega_proto::{Manifest, ManifestError, UnitName};
 
 /// A unit's canonical manifest and the hash a peer must present to claim it.

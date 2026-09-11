@@ -6,9 +6,9 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{Harness, expect_refusal, unit_name, widget_manifest};
-use omega_daemon::host::StateConfig;
 use omega_daemon::manifest::ManifestStore;
 use omega_host::Layout;
+use omega_host::StateConfig;
 use omega_proto::Manifest;
 use omega_proto::omega::{Capability, ErrorCode, frame};
 

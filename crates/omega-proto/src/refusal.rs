@@ -43,18 +43,31 @@ impl Refusal {
         Self::new(ErrorCode::FailedPrecondition, message)
     }
 
+    pub fn deadline(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::DeadlineExceeded, message)
+    }
+
+    pub fn too_large(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::PayloadTooLarge, message)
+    }
+
+    pub fn exhausted(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::ResourceExhausted, message)
+    }
+
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Unavailable, message)
+    }
+
     /// The refusal as a terminal `Result` frame on `stream_id`.
     pub fn frame(&self, stream_id: u64) -> Frame {
-        Frame {
+        Frame::reply(
             stream_id,
-            body: Some(frame::Body::Result(OpResult {
-                outcome: Some(result::Outcome::Error(Error {
-                    code: self.code as i32,
-                    message: self.message.clone(),
-                })),
-                done: true,
-            })),
-        }
+            result::Outcome::Error(Error {
+                code: self.code as i32,
+                message: self.message.clone(),
+            }),
+        )
     }
 
     /// The refusal a frame carries, if it carries one.

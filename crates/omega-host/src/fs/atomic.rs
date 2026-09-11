@@ -2,40 +2,58 @@ use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::fs::TempPath;
+use crate::fs::{Directory, TempPath};
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteStep {
+    Write,
+    FlushFile,
+    Rename,
+    FlushDirectory,
+}
 
 /// A file written by write-then-rename: readers see either the old contents
 /// or the new ones, never a partial write.
 ///
-/// Both halves are flushed to the disk, not just to the page cache. Without
-/// that, a crash seconds after a "successful" write can leave an empty file
-/// where a manifest used to be — the rename is atomic with respect to other
-/// readers, not with respect to power loss.
+/// Parent directories and their ancestors are flushed before publication;
+/// file contents are flushed before rename and the containing directory after it.
 #[derive(Debug, Clone)]
 pub struct AtomicFile {
     path: PathBuf,
+    #[cfg(test)]
+    fault: Option<WriteStep>,
 }
 
 impl AtomicFile {
     pub fn at(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            #[cfg(test)]
+            fault: None,
+        }
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Write `bytes`, creating parent directories. The temp file is removed
-    /// if anything fails, so a failure leaves nothing behind.
+    /// Write `bytes`, creating parent directories. Failed writes attempt to
+    /// remove the temporary file. A directory-sync failure after rename leaves
+    /// the new contents visible, but their durability is uncertain.
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
         let dir = match self.path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
             _ => Path::new("."),
         };
-        std::fs::create_dir_all(dir)?;
+        Directory::create_all(dir)?;
 
         let tmp = TempPath::sibling(&self.path, "tmp");
-        match self.replace(&tmp, bytes, dir) {
+        let file = File::options().write(true).create_new(true).open(&tmp)?;
+        match self.replace(file, &tmp, bytes, dir) {
             Ok(()) => Ok(()),
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp);
@@ -44,30 +62,31 @@ impl AtomicFile {
         }
     }
 
-    fn replace(&self, tmp: &Path, bytes: &[u8], dir: &Path) -> io::Result<()> {
+    fn replace(&self, file: File, tmp: &Path, bytes: &[u8], dir: &Path) -> io::Result<()> {
         // The contents must be on disk before the rename can publish them.
-        let file = File::create(tmp)?;
+        #[cfg(test)]
+        self.check(WriteStep::Write)?;
         std::io::Write::write_all(&mut &file, bytes)?;
+        #[cfg(test)]
+        self.check(WriteStep::FlushFile)?;
         file.sync_all()?;
         drop(file);
 
+        #[cfg(test)]
+        self.check(WriteStep::Rename)?;
         std::fs::rename(tmp, &self.path)?;
 
-        // ...and the rename itself must be on disk, which is a property of
-        // the directory, not the file.
-        Self::sync_dir(dir)
+        #[cfg(test)]
+        self.check(WriteStep::FlushDirectory)?;
+        Directory::sync(dir)
     }
 
-    /// Flush a directory entry. Not every filesystem supports it; one that
-    /// does not was never going to lose the rename either.
-    pub fn sync_dir(dir: &Path) -> io::Result<()> {
-        match File::open(dir) {
-            Ok(handle) => match handle.sync_all() {
-                Err(e) if e.kind() == io::ErrorKind::InvalidInput => Ok(()),
-                other => other,
-            },
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e),
+    #[cfg(test)]
+    fn check(&self, step: WriteStep) -> io::Result<()> {
+        if self.fault == Some(step) {
+            Err(io::Error::from_raw_os_error(libc::EIO))
+        } else {
+            Ok(())
         }
     }
 }

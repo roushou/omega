@@ -15,17 +15,25 @@
 //! [`POLICY`]: crate::session::dispatch
 //! [`Frame`]: omega_proto::omega::Frame
 
+use crate::session::operations::Operations;
 use std::path::Path;
+use std::sync::Arc;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::task::JoinSet;
+
+mod requests;
+#[cfg(test)]
+mod tests;
+use requests::Requests;
+use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 
 use omega_proto::omega::{Frame, Invoke, frame};
 use omega_proto::{Observation, Refusal, Socket};
 
 use crate::broker::Brokerage;
-use crate::hub::{Heartbeat, Hub, Observed, ViewUpdate};
+use crate::hub::{Heartbeat, Hub, ViewUpdate};
 use crate::session::admission::Peer;
 use crate::session::{Dispatcher, Subscriptions};
 use crate::supervisor::Supervisor;
@@ -45,7 +53,7 @@ struct Gateway {
 #[derive(Debug)]
 pub struct ShellServer {
     hub: Hub,
-    listener: UnixListener,
+    listener: omega_proto::BoundSocket,
     socket: Socket,
     /// Absent for a server that only streams — a test watching views, and
     /// nothing a person runs.
@@ -86,28 +94,38 @@ impl ShellServer {
         self.socket.path()
     }
 
-    /// Accept observers and stream to each.
+    /// Accept observers and stream to each. Dropping this future cancels its connections.
     pub async fn run(&self) -> Result<(), ShellError> {
+        let mut connections = JoinSet::new();
+        let result = self.accepting(&mut connections).await;
+        connections.shutdown().await;
+        result
+    }
+
+    pub(crate) const CONNECTION_LIMIT: usize = 64;
+
+    /// The caller owns tasks across cancellation of the listener future.
+    pub(crate) async fn accepting(&self, connections: &mut JoinSet<()>) -> Result<(), ShellError> {
         loop {
-            let (stream, _) = self.listener.accept().await?;
-            // Snapshots + subscriptions taken atomically: no gap to lose an
-            // update between the snapshot and the live stream.
-            let (views, view_rx) = self.hub.subscribe_views();
-            let (state, state_rx) = self.hub.subscribe_state();
-            let hub = self.hub.clone();
-
-            // The kernel's word on who this is, taken once: reading is open,
-            // and asking for anything is the owner's alone.
-            let peer = Self::admit(&stream);
-            let gateway = self.gateway.clone();
-
-            tokio::spawn(async move {
-                let connection =
-                    ShellConnection::new(stream, view_rx, state_rx, hub, peer, gateway);
-                if let Err(e) = connection.stream(views, state).await {
-                    tracing::debug!("observer connection ended: {e}");
+            tokio::select! {
+                Some(result) = connections.join_next(), if !connections.is_empty() => {
+                    if let Err(error) = result { tracing::warn!(%error, "observer task failed"); }
                 }
-            });
+                accepted = self.listener.accept(), if connections.len() < Self::CONNECTION_LIMIT => {
+                    let (stream, _) = accepted?;
+                    let (views, view_rx) = self.hub.subscribe_views();
+                    let (state, state_rx) = self.hub.subscribe_state();
+                    let hub = self.hub.clone();
+                    let peer = Self::admit(&stream);
+                    let gateway = self.gateway.clone();
+                    connections.spawn(async move {
+                        let connection = ShellConnection::new(stream, view_rx, state_rx, hub, peer, gateway);
+                        if let Err(error) = connection.stream(views, state).await {
+                            tracing::debug!(%error, "observer connection ended");
+                        }
+                    });
+                }
+            }
         }
     }
 }
@@ -128,19 +146,20 @@ impl ShellServer {
 
 /// One connected observer: everything current, then everything that changes —
 /// and whatever it asks for meanwhile.
-struct ShellConnection {
-    writer: tokio::io::WriteHalf<UnixStream>,
-    requests: tokio::io::Lines<BufReader<tokio::io::ReadHalf<UnixStream>>>,
-    views: broadcast::Receiver<ViewUpdate>,
-    state: broadcast::Receiver<omega_proto::omega::StatePatch>,
+struct ShellConnection<S> {
+    writer: tokio::io::WriteHalf<S>,
+    requests: Requests<tokio::io::ReadHalf<S>>,
+    views: crate::hub::history::Receiver<Arc<ViewUpdate>>,
+    state: crate::hub::history::Receiver<omega_proto::omega::StatePatch>,
     hub: Hub,
     /// Who this is, or why they are nobody. Reading does not depend on it;
     /// asking does.
-    peer: Result<Peer, Refusal>,
+    peer: Result<Arc<Peer>, Refusal>,
     gateway: Option<Gateway>,
+    sent_views: std::collections::BTreeMap<crate::hub::SurfaceRef, u64>,
 }
 
-impl ShellConnection {
+impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
     /// How often a connection says it is still there when nothing else has.
     ///
     /// Comfortably inside the silence an observer treats as a dead daemon —
@@ -149,9 +168,9 @@ impl ShellConnection {
     const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
 
     fn new(
-        stream: UnixStream,
-        views: broadcast::Receiver<ViewUpdate>,
-        state: broadcast::Receiver<omega_proto::omega::StatePatch>,
+        stream: S,
+        views: crate::hub::history::Receiver<Arc<ViewUpdate>>,
+        state: crate::hub::history::Receiver<omega_proto::omega::StatePatch>,
         hub: Hub,
         peer: Result<Peer, Refusal>,
         gateway: Option<Gateway>,
@@ -159,11 +178,12 @@ impl ShellConnection {
         let (reader, writer) = tokio::io::split(stream);
         Self {
             writer,
-            requests: BufReader::new(reader).lines(),
+            requests: Requests::new(reader),
+            sent_views: Default::default(),
             views,
             state,
             hub,
-            peer,
+            peer: peer.map(Arc::new),
             gateway,
         }
     }
@@ -173,7 +193,7 @@ impl ShellConnection {
     /// answers to anything asked along the way.
     async fn stream(
         mut self,
-        views: Vec<ViewUpdate>,
+        views: Vec<Arc<ViewUpdate>>,
         state: omega_proto::omega::StateSnapshot,
     ) -> Result<(), ShellError> {
         // Everything, until the observer says otherwise: reading this socket
@@ -181,8 +201,9 @@ impl ShellConnection {
         // wants what the daemon holds.
         let mut subscriptions = Subscriptions::watcher();
 
-        self.write_views(&views).await?;
+        self.write_views(views).await?;
         self.write_topics(&subscriptions, &state.topics).await?;
+        drop(state);
 
         // One dispatcher per connection, as a session has: what it holds on
         // this peer's behalf is given back when the connection ends.
@@ -194,6 +215,8 @@ impl ShellConnection {
                 gateway.brokers.clone(),
             )
         });
+        let dispatcher = dispatcher.map(Arc::new);
+        let mut operations = Operations::new();
         let mut beat = tokio::time::interval(Self::HEARTBEAT);
         beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         // The first tick is immediate and would beat before anything was
@@ -203,13 +226,12 @@ impl ShellConnection {
         loop {
             tokio::select! {
                 view = self.views.recv() => match view {
-                    Ok(view) => self.write_line(&Observed::View(view)).await?,
+                    Ok(view) => self.write_views([view]).await?,
                     // Dropped views would leave surfaces frozen at a stale
                     // tree with nothing to correct them, so resend them all.
                     Err(broadcast::error::RecvError::Lagged(missed)) => {
                         tracing::warn!(missed, "observer lagged on views; resending every surface");
-                        let snapshot = self.hub.view_snapshot();
-                        self.write_views(&snapshot).await?;
+                        self.resync_views().await?;
                     }
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
                 },
@@ -217,7 +239,8 @@ impl ShellConnection {
                     Ok(patch) => self.write_topics(&subscriptions, &patch.topics).await?,
                     Err(broadcast::error::RecvError::Lagged(missed)) => {
                         tracing::warn!(missed, "observer lagged on state; resending every topic");
-                        let snapshot = self.hub.snapshot();
+                        let (snapshot, receiver) = self.hub.subscribe_state();
+                        self.state = receiver;
                         self.write_topics(&subscriptions, &snapshot.topics).await?;
                     }
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
@@ -225,13 +248,36 @@ impl ShellConnection {
                 line = self.requests.next_line() => match line? {
                     Some(line) if line.trim().is_empty() => {}
                     Some(line) => {
-                        let answer = self.answer(dispatcher.as_ref(), &mut subscriptions, &line).await;
-                        self.write_answer(&answer).await?;
+                        let frame: Frame = match serde_json::from_str(&line) {
+                            Ok(frame) => frame,
+                            Err(error) => {
+                                self.write_answer(&Refusal::invalid(format!("not a request: {error}")).frame(0)).await?;
+                                continue;
+                            }
+                        };
+                        if let (Some(dispatcher), Ok(peer), Some(frame::Body::Invoke(invoke))) =
+                            (&dispatcher, &self.peer, &frame.body)
+                            && Operations::deferred(invoke)
+                        {
+                            if let Err(refusal) = operations.start(
+                                dispatcher.clone(), peer.clone(), subscriptions.clone(),
+                                frame.stream_id, invoke.clone(),
+                            ) {
+                                self.write_answer(&refusal.frame(frame.stream_id)).await?;
+                            }
+                        } else {
+                            let answer = self.answer(dispatcher.as_deref(), &mut subscriptions, frame).await;
+                            self.write_answer(&answer).await?;
+                        }
                     }
                     // The observer hung up. Its views have nowhere to go.
                     None => return Ok(()),
                 },
-                _ = beat.tick() => self.write_line(&Observed::Beat(Heartbeat { heartbeat: true })).await?,
+                result = operations.next(), if !operations.is_empty() => {
+                    let answer = result.map_err(|error| std::io::Error::other(error.to_string()))?;
+                    self.write_answer(&answer).await?;
+                },
+                _ = beat.tick() => self.write_line(&Heartbeat { heartbeat: true }).await?,
             }
         }
     }
@@ -243,12 +289,8 @@ impl ShellConnection {
         &self,
         dispatcher: Option<&Dispatcher>,
         subscriptions: &mut Subscriptions,
-        line: &str,
+        frame: Frame,
     ) -> Frame {
-        let frame: Frame = match serde_json::from_str(line) {
-            Ok(frame) => frame,
-            Err(e) => return Refusal::invalid(format!("not a request: {e}")).frame(0),
-        };
         let stream_id = frame.stream_id;
 
         let Some(frame::Body::Invoke(Invoke { op: Some(op) })) = frame.body else {
@@ -278,11 +320,47 @@ impl ShellConnection {
         }
     }
 
-    async fn write_views(&mut self, views: &[ViewUpdate]) -> Result<(), ShellError> {
-        for view in views {
-            self.write_line(&Observed::View(view.clone())).await?;
-        }
-        Ok(())
+    async fn resync_views(&mut self) -> Result<(), ShellError> {
+        let (snapshot, receiver) = self.hub.subscribe_views();
+        self.views = receiver;
+        let current: std::collections::BTreeSet<_> =
+            snapshot.iter().map(|view| &view.surface).collect();
+        let removed: Vec<_> = self
+            .sent_views
+            .iter()
+            .filter(|(surface, _)| !current.contains(surface))
+            .map(|(surface, revision)| {
+                Arc::new(ViewUpdate {
+                    surface: surface.clone(),
+                    view: omega_proto::omega::ViewTree {
+                        root: None,
+                        revision: revision.checked_add(1).expect("view revision exhausted"),
+                    },
+                })
+            })
+            .collect();
+        self.write_views(removed).await?;
+        self.write_views(snapshot).await
+    }
+
+    async fn write_views(
+        &mut self,
+        views: impl IntoIterator<Item = Arc<ViewUpdate>>,
+    ) -> Result<(), ShellError> {
+        tokio::time::timeout(Self::WRITE_TIMEOUT, async {
+            for view in views {
+                self.write_line(view.as_ref()).await?;
+                if view.view.root.is_some() {
+                    self.sent_views
+                        .insert(view.surface.clone(), view.view.revision);
+                } else {
+                    self.sent_views.remove(&view.surface);
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| ShellError::SnapshotTimeout)?
     }
 
     /// The topics this observer asked for, one line each.
@@ -295,16 +373,19 @@ impl ShellConnection {
         subscriptions: &Subscriptions,
         topics: &[omega_proto::omega::StateTopic],
     ) -> Result<(), ShellError> {
-        for topic in topics {
-            if !subscriptions.wants(&topic.topic) {
-                continue;
+        tokio::time::timeout(Self::WRITE_TIMEOUT, async {
+            for topic in topics {
+                if subscriptions.wants(&topic.topic) {
+                    self.write_line(topic).await?;
+                }
             }
-            self.write_line(&Observed::State(topic.clone())).await?;
-        }
-        Ok(())
+            Ok(())
+        })
+        .await
+        .map_err(|_| ShellError::SnapshotTimeout)?
     }
 
-    async fn write_line(&mut self, observed: &Observed) -> Result<(), ShellError> {
+    async fn write_line(&mut self, observed: &impl serde::Serialize) -> Result<(), ShellError> {
         self.write(serde_json::to_string(observed)?).await
     }
 
@@ -312,17 +393,35 @@ impl ShellConnection {
         self.write(Observation::line(answer)?).await
     }
 
+    const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
     async fn write(&mut self, line: String) -> Result<(), ShellError> {
-        self.writer.write_all(line.as_bytes()).await?;
-        self.writer.write_all(b"\n").await?;
-        self.writer.flush().await?;
-        Ok(())
+        let writing = tokio::time::timeout(Self::WRITE_TIMEOUT, async {
+            self.writer.write_all(line.as_bytes()).await?;
+            self.writer.write_all(b"\n").await?;
+            self.writer.flush().await
+        });
+        tokio::pin!(writing);
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut writing => {
+                    result.map_err(|_| ShellError::WriteTimeout)??;
+                    return Ok(());
+                }
+                result = self.requests.buffer_next(), if !self.requests.closed => { result?; }
+            }
+        }
     }
 }
 
 /// What serving the shell socket can fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum ShellError {
+    #[error("observer snapshot batch deadline elapsed")]
+    SnapshotTimeout,
+    #[error("observer write deadline elapsed")]
+    WriteTimeout,
     #[error("cannot bind shell socket {}: {source}", path.display())]
     Bind {
         path: PathBuf,

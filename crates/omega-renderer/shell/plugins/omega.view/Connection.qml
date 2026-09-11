@@ -68,7 +68,7 @@ Item {
 
         if (link.unit !== "" && msg.unit !== link.unit) return
         if (link.surface !== "" && msg.surface !== link.surface) return
-        if (link.module !== "" && (msg.module || "") !== link.module) return
+        if ((msg.module || "") !== link.module) return
         link.drawnBy = msg.unit
         link.tree = msg.view && msg.view.root ? msg.view.root : null
     }
@@ -82,9 +82,15 @@ Item {
     // The daemon sends everything it holds the moment a connection opens, so
     // this narrows what follows rather than what arrived — one snapshot, and
     // then only the views this host is here for.
+    function allocateStream() {
+        var stream = link.nextStream
+        link.nextStream += 2
+        return stream
+    }
+
     function subscribeToNothing() {
         link.send({
-            streamId: link.nextStream++,
+            streamId: link.allocateStream(),
             invoke: { subscribe: { topics: [], events: [], replace: true } }
         })
     }
@@ -118,7 +124,7 @@ Item {
             if (encoded !== null) args.push(encoded)
         }
         link.send({
-            streamId: link.nextStream++,
+            streamId: link.allocateStream(),
             invoke: {
                 act: {
                     action: {

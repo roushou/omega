@@ -1,14 +1,14 @@
 //! The protocol: the generated ontology types and the wire version.
 
 /// The newest wire version this build speaks. Sent in `Hello` and `Welcome`.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// The oldest wire version this build still serves.
 ///
 /// A peer offering a version outside `MIN_PROTOCOL_VERSION..=PROTOCOL_VERSION`
 /// is refused at the handshake. Raise this only for a change that breaks unit
 /// binaries built against an older version.
-pub const MIN_PROTOCOL_VERSION: u32 = 1;
+pub const MIN_PROTOCOL_VERSION: u32 = 2;
 
 /// The version two peers speak: the lower of [`PROTOCOL_VERSION`] and what
 /// the peer offered.

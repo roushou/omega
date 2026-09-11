@@ -2,15 +2,13 @@
 
 use std::collections::HashMap;
 
-use tokio::sync::mpsc;
-
 use omega_proto::UnitName;
 use omega_proto::omega::{UnitPhase, UnitStatus, Value};
 
 use crate::manifest::UnitManifest;
 use crate::shutdown::Shutdown;
 use crate::units::lifecycle::{Lifecycle, Transition};
-use crate::units::session::Request;
+use crate::units::session::SessionLink;
 use crate::units::token::UnitToken;
 
 /// The two things that can be asked of a running unit.
@@ -28,7 +26,6 @@ pub struct UnitControl {
 /// One record per unit rather than a map per fact: the manifest, the token,
 /// the supervision handle, the session and the phase are all keyed by the
 /// same name and describe the same thing.
-/// sixth map.
 #[derive(Debug)]
 pub struct UnitRecord {
     pub name: UnitName,
@@ -43,7 +40,9 @@ pub struct UnitRecord {
     /// Present while the supervisor is running it.
     pub control: Option<UnitControl>,
     /// Present while the unit holds a session.
-    pub session: Option<mpsc::Sender<Request>>,
+    pub(crate) session: Option<SessionLink>,
+    pub(crate) instances:
+        std::collections::BTreeMap<crate::hub::SurfaceRef, HashMap<String, Value>>,
     /// The settings the document gave it, as the running process was told
     /// them. Construction rather than state: a plugin's fields are built out
     /// of these, so changing them means running the unit again.
@@ -69,6 +68,7 @@ impl UnitRecord {
             pid: None,
             control: None,
             session: None,
+            instances: Default::default(),
             config: HashMap::new(),
             adopted: false,
             restarts: 0,

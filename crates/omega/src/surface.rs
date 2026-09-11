@@ -33,9 +33,13 @@ pub trait Wired: Sized + Send + Sync + 'static {
 /// Something to draw.
 ///
 /// `render` is called once the topics its fields declare have arrived, and
-/// again whenever any of them changes. Identical trees are dropped by the
-/// daemon, so render whenever you like — and hold nothing that *does*
-/// anything, which the compiler enforces.
+/// again as state patches arrive. Readiness belongs to each surface: another
+/// widget's missing topic does not delay this one. Explicit absence counts as a
+/// report, and unwritten records have defaults. A requested instance awaiting its
+/// topics answers with an empty view and publishes once ready.
+///
+/// The runtime suppresses identical trees per instance before sending them.
+/// Rendering holds only readings; effects are excluded by the `Reads` bound.
 pub trait Widget: Wired {
     fn render(&self) -> Ui;
 }
@@ -45,8 +49,26 @@ pub trait Widget: Wired {
 /// Called by `omega run`, by a keybind, by a button in this plugin's own
 /// view, or by another plugin that was granted the right to. It runs with
 /// this plugin's capabilities and nobody else's.
+/// Commands run concurrently with socket processing. Shared mutable command
+/// state must synchronize its own access; record updates already do so.
+///
+/// ```no_run
+/// use omega::{Args, Command};
+/// #[derive(omega::Command)]
+/// struct Lock { session: omega::effect::Session }
+/// impl Command for Lock {
+///     type Output = ();
+///     async fn call(&self, _: Args) -> Result<(), omega::Error> {
+///         self.session.lock().await
+///     }
+/// }
+/// ```
 pub trait Command: Wired {
-    fn call(&self, args: Args) -> Answer;
+    type Output: IntoValue + Send;
+    fn call(
+        &self,
+        args: Args,
+    ) -> impl std::future::Future<Output = Result<Self::Output, crate::Error>> + Send;
 }
 
 /// Something that happens.
@@ -80,49 +102,5 @@ impl Args {
 
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
-    }
-}
-
-/// What a command answered.
-#[derive(Debug, Clone)]
-pub enum Answer {
-    /// It did the job and has nothing to say.
-    Done,
-    /// It has something to hand back.
-    Value(Value),
-    /// It will not, and this is why. The caller sees the message.
-    Refused(String),
-}
-
-impl Answer {
-    pub fn done() -> Self {
-        Self::Done
-    }
-
-    pub fn value(value: impl IntoValue) -> Self {
-        Self::Value(value.into_value())
-    }
-
-    pub fn refused(why: impl Into<String>) -> Self {
-        Self::Refused(why.into())
-    }
-}
-
-impl From<()> for Answer {
-    fn from(_: ()) -> Self {
-        Self::Done
-    }
-}
-
-/// A command that hands back a word writes the word.
-impl From<&str> for Answer {
-    fn from(value: &str) -> Self {
-        Self::value(value)
-    }
-}
-
-impl From<String> for Answer {
-    fn from(value: String) -> Self {
-        Self::value(value)
     }
 }

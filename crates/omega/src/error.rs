@@ -2,11 +2,15 @@
 
 use omega_proto::{ClientError, CodecError, HandshakeError, Refusal};
 
-/// The result of running a plugin.
+/// The result of a plugin operation.
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("effect failed: {0}")]
+    Effect(#[from] crate::effect::EffectError),
     /// The daemon is not there, or would not have us.
     #[error("cannot reach the daemon: {0}")]
     Daemon(#[from] ClientError),
@@ -46,6 +50,32 @@ impl From<HandshakeError> for Error {
                 newest,
             },
             other => Self::Daemon(ClientError::Handshake(other)),
+        }
+    }
+}
+
+impl Error {
+    /// Reject invalid command input.
+    ///
+    /// ```
+    /// let error = omega::Error::invalid("expected a network name");
+    /// assert!(error.to_string().contains("expected a network name"));
+    /// ```
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::Refused(Refusal::invalid(message))
+    }
+
+    pub(crate) fn refusal(&self) -> Refusal {
+        match self {
+            Self::Effect(error) => error.refusal(),
+            Self::Refused(refusal) | Self::Daemon(ClientError::Refused(refusal)) => refusal.clone(),
+            Self::Daemon(_) | Self::Transport(_) | Self::Io(_) => {
+                Refusal::unavailable(self.to_string())
+            }
+            Self::Name(..) => Refusal::invalid(self.to_string()),
+            Self::VersionMismatch { .. } | Self::Runtime(_) | Self::Describe(_) => {
+                Refusal::precondition(self.to_string())
+            }
         }
     }
 }

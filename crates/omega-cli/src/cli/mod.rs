@@ -8,6 +8,7 @@ pub(crate) mod link;
 mod logs;
 mod new;
 mod restart;
+mod rollback;
 mod run;
 pub(crate) mod shell;
 mod status;
@@ -85,6 +86,7 @@ pub enum Command {
     Logs(logs::LogsCmd),
     New(new::NewCmd),
     Restart(restart::RestartCmd),
+    Rollback(rollback::RollbackCmd),
     Run(run::RunCmd),
     Shell(shell::ShellCmd),
     Status(status::StatusCmd),
@@ -103,6 +105,7 @@ impl Command {
             Self::Logs(cmd) => cmd.run(ui).await,
             Self::New(cmd) => cmd.run(ui),
             Self::Restart(cmd) => cmd.run(ui).await,
+            Self::Rollback(cmd) => cmd.run(ui),
             Self::Run(cmd) => cmd.run(ui).await,
             Self::Shell(cmd) => cmd.run(ui),
             Self::Status(cmd) => cmd.run(ui).await,

@@ -6,19 +6,8 @@
 
 use std::path::PathBuf;
 
-use tokio::sync::{Mutex, MutexGuard};
-
 use omega_brokers::{Backlight, Broker};
 use omega_proto::omega::{SetBacklight, action, set_backlight, state_topic};
-
-/// `OMEGA_BACKLIGHT` is one variable for the whole process, so two tests
-/// pointing it at their own fixture at the same time would each read the
-/// other's machine. Async-aware because these tests hold it across a write.
-static ENV: Mutex<()> = Mutex::const_new(());
-
-async fn exclusive() -> MutexGuard<'static, ()> {
-    ENV.lock().await
-}
 
 struct Fixture(PathBuf);
 
@@ -54,11 +43,6 @@ impl Fixture {
         dir
     }
 
-    fn point_at(&self) {
-        // SAFETY: the guard makes this the only test reading or writing it.
-        unsafe { std::env::set_var("OMEGA_BACKLIGHT", &self.0) };
-    }
-
     fn raw(&self) -> u32 {
         std::fs::read_to_string(self.0.join("intel_backlight/brightness"))
             .unwrap()
@@ -70,7 +54,6 @@ impl Fixture {
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        unsafe { std::env::remove_var("OMEGA_BACKLIGHT") };
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
@@ -90,20 +73,16 @@ fn set(change: set_backlight::Change) -> action::Kind {
 
 #[tokio::test]
 async fn a_raw_scale_is_reported_as_a_percentage() {
-    let _guard = exclusive().await;
     let fixture = Fixture::new("read", 48, 96);
-    fixture.point_at();
 
-    assert_eq!(percent(&Backlight::new().patch()), Some(50));
+    assert_eq!(percent(&Backlight::at(&fixture.0).patch()), Some(50));
 }
 
 #[tokio::test]
 async fn setting_it_writes_the_raw_scale_back() {
-    let _guard = exclusive().await;
     let fixture = Fixture::new("write", 0, 255);
-    fixture.point_at();
 
-    let mut backlight = Backlight::new();
+    let mut backlight = Backlight::at(&fixture.0);
     let changed = backlight
         .act(&set(set_backlight::Change::AbsolutePercent(40)))
         .await
@@ -121,11 +100,9 @@ async fn setting_it_writes_the_raw_scale_back() {
 
 #[tokio::test]
 async fn a_step_moves_from_where_the_screen_is_now() {
-    let _guard = exclusive().await;
     let fixture = Fixture::new("step", 50, 100);
-    fixture.point_at();
 
-    let mut backlight = Backlight::new();
+    let mut backlight = Backlight::at(&fixture.0);
     backlight
         .act(&set(set_backlight::Change::DeltaPercent(10)))
         .await
@@ -149,11 +126,9 @@ async fn a_step_moves_from_where_the_screen_is_now() {
 
 #[tokio::test]
 async fn a_machine_with_no_backlight_says_so_and_refuses_to_set_one() {
-    let _guard = exclusive().await;
     let fixture = Fixture::empty("absent");
-    fixture.point_at();
 
-    let mut backlight = Backlight::new();
+    let mut backlight = Backlight::at(&fixture.0);
 
     let patch = backlight.patch();
     assert_eq!(patch.topics.len(), 1, "the topic is published either way");
@@ -170,4 +145,15 @@ async fn a_machine_with_no_backlight_says_so_and_refuses_to_set_one() {
             .await
             .is_err()
     );
+}
+
+#[test]
+fn separate_backlight_roots_do_not_share_configuration() {
+    let first = Fixture::new("first", 25, 100);
+    let second = Fixture::new("second", 75, 100);
+    let mut a = Backlight::at(&first.0);
+    let mut b = Backlight::at(&second.0);
+    assert_eq!(percent(&a.patch()), Some(25));
+    assert_eq!(percent(&b.patch()), Some(75));
+    assert_eq!(percent(&a.patch()), Some(25));
 }

@@ -19,12 +19,11 @@ pub struct SetProfile {
 does!(SetProfile, SystemControl);
 
 impl SetProfile {
-    /// Ask for a profile. The daemon may refuse it, or degrade it a moment
-    /// later for thermals — either way the answer arrives as a reading rather
-    /// than as a return value.
-    pub fn set(&self, profile: PowerProfile) {
+    /// Ask for a profile. The receipt reports whether the request succeeded;
+    /// later thermal degradation is reported through the profile reading.
+    pub fn set(&self, profile: PowerProfile) -> crate::effect::Effect {
         self.act(action::Kind::SetPowerProfile(SetPowerProfile {
             profile: profile as i32,
-        }));
+        }))
     }
 }

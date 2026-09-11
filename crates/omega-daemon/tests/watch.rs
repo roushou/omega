@@ -2,11 +2,8 @@
 
 use std::path::PathBuf;
 
-use omega_daemon::host::StateConfig;
 use omega_daemon::watch::StateStamp;
-use omega_document::{Document, DocumentFile, Units};
 use omega_host::Layout;
-use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 
@@ -47,32 +44,21 @@ fn an_absent_state_dir_is_a_stable_stamp() {
 }
 
 #[test]
-fn writing_either_half_of_the_build_is_a_change() {
+fn only_publishing_a_generation_changes_the_stamp() {
     let tmp = TempDir::new("rebuild");
     let layout = tmp.layout();
-    std::fs::create_dir_all(&layout.state).unwrap();
-
-    let units = layout.file::<StateConfig>(());
-    units
-        .write(&StateConfig::new(
-            &layout,
-            [UnitName::parse("a-unit").unwrap()],
-        ))
-        .unwrap();
-    let document = DocumentFile::of(&layout);
-    document.write(&Document::new().into_inner()).unwrap();
-
     let stamp = StateStamp::of(&layout);
+    let generation = omega_host::Generations::new(&layout).stage().unwrap();
+    generation.files().write("document.json", b"{}").unwrap();
     assert!(!stamp.changed(&layout));
-
-    // What the machine is for changed...
-    document
-        .write(&Document::new().unit(Units::disabled("a-unit")).into_inner())
-        .unwrap();
+    generation.commit().unwrap();
     assert!(stamp.changed(&layout));
-
-    // ...and so did what was built.
     let stamp = StateStamp::of(&layout);
-    units.write(&StateConfig::default()).unwrap();
-    assert!(stamp.changed(&layout));
+    let abandoned = omega_host::Generations::new(&layout).stage().unwrap();
+    abandoned
+        .files()
+        .write("document.json", b"changed")
+        .unwrap();
+    drop(abandoned);
+    assert!(!stamp.changed(&layout));
 }

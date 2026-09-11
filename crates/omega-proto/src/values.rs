@@ -223,3 +223,10 @@ impl IntoValue for Values {
         }
     }
 }
+
+/// Unit denotes the absence of a return value.
+impl IntoValue for () {
+    fn into_value(self) -> Value {
+        Value::default()
+    }
+}

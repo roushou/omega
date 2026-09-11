@@ -29,9 +29,14 @@ impl<'a> Describe<'a> {
     /// What one built plugin declares, validated against the unit it is.
     pub async fn manifest(&self, name: &UnitName) -> anyhow::Result<Manifest> {
         let program = self.layout.compiled_binary(self.profile, name);
+        Self::program(&program, name).await
+    }
 
-        let output = tokio::process::Command::new(&program)
+    /// Describe the exact artifact that will be published.
+    pub async fn program(program: &std::path::Path, name: &UnitName) -> anyhow::Result<Manifest> {
+        let output = tokio::process::Command::new(program)
             .arg(Manifest::DESCRIBE)
+            .kill_on_drop(true)
             .output()
             .await
             .with_context(|| {

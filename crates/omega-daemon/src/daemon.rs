@@ -4,16 +4,13 @@
 use std::io;
 use std::time::Duration;
 
-use tokio::net::UnixListener;
 use tokio::signal::unix::SignalKind;
 
-use crate::host::StateConfig;
 use omega_host::Layout;
 use omega_proto::{Observation, Socket};
 
 use crate::broker::Brokerage;
 use crate::hub::Hub;
-use crate::manifest::ManifestStore;
 use crate::manifest::ManifestStoreError;
 use crate::reconcile::{Context, Converger, Work};
 use crate::schedule::Schedules;
@@ -34,7 +31,7 @@ pub struct Daemon {
     /// The subsystems this daemon brokers.
     brokers: Brokerage,
     supervisor: Supervisor,
-    listener: UnixListener,
+    listener: omega_proto::BoundSocket,
     socket: Socket,
     shell: ShellServer,
     shutdown: Shutdown,
@@ -101,18 +98,18 @@ impl Daemon {
         // Convergence runs in its own task: a bar instance can wait five
         // seconds on a wedged unit, and the daemon must keep accepting
         // connections and answering signals while it does.
+        let schedules = Schedules::new(
+            self.hub.clone(),
+            self.units.clone(),
+            self.brokers.clone(),
+            self.shutdown.clone(),
+        );
         let converger = Converger::spawn(
             Context {
                 layout: self.layout.clone(),
-                hub: self.hub.clone(),
                 supervisor: self.supervisor.clone(),
                 units: self.units.clone(),
-                schedules: Schedules::new(
-                    self.hub.clone(),
-                    self.units.clone(),
-                    self.brokers.clone(),
-                    self.shutdown.clone(),
-                ),
+                schedules: schedules.clone(),
             },
             self.shutdown.clone(),
         );
@@ -123,19 +120,27 @@ impl Daemon {
             .unwrap_or_else(|e| e.into_inner())
             .take();
         let mut built = StateStamp::of(&self.layout);
-        // The state dir is replaced by a rename, which destroys a watch on
-        // the directory itself — so the parent is watched too, and that is
-        // what survives the swap.
+        // Watching the parent also covers a state directory created after startup.
         let mut rebuilt = StateStamp::watch(&self.layout, Self::SETTLE)
             .inspect_err(|e| tracing::warn!(error = %e, "cannot watch the state dir for rebuilds"))
             .ok();
 
+        let mut recovery = tokio::time::interval(Duration::from_secs(2));
+        recovery.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut sessions = tokio::task::JoinSet::new();
+        let mut observers = tokio::task::JoinSet::new();
         let outcome = loop {
             tokio::select! {
                 // Both loops are cancel-safe: a pending `accept` that loses
                 // the race is simply started again on the next pass.
-                result = self.accept_loop() => break result.map_err(DaemonError::from),
-                result = self.shell.run() => break result.map_err(DaemonError::from),
+                result = self.accept_loop(&mut sessions) => break result.map_err(DaemonError::from),
+                result = self.shell.accepting(&mut observers) => break result.map_err(DaemonError::from),
+                _ = recovery.tick() => {
+                    if built.changed(&self.layout) {
+                        built = StateStamp::of(&self.layout);
+                        converger.request(Work::REBUILD);
+                    }
+                }
                 Some(()) = Self::rebuilt(rebuilt.as_mut()) => {
                     // The watch says something moved; the stamp says whether
                     // it was the pair of files this daemon runs from.
@@ -164,7 +169,15 @@ impl Daemon {
             }
         };
 
+        self.shutdown.trigger();
+        converger.stop().await;
+        schedules.shutdown().await;
+        sessions.shutdown().await;
+        observers.shutdown().await;
         self.stop().await;
+        if let Some(error) = self.shutdown.failure() {
+            return Err(DaemonError::Task(error));
+        }
         outcome
     }
 
@@ -225,26 +238,28 @@ impl Daemon {
         tracing::warn!("shutdown deadline reached; leaving remaining units to the kernel");
     }
 
-    async fn accept_loop(&self) -> io::Result<()> {
-        loop {
-            let (stream, _) = self.listener.accept().await?;
-            let session = Session::new(self.supervisor.clone(), self.hub.clone())
-                .with_brokers(self.brokers.clone())
-                .with_shutdown(self.shutdown.clone())
-                .with_units(self.units.clone());
-            tokio::spawn(async move {
-                if let Err(e) = session.serve(stream).await {
-                    tracing::warn!("connection ended: {e}");
-                }
-            });
-        }
-    }
-}
+    const CONNECTION_LIMIT: usize = 64;
 
-impl Drop for Daemon {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(self.socket.path());
-        let _ = std::fs::remove_file(self.shell.path());
+    async fn accept_loop(&self, sessions: &mut tokio::task::JoinSet<()>) -> io::Result<()> {
+        loop {
+            tokio::select! {
+                Some(result) = sessions.join_next(), if !sessions.is_empty() => {
+                    if let Err(error) = result { tracing::warn!(%error, "control session task failed"); }
+                }
+                accepted = self.listener.accept(), if sessions.len() < Self::CONNECTION_LIMIT => {
+                    let (stream, _) = accepted?;
+                    let session = Session::new(self.supervisor.clone(), self.hub.clone())
+                        .with_brokers(self.brokers.clone())
+                        .with_shutdown(self.shutdown.clone())
+                        .with_units(self.units.clone());
+                    sessions.spawn(async move {
+                        if let Err(error) = session.serve(stream).await {
+                            tracing::warn!(%error, "connection ended");
+                        }
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -278,19 +293,10 @@ impl DaemonBuilder {
             source,
         })?;
 
-        // A state dir with no `units.toml` is a machine nothing has been
-        // built for yet, not a broken one. Refusing to start meant `omega
-        // init` — which installs the service before anything is built — burned
-        // through systemd's restart limit, so the daemon was permanently dead
-        // by the time the first `omega build` produced the file.
-        let config = self.layout.file::<StateConfig>(()).read_or_default()?;
-        let manifests = ManifestStore::load(&config, &self.layout)?;
-
         let hub = Hub::new();
         let shutdown = Shutdown::new();
         let brokers = Brokerage::new(hub.clone(), shutdown.clone());
         let (units, arrivals) = UnitTable::new(hub.clone());
-        units.adopt(&manifests);
         let supervisor = Supervisor::new(socket.clone(), units.clone(), shutdown.clone());
         let shell = ShellServer::bind_at(
             self.observation.unwrap_or_else(Observation::socket),
@@ -352,6 +358,10 @@ impl DaemonHandle {
 /// What starting or running the daemon can fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum DaemonError {
+    #[error(transparent)]
+    Task(#[from] crate::shutdown::TaskFailure),
+    #[error("invalid desired state: {0}")]
+    DesiredState(#[from] crate::reconcile::ProviderError),
     #[error("cannot bind control socket {}: {source}", path.display())]
     Bind {
         path: PathBuf,

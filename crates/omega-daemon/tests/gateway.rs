@@ -183,7 +183,7 @@ async fn pressing_a_button_reaches_the_plugin_that_drew_it() {
     // refused for the reason it actually failed — a precondition, not a bad
     // request, which is the difference between "try again" and "stop".
     let refusal = observer.refusal(press("lamp", "toggle")).await;
-    assert_eq!(refusal.code, ErrorCode::FailedPrecondition, "{refusal}");
+    assert_eq!(refusal.code, ErrorCode::Unavailable, "{refusal}");
     assert!(refusal.message.contains("lamp"), "{refusal}");
 
     // A button wired to a command nobody declared is answered too, rather
@@ -260,4 +260,26 @@ async fn a_server_that_only_streams_says_so() {
         }))
         .await;
     assert_eq!(refusal.code, ErrorCode::Unimplemented);
+}
+
+#[tokio::test]
+async fn observation_actions_use_the_same_payload_validation_without_a_handler() {
+    let shell = Shell::serving("gateway-malformed");
+    let mut observer = shell.connect().await;
+    for level in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
+        let refusal = observer
+            .refusal(invoke::Op::Act(Act {
+                action: Some(Action {
+                    kind: Some(action::Kind::SetVolume(omega_proto::omega::SetVolume {
+                        change: Some(omega_proto::omega::set_volume::Change::Absolute(level)),
+                    })),
+                }),
+            }))
+            .await;
+        assert_eq!(refusal.code, ErrorCode::InvalidArgument);
+        assert!(
+            refusal.message.contains("SetVolume.change"),
+            "{level}: {refusal}"
+        );
+    }
 }

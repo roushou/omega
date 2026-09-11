@@ -55,6 +55,10 @@ impl Encoder<Frame> for FrameCodec {
     type Error = CodecError;
 
     fn encode(&mut self, item: Frame, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let length = item.encoded_len();
+        if length > MAX_FRAME_LEN {
+            return Err(CodecError::FrameTooLong(length));
+        }
         item.encode_length_delimited(dst)?;
         Ok(())
     }
@@ -91,6 +95,10 @@ impl Decoder for FrameCodec {
 /// What framing can fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum CodecError {
+    #[error("receive capacity exhausted while writing")]
+    ReceiveCapacity,
+    #[error("connection cannot resume an interrupted or failed write")]
+    InterruptedWrite,
     #[error("frame length {0} exceeds MAX_FRAME_LEN")]
     FrameTooLong(usize),
     #[error("length prefix overflows 64 bits")]

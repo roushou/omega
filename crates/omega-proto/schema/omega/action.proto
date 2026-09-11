@@ -85,7 +85,7 @@ message CloseWindow {
 
 message WindowSelector {
   oneof target {
-    bool focused = 1;
+    bool focused = 1;           // selected means true; absent selector means focused
     string app_id = 2;
     string title = 3;
   }
@@ -128,13 +128,13 @@ message SetVolume {
   oneof change {
     double absolute = 1;        // 0.0 .. 1.0
     double delta = 2;           // signed
-    bool toggle_mute = 3;
+    bool toggle_mute = 3;       // must be true when selected
   }
 }
 
 message SetBacklight {
   oneof change {
-    uint32 absolute_percent = 1;
+    uint32 absolute_percent = 1; // 0 .. 100; invalid absolute values are refused
     int32 delta_percent = 2;
   }
 }

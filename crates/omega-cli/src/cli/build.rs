@@ -1,13 +1,11 @@
 //! `omega build`: compile the config workspace and assemble the state dir.
 
-use std::path::PathBuf;
+use anyhow::bail;
 
-use anyhow::{Context, bail};
-
-use omega_daemon::host::{BuiltUnit, StateConfig};
-use omega_daemon::host::{Changes, Recursion, StageDir, Units};
+use omega_daemon::host::{Changes, Recursion, Units};
 use omega_document::{DocumentFile, StateDocument};
-use omega_host::{Layout, Profile};
+use omega_host::{BuiltUnit, StateConfig};
+use omega_host::{Generations, Layout, Profile};
 use omega_proto::Manifest;
 use omega_proto::UnitName;
 
@@ -133,49 +131,24 @@ impl BuildCmd {
         //    schedule that will never fire should fail where somebody is
         //    still looking at the output, not in a log at three in the
         //    morning.
-        Self::check_cadences(&document)?;
-        Self::check_keybinds(&document)?;
+        omega_document::DocumentValidation::validate(
+            &document,
+            plan.units.iter().map(|unit| &unit.manifest),
+        )?;
 
         // 6. Assemble the daemon's state atomically.
+        let count = plan.len();
         plan.materialize(layout, &document)?;
 
         ui.step(
             Step::Built,
             format!(
                 "{} into {}",
-                Paint::count(plan.len(), "plugin"),
+                Paint::count(count, "plugin"),
                 Paint::path(&layout.state)
             ),
         );
         Ok(())
-    }
-
-    /// Every schedule's cadence, read with the grammar the daemon reads it
-    /// with. Neither owns a private copy of the rule.
-    fn check_cadences(document: &StateDocument) -> anyhow::Result<()> {
-        for schedule in &document.schedules {
-            schedule
-                .parsed()
-                .with_context(|| format!("schedule {:?} will never fire", schedule.id))?;
-        }
-        Ok(())
-    }
-
-    /// Keybinds are declarable and nothing converges them yet.
-    ///
-    /// Refused rather than staged, for the reason the daemon refuses an
-    /// action it cannot perform: a bind that is accepted and never fires is
-    /// worse than one that is turned away, because the first costs an
-    /// afternoon to find. Delete this when a provider converges them.
-    fn check_keybinds(document: &StateDocument) -> anyhow::Result<()> {
-        let Some(keybind) = document.keybinds.first() else {
-            return Ok(());
-        };
-        bail!(
-            "keybind {:?}: the daemon does not converge keybinds yet, so this \
-             would build and never fire",
-            keybind.id
-        )
     }
 
     /// What the config plane said, in one line: a document is the point of
@@ -208,29 +181,36 @@ impl BuildCmd {
 /// left in it.
 struct BuildPlan {
     units: Vec<UnitBuild>,
+    generation: omega_host::GenerationStage,
 }
 
 struct UnitBuild {
     name: UnitName,
     manifest: Manifest,
-    binary: PathBuf,
 }
 
 impl BuildPlan {
     /// Ask every built plugin what it declares.
     async fn describe(units: &Units, layout: &Layout, profile: Profile) -> anyhow::Result<Self> {
-        let describe = Describe::new(layout, profile);
+        let generation = Generations::new(layout).stage()?;
+        let staged = Layout::at(&layout.config, generation.files().path(), &layout.cache);
 
         let mut plan = Vec::with_capacity(units.len());
         for name in units {
+            generation.files().copy(
+                &layout.compiled_binary(profile, name),
+                layout.unit_program_rel(name),
+            )?;
             plan.push(UnitBuild {
-                manifest: describe.manifest(name).await?,
+                manifest: Describe::program(&staged.state_unit_program(name), name).await?,
                 name: name.clone(),
-                binary: layout.compiled_binary(profile, name),
             });
         }
 
-        Ok(Self { units: plan })
+        Ok(Self {
+            units: plan,
+            generation,
+        })
     }
 
     fn len(&self) -> usize {
@@ -259,9 +239,9 @@ impl BuildPlan {
         self.units.iter().map(|unit| unit.name.clone()).collect()
     }
 
-    /// Assemble the state dir in a staging directory, then swap it in.
-    fn materialize(&self, layout: &Layout, document: &StateDocument) -> anyhow::Result<()> {
-        let stage = StageDir::new(&layout.state)?;
+    /// Complete and durably publish the generation containing the described binaries.
+    fn materialize(self, layout: &Layout, document: &StateDocument) -> anyhow::Result<()> {
+        let stage = self.generation.files();
 
         let mut built = Vec::with_capacity(self.units.len());
         for unit in &self.units {
@@ -270,13 +250,6 @@ impl BuildPlan {
             // The canonical bytes, not a re-encoding of them: this file is
             // what the daemon hashes, so it must be what was hashed.
             stage.write(&entry.manifest, &unit.manifest.canonical())?;
-            stage.copy(&unit.binary, &entry.program).with_context(|| {
-                format!(
-                    "unit {}: cannot copy compiled binary {} (is the crate name identical to the unit name?)",
-                    unit.name,
-                    unit.binary.display()
-                )
-            })?;
 
             built.push(entry);
         }
@@ -289,7 +262,7 @@ impl BuildPlan {
         // not at all.
         DocumentFile::at(stage.path().join(DocumentFile::FILE_NAME)).write(document)?;
 
-        stage.commit()?;
+        self.generation.commit()?;
         Ok(())
     }
 }

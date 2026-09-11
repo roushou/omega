@@ -13,11 +13,13 @@ mod document;
 mod error;
 mod file;
 mod keys;
+mod validation;
 
 pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};
 pub use error::DocumentError;
 pub use file::DocumentFile;
 pub use keys::Key;
+pub use validation::{DocumentValidation, ValidationError};
 
 pub use omega_proto::omega::StateDocument;
 

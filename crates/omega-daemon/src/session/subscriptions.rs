@@ -12,7 +12,7 @@ use omega_proto::UnitName;
 use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot};
 use omega_proto::{Address, Refusal};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Subscriptions {
     /// The unit whose keyspace is implicitly readable and writable.
     owner: Option<UnitName>,
@@ -77,6 +77,7 @@ impl Subscriptions {
     /// everything unwanted would quietly let each new topic back in.
     pub fn subscribe(&mut self, topics: &[String], replace: bool) -> Result<(), Refusal> {
         for topic in topics {
+            Address::parse(topic).map_err(|error| Refusal::invalid(error.to_string()))?;
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
                     "topic {topic:?} is not declared by this unit"
@@ -193,16 +194,40 @@ impl Subscriptions {
         (!topics.is_empty()).then_some(StatePatch { topics })
     }
 
-    /// The topics a `GetState` with no names should answer with.
-    ///
-    /// Empty for a selection standing for everything allowed, which has no
-    /// list to give — a watcher, and what one was already answered with.
-    pub fn active(&self) -> Vec<String> {
-        let Some(active) = self.active.as_ref() else {
-            return Vec::new();
-        };
-        let mut topics: Vec<_> = active.iter().cloned().collect();
-        topics.sort();
-        topics
+    /// Read selection is filtered before leaving the authorization boundary.
+    pub fn read(
+        &self,
+        snapshot: StateSnapshot,
+        requested: &[String],
+    ) -> Result<StatePatch, Refusal> {
+        for topic in requested {
+            Address::parse(topic).map_err(|error| Refusal::invalid(error.to_string()))?;
+            if !self.permits(topic) {
+                return Err(Refusal::denied(format!(
+                    "topic {topic:?} is not declared by this unit"
+                )));
+            }
+        }
+        Ok(StatePatch {
+            topics: snapshot
+                .topics
+                .into_iter()
+                .filter(|topic| {
+                    if requested.is_empty() {
+                        self.wants(&topic.topic)
+                    } else {
+                        requested.contains(&topic.topic)
+                    }
+                })
+                .collect(),
+        })
+    }
+
+    pub fn select(&mut self, request: &omega_proto::omega::Subscribe) -> Result<(), Refusal> {
+        let mut next = self.clone();
+        next.subscribe(&request.topics, request.replace)?;
+        next.subscribe_events(&request.events)?;
+        *self = next;
+        Ok(())
     }
 }

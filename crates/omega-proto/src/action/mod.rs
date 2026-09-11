@@ -96,3 +96,9 @@ actions! {
     ToggleFullscreen => None,
     SetPowerProfile => SystemControl,
 }
+
+mod validation;
+pub use validation::ActionError;
+
+#[cfg(test)]
+mod tests;

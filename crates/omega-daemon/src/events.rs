@@ -57,6 +57,7 @@ impl EventStamp {
 #[derive(Debug, Default)]
 pub struct Transitions {
     battery: Option<BatteryState>,
+    mains: Option<bool>,
 }
 
 impl Transitions {
@@ -71,15 +72,27 @@ impl Transitions {
 
     /// The events a patch implies, given everything seen before it.
     pub fn of(&mut self, patch: &StatePatch) -> Vec<EventKind> {
-        patch
-            .topics
-            .iter()
-            .filter_map(|topic| match topic.value.as_ref()? {
-                state_topic::Value::Battery(battery) => Some(self.battery(*battery)),
-                _ => None,
-            })
-            .flatten()
-            .collect()
+        let mut events = Vec::new();
+        for topic in &patch.topics {
+            match topic.value.as_ref() {
+                Some(state_topic::Value::Battery(battery)) => events.extend(self.battery(*battery)),
+                Some(state_topic::Value::Mains(mains)) => {
+                    if let Some(previous) = self.mains.replace(mains.connected)
+                        && previous != mains.connected
+                    {
+                        events.push(if mains.connected {
+                            EventKind::EventAcPlugged
+                        } else {
+                            EventKind::EventAcUnplugged
+                        });
+                    }
+                }
+                None if topic.topic == "battery" => self.battery = None,
+                None if topic.topic == "mains" => self.mains = None,
+                _ => {}
+            }
+        }
+        events
     }
 
     fn battery(&mut self, next: BatteryState) -> Vec<EventKind> {
@@ -91,14 +104,6 @@ impl Transitions {
         };
 
         let mut events = Vec::new();
-
-        if next.charging != previous.charging {
-            events.push(if next.charging {
-                EventKind::EventAcPlugged
-            } else {
-                EventKind::EventAcUnplugged
-            });
-        }
 
         if Self::crossed(previous.level, next.level, Self::CRITICAL) {
             events.push(EventKind::EventBatteryCritical);

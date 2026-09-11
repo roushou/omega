@@ -1,18 +1,6 @@
-//! A Wi-Fi indicator and its panel — the test of whether the SDK is worth it.
-//!
-//! `docs/design.md` names this: Omarchy's `omarchy.network` is 1,970 lines of
-//! QML and 380 of JavaScript, and if the same desktop feature does not come
-//! out here at a small fraction of that, the typed path is not shorter than
-//! the untyped one and the SDK is decoration.
-//!
-//! It is an example rather than a test because what it proves is that this
-//! compiles and reads well, which a person judges. `cargo build --examples`
-//! keeps it honest: the SDK cannot change out from under it silently.
-//!
-//! The indicator holds `Network` — the one connection the machine has — and
-//! the panel holds `Wifi`, the list it could have. Holding only what it draws
-//! is what keeps the indicator from waking every time a signal jitters three
-//! rooms away.
+//! A Wi-Fi indicator, panel and commands using readings, records and awaited effects.
+//! Enter a network name and submit it before submitting its passphrase.
+//! Network changes use nmcli; awaiting Shell confirms launch, not connectivity.
 
 use omega::effect::Shell;
 use omega::reading::{AccessPoint, Network, Wifi};
@@ -20,10 +8,10 @@ use omega::record::{Own, Watch};
 use omega::ui::{
     Bind, Button, Column, Field, Glyph, Graph, Icon, List, Progress, Role, Row, Stack, Text,
 };
-use omega::{Answer, Args, Command, Percent, Ui, Widget};
+use omega::{Args, Command, Percent, Ui, Widget};
 
 /// This unit's name, for the config plane to refer to it by.
-pub const UNIT: &str = "wifi";
+pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
 /// What the document can configure an instance with.
 #[derive(omega::Config, Debug, Clone, PartialEq)]
@@ -168,14 +156,13 @@ fn row(point: &AccessPoint) -> Stack {
 
 /// Somewhere to type a network and its passphrase.
 ///
-/// Two fields, one binding: the SSID is an argument the view chose and the
-/// passphrase is what the user typed, appended by the shell — so `connect` is
-/// called with both and neither is a command of its own.
+/// Submitting the network name stores it; submitting the passphrase connects
+/// that network. The passphrase is never written to a record.
 fn join() -> Stack {
     Column::new()
         .gap(4)
         .child(Text::new("Join another").dim())
-        .child(Field::new("Network").on_submit("remember"))
+        .child(Field::new("Network (press Enter)").on_submit("remember"))
         .child(
             Field::new("Passphrase")
                 .secret()
@@ -183,22 +170,51 @@ fn join() -> Stack {
         )
 }
 
+#[derive(omega::UnitState, Debug, Clone, Default)]
+pub struct SelectedNetwork {
+    pub ssid: String,
+}
+
+#[derive(omega::Command, Debug)]
+pub struct Remember {
+    selected: Own<SelectedNetwork>,
+}
+
+impl Command for Remember {
+    type Output = ();
+
+    async fn call(&self, args: Args) -> Result<(), omega::Error> {
+        let ssid = args
+            .get::<String>(0)
+            .filter(|ssid| !ssid.is_empty())
+            .ok_or_else(|| omega::Error::invalid("no network"))?;
+        self.selected.set(&SelectedNetwork { ssid }).await
+    }
+}
+
 /// Join a network. Called with the passphrase the field carried.
 #[derive(omega::Command, Debug)]
 pub struct Connect {
     shell: Shell,
+    selected: Own<SelectedNetwork>,
 }
 
 impl Command for Connect {
-    fn call(&self, args: Args) -> Answer {
+    type Output = ();
+    async fn call(&self, args: Args) -> Result<(), omega::Error> {
         let Some(secret) = args.get::<String>(0) else {
-            return Answer::refused("no passphrase");
+            return Err(omega::Error::invalid("no passphrase"));
         };
-        // The escape hatch, and honestly so: joining is NetworkManager's and
-        // Omega has no action for it yet.
+        let ssid = self.selected.get().ssid;
+        if ssid.is_empty() {
+            return Err(omega::Error::invalid("submit a network name first"));
+        }
         self.shell
-            .run(format!("nmcli device wifi connect --ask password {secret}"));
-        Answer::from("connecting")
+            .run_with_args(
+                "nmcli",
+                ["device", "wifi", "connect", &ssid, "password", &secret],
+            )
+            .await
     }
 }
 
@@ -221,10 +237,12 @@ pub struct Sample {
 }
 
 impl Command for Sample {
-    fn call(&self, _: Args) -> Answer {
+    type Output = ();
+    async fn call(&self, _: Args) -> Result<(), omega::Error> {
         let strength = f64::from(self.network.strength().whole_percent());
-        self.signal.set(&self.signal.get().with(strength));
-        Answer::done()
+        self.signal
+            .update(|signal| *signal = signal.with(strength))
+            .await
     }
 }
 
@@ -235,12 +253,14 @@ pub struct Join {
 }
 
 impl Command for Join {
-    fn call(&self, args: Args) -> Answer {
+    type Output = ();
+    async fn call(&self, args: Args) -> Result<(), omega::Error> {
         let Some(ssid) = args.get::<String>(0) else {
-            return Answer::refused("no network");
+            return Err(omega::Error::invalid("no network"));
         };
-        self.shell.run(format!("nmcli device wifi connect {ssid}"));
-        Answer::from("joining")
+        self.shell
+            .run_with_args("nmcli", ["device", "wifi", "connect", &ssid])
+            .await
     }
 }
 
@@ -251,12 +271,14 @@ pub struct Disconnect {
 }
 
 impl Command for Disconnect {
-    fn call(&self, args: Args) -> Answer {
+    type Output = ();
+    async fn call(&self, args: Args) -> Result<(), omega::Error> {
         let Some(name) = args.get::<String>(0) else {
-            return Answer::refused("no network");
+            return Err(omega::Error::invalid("no network"));
         };
-        self.shell.run(format!("nmcli connection down id {name}"));
-        Answer::from("disconnecting")
+        self.shell
+            .run_with_args("nmcli", ["connection", "down", "id", &name])
+            .await
     }
 }
 
@@ -273,6 +295,7 @@ fn main() -> omega::Result<()> {
     omega::Plugin::named(UNIT, "0.1.0")
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
+        .command::<Remember>("remember")
         .command::<Connect>("connect")
         .command::<Join>("join")
         .command::<Sample>("sample")

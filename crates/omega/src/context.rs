@@ -9,7 +9,8 @@
 //! Authors never see this type. It exists so the derive has something to
 //! build fields out of.
 
-use std::sync::{Arc, RwLock};
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, RwLock};
 
 use omega_proto::omega::{StatePatch, StateSnapshot, invoke};
 use omega_proto::{FromValue, SystemTopic, TopicValue, Values};
@@ -26,20 +27,19 @@ pub struct Context {
 struct Shared {
     /// Read on every render, written by the runtime as patches arrive.
     state: RwLock<Mirror>,
-    /// Where effects go. Unbounded because a plugin must never block on the
-    /// daemon draining it — a wedged socket is the runtime's problem, not the
-    /// author's.
-    effects: tokio::sync::mpsc::UnboundedSender<invoke::Op>,
+    records: Mutex<BTreeMap<String, Values>>,
+    effects: crate::effect::queue::EffectsSender,
 }
 
 impl Context {
     pub(crate) fn new(
         snapshot: &StateSnapshot,
-        effects: tokio::sync::mpsc::UnboundedSender<invoke::Op>,
+        effects: crate::effect::queue::EffectsSender,
     ) -> Self {
         Self {
             inner: Arc::new(Shared {
                 state: RwLock::new(Mirror::from_snapshot(snapshot)),
+                records: Mutex::new(BTreeMap::new()),
                 effects,
             }),
         }
@@ -49,10 +49,7 @@ impl Context {
         self.write().apply(patch);
     }
 
-    /// Whether every one of these topics has a value yet.
-    ///
-    /// The runtime holds a plugin's first render until they do, so a field
-    /// can read its topic without asking whether it exists.
+    /// Whether the daemon has reported each topic, including explicit absence.
     pub(crate) fn holds(&self, topics: &[SystemTopic]) -> bool {
         let state = self.read();
         topics.iter().all(|topic| state.knows(*topic))
@@ -68,11 +65,37 @@ impl Context {
         FromValue::from_value(self.read().generic(address)?)
     }
 
-    /// Queue an effect. Fire and forget: the daemon answers, and a refusal
-    /// surfaces in the runtime's log rather than at an author's call site
-    /// that had nothing to do about it.
-    pub fn act(&self, op: invoke::Op) {
-        let _ = self.inner.effects.send(op);
+    pub(crate) fn record<T: crate::record::UnitState>(&self) -> T {
+        let mut records = self.inner.records.lock().unwrap_or_else(|e| e.into_inner());
+        let values = records
+            .entry(T::address())
+            .or_insert_with(|| self.keyspace(&T::address()).unwrap_or_default());
+        T::read(values)
+    }
+
+    pub(crate) fn update_record<T: crate::record::UnitState>(
+        &self,
+        change: impl FnOnce(&mut T),
+    ) -> crate::effect::Submission {
+        let admission = self.inner.effects.reserve_record()?;
+        let mut records = self.inner.records.lock().unwrap_or_else(|e| e.into_inner());
+        let values = records
+            .entry(T::address())
+            .or_insert_with(|| self.keyspace(&T::address()).unwrap_or_default());
+        let mut value = T::read(values);
+        change(&mut value);
+        let updated = value.write();
+        let receipt = admission.submit(invoke::Op::SetState(omega_proto::omega::SetState {
+            topic: T::address(),
+            value: Some(omega_proto::IntoValue::into_value(updated.clone())),
+        }))?;
+        *values = updated;
+        Ok(receipt)
+    }
+
+    /// Admit one effect without blocking. Its receipt reports the terminal answer.
+    pub fn act(&self, op: invoke::Op) -> crate::effect::Submission {
+        self.inner.effects.submit(op)
     }
 
     fn read(&self) -> std::sync::RwLockReadGuard<'_, Mirror> {

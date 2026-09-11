@@ -1,28 +1,28 @@
-//! What fires on its own.
-//!
-//! The document declares schedules; this starts, restarts and stops the
-//! timers behind them. The timers themselves live in [`Schedules`], which
-//! outlives a pass — a provider is rebuilt every time the daemon converges,
-//! and anything it owned would be rebuilt with it.
-//!
-//! A schedule is *updated* by being replaced: there is no way to change a
-//! running timer's period, and no reason to want one. What matters is that
-//! the schedules a pass leaves alone keep ticking, so an unrelated
-//! convergence — a unit connecting, a bar re-rendering — does not reset every
-//! clock on the machine.
+//! Timer declarations are planned here; their tasks remain owned by Schedules.
 
-use std::collections::BTreeMap;
-
-use async_trait::async_trait;
-
-use omega_proto::omega::{Schedule, StateDocument};
-
-use crate::reconcile::{Action, Change, Provider, ProviderError};
+use crate::reconcile::ProviderError;
 use crate::schedule::Schedules;
+use omega_proto::omega::{Schedule, StateDocument};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct ScheduleProvider {
     schedules: Schedules,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScheduleChange {
+    Set(Schedule),
+    Remove(String),
+}
+
+impl ScheduleChange {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Set(schedule) => &schedule.id,
+            Self::Remove(id) => id,
+        }
+    }
 }
 
 impl ScheduleProvider {
@@ -30,97 +30,53 @@ impl ScheduleProvider {
         Self { schedules }
     }
 
-    /// The schedules the document declares, by id.
-    ///
-    /// Last one wins where a document declares an id twice, and the plan says
-    /// so — a duplicated id is a config mistake that would otherwise show up
-    /// as a schedule firing at a cadence nobody wrote.
-    fn declared(document: &StateDocument) -> BTreeMap<String, Schedule> {
-        document
+    pub fn plan(&self, document: &StateDocument) -> Result<Vec<ScheduleChange>, ProviderError> {
+        let mut declared = BTreeMap::new();
+        for schedule in &document.schedules {
+            schedule.parsed().map_err(Self::error)?;
+            if let Some(action) = &schedule.action {
+                action.validate().map_err(Self::error)?;
+            }
+            if schedule.id.is_empty() || declared.insert(schedule.id.as_str(), schedule).is_some() {
+                return Err(Self::error("empty or duplicate schedule id"));
+            }
+        }
+        let running: BTreeMap<_, _> = self
             .schedules
-            .iter()
-            .map(|schedule| (schedule.id.clone(), schedule.clone()))
-            .collect()
-    }
-
-    fn running(&self) -> BTreeMap<String, Schedule> {
-        self.schedules
             .declared()
             .into_iter()
             .map(|schedule| (schedule.id.clone(), schedule))
-            .collect()
-    }
-}
-
-#[async_trait]
-impl Provider for ScheduleProvider {
-    fn domain(&self) -> &'static str {
-        "schedules"
-    }
-
-    fn plan(&self, document: &StateDocument) -> Vec<Change> {
-        let declared = Self::declared(document);
-        let running = self.running();
-
-        let mut changes = Vec::new();
-
-        for (id, schedule) in &declared {
-            match running.get(id) {
-                None => changes.push(Change::create(
-                    id.clone(),
-                    format!("fire {}", schedule.cadence),
-                )),
-                // Compared as a whole declaration rather than by cadence: an
-                // action that changed is as much a different schedule as a
-                // period that did.
-                Some(current) if current != schedule => changes.push(Change::update(
-                    id.clone(),
-                    format!("fire {} instead", schedule.cadence),
-                )),
-                Some(_) => {}
-            }
-        }
-
-        changes.extend(
-            running
-                .keys()
-                .filter(|id| !declared.contains_key(*id))
-                .map(|id| Change::delete(id.clone(), "the document no longer declares it")),
-        );
-
-        changes.sort_by(|a, b| a.target.cmp(&b.target));
-        changes
+            .collect();
+        let mut changes: Vec<_> = declared
+            .iter()
+            .filter(|(id, schedule)| running.get(**id) != Some(*schedule))
+            .map(|(_, schedule)| ScheduleChange::Set((*schedule).clone()))
+            .chain(
+                running
+                    .keys()
+                    .filter(|id| !declared.contains_key(id.as_str()))
+                    .cloned()
+                    .map(ScheduleChange::Remove),
+            )
+            .collect();
+        changes.sort_by(|a, b| a.id().cmp(b.id()));
+        Ok(changes)
     }
 
-    async fn apply(
-        &self,
-        document: &StateDocument,
-        changes: &[Change],
-    ) -> Result<(), ProviderError> {
-        let declared = Self::declared(document);
-
+    pub async fn apply(&self, changes: &[ScheduleChange]) -> Result<(), ProviderError> {
         for change in changes {
-            match change.action {
-                Action::Create | Action::Update => {
-                    let Some(schedule) = declared.get(&change.target) else {
-                        continue;
-                    };
-                    // A cadence the grammar cannot read is reported and
-                    // skipped. The rest of the document still converges: one
-                    // mistyped period should not cost somebody every other
-                    // schedule on the machine.
-                    if let Err(e) = self.schedules.start(schedule) {
-                        tracing::error!(
-                            schedule = %schedule.id,
-                            error = %e,
-                            "the schedule will not fire",
-                        );
-                    }
+            tracing::info!(schedule = change.id(), "converging schedule");
+            match change {
+                ScheduleChange::Set(schedule) => {
+                    self.schedules.start(schedule).await.map_err(Self::error)?
                 }
-                Action::Delete => self.schedules.stop(&change.target),
+                ScheduleChange::Remove(id) => self.schedules.stop(id).await,
             }
         }
-
         Ok(())
+    }
+
+    fn error(error: impl std::fmt::Display) -> ProviderError {
+        ProviderError::new("schedules", error.to_string())
     }
 }

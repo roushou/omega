@@ -25,6 +25,7 @@ pub enum OpKind {
     AdoptUnit,
     CallCommand,
     RenderWidget,
+    RemoveWidget,
 }
 
 impl OpKind {
@@ -41,6 +42,7 @@ impl OpKind {
             invoke::Op::AdoptUnit(_) => Self::AdoptUnit,
             invoke::Op::CallCommand(_) => Self::CallCommand,
             invoke::Op::RenderWidget(_) => Self::RenderWidget,
+            invoke::Op::RemoveWidget(_) => Self::RemoveWidget,
         }
     }
 
@@ -57,6 +59,7 @@ impl OpKind {
             Self::AdoptUnit => "AdoptUnit",
             Self::CallCommand => "CallCommand",
             Self::RenderWidget => "RenderWidget",
+            Self::RemoveWidget => "RemoveWidget",
         }
     }
 
@@ -66,6 +69,7 @@ impl OpKind {
         match op {
             invoke::Op::PublishView(publish) => Some(&publish.surface_id),
             invoke::Op::RenderWidget(render) => Some(&render.surface_id),
+            invoke::Op::RemoveWidget(remove) => Some(&remove.surface_id),
             invoke::Op::GetState(_)
             | invoke::Op::SetState(_)
             | invoke::Op::Subscribe(_)

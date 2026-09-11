@@ -29,6 +29,8 @@ pub enum ClientError {
     Refused(#[from] Refusal),
     #[error("the daemon did not answer in time")]
     Timeout,
+    #[error("terminal response has no outcome")]
+    MissingOutcome,
     #[error("the daemon closed the connection")]
     Closed,
 }
@@ -36,7 +38,7 @@ pub enum ClientError {
 /// A connected peer.
 #[derive(Debug)]
 pub struct Client {
-    transport: Transport<UnixStream>,
+    transport: crate::Duplex<UnixStream>,
     streams: PeerStreams,
 }
 
@@ -75,7 +77,7 @@ impl Client {
         manifest_hash: &str,
         token: &str,
     ) -> Result<(Self, Welcome), ClientError> {
-        let mut transport = Transport::new(stream);
+        let mut transport = Transport::new(stream).duplex();
 
         transport
             .send(Handshake::hello(manifest_hash, token))
@@ -105,7 +107,7 @@ impl Client {
         self.streams.allocate()
     }
 
-    /// Send an op on a stream. `stream_id` 0 is fire-and-forget.
+    /// Send an op on its allocated request stream.
     pub async fn invoke(&mut self, stream_id: u64, op: invoke::Op) -> Result<(), ClientError> {
         self.send(Frame {
             stream_id,
@@ -119,8 +121,8 @@ impl Client {
         Ok(())
     }
 
-    /// The next frame, with the housekeeping every peer shares: keepalives
-    /// answered, refusals raised.
+    /// The next frame, answering keepalives automatically.
+    /// Operation refusals remain correlated results for the caller to handle.
     ///
     /// `Ok(None)` when the daemon closes the connection.
     pub async fn recv(&mut self) -> Result<Option<Frame>, ClientError> {
@@ -128,10 +130,6 @@ impl Client {
             let Some(frame) = self.transport.recv().await? else {
                 return Ok(None);
             };
-
-            if let Some(refusal) = Refusal::of(&frame) {
-                return Err(ClientError::Refused(refusal));
-            }
 
             // A daemon checking whether this peer is still there gets its
             // answer here rather than from every caller's loop.
@@ -152,7 +150,8 @@ impl Client {
         }
     }
 
-    /// Wait for the answer to one request, discarding frames that are not it.
+    /// Wait for the terminal answer to one request, discarding intermediate results
+    /// and frames from other streams.
     /// Callers that need to see those frames use [`recv`] and match
     /// themselves.
     ///
@@ -161,18 +160,103 @@ impl Client {
         &mut self,
         stream_id: u64,
     ) -> Result<crate::omega::result::Outcome, ClientError> {
+        let deadline = tokio::time::Instant::now() + Self::TIMEOUT;
         loop {
-            let frame = tokio::time::timeout(Self::TIMEOUT, self.recv())
+            let frame = tokio::time::timeout_at(deadline, self.recv())
                 .await
                 .map_err(|_| ClientError::Timeout)??
                 .ok_or(ClientError::Closed)?;
 
-            let Some(frame::Body::Result(result)) = frame.body else {
+            if frame.stream_id != stream_id {
                 continue;
-            };
-            if frame.stream_id == stream_id {
-                return result.outcome.ok_or(ClientError::Closed);
+            }
+            if !matches!(&frame.body, Some(frame::Body::Result(result)) if result.done) {
+                continue;
+            }
+            if let Some(refusal) = Refusal::of(&frame) {
+                return Err(ClientError::Refused(refusal));
+            }
+            if let Some(frame::Body::Result(result)) = frame.body {
+                return result.outcome.ok_or(ClientError::MissingOutcome);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::IntoValue;
+    use crate::omega::{Result as OpResult, result};
+
+    struct Fixture;
+    impl Fixture {
+        fn connected() -> (Client, Transport<UnixStream>) {
+            let (client, server) = UnixStream::pair().unwrap();
+            (
+                Client {
+                    transport: Transport::new(client).duplex(),
+                    streams: PeerStreams::new(),
+                },
+                Transport::new(server),
+            )
+        }
+        fn intermediate() -> Frame {
+            Frame {
+                stream_id: 1,
+                body: Some(frame::Body::Result(OpResult {
+                    done: false,
+                    outcome: Some(result::Outcome::Value("intermediate".into_value())),
+                })),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn answer_waits_for_the_terminal_result_on_its_stream() {
+        let (mut client, mut server) = Fixture::connected();
+        let terminal = result::Outcome::Value("terminal".into_value());
+        let (answer, ()) = tokio::join!(client.answer(1), async {
+            server.send(Fixture::intermediate()).await.unwrap();
+            server
+                .send(Frame::reply(3, result::Outcome::Ok(Default::default())))
+                .await
+                .unwrap();
+            server
+                .send(Frame::reply(1, terminal.clone()))
+                .await
+                .unwrap();
+        });
+        assert_eq!(answer.unwrap(), terminal);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn intermediate_results_do_not_complete_or_extend_the_deadline() {
+        let (mut client, mut server) = Fixture::connected();
+        let (answer, ()) = tokio::join!(client.answer(1), async {
+            for _ in 0..4 {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                server.send(Fixture::intermediate()).await.unwrap();
+            }
+        });
+        assert!(matches!(answer, Err(ClientError::Timeout)));
+    }
+
+    #[tokio::test]
+    async fn an_empty_terminal_result_is_not_reported_as_a_disconnect() {
+        let (mut client, mut server) = Fixture::connected();
+        let (answer, ()) = tokio::join!(client.answer(1), async {
+            server
+                .send(Frame {
+                    stream_id: 1,
+                    body: Some(frame::Body::Result(OpResult {
+                        done: true,
+                        outcome: None,
+                    })),
+                })
+                .await
+                .unwrap();
+        });
+        assert!(matches!(answer, Err(ClientError::MissingOutcome)));
     }
 }

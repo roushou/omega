@@ -11,7 +11,7 @@ the state they read, and reconciles the machine against the document.
 
 - **Linux with a systemd user manager.** `omega daemon install` writes a
   `systemd --user` unit bound to `graphical-session.target`.
-- **Rust 1.85+.** A runtime requirement, not just a build one: `omega build`
+- **Rust 1.88+.** A runtime requirement, not just a build one: `omega build`
   compiles your configuration with cargo whenever it changes.
 - **[Omarchy](https://omarchy.org)** to draw. Its Quickshell shell is the only
   renderer host. Without it the daemon still runs and units still execute —
@@ -58,7 +58,7 @@ omega build
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Design](docs/design.md)
+- [Open design questions](docs/design.md)
 - [Contributing](AGENTS.md)
 
 ## License

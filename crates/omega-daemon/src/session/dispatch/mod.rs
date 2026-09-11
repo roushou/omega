@@ -6,7 +6,7 @@
 //! a policy: authorization is not something a call site can forget.
 
 use omega_proto::omega::{
-    Empty, Frame, Invoke, StatePatch, StateTopic, Value, frame, invoke, result, state_topic,
+    Empty, Frame, Invoke, StatePatch, StateTopic, Value, invoke, result, state_topic,
 };
 use omega_proto::{Address, Refusal};
 use omega_proto::{ModuleId, SurfaceId, UnitName};
@@ -47,13 +47,7 @@ impl Response {
             Self::State(patch) => result::Outcome::State(patch),
             Self::Value(value) => result::Outcome::Value(value),
         };
-        Frame {
-            stream_id,
-            body: Some(frame::Body::Result(omega_proto::omega::Result {
-                outcome: Some(outcome),
-                done: true,
-            })),
-        }
+        Frame::reply(stream_id, outcome)
     }
 }
 
@@ -185,32 +179,29 @@ impl Dispatcher {
                     Some(ModuleId::parse(publish.module_id.clone()).or_refuse()?)
                 };
 
-                self.hub.publish_view(ViewUpdate {
-                    surface: SurfaceRef {
-                        unit: unit.clone(),
-                        surface,
-                        module,
-                    },
-                    view: view.clone(),
-                });
+                self.hub
+                    .publish_view(ViewUpdate {
+                        surface: SurfaceRef {
+                            unit: unit.clone(),
+                            surface,
+                            module,
+                        },
+                        view: view.clone(),
+                    })
+                    .or_refuse()?;
                 Ok(Response::Ok)
             }
 
             invoke::Op::GetState(get) => {
                 // Reading is bounded by the subscription, so a `GetState` can
                 // never reach past what the manifest declared.
-                let topics = if get.topics.is_empty() {
-                    subscriptions.active()
-                } else {
-                    Self::permitted(subscriptions, &get.topics)?;
-                    get.topics.clone()
-                };
-                Ok(Response::State(self.hub.read_state(&topics)))
+                Ok(Response::State(
+                    subscriptions.read(self.hub.snapshot(), &get.topics)?,
+                ))
             }
 
             invoke::Op::Subscribe(subscribe) => {
-                subscriptions.subscribe(&subscribe.topics, subscribe.replace)?;
-                subscriptions.subscribe_events(&subscribe.events)?;
+                subscriptions.select(subscribe)?;
                 Ok(Response::Ok)
             }
 
@@ -250,7 +241,8 @@ impl Dispatcher {
                 // The unit field is the daemon's, not the frame's: an event
                 // cannot claim to come from another unit.
                 self.hub
-                    .publish_custom_event(unit.as_str(), &event.name, event.payload.clone());
+                    .publish_custom_event(unit.as_str(), &event.name, event.payload.clone())
+                    .or_refuse()?;
                 Ok(Response::Ok)
             }
 
@@ -274,30 +266,23 @@ impl Dispatcher {
                     .clone()
                     .ok_or_else(|| Refusal::invalid("SetState carries no value"))?;
 
-                self.hub.publish_state(StatePatch {
-                    topics: vec![StateTopic {
-                        topic: topic.to_string(),
-                        revision: 0, // the Hub assigns the real revision
-                        value: Some(state_topic::Value::Generic(value)),
-                    }],
-                });
+                self.hub
+                    .publish_state(StatePatch {
+                        topics: vec![StateTopic {
+                            topic: topic.to_string(),
+                            revision: 0, // the Hub assigns the real revision
+                            value: Some(state_topic::Value::Generic(value)),
+                        }],
+                    })
+                    .or_refuse()?;
                 Ok(Response::Ok)
             }
 
             invoke::Op::AdoptUnit(adopt) => {
                 let name = UnitName::parse(adopt.unit.clone()).or_refuse()?;
 
-                // Only a unit this build produced: a token for a name the
-                // daemon holds no manifest for would be a token for nothing,
-                // and the handshake would refuse it a moment later.
-                if self.units.manifest(&name).is_none() {
-                    return Err(Refusal::precondition(format!(
-                        "{name} is not a unit this build contains"
-                    )));
-                }
-
-                let token = self.supervisor.adopt_unit(&name).await;
-                self.adopted.taken(name.clone());
+                let token = self.supervisor.adopt_unit(&name).await?;
+                self.adopted.taken(name.clone(), token.clone());
                 tracing::info!(unit = %name, "adopted for development");
 
                 Ok(Response::Value(Value {
@@ -323,16 +308,6 @@ impl Dispatcher {
                 "{} is not served by this daemon",
                 OpKind::of(other).name()
             ))),
-        }
-    }
-
-    /// Every named topic must be one the manifest declared.
-    fn permitted(subscriptions: &Subscriptions, topics: &[String]) -> Result<(), Refusal> {
-        match topics.iter().find(|topic| !subscriptions.permits(topic)) {
-            Some(topic) => Err(Refusal::denied(format!(
-                "topic {topic:?} is not declared by this unit"
-            ))),
-            None => Ok(()),
         }
     }
 }

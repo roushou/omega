@@ -134,3 +134,29 @@ fn a_peer_the_supervisor_never_spawned_has_no_lifecycle_to_change() {
     assert!(!lifecycle.connected());
     assert_eq!(lifecycle, Lifecycle::Idle);
 }
+
+#[tokio::test]
+async fn obsolete_session_cannot_disconnect_its_replacement() {
+    let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
+    let name = omega_proto::UnitName::parse("unit").unwrap();
+    let first = units.connected(&name, tokio::sync::mpsc::channel(1).0);
+    let second = units.connected(&name, tokio::sync::mpsc::channel(1).0);
+    first.cancelled().await;
+    drop(first);
+    assert!(units.is_connected(&name));
+    assert!(second.is_current());
+    drop(second);
+    assert!(!units.is_connected(&name));
+}
+
+#[test]
+fn obsolete_adoption_cannot_release_its_replacement() {
+    let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
+    let name = omega_proto::UnitName::parse("unit").unwrap();
+    let old = units.adopt_unit(&name);
+    let current = units.adopt_unit(&name);
+    units.release_adoption(&name, &old);
+    assert!(units.held().contains(&name));
+    units.release_adoption(&name, &current);
+    assert!(!units.held().contains(&name));
+}

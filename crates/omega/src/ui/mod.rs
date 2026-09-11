@@ -67,7 +67,7 @@ impl Ui {
 impl<T: Into<Node>> From<T> for Ui {
     fn from(node: T) -> Self {
         let mut root = node.into();
-        root.assign_keys("");
+        root.assign_keys();
         Self {
             tree: ViewTree {
                 root: Some(root.into_wire()),
@@ -80,5 +80,38 @@ impl<T: Into<Node>> From<T> for Ui {
 impl Default for Ui {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Column, Row, Text, Ui};
+
+    #[test]
+    fn positional_keys_follow_explicit_parent_keys() {
+        let ui: Ui = Column::new()
+            .child(Text::new("first"))
+            .child(Row::new().key("named").child(Text::new("nested")))
+            .child(Row::new().child(Text::new("last")))
+            .into();
+        let root = ui.into_tree().root.unwrap();
+        assert_eq!(root.key, "root");
+        assert_eq!(root.children[0].key, "root.0");
+        assert_eq!(root.children[1].key, "named");
+        assert_eq!(root.children[1].children[0].key, "named.0");
+        assert_eq!(root.children[2].children[0].key, "root.2.0");
+    }
+
+    #[test]
+    fn explicit_empty_keys_and_named_descendants_are_preserved() {
+        let ui: Ui = Row::new()
+            .key("")
+            .child(Text::new("positional"))
+            .child(Text::new("named").key("stable"))
+            .into();
+        let root = ui.into_tree().root.unwrap();
+        assert_eq!(root.key, "");
+        assert_eq!(root.children[0].key, ".0");
+        assert_eq!(root.children[1].key, "stable");
     }
 }

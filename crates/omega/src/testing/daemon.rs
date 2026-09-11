@@ -27,6 +27,7 @@ use crate::testing::state::State;
 pub struct TestDaemon {
     transport: Transport<UnixStream>,
     streams: omega_proto::DaemonStreams,
+    revision: u64,
 }
 
 impl TestDaemon {
@@ -45,6 +46,7 @@ impl TestDaemon {
         Self {
             transport: Transport::new(daemon),
             streams: omega_proto::DaemonStreams::new(),
+            revision: 0,
         }
     }
 
@@ -65,6 +67,11 @@ impl TestDaemon {
             other => panic!("the plugin's first frame was {other:?}, not a Hello"),
         };
 
+        let mut snapshot = state.snapshot();
+        for topic in &mut snapshot.topics {
+            self.revision += 1;
+            topic.revision = self.revision;
+        }
         self.send(Frame {
             stream_id: 0,
             body: Some(frame::Body::Welcome(Welcome {
@@ -72,7 +79,7 @@ impl TestDaemon {
                 unit_id: "test".to_string(),
                 daemon_version: env!("CARGO_PKG_VERSION").to_string(),
                 capabilities: Vec::new(),
-                state: Some(state.snapshot()),
+                state: Some(snapshot),
                 config: settings.clone().into_map(),
             })),
         })
@@ -83,9 +90,14 @@ impl TestDaemon {
 
     /// Move the state. A widget re-renders on its own.
     pub async fn publish(&mut self, state: &State) {
+        let mut patch = state.patch();
+        for topic in &mut patch.topics {
+            self.revision += 1;
+            topic.revision = self.revision;
+        }
         self.send(Frame {
             stream_id: 0,
-            body: Some(frame::Body::StatePatch(state.patch())),
+            body: Some(frame::Body::StatePatch(patch)),
         })
         .await;
     }
@@ -164,10 +176,10 @@ impl TestDaemon {
     /// The next thing the plugin asked the machine to do.
     pub async fn next_effect(&mut self) -> invoke::Op {
         loop {
-            if let Some(frame::Body::Invoke(Invoke { op: Some(op) })) = self.next().await.body {
-                if !matches!(op, invoke::Op::PublishView(_)) {
-                    return op;
-                }
+            if let Some(frame::Body::Invoke(Invoke { op: Some(op) })) = self.next().await.body
+                && !matches!(op, invoke::Op::PublishView(_))
+            {
+                return op;
             }
         }
     }
@@ -202,11 +214,23 @@ impl TestDaemon {
     }
 
     async fn next(&mut self) -> Frame {
-        self.transport
+        let frame = self
+            .transport
             .recv()
             .await
             .expect("the connection to the plugin broke")
-            .expect("the plugin closed the connection")
+            .expect("the plugin closed the connection");
+        if matches!(frame.body, Some(frame::Body::Invoke(_))) {
+            self.send(Frame {
+                stream_id: frame.stream_id,
+                body: Some(frame::Body::Result(omega_proto::omega::Result {
+                    done: true,
+                    outcome: Some(result::Outcome::Ok(Default::default())),
+                })),
+            })
+            .await;
+        }
+        frame
     }
 }
 

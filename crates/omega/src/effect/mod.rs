@@ -8,12 +8,17 @@
 //! change and identical trees are dropped, so an effect there fires on every
 //! percent the battery moves — the compiler says so, by way of [`Does`].
 //!
-//! Effects are queued rather than awaited, so a plugin's render loop cannot
-//! stall on the daemon. A refusal is logged by the runtime.
+//! Await an effect to observe its terminal result. Manual receipt handling is
+//! available for reactions and explicitly detached work. Detached failures end
+//! the runtime. At most 64 effects and 8 MiB of logical payloads are admitted;
+//! timed-out sent work retains admission until a terminal reply or disconnect.
 //!
 //! [`Does`]: crate::wiring::Does
 
 mod brightness;
+mod completion;
+pub(crate) mod queue;
+pub use completion::{Completion, Effect, EffectError, Receipt, Submission};
 mod notify;
 mod power_profile;
 mod session;
@@ -45,12 +50,12 @@ macro_rules! does {
 
         impl $handle {
             /// Queue one action for the daemon.
-            fn act(&self, kind: omega_proto::omega::action::Kind) {
-                self.context.act(omega_proto::omega::invoke::Op::Act(
+            fn act(&self, kind: omega_proto::omega::action::Kind) -> $crate::effect::Effect {
+                $crate::effect::Effect::new(self.context.act(omega_proto::omega::invoke::Op::Act(
                     omega_proto::omega::Act {
                         action: Some(omega_proto::omega::Action { kind: Some(kind) }),
                     },
-                ));
+                )))
             }
         }
     };

@@ -8,9 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use omega_daemon::host::{BuiltUnit, StateConfig};
 use omega_host::Layout;
 use omega_host::Toml;
+use omega_host::{BuiltUnit, StateConfig};
 use omega_proto::UnitName;
 
 struct TempDir(PathBuf);

@@ -115,3 +115,73 @@ fn json_roundtrip() {
         assert_eq!(serde_json::from_str::<Frame>(&json).unwrap(), frame);
     }
 }
+
+#[test]
+fn identifiers_validate_deserialized_strings() {
+    use omega_proto::{ModuleId, SurfaceId, UnitName};
+    for value in ["", "../outside", "/absolute", "9name", "Upper"] {
+        let value = serde_json::to_string(value).unwrap();
+        assert!(serde_json::from_str::<UnitName>(&value).is_err());
+        assert!(serde_json::from_str::<SurfaceId>(&value).is_err());
+        assert!(serde_json::from_str::<ModuleId>(&value).is_err());
+    }
+    let name: UnitName = serde_json::from_str("\"valid-name\"").unwrap();
+    assert_eq!(name.as_str(), "valid-name");
+}
+
+#[test]
+fn encoding_rejects_oversized_frames_without_touching_the_output_buffer() {
+    let mut frame = hello_frame();
+    let Some(frame::Body::Hello(hello)) = &mut frame.body else {
+        panic!()
+    };
+    hello.token = "x".repeat(omega_proto::MAX_FRAME_LEN);
+    let mut bytes = BytesMut::from(b"existing".as_slice());
+    let capacity = bytes.capacity();
+    assert!(matches!(
+        FrameCodec.encode(frame, &mut bytes),
+        Err(CodecError::FrameTooLong(_))
+    ));
+    assert_eq!(&bytes[..], b"existing");
+    assert_eq!(bytes.capacity(), capacity);
+}
+
+#[test]
+fn an_oversized_reply_is_a_terminal_refusal_on_the_original_stream() {
+    let answer = Frame::reply(
+        13,
+        omega_proto::omega::result::Outcome::Value(omega_proto::IntoValue::into_value(
+            "x".repeat(omega_proto::MAX_FRAME_LEN),
+        )),
+    );
+    assert_eq!(answer.stream_id, 13);
+    let refusal = omega_proto::Refusal::of(&answer).unwrap();
+    assert_eq!(refusal.code, omega_proto::omega::ErrorCode::PayloadTooLarge);
+    let Some(frame::Body::Result(result)) = &answer.body else {
+        panic!()
+    };
+    assert!(result.done);
+    let mut bytes = BytesMut::new();
+    FrameCodec.encode(answer, &mut bytes).unwrap();
+    assert!(bytes.len() < 100);
+}
+
+#[test]
+fn resource_refusals_preserve_distinct_codes_in_protobuf_and_json() {
+    use omega_proto::omega::ErrorCode;
+    use prost::Message;
+    for code in [
+        ErrorCode::Unavailable,
+        ErrorCode::ResourceExhausted,
+        ErrorCode::PayloadTooLarge,
+        ErrorCode::DeadlineExceeded,
+    ] {
+        let frame = omega_proto::Refusal::new(code, "reason").frame(17);
+        let decoded = Frame::decode(frame.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(omega_proto::Refusal::of(&decoded).unwrap().code, code);
+        let json = serde_json::to_string(&frame).unwrap();
+        let decoded: Frame = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.stream_id, 17);
+        assert_eq!(omega_proto::Refusal::of(&decoded).unwrap().code, code);
+    }
+}

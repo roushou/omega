@@ -92,7 +92,7 @@ impl Sinks {
 
 /// `pactl`, and the subscription held open to it.
 struct Link {
-    events: BufReader<tokio::process::ChildStdout>,
+    events: tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
     /// Kept so the subscription is killed when this broker is dropped rather
     /// than outliving the daemon that started it.
     _child: Child,
@@ -118,7 +118,7 @@ impl Link {
         ))?;
 
         Ok(Self {
-            events: BufReader::new(stdout),
+            events: BufReader::new(stdout).lines(),
             _child: child,
         })
     }
@@ -126,12 +126,11 @@ impl Link {
     /// Wait for an event that changes what a volume widget draws.
     async fn wait(&mut self) -> Result<(), BrokerError> {
         loop {
-            let mut line = String::new();
-            match self.events.read_line(&mut line).await {
-                Ok(0) => {
+            match self.events.next_line().await {
+                Ok(None) => {
                     return Err(BrokerError::Unreadable("pactl stopped subscribing".into()));
                 }
-                Ok(_) => {
+                Ok(Some(line)) => {
                     if Self::WATCHED.iter().any(|watched| line.contains(watched)) {
                         return Ok(());
                     }
@@ -151,6 +150,7 @@ impl Link {
     async fn run(args: &[&str]) -> Result<String, BrokerError> {
         let output = Command::new("pactl")
             .args(args)
+            .kill_on_drop(true)
             .output()
             .await
             .map_err(BrokerError::unreadable)?;
@@ -237,6 +237,10 @@ impl Broker for PipeWire {
 
     fn actions(&self) -> &'static [ActionKind] {
         &[ActionKind::SetVolume]
+    }
+
+    fn disconnect(&mut self) {
+        self.link = None;
     }
 
     async fn connect(&mut self) -> Result<(), BrokerError> {

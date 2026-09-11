@@ -211,3 +211,77 @@ async fn an_action_no_broker_claims_is_still_unimplemented() {
     assert_eq!(refusal.code, ErrorCode::Unimplemented);
     assert!(refusal.message.contains("SetBacklight"), "{refusal}");
 }
+
+#[tokio::test]
+async fn invalid_payloads_are_refused_before_broker_dispatch() {
+    let recorder = Recorder::default();
+    let manifest = backlight_manifest("dimmer");
+    let harness = Harness::new(
+        "act-malformed",
+        ManifestStore::from_manifests([manifest.clone()]),
+    )
+    .with_broker(Box::new(recorder.clone()));
+    let token = harness.register_unit(&manifest.name);
+    let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
+    transport.recv().await.unwrap().unwrap();
+    for (stream, change) in [
+        (1, None),
+        (3, Some(set_backlight::Change::AbsolutePercent(101))),
+    ] {
+        transport
+            .send(act(
+                stream,
+                action::Kind::SetBacklight(SetBacklight { change }),
+            ))
+            .await
+            .unwrap();
+        let answer = next_result(&mut transport).await;
+        assert_eq!(answer.as_ref().unwrap().stream_id, stream);
+        let refusal = expect_refusal(answer);
+        assert_eq!(refusal.code, ErrorCode::InvalidArgument);
+        assert!(refusal.message.contains("SetBacklight.change"));
+    }
+    assert!(recorder.served.lock().unwrap().is_empty());
+    transport.send(act(5, dim())).await.unwrap();
+    expect_ok(next_result(&mut transport).await);
+    assert_eq!(
+        *recorder.served.lock().unwrap(),
+        vec![ActionKind::SetBacklight]
+    );
+}
+
+#[tokio::test]
+async fn capability_refusal_precedes_payload_validation() {
+    let (_harness, mut transport) =
+        connected("act-malformed-denied", widget_manifest("reader", "battery")).await;
+    transport
+        .send(act(1, action::Kind::SetBacklight(SetBacklight::default())))
+        .await
+        .unwrap();
+    let refusal = expect_refusal(next_result(&mut transport).await);
+    assert_eq!(refusal.code, ErrorCode::PermissionDenied);
+}
+
+#[tokio::test]
+async fn nonfinite_binary_volume_changes_are_invalid_even_without_a_handler() {
+    let manifest =
+        widget_manifest("volume", "panel").granting([Capability::StateRead, Capability::Audio]);
+    let (_harness, mut transport) = connected("act-nonfinite", manifest).await;
+    for (index, value) in [f64::NAN, f64::INFINITY, -0.1, 1.1].into_iter().enumerate() {
+        let stream = (index * 2 + 1) as u64;
+        transport
+            .send(act(
+                stream,
+                action::Kind::SetVolume(omega_proto::omega::SetVolume {
+                    change: Some(omega_proto::omega::set_volume::Change::Absolute(value)),
+                }),
+            ))
+            .await
+            .unwrap();
+        let answer = next_result(&mut transport).await;
+        assert_eq!(answer.as_ref().unwrap().stream_id, stream);
+        let refusal = expect_refusal(answer);
+        assert_eq!(refusal.code, ErrorCode::InvalidArgument);
+        assert!(refusal.message.contains("SetVolume.change.absolute"));
+    }
+}

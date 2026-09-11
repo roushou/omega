@@ -12,13 +12,13 @@ use std::time::Duration;
 use common::{TempSocket, widget_manifest};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+use omega_daemon::Shutdown;
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::shell::ShellServer;
 use omega_daemon::supervisor::Supervisor;
 use omega_daemon::units::UnitTable;
-use omega_daemon::{Shutdown, hub::Observed};
 use omega_proto::Socket;
 use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
 
@@ -180,7 +180,7 @@ async fn an_observer_that_asks_for_nothing_is_sent_everything() {
     // `omega status`, a raw `socat` — still sees what the daemon holds.
     let mut observing = Observing::new("observe-default").await;
 
-    observing.hub.publish_state(battery(0.9));
+    observing.hub.publish_state(battery(0.9)).unwrap();
 
     assert!(
         observing.sees("battery", PROMPTLY).await,
@@ -195,7 +195,7 @@ async fn an_observer_can_decline_every_topic_and_still_draw() {
     let mut observing = Observing::new("observe-none").await;
     observing.subscribe_to(&[]).await;
 
-    observing.hub.publish_state(battery(0.9));
+    observing.hub.publish_state(battery(0.9)).unwrap();
 
     assert_eq!(
         observing.topic_within(SETTLES).await,
@@ -210,7 +210,7 @@ async fn an_observer_is_sent_the_topics_it_named_and_no_others() {
     let mut observing = Observing::new("observe-some").await;
     observing.subscribe_to(&["units"]).await;
 
-    observing.hub.publish_state(battery(0.9));
+    observing.hub.publish_state(battery(0.9)).unwrap();
 
     assert_eq!(
         observing.topic_within(SETTLES).await,
@@ -244,10 +244,7 @@ fn a_heartbeat_is_a_line_an_observer_can_tell_apart() {
     // Every line on this socket is a JSON object told apart by its keys, so
     // the beat must not look like a view or a topic to a reader that only
     // checks for one.
-    let line = serde_json::to_value(Observed::Beat(omega_daemon::hub::Heartbeat {
-        heartbeat: true,
-    }))
-    .unwrap();
+    let line = serde_json::to_value(omega_daemon::hub::Heartbeat { heartbeat: true }).unwrap();
 
     assert_eq!(line["heartbeat"].as_bool(), Some(true));
     assert!(line["view"].is_null());

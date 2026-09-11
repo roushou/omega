@@ -23,14 +23,14 @@ async fn a_changed_value_reaches_subscribers() {
     let hub = Hub::new();
     let (_snapshot, mut patches) = hub.subscribe_state();
 
-    hub.publish_state(battery(0.42));
+    hub.publish_state(battery(0.42)).unwrap();
     let first = patches.recv().await.unwrap();
     assert_eq!(first.topics[0].revision, 1);
 
     // The same reading again is not an update...
-    hub.publish_state(battery(0.42));
+    hub.publish_state(battery(0.42)).unwrap();
     // ...but a different one is.
-    hub.publish_state(battery(0.17));
+    hub.publish_state(battery(0.17)).unwrap();
 
     let second = patches.recv().await.unwrap();
     assert_eq!(second.topics[0].revision, 2);

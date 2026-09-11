@@ -9,7 +9,7 @@ use omega::ui::{
     Bind, Button, Field, Glyph, Graph, Grid, Group, Header, Icon, Image, List, Progress, Role, Row,
     Separator, Slider, Spacer, Text, Toggle,
 };
-use omega::{Answer, Args, Command, Percent, Ui, Widget};
+use omega::{Args, Command, Percent, Ui, Widget};
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Capability, Lock, SurfaceKind, action, value};
 
@@ -106,9 +106,9 @@ struct LockScreen {
 }
 
 impl Command for LockScreen {
-    fn call(&self, _args: Args) -> Answer {
-        self.session.lock();
-        Answer::done()
+    type Output = ();
+    async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
+        self.session.lock().await
     }
 }
 
@@ -132,11 +132,11 @@ fn a_plugin_can_draw_and_do_at_once() {
     );
 }
 
-#[test]
-fn a_command_is_judged_by_what_it_asked_the_machine_to_do() {
-    let called = Called::of::<LockScreen>(&State::new(), Vec::new());
+#[tokio::test]
+async fn a_command_is_judged_by_what_it_asked_the_machine_to_do() {
+    let called = Called::of::<LockScreen>(&State::new(), Vec::new()).await;
 
-    assert!(matches!(called.answer, Answer::Done));
+    assert!(called.answer.is_ok());
     assert!(called.did(&action::Kind::Lock(Lock {})));
 }
 
@@ -194,32 +194,27 @@ struct Threshold {
 }
 
 impl Command for Threshold {
-    fn call(&self, _args: Args) -> Answer {
-        Answer::value(self.settings.low_threshold.to_string())
+    type Output = String;
+    async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
+        Ok(self.settings.low_threshold.to_string())
     }
 }
 
 /// What a command handed back, when it handed back text.
-fn answered(answer: &Answer) -> Option<String> {
-    match answer {
-        Answer::Value(value) => match value.kind.as_ref()? {
-            value::Kind::StringValue(text) => Some(text.clone()),
-            _ => None,
-        },
-        _ => None,
-    }
+fn answered(answer: &Result<String, omega::Error>) -> Option<String> {
+    answer.as_ref().ok().cloned()
 }
 
-#[test]
-fn a_command_is_configured_by_its_unit() {
+#[tokio::test]
+async fn a_command_is_configured_by_its_unit() {
     let state = State::new();
     let settings = Warning { low_threshold: 20 }.write();
 
-    let configured = Called::configured::<Threshold>(&state, &settings, Vec::new());
+    let configured = Called::configured::<Threshold>(&state, &settings, Vec::new()).await;
     assert_eq!(answered(&configured.answer).as_deref(), Some("20"));
 
     // ...and falls back to the field's default when the document said nothing.
-    let bare = Called::of::<Threshold>(&state, Vec::new());
+    let bare = Called::of::<Threshold>(&state, Vec::new()).await;
     assert_eq!(answered(&bare.answer).as_deref(), Some("0"));
 }
 
@@ -398,12 +393,13 @@ struct Announce {
 }
 
 impl Command for Announce {
-    fn call(&self, args: Args) -> Answer {
+    type Output = String;
+    async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
         let Some(text) = args.get::<String>(0) else {
-            return Answer::refused("announce takes one string");
+            return Err(omega::Error::invalid("announce takes one string"));
         };
-        self.notify.send(text.clone());
-        Answer::value(text)
+        self.notify.send(text.clone()).await?;
+        Ok(text)
     }
 }
 
@@ -452,10 +448,10 @@ struct Focus {
 }
 
 impl Command for Focus {
-    fn call(&self, args: Args) -> Answer {
+    type Output = ();
+    async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
         let on = args.get::<bool>(0).unwrap_or(true);
-        self.mode.set(&Mode { focus: on });
-        Answer::done()
+        self.mode.set(&Mode { focus: on }).await
     }
 }
 
@@ -509,9 +505,9 @@ fn a_widget_reads_state_that_has_never_been_set() {
     assert_eq!(Drawn::of::<Showing>(&State::new()).text(), "open");
 }
 
-#[test]
-fn publishing_state_is_an_effect_like_any_other() {
-    let called = Called::of::<Focus>(&State::new(), Vec::new());
+#[tokio::test]
+async fn publishing_state_is_an_effect_like_any_other() {
+    let called = Called::of::<Focus>(&State::new(), Vec::new()).await;
 
     // A plugin does not write its own keyspace directly: it asks the daemon,
     // which owns the value from there on and replicates it to whoever reads.
@@ -803,29 +799,21 @@ fn a_widget_that_draws_nothing_says_so() {
 }
 
 #[tokio::test]
-async fn an_instantiated_surface_stops_publishing_anonymously() {
+async fn anonymous_and_placed_instances_keep_their_own_addresses() {
     let mut daemon =
         TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<Charge>());
     daemon.welcome(&State::new().battery(0.5, false)).await;
-
-    // Until the document says otherwise a surface has one instance, and a
-    // plugin publishes to it.
-    let first = daemon.next_view().await;
-    assert_eq!(first.module, "");
-
-    // Being handed an instance is being told otherwise. Everything after
-    // belongs to that instance — a plugin that kept publishing anonymously
-    // would leave the document's instance frozen at whatever it last
-    // answered, which is a widget that looks alive and reports a stale
-    // number.
+    assert_eq!(daemon.next_view().await.module, "");
     daemon
         .render("charge", "top-bar-1", Default::default())
         .await;
-
     daemon.publish(&State::new().battery(0.2, false)).await;
-    let after = daemon.next_view().await;
-    assert_eq!(after.module, "top-bar-1", "published to the wrong instance");
-    assert_eq!(after.view.text(), "20%");
+    let anonymous = daemon.next_view().await;
+    let placed = daemon.next_view().await;
+    assert_eq!(anonymous.module, "");
+    assert_eq!(placed.module, "top-bar-1");
+    assert_eq!(anonymous.view.text(), "20%");
+    assert_eq!(placed.view.text(), "20%");
 }
 
 // ---- publishing a collection ----
@@ -1043,4 +1031,161 @@ fn a_machine_with_no_battery_is_on_mains_not_flat() {
     // an empty battery.
     let desktop = State::new().absent(SystemTopic::Battery).mains(true);
     assert_eq!(Drawn::of::<Situation>(&desktop).text(), "On mains");
+}
+
+#[derive(omega::UnitState, Default, Clone)]
+struct Counter {
+    value: u32,
+}
+
+#[derive(omega::Command)]
+struct IncrementTwice {
+    counter: omega::record::Own<Counter>,
+}
+
+impl Command for IncrementTwice {
+    type Output = String;
+    async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
+        self.counter
+            .update(|counter| counter.value += 1)
+            .receipt()
+            .unwrap()
+            .detach();
+        self.counter
+            .update(|counter| counter.value += 1)
+            .receipt()
+            .unwrap()
+            .detach();
+        Ok(self.counter.get().value.to_string())
+    }
+}
+
+#[tokio::test]
+async fn consecutive_record_updates_see_local_writes_before_replication() {
+    let called = Called::of::<IncrementTwice>(&State::new(), Vec::new()).await;
+    assert_eq!(answered(&called.answer).as_deref(), Some("2"));
+    assert_eq!(called.effects.len(), 2);
+    for (index, effect) in called.effects.iter().enumerate() {
+        let omega_proto::omega::invoke::Op::SetState(write) = effect else {
+            panic!("expected a record write")
+        };
+        let values: Values =
+            omega_proto::FromValue::from_value(write.value.as_ref().unwrap()).unwrap();
+        assert_eq!(Counter::read(&values).value, index as u32 + 1);
+    }
+}
+
+#[derive(omega::Command)]
+struct FillRecords {
+    counter: omega::record::Own<Counter>,
+}
+impl Command for FillRecords {
+    type Output = u32;
+    async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
+        let mut admitted = 0;
+        loop {
+            match self.counter.update(|counter| counter.value += 1).receipt() {
+                Ok(receipt) => {
+                    admitted += 1;
+                    receipt.detach();
+                }
+                Err(omega::effect::EffectError::Full) => break,
+                Err(error) => panic!("unexpected admission failure: {error}"),
+            }
+        }
+        assert_eq!(self.counter.get().value, admitted);
+        assert!(matches!(
+            self.counter
+                .update(|_| panic!("rejected update ran"))
+                .receipt(),
+            Err(omega::effect::EffectError::Full)
+        ));
+        Ok(admitted)
+    }
+}
+
+#[tokio::test]
+async fn rejected_record_admission_does_not_change_local_state_or_run_the_update() {
+    let called = Called::of::<FillRecords>(&State::new(), vec![]).await;
+    assert_eq!(called.effects.len(), 64);
+}
+
+#[derive(omega::Command)]
+struct ForwardRecord {
+    counter: omega::record::Own<Counter>,
+}
+impl Command for ForwardRecord {
+    type Output = ();
+    async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
+        self.counter.update(|counter| counter.value += 1).await
+    }
+}
+#[tokio::test]
+async fn command_fixtures_complete_forwarded_record_publications() {
+    let called = Called::of::<ForwardRecord>(&State::new(), vec![]).await;
+    assert_eq!(called.effects.len(), 1);
+    assert!(called.answer.is_ok());
+}
+
+#[derive(omega::UnitState, Default)]
+struct LargeRecord {
+    text: String,
+}
+
+#[derive(omega::Command)]
+struct FillRecordBytes {
+    record: Own<LargeRecord>,
+}
+impl Command for FillRecordBytes {
+    type Output = bool;
+    async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
+        let value = LargeRecord {
+            text: "x".repeat(3 * 1024 * 1024),
+        };
+        self.record.set(&value).receipt().unwrap().detach();
+        self.record.set(&value).receipt().unwrap().detach();
+        assert!(matches!(
+            self.record
+                .update(|_| panic!("byte reservation failure ran the callback"))
+                .receipt(),
+            Err(omega::effect::EffectError::Full)
+        ));
+        assert_eq!(self.record.get().text, value.text);
+        Ok(true)
+    }
+}
+
+#[tokio::test]
+async fn exhausted_record_byte_budget_preserves_the_local_record() {
+    let called = Called::of::<FillRecordBytes>(&State::new(), vec![]).await;
+    assert_eq!(called.effects.len(), 2);
+}
+
+#[derive(omega::Command)]
+struct OversizedRecord {
+    record: Own<LargeRecord>,
+}
+impl Command for OversizedRecord {
+    type Output = bool;
+    async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
+        assert!(matches!(
+            self.record
+                .update(|record| record.text = "x".repeat(omega_proto::MAX_FRAME_LEN))
+                .receipt(),
+            Err(omega::effect::EffectError::TooLarge)
+        ));
+        assert!(self.record.get().text.is_empty());
+        self.record
+            .update(|record| record.text = "valid".into())
+            .receipt()
+            .unwrap()
+            .detach();
+        Ok(true)
+    }
+}
+
+#[tokio::test]
+async fn oversized_record_result_is_not_committed_and_releases_its_reservation() {
+    let called = Called::of::<OversizedRecord>(&State::new(), vec![]).await;
+    assert_eq!(called.effects.len(), 1);
 }

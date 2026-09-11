@@ -8,6 +8,8 @@ use omega_proto::Refusal;
 use omega_proto::UnitName;
 use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke, result};
 
+use crate::refusal::Refusable;
+
 use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
 use crate::session::admission::Grants;
@@ -48,6 +50,7 @@ impl Actions {
 
     /// Carry out an authorized action.
     pub async fn perform(&self, action: &action::Kind) -> Result<Response, Refusal> {
+        action.validate().or_refuse()?;
         match action {
             // The daemon's own: spawning a process is not brokering a
             // subsystem, and routing between units is its own job.
@@ -70,10 +73,7 @@ impl Actions {
                 ActionKind::of(action).name()
             ))),
             Some(Ok(())) => Ok(Response::Ok),
-            Some(Err(error)) => Err(Refusal::unimplemented(format!(
-                "{} could not be performed: {error}",
-                ActionKind::of(action).name()
-            ))),
+            Some(Err(error)) => Err(error.refusal()),
         }
     }
 
@@ -145,10 +145,6 @@ impl Actions {
     /// to do something, not a request to wait for it, and a unit that blocks
     /// the daemon on a slow command would take the desktop with it.
     fn run(run: &RunCommand) -> Result<Response, Refusal> {
-        if run.command.trim().is_empty() {
-            return Err(Refusal::invalid("RunCommand carries no command"));
-        }
-
         let command = run.command.clone();
         tokio::spawn(async move {
             match tokio::process::Command::new("/bin/sh")

@@ -67,6 +67,11 @@ pub trait Broker: Send + 'static {
         Ok(())
     }
 
+    /// Release connection state after a failed or cancelled operation.
+    /// Connection-owning brokers must drop every link here. This operation
+    /// must not block; reconnect always starts from a disconnected state.
+    fn disconnect(&mut self) {}
+
     /// Wait until there may be something new.
     ///
     /// A signal stream, an interval, or both. The default never returns,
@@ -174,6 +179,12 @@ impl Cadence {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BrokerError {
+    #[error("broker operation deadline elapsed; execution may have started")]
+    Timeout,
+    #[error("broker action capacity exhausted")]
+    Full,
+    #[error("broker action exceeds payload limit")]
+    TooLarge,
     #[error("{0}")]
     Io(#[from] std::io::Error),
     /// The subsystem is reachable but said something this broker cannot read,

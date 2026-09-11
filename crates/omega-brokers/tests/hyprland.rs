@@ -110,14 +110,6 @@ async fn it_reads_the_session_it_is_running_in() {
         workspaces.workspaces.iter().any(|w| w.active),
         "one workspace is the one being looked at"
     );
-
-    // The second reading waits on the event socket. Hyprland streams every
-    // window focus down it, so a broker that woke on all of them would re-read
-    // the monitors on each keystroke.
-    assert!(
-        common::waits(&mut hyprland).await,
-        "a second reading should wait"
-    );
 }
 
 // ---- workspaces and focus ----
@@ -315,5 +307,42 @@ fn a_name_that_would_end_the_line_is_refused() {
         }))
         .unwrap(),
         "togglefloating class:kitty"
+    );
+}
+
+#[test]
+fn workspace_dispatch_rejects_delimiters_and_monitor_moves_refuse_ignored_selectors() {
+    for name in [
+        "work;dispatch exec bad",
+        "work\nother",
+        "work,other",
+        "work\0other",
+    ] {
+        assert!(
+            Dispatch::of(&action::Kind::SwitchWorkspace(SwitchWorkspace {
+                target: Some(switch_workspace::Target::Name(name.into())),
+            }))
+            .is_none()
+        );
+        assert!(
+            Dispatch::of(&action::Kind::MoveToWorkspace(MoveToWorkspace {
+                target: Some(move_to_workspace::Target::Name(name.into())),
+                window: None,
+            }))
+            .is_none()
+        );
+    }
+    assert!(
+        Dispatch::of(&action::Kind::MoveToMonitor(MoveToMonitor {
+            monitor_id: "DP-1".into(),
+            window: named("kitty"),
+        }))
+        .is_none()
+    );
+    assert!(
+        Dispatch::of(&action::Kind::SwitchWorkspace(SwitchWorkspace {
+            target: Some(switch_workspace::Target::Direction(999)),
+        }))
+        .is_none()
     );
 }

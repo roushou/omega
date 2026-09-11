@@ -4,13 +4,13 @@
 //! them and builds whichever one an instance calls for. Each entry keeps the
 //! two things the type knew — what it declares, and how to make one.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 
-use omega_proto::omega::{Capability, Event, EventKind};
-use omega_proto::{SystemTopic, Values};
+use omega_proto::omega::{Capability, Event, EventKind, Value};
+use omega_proto::{IntoValue, SystemTopic, Values};
 
 use crate::context::Context;
-use crate::surface::{Answer, Args, Command, Reaction, Widget, Wired};
+use crate::surface::{Args, Command, Reaction, Widget, Wired};
 use crate::ui::Ui;
 
 /// What every entry can do, whatever it was registered as.
@@ -42,6 +42,13 @@ impl WidgetEntry {
         (self.declare)(capabilities, topics, keyspaces);
     }
 
+    pub(crate) fn topics(&self) -> Vec<SystemTopic> {
+        let mut topics = BTreeSet::new();
+        (self.declare)(&mut BTreeSet::new(), &mut topics, &mut BTreeSet::new());
+        // Keyspaces have defaults; an unwritten record must not prevent rendering.
+        topics.into_iter().collect()
+    }
+
     pub(crate) fn build(&self, context: &Context, settings: &Values) -> Box<dyn RenderedWidget> {
         (self.make)(context, settings)
     }
@@ -63,7 +70,7 @@ impl<W: Widget> RenderedWidget for W {
 pub(crate) struct CommandEntry {
     pub(crate) name: String,
     declare: Declaration,
-    make: fn(&Context, &Values) -> Box<dyn CalledCommand>,
+    make: fn(&Context, &Values) -> Arc<dyn CalledCommand>,
 }
 
 impl CommandEntry {
@@ -71,7 +78,7 @@ impl CommandEntry {
         Self {
             name,
             declare: declare::<C>,
-            make: |context, settings| Box::new(C::build(context, settings)),
+            make: |context, settings| Arc::new(C::build(context, settings)),
         }
     }
 
@@ -84,18 +91,24 @@ impl CommandEntry {
         (self.declare)(capabilities, topics, keyspaces);
     }
 
-    pub(crate) fn build(&self, context: &Context, settings: &Values) -> Box<dyn CalledCommand> {
+    pub(crate) fn build(&self, context: &Context, settings: &Values) -> Arc<dyn CalledCommand> {
         (self.make)(context, settings)
     }
 }
 
 pub(crate) trait CalledCommand: Send + Sync {
-    fn call(&self, args: Args) -> Answer;
+    fn call(
+        self: Arc<Self>,
+        args: Args,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, crate::Error>> + Send>>;
 }
 
 impl<C: Command> CalledCommand for C {
-    fn call(&self, args: Args) -> Answer {
-        Command::call(self, args)
+    fn call(
+        self: Arc<Self>,
+        args: Args,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, crate::Error>> + Send>> {
+        Box::pin(async move { Command::call(&*self, args).await.map(IntoValue::into_value) })
     }
 }
 

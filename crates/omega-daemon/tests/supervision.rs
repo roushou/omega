@@ -198,3 +198,18 @@ async fn a_token_is_revoked_when_its_process_is_gone() {
     assert!(supervisor.identify(1234, token.as_str()).is_some());
     assert!(supervisor.identify(1234, "another-token").is_none());
 }
+
+#[tokio::test(start_paused = true)]
+async fn cancelling_a_supervisor_releases_its_unit_and_token() {
+    let units = UnitTable::detached(Hub::new());
+    let shutdown = Shutdown::new();
+    let supervisor = Supervisor::new(Socket::at("/unused"), units.clone(), shutdown.clone());
+    let name = unit("cancelled");
+    let task = supervisor.spawn(UnitSpec::new(name.clone(), "/nonexistent/omega"));
+    tokio::task::yield_now().await;
+    assert!(units.is_supervised(&name));
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    assert!(!units.is_supervised(&name));
+    assert!(!shutdown.is_triggered());
+}

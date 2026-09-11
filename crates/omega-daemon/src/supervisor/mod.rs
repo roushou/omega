@@ -4,9 +4,9 @@
 pub mod backoff;
 pub mod log;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use tokio::process::{Child, Command};
 use tokio::sync::watch;
@@ -29,6 +29,7 @@ pub use log::UnitLog;
 pub struct UnitSpec {
     pub name: UnitName,
     pub program: PathBuf,
+    generation: Option<omega_host::Generation>,
     /// Where the unit's own output goes. Absent means it inherits the
     /// daemon's, which is what a test wants and a desktop does not.
     pub log: Option<UnitLog>,
@@ -39,8 +40,16 @@ impl UnitSpec {
         Self {
             name,
             program: program.into(),
+            generation: None,
             log: None,
         }
+    }
+
+    /// Keep the executable generation leased throughout supervision and crash recovery.
+    pub fn for_generation(name: UnitName, generation: omega_host::Generation) -> Self {
+        let mut spec = Self::new(name.clone(), generation.layout().state_unit_program(&name));
+        spec.generation = Some(generation);
+        spec
     }
 
     /// Send this unit's output to its own log.
@@ -66,6 +75,7 @@ struct SupervisorInner {
     /// the handles that stop and cycle them. The supervisor keeps no private
     /// copy of any of it.
     units: UnitTable,
+    handover: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Supervisor {
@@ -75,6 +85,7 @@ impl Supervisor {
                 socket,
                 shutdown,
                 units,
+                handover: Arc::new(tokio::sync::Mutex::new(())),
             }),
         }
     }
@@ -108,15 +119,18 @@ impl Supervisor {
         self.inner.units.adopt(&manifests);
     }
 
-    /// Spawn `spec` and supervise it: restart on exit or when its binary is
-    /// rebuilt, until the unit or the daemon is stopped.
+    /// Supervise this executable until the unit or daemon stops.
+    /// Build activation owns replacement; crash recovery reuses this exact path.
     pub fn spawn(&self, spec: UnitSpec) -> tokio::task::JoinHandle<()> {
         let control = UnitControl {
             stop: Shutdown::new(),
             cycle: watch::channel(0).0,
         };
         self.inner.units.supervise(&spec.name, control.clone());
-        tokio::spawn(UnitProcess::new(self.inner.clone(), spec, control).run())
+        let task_name = format!("supervisor {}", spec.name);
+        let process = UnitProcess::new(self.inner.clone(), spec, control);
+        let shutdown = self.inner.shutdown.clone();
+        tokio::spawn(async move { shutdown.supervise(task_name, process.run()).await })
     }
 
     /// Cycle a unit's process, leaving it supervised. Returns whether there
@@ -147,15 +161,30 @@ impl Supervisor {
     /// The supervised instance is stopped first and waited for: the point of
     /// adopting a unit is to *be* it, and two processes answering to one name
     /// would race for its session and its surfaces.
-    pub async fn adopt_unit(&self, name: &UnitName) -> UnitToken {
+    pub async fn handover(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.inner.handover.clone().lock_owned().await
+    }
+
+    pub async fn adopt_unit(&self, name: &UnitName) -> Result<UnitToken, omega_proto::Refusal> {
+        let _handover = self.handover().await;
+        if self.inner.units.manifest(name).is_none() {
+            return Err(omega_proto::Refusal::precondition(format!(
+                "{name} is not a unit this build contains"
+            )));
+        }
         self.stop(name).await;
-        self.inner.units.adopt_unit(name)
+        if self.inner.units.is_supervised(name) {
+            return Err(omega_proto::Refusal::precondition(format!(
+                "{name} has not finished stopping"
+            )));
+        }
+        Ok(self.inner.units.adopt_unit(name))
     }
 
     /// Give an adopted unit back, so the next convergence runs the binary the
     /// build produced.
-    pub fn release_unit(&self, name: &UnitName) {
-        self.inner.units.release_adoption(name);
+    pub fn release_unit(&self, name: &UnitName, token: &UnitToken) {
+        self.inner.units.release_adoption(name, token);
     }
 
     /// Stop one unit and wait for it, leaving every other unit alone.
@@ -184,7 +213,6 @@ impl Supervisor {
 struct UnitProcess {
     supervisor: Arc<SupervisorInner>,
     spec: UnitSpec,
-    last_modified: Option<SystemTime>,
     backoff: Backoff,
     /// This unit alone: stopped by the reconciler, cycled by an operator.
     control: UnitControl,
@@ -192,18 +220,14 @@ struct UnitProcess {
 }
 
 impl UnitProcess {
-    /// How often to check whether a unit's binary has been rebuilt.
-    const BINARY_POLL: Duration = Duration::from_secs(1);
     /// How long a unit gets to exit on its own before it is killed.
     pub(crate) const GRACE: Duration = Duration::from_secs(5);
 
     fn new(supervisor: Arc<SupervisorInner>, spec: UnitSpec, control: UnitControl) -> Self {
-        let last_modified = Self::mtime(&spec.program);
         let cycles = control.cycle.subscribe();
         Self {
             supervisor,
             spec,
-            last_modified,
             backoff: Backoff::new(),
             control,
             cycles,
@@ -291,9 +315,6 @@ impl UnitProcess {
                 _ = self.stopped() => break,
             }
         }
-
-        self.report(Transition::Stopped);
-        self.supervisor.units.release(&self.spec.name);
     }
 
     /// Tell the table what happened. Nothing else records it.
@@ -315,50 +336,32 @@ impl UnitProcess {
             command.stdout(out).stderr(err);
         }
 
+        if let Some(generation) = &self.spec.generation {
+            generation.protect_child(command.as_std_mut());
+        }
         command.spawn()
     }
 
-    /// Watch one child until it exits, its binary is replaced, or the daemon
-    /// starts shutting down.
+    /// Watch one child until it exits or receives a stop or restart request.
     async fn watch(&mut self, child: &mut Child) {
         let stop = self.control.stop.clone();
         let shutdown = self.supervisor.shutdown.clone();
 
-        loop {
-            tokio::select! {
-                _ = Self::either(&stop, &shutdown) => {
-                    self.terminate(child).await;
-                    return;
-                }
-                // An operator asked for this instance to go. The unit is
-                // still wanted, so the loop respawns it — and an asked-for
-                // restart is not a crash, so it does not count against the
-                // backoff.
-                _ = self.cycles.changed() => {
-                    tracing::info!(unit = %self.spec.name, "cycling on request");
-                    self.terminate(child).await;
-                    self.backoff.reset();
-                    return;
-                }
-                exit = tokio::time::timeout(Self::BINARY_POLL, child.wait()) => {
-                    match exit {
-                        // The unit exited on its own.
-                        Ok(status) => {
-                            self.exited(status);
-                            return;
-                        }
-                        // Timeout: check whether the binary was rebuilt.
-                        Err(_) => {
-                            let modified = Self::mtime(&self.spec.program);
-                            if modified != self.last_modified {
-                                tracing::info!(unit = %self.spec.name, "binary changed; restarting");
-                                self.last_modified = modified;
-                                self.terminate(child).await;
-                                return;
-                            }
-                        }
-                    }
-                }
+        tokio::select! {
+            _ = Self::either(&stop, &shutdown) => {
+                self.terminate(child).await;
+            }
+            // An operator asked for this instance to go. The unit is
+            // still wanted, so the loop respawns it — and an asked-for
+            // restart is not a crash, so it does not count against the
+            // backoff.
+            _ = self.cycles.changed() => {
+                tracing::info!(unit = %self.spec.name, "cycling on request");
+                self.terminate(child).await;
+                self.backoff.reset();
+            }
+            status = child.wait() => {
+                self.exited(status);
             }
         }
     }
@@ -409,8 +412,12 @@ impl UnitProcess {
             }
         }
     }
+}
 
-    fn mtime(path: &Path) -> Option<SystemTime> {
-        std::fs::metadata(path).and_then(|m| m.modified()).ok()
+impl Drop for UnitProcess {
+    fn drop(&mut self) {
+        self.supervisor.units.revoke(&self.spec.name);
+        self.report(Transition::Stopped);
+        self.supervisor.units.release(&self.spec.name);
     }
 }

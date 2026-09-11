@@ -127,12 +127,6 @@ impl Renderer {
         std::fs::create_dir_all(plugins)
             .with_context(|| format!("could not create {}", plugins.display()))?;
 
-        // A previous `--link` is a symlink, and swapping a directory in over
-        // one leaves the link behind under the staging backup's name.
-        if dir.is_symlink() {
-            std::fs::remove_file(&dir)?;
-        }
-
         let stage = StageDir::new(&dir)?;
         for asset in self.files {
             stage.write(asset.name, asset.contents.as_bytes())?;

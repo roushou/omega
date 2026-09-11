@@ -7,19 +7,17 @@
 
 use std::collections::BTreeSet;
 
-use async_trait::async_trait;
-
-use omega_host::Layout;
+use omega_host::Generation;
 use omega_proto::UnitName;
 use omega_proto::omega::StateDocument;
 
-use crate::reconcile::{Change, Provider, ProviderError};
+use crate::reconcile::ProviderError;
 use crate::supervisor::{Supervisor, UnitLog, UnitSpec};
 
 #[derive(Debug)]
 pub struct UnitProvider {
     supervisor: Supervisor,
-    layout: Layout,
+    generation: Generation,
     /// Every unit the build produced.
     built: BTreeSet<UnitName>,
 }
@@ -27,100 +25,82 @@ pub struct UnitProvider {
 impl UnitProvider {
     pub fn new(
         supervisor: Supervisor,
-        layout: &Layout,
+        generation: Generation,
         built: impl IntoIterator<Item = UnitName>,
     ) -> Self {
         Self {
             supervisor,
-            layout: layout.clone(),
+            generation,
             built: built.into_iter().collect(),
         }
     }
 
-    /// The units the document wants running: everything built, minus what it
-    /// disables. A document naming a unit that was never built is a mistake
-    /// worth reporting rather than silently ignoring.
-    fn desired(&self, document: &StateDocument) -> BTreeSet<UnitName> {
-        let disabled: BTreeSet<&str> = document
-            .units
-            .iter()
-            .filter(|unit| !unit.enabled)
-            .map(|unit| unit.name.as_str())
-            .collect();
-
-        self.built
-            .iter()
-            .filter(|name| !disabled.contains(name.as_str()))
-            .cloned()
-            .collect()
-    }
-
-    fn unknown(&self, document: &StateDocument) -> Vec<String> {
-        document
-            .units
-            .iter()
-            .map(|unit| unit.name.clone())
-            .filter(|name| !self.built.iter().any(|built| built.as_str() == name))
-            .collect()
-    }
-}
-
-#[async_trait]
-impl Provider for UnitProvider {
-    fn domain(&self) -> &'static str {
-        "units"
-    }
-
-    fn plan(&self, document: &StateDocument) -> Vec<Change> {
-        let desired = self.desired(document);
-        let running: BTreeSet<UnitName> = self.supervisor.running().into_iter().collect();
-
-        let mut changes: Vec<Change> = desired
-            .difference(&running)
-            .map(|name| Change::create(name.as_str(), "start the unit"))
-            .chain(
-                running
-                    .difference(&desired)
-                    .map(|name| Change::delete(name.as_str(), "the document disables this unit")),
-            )
-            .collect();
-
-        for name in self.unknown(document) {
-            changes.push(Change::update(
-                name.clone(),
-                format!("the document names {name}, which this build does not contain"),
-            ));
+    pub fn plan(&self, document: &StateDocument) -> Result<Vec<UnitChange>, ProviderError> {
+        let mut desired = self.built.clone();
+        let mut configured = BTreeSet::new();
+        for unit in &document.units {
+            let name = UnitName::parse(&unit.name)
+                .map_err(|error| ProviderError::new("units", error.to_string()))?;
+            if !self.built.contains(&name) || !configured.insert(name.clone()) {
+                return Err(ProviderError::new(
+                    "units",
+                    format!("unknown or duplicate unit {name}"),
+                ));
+            }
+            if !unit.enabled {
+                desired.remove(&name);
+            }
         }
-
-        changes.sort_by(|a, b| a.target.cmp(&b.target));
-        changes
+        let running: BTreeSet<_> = self.supervisor.running().into_iter().collect();
+        let mut changes: Vec<_> = desired
+            .difference(&running)
+            .cloned()
+            .map(UnitChange::Start)
+            .chain(running.difference(&desired).cloned().map(UnitChange::Stop))
+            .collect();
+        changes.sort_by(|a, b| a.name().cmp(b.name()));
+        Ok(changes)
     }
 
-    async fn apply(
-        &self,
-        _document: &StateDocument,
-        changes: &[Change],
-    ) -> Result<(), ProviderError> {
+    pub async fn apply(&self, changes: &[UnitChange]) -> Result<(), ProviderError> {
+        let _handover = self.supervisor.handover().await;
         for change in changes {
-            let Ok(name) = UnitName::parse(change.target.clone()) else {
-                continue;
-            };
-
-            match change.action {
-                crate::reconcile::Action::Create => {
-                    self.supervisor.spawn(
-                        UnitSpec::new(name.clone(), self.layout.state_unit_program(&name))
-                            .logged(UnitLog::at(self.layout.unit_log(&name))),
-                    );
+            let name = change.name();
+            tracing::info!(unit = %name, ?change, "converging unit");
+            match change {
+                UnitChange::Start(_) => {
+                    if self.supervisor.running().contains(name) {
+                        continue;
+                    }
+                    let spec = UnitSpec::for_generation(name.clone(), self.generation.clone());
+                    self.supervisor
+                        .spawn(spec.logged(UnitLog::at(self.generation.layout().unit_log(name))));
                 }
-                crate::reconcile::Action::Delete => self.supervisor.stop(&name).await,
-                // A unit the build does not contain: reported in the plan,
-                // and nothing this provider can do about it.
-                crate::reconcile::Action::Update => {
-                    tracing::warn!(unit = %name, "{}", change.summary)
+                UnitChange::Stop(_) => {
+                    self.supervisor.stop(name).await;
+                    if self.supervisor.running().contains(name) {
+                        return Err(ProviderError::new(
+                            "units",
+                            format!("{name} has not stopped"),
+                        ));
+                    }
                 }
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnitChange {
+    Start(UnitName),
+    Stop(UnitName),
+}
+
+impl UnitChange {
+    pub fn name(&self) -> &UnitName {
+        match self {
+            Self::Start(name) | Self::Stop(name) => name,
+        }
     }
 }

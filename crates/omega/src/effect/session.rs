@@ -14,19 +14,19 @@ pub struct Session {
 does!(Session, SystemControl);
 
 impl Session {
-    pub fn lock(&self) {
-        self.act(action::Kind::Lock(Lock {}));
+    pub fn lock(&self) -> crate::effect::Effect {
+        self.act(action::Kind::Lock(Lock {}))
     }
 
-    pub fn sleep(&self) {
-        self.act(action::Kind::Sleep(Sleep {}));
+    pub fn sleep(&self) -> crate::effect::Effect {
+        self.act(action::Kind::Sleep(Sleep {}))
     }
 
-    pub fn reboot(&self) {
-        self.act(action::Kind::Reboot(Reboot {}));
+    pub fn reboot(&self) -> crate::effect::Effect {
+        self.act(action::Kind::Reboot(Reboot {}))
     }
 
-    pub fn shut_down(&self) {
-        self.act(action::Kind::Shutdown(Shutdown {}));
+    pub fn shut_down(&self) -> crate::effect::Effect {
+        self.act(action::Kind::Shutdown(Shutdown {}))
     }
 }

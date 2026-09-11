@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use omega_host::Layout;
+use omega_host::{Generations, Layout};
 
 use crate::ui::{Paint, Step, Ui};
 
@@ -10,18 +10,31 @@ use crate::ui::{Paint, Step, Ui};
 ///
 /// Safe while the desktop is running: the daemon runs the binaries staged in
 /// the state dir, not the ones cargo left in `target/`. The state dir is
-/// therefore not cleanable here — taking it away would stop units that the
-/// document still says should run, and a build is what replaces it.
+/// retained unless generation cleanup proves a directory has no references or leases.
 #[derive(Debug, clap::Args)]
 pub struct CleanCmd {
     /// Also remove the unit logs.
     #[arg(long)]
     pub logs: bool,
+
+    /// Also remove unreferenced build generations that no running process leases.
+    #[arg(long)]
+    pub generations: bool,
 }
 
 impl CleanCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let layout = Layout::resolve();
+
+        if self.generations {
+            let removed = Generations::new(&layout).clean()?;
+            if removed.is_empty() {
+                ui.step(Step::Done, "no unused build generations");
+            }
+            for id in removed {
+                ui.step(Step::Removed, format!("build generation {id}"));
+            }
+        }
 
         let mut targets = vec![layout.target_dir()];
         if self.logs {

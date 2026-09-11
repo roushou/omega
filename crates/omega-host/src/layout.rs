@@ -182,9 +182,7 @@ impl Layout {
 
     /// `~/.cache/omega/logs` — unit output.
     ///
-    /// In the cache, not the state dir: a build replaces the state dir
-    /// wholesale, and the logs explaining why the last build's unit died must
-    /// survive the build that replaces it.
+    /// Logs outlive both build activation and generation reclamation.
     pub fn logs_dir(&self) -> PathBuf {
         self.cache.join("logs")
     }
@@ -197,6 +195,41 @@ impl Layout {
     /// The compiled binary for a unit (cargo names it after the crate).
     pub fn compiled_binary(&self, profile: Profile, name: &UnitName) -> PathBuf {
         self.profile_dir(profile).join(name.as_str())
+    }
+
+    /// The mutable shell-sourceable session environment.
+    pub fn environment(&self) -> PathBuf {
+        self.state.join("environment")
+    }
+
+    /// Immutable build directories, retained while processes may reference them.
+    pub fn generations_dir(&self) -> PathBuf {
+        self.state.join("generations")
+    }
+
+    /// The atomically published generation name.
+    pub fn active_build(&self) -> PathBuf {
+        self.state.join("current")
+    }
+
+    /// Durable accepted and previous generation identifiers.
+    pub fn generation_history(&self) -> PathBuf {
+        self.state.join("generations.toml")
+    }
+
+    /// Serializes publication, acceptance, lease acquisition and cleanup.
+    pub fn generation_lock(&self) -> PathBuf {
+        self.state.join(".generations.lock")
+    }
+
+    /// A lease on this pinned generation directory.
+    pub fn generation_lease(&self) -> PathBuf {
+        self.state.join(".lease")
+    }
+
+    /// Marks a complete generation managed by the lease-aware store.
+    pub fn generation_ready(&self) -> PathBuf {
+        self.state.join(".ready")
     }
 
     // ---- assembled state ----

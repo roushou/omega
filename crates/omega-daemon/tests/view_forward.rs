@@ -79,13 +79,13 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
 
     // First publish: revision 1, content preserved.
     let view_a = view_with_text("50%");
-    hub.publish_view(battery("50%"));
+    hub.publish_view(battery("50%")).unwrap();
     let first = rx.recv().await.unwrap();
     assert_eq!(first.view.revision, 1);
     assert_eq!(first.view.root, view_a.root);
 
     // Identical re-publish: deduplicated — no new revision, no broadcast.
-    hub.publish_view(battery("50%"));
+    hub.publish_view(battery("50%")).unwrap();
     assert!(
         rx.try_recv().is_err(),
         "identical view must not be rebroadcast"
@@ -93,20 +93,20 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
 
     // Changed content: revision 2.
     let view_b = view_with_text("87%");
-    hub.publish_view(battery("87%"));
+    hub.publish_view(battery("87%")).unwrap();
     let second = rx.recv().await.unwrap();
     assert_eq!(second.view.revision, 2);
     assert_eq!(second.view.root, view_b.root);
 
-    // Another unit's surface has its own independent sequence — even when it
-    // chose the same surface id.
+    // The global sequence also advances across different surface addresses.
     hub.publish_view(ViewUpdate {
         surface: SurfaceRef::new(unit_name("clock-widget"), surface("battery")),
         view: view_with_text("12:00"),
-    });
+    })
+    .unwrap();
     let clock = rx.recv().await.unwrap();
     assert_eq!(clock.surface.unit, unit_name("clock-widget"));
-    assert_eq!(clock.view.revision, 1);
+    assert_eq!(clock.view.revision, 3);
 }
 
 #[tokio::test]
@@ -120,7 +120,7 @@ async fn shell_socket_streams_views() {
     });
 
     // Published before connecting: delivered as the snapshot.
-    hub.publish_view(battery("50%"));
+    hub.publish_view(battery("50%")).unwrap();
 
     let stream = socket.connect_stream().await.unwrap();
     let mut reader = BufReader::new(stream);
@@ -131,7 +131,7 @@ async fn shell_socket_streams_views() {
     assert_eq!(text_of(&first), "50%");
 
     // Published after connecting: delivered live.
-    hub.publish_view(battery("87%"));
+    hub.publish_view(battery("87%")).unwrap();
 
     let mut second = String::new();
     tokio::time::timeout(Duration::from_secs(2), reader.read_line(&mut second))
@@ -151,7 +151,7 @@ async fn the_observation_socket_streams_state_as_it_changes() {
         let _ = server.run().await;
     });
 
-    hub.publish_state(battery_patch(0.42));
+    hub.publish_state(battery_patch(0.42)).unwrap();
 
     let stream = socket.connect_stream().await.unwrap();
     let mut reader = BufReader::new(stream);
@@ -164,7 +164,8 @@ async fn the_observation_socket_streams_state_as_it_changes() {
     // ...then every change, without being asked again. Ten times, because a
     // stream that works once and then stops is the failure worth catching.
     for revision in 2..=11 {
-        hub.publish_state(battery_patch(revision as f64 / 100.0));
+        hub.publish_state(battery_patch(revision as f64 / 100.0))
+            .unwrap();
 
         let mut line = String::new();
         tokio::time::timeout(Duration::from_secs(2), reader.read_line(&mut line))
@@ -197,7 +198,7 @@ async fn a_view_line_is_not_mistaken_for_a_topic() {
         let _ = server.run().await;
     });
 
-    hub.publish_view(battery("50%"));
+    hub.publish_view(battery("50%")).unwrap();
 
     let stream = socket.connect_stream().await.unwrap();
     let mut reader = BufReader::new(stream);
@@ -237,7 +238,8 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
     hub.publish_view(ViewUpdate {
         surface: SurfaceRef::module(unit.clone(), surface("battery"), module("top-bar-1")),
         view: view_with_text("80%"),
-    });
+    })
+    .unwrap();
     assert_eq!(hub.view_snapshot().len(), 1);
 
     let (_snapshot, mut observed) = hub.subscribe_views();

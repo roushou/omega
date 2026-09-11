@@ -91,6 +91,7 @@ message Invoke {
     // ---- daemon -> unit: surface invocations ----
     CallCommand call_command = 10;
     RenderWidget render_widget = 11;
+    RemoveWidget remove_widget = 12;
   }
 }
 
@@ -220,6 +221,14 @@ enum ErrorCode {
   // The peer is who it says, but the connection cannot proceed: protocol
   // version mismatch, manifest hash mismatch, no manifest on file.
   ERROR_CODE_FAILED_PRECONDITION = 5;
+  // A required service or session is unavailable.
+  ERROR_CODE_UNAVAILABLE = 6;
+  // A count or aggregate byte budget is exhausted.
+  ERROR_CODE_RESOURCE_EXHAUSTED = 7;
+  // One payload exceeds its permitted size.
+  ERROR_CODE_PAYLOAD_TOO_LARGE = 8;
+  // The operation deadline elapsed; external completion may be unknown.
+  ERROR_CODE_DEADLINE_EXCEEDED = 9;
 }
 
 message Empty {}
@@ -230,4 +239,10 @@ message Ping {
 
 message Pong {
   uint64 nonce = 1;
+}
+
+// End a placed instance. The anonymous instance is independent.
+message RemoveWidget {
+  string surface_id = 1;
+  string module_id = 2;
 }

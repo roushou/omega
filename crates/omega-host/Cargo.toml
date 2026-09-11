@@ -15,6 +15,7 @@ description = "Omega's host side: the filesystem layout, atomic writes, and TOML
 workspace = true
 
 [dependencies]
+libc = "0.2"
 omega-proto.workspace = true
 serde.workspace = true
 thiserror.workspace = true

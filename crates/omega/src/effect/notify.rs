@@ -17,13 +17,13 @@ does!(Notify, Notify);
 
 impl Notify {
     /// The shortest form: a line of text.
-    pub fn send(&self, summary: impl Into<String>) {
-        self.show(Notification::new(summary));
+    pub fn send(&self, summary: impl Into<String>) -> crate::effect::Effect {
+        self.show(Notification::new(summary))
     }
 
     /// A notification built up first, for one that needs more than a line.
-    pub fn show(&self, notification: Notification) {
-        self.act(action::Kind::Notify(notification.into_action()));
+    pub fn show(&self, notification: Notification) -> crate::effect::Effect {
+        self.act(action::Kind::Notify(notification.into_action()))
     }
 }
 
