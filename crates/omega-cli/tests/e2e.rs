@@ -175,6 +175,23 @@ fn a_scaffolded_config_builds_and_runs() {
     )
     .unwrap();
     machine.run(&["shell", "adopt"]);
+    let workspace_path = machine.root.join("config/Cargo.toml");
+    let wildcard_workspace = std::fs::read_to_string(&workspace_path)
+        .unwrap()
+        .replace("units/battery-widget", "units/*");
+    std::fs::write(&workspace_path, &wildcard_workspace).unwrap();
+    let placed = machine.omega(&["new", "extra-widget"]).output().unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&workspace_path).unwrap(),
+        wildcard_workspace
+    );
+
+    assert!(placed.status.success());
+    let guidance = String::from_utf8_lossy(&placed.stderr);
+    assert!(guidance.contains("shell_import.rs"), "{guidance}");
+    assert!(guidance.contains("Bar::left"), "{guidance}");
+    assert!(guidance.contains("makes it visible"), "{guidance}");
+
     std::fs::write(machine.root.join("config/system/src/main.rs"),
         "mod shell_import;\nfn main() -> omega_document::Result<()> { omega_document::Document::new().shell(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
     machine.run(&["check"]);
@@ -323,4 +340,91 @@ fn both_templates_build_with_their_printed_placements() {
         .unwrap();
     assert!(!rejected.status.success());
     assert!(!machine.root.join("config/units/invalid-widget").exists());
+}
+
+#[test]
+#[ignore = "compiles and validates config programs with cargo; run with --ignored"]
+fn shell_only_configs_build_and_check_never_publishes() {
+    let machine = Machine::new();
+    machine.run(&["init", "--bare"]);
+    let main = machine.root.join("config/system/src/main.rs");
+    let original = std::fs::read_to_string(&main).unwrap();
+    machine.run(&["check"]);
+    assert!(!machine.root.join("state").exists());
+    machine.run(&["build", "--debug"]);
+    let layout = omega_host::Layout::at(
+        machine.root.join("config"),
+        machine.root.join("state"),
+        machine.root.join("cache"),
+    );
+    let generations = omega_host::Generations::new(&layout);
+    let baseline = generations.pin_current().unwrap().unwrap();
+    let baseline_document = omega_document::DocumentFile::of(baseline.layout())
+        .read()
+        .unwrap();
+    assert!(!baseline_document.shell_json.is_empty());
+    let shell_path = machine.root.join("omarchy/shell.json");
+    std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
+    std::fs::write(&shell_path, r#"{"version":1}"#).unwrap();
+    machine.run(&["shell", "adopt"]);
+    let _daemon = machine.daemon();
+    assert!(listening(&machine.observation(), Duration::from_secs(10)));
+    machine.run(&["shell", "apply"]);
+    assert!(
+        std::fs::read_to_string(&shell_path)
+            .unwrap()
+            .contains("omarchy.menu")
+    );
+
+    let baseline_ids = generations.recovery_ids().unwrap();
+    let status = machine.omega(&["status"]).output().unwrap();
+    assert!(status.status.success());
+    assert!(!String::from_utf8_lossy(&status.stderr).contains("omega build"));
+
+    machine.run(&["new", "hello"]);
+    for (body, expected) in [
+        (
+            r#"omega_document::Document::new().shell(
+            omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
+                omega_document::shell::PluginWidget::new("hello", "hello").surface("missing").into()
+            ])))?.emit()"#,
+            "declares no widget",
+        ),
+        (
+            r#"omega_document::Document::new().shell(
+            omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
+                omega_document::shell::PluginWidget::new("same", "hello").into(),
+                omega_document::shell::PluginWidget::new("same", "hello").into()
+            ])))?.emit()"#,
+            "duplicate placement",
+        ),
+        (
+            r#"omega_document::Document::new().schedule(omega_document::Schedules::every(
+            "tick", omega_document::Cadence::seconds(1),
+            omega_document::Actions::invoke("missing", "tick")
+        )).emit()"#,
+            "unknown unit",
+        ),
+    ] {
+        std::fs::write(
+            &main,
+            format!("fn main() -> omega_document::Result<()> {{ {body} }}"),
+        )
+        .unwrap();
+        let output = machine.omega(&["check"]).output().unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{stderr}");
+        assert!(stderr.contains(expected), "{stderr}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            omega_document::DocumentFile::of(generations.pin_current().unwrap().unwrap().layout())
+                .read()
+                .unwrap(),
+            baseline_document,
+        );
+        assert_eq!(generations.recovery_ids().unwrap(), baseline_ids);
+    }
+    std::fs::write(&main, original).unwrap();
+    machine.run(&["check"]);
+    assert_eq!(generations.recovery_ids().unwrap(), baseline_ids);
 }

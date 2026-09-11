@@ -77,16 +77,13 @@ impl BuildCmd {
             bail!(
                 "{} is not a Rust workspace — start one with {}",
                 Paint::path(&layout.config),
-                Paint::command("omega init <name>")
+                Paint::command("omega init")
             );
         }
 
         // 1. What there is to build. A plugin declares what it needs in its
         //    own code, so there is nothing to read until it is compiled.
         let units = Units::discover(layout)?;
-        if units.is_empty() {
-            bail!("no plugins found in {}", Paint::path(layout.units_dir()));
-        }
         ui.step(
             Step::Building,
             format!(

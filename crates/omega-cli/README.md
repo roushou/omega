@@ -44,7 +44,15 @@ or `omega link --published` to return to registry dependencies.
 
 `omega new <name>` starts with a minimal text widget. Use
 `omega new power --template battery` for a battery widget with configurable
-low-charge styling. Both templates include tests and print a placement declaration.
+low-charge styling. Both templates include tests and print a placement declaration. New plugins are
+registered as workspace members. Put the printed expression into your shell's
+`Bar::left`, `Bar::center`, or `Bar::right`; running a plugin alone does not
+place its widget on screen.
+
+`omega check` compiles the workspace, evaluates the Rust configuration, and
+validates its placements and schedules without publishing a generation.
+Configurations containing only native Omarchy widgets can be checked and built
+without creating any Omega plugins.
 
 Run `omega --help` or `omega <command> --help` for the full command reference.
 

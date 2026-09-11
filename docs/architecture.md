@@ -37,8 +37,11 @@ Configuration entry points can return `omega_document::Result<()>`. Its error
 enum wraps document, shell, validation and I/O failures; config authors can also
 use their own error library. Generated workspaces require neither `anyhow` nor
 `miette` as a direct dependency. Build publication and daemon adoption use the
-same document validator. Validation retains underlying error sources, available
-widget surfaces and duplicate placement locations for callers to inspect.
+same document validator. `omega check` evaluates and validates without
+staging or publishing a generation. A configuration may contain only native
+shell widgets, with no Omega plugins. Fresh workspaces start with `system`;
+`omega new` registers each added plugin in Cargo's workspace membership.
+Validation retains underlying error sources, available widget surfaces and duplicate placement locations for callers to inspect.
 
 Terminal diagnostics belong to `omega-cli::ui::Ui`. Its `miette` adapter renders
 shell-import JSON snippets and suggestions for duplicate placements or invalid
@@ -385,7 +388,7 @@ when less than one maximum-sized payload remains.
 
 ```
 ~/.config/omega/          source only
-  Cargo.toml Cargo.lock   workspace; members are system/ and units/*
+  Cargo.toml Cargo.lock   workspace; members are system/ and registered units/
   system/                 → document.json, one entry point, no side effects
   units/                  independent unit packages
   target/                 cargo's, at cargo's default path; gitignored

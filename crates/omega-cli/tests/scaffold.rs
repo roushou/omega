@@ -81,10 +81,7 @@ fn the_workspace_manifest_is_a_workspace_cargo_would_accept() {
 
     assert_eq!(workspace.resolver.as_deref(), Some("3"));
     // The config plane is a member alongside the units it configures.
-    assert_eq!(
-        workspace.members,
-        vec!["system".to_string(), "units/*".to_string()]
-    );
+    assert_eq!(workspace.members, vec!["system".to_string()]);
     assert!(
         manifest.package.is_none(),
         "a workspace root is not a package"

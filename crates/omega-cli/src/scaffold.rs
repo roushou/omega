@@ -159,7 +159,7 @@ impl Scaffold {
         CargoManifest {
             workspace: Some(Workspace {
                 resolver: Some("3".into()),
-                members: vec![Layout::SYSTEM_CRATE.to_string(), "units/*".into()],
+                members: vec![Layout::SYSTEM_CRATE.to_string()],
                 dependencies,
                 ..Default::default()
             }),

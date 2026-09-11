@@ -9,7 +9,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use omega_proto::omega::{UnitPhase, UnitStatus, state_topic};
 use omega_proto::{Observation, Socket, SystemTopic};
 
-use crate::ui::{Cell, Column, Paint, Table, Ui};
+use crate::ui::{Cell, Column, Paint, Step, Table, Ui};
 
 /// Report the daemon's view of every unit.
 #[derive(Debug, clap::Args)]
@@ -34,8 +34,7 @@ impl StatusCmd {
             .context("the daemon did not report its units in time")??;
 
         if units.is_empty() {
-            ui.warn("the daemon is running no units");
-            ui.next("omega build");
+            ui.step(Step::Checked, "the daemon is running; no plugins");
         } else {
             ui.table(&Self::table(&units));
         }

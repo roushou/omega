@@ -1,10 +1,6 @@
-//! `omega check`: what each plugin declares, and whether the daemon can
-//! grant it.
-//!
-//! This compiles. A plugin's manifest is the sum of its fields, so the only
-//! thing that can say what a plugin declares is the plugin — and asking it
-//! means building it first. What that buys is the thing it replaced: there is
-//! no second file to check the code against, because there is no second file.
+//! Compile manifests and evaluate the desired-state document without publishing.
+//! Manifest validation requires running the built plugins; `cargo check` alone
+//! cannot determine what their fields declare.
 
 use anyhow::bail;
 
@@ -14,10 +10,11 @@ use omega_proto::omega::Capability;
 
 use crate::cargo::Cargo;
 use crate::describe::Describe;
+use crate::system::System;
 use crate::ui::{Paint, Step, Ui};
 use omega_renderer::{HostShell, Renderer};
 
-/// Compile every plugin and report what it asks the daemon for.
+/// Compile and validate the configuration and plugins without publishing a generation.
 #[derive(Debug, clap::Args)]
 pub struct CheckCmd;
 
@@ -32,14 +29,11 @@ impl CheckCmd {
             bail!(
                 "{} is not a Rust workspace — start one with {}",
                 Paint::path(&layout.config),
-                Paint::command("omega init <name>")
+                Paint::command("omega init")
             );
         }
 
         let units = Units::discover(&layout)?;
-        if units.is_empty() {
-            bail!("no plugins found in {}", Paint::path(layout.units_dir()));
-        }
 
         ui.step(Step::Checking, Paint::count(units.len(), "plugin"));
         Cargo::new(&layout).build(Self::PROFILE).await?;
@@ -48,17 +42,21 @@ impl CheckCmd {
         // makes you re-run it once per mistake is worse than no check.
         let describe = Describe::new(&layout, Self::PROFILE);
         let mut failures = 0;
+        let mut manifests = Vec::with_capacity(units.len());
 
         for name in &units {
             match describe.manifest(name).await {
-                Ok(manifest) => ui.item(
-                    true,
-                    format!(
-                        "{}  {}",
-                        Paint::name(name),
-                        Paint::dim(Self::asks(&manifest))
-                    ),
-                ),
+                Ok(manifest) => {
+                    ui.item(
+                        true,
+                        format!(
+                            "{}  {}",
+                            Paint::name(name),
+                            Paint::dim(Self::asks(&manifest))
+                        ),
+                    );
+                    manifests.push(manifest);
+                }
                 Err(e) => {
                     failures += 1;
                     ui.item(
@@ -69,21 +67,23 @@ impl CheckCmd {
             }
         }
 
-        Self::renderer(ui);
-
-        match failures {
-            0 => {
-                ui.step(
-                    Step::Checked,
-                    format!("{}, all sound", Paint::count(units.len(), "plugin")),
-                );
-                Ok(())
-            }
-            n => bail!(
-                "{n} of {} failed validation",
+        if failures > 0 {
+            bail!(
+                "{failures} of {} failed validation",
                 Paint::count(units.len(), "plugin")
-            ),
+            );
         }
+        let document = System::new(&layout).evaluate(Self::PROFILE).await?;
+        omega_document::DocumentValidation::validate(&document, &manifests)?;
+        Self::renderer(ui);
+        ui.step(
+            Step::Checked,
+            format!(
+                "configuration and {} validated; no generation published",
+                Paint::count(units.len(), "plugin"),
+            ),
+        );
+        Ok(())
     }
 
     /// Whether what draws these plugins is as old as they are.

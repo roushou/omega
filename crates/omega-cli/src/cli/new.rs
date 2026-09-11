@@ -54,6 +54,18 @@ impl NewCmd {
         AtomicFile::at(layout.unit_lib_src(&name)).write(self.template.library().as_bytes())?;
         AtomicFile::at(layout.unit_main_src(&name)).write(scaffold.unit_main(&name)?.as_bytes())?;
 
+        let workspace_file = layout.file::<CargoManifest>(CargoSlot::Workspace);
+        let mut manifest = workspace_file.read()?;
+        let workspace = manifest
+            .workspace
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("the config manifest has no [workspace]"))?;
+        // Existing membership globs remain authoritative.
+        if !workspace.member_dirs(&layout.config)?.contains(&unit_dir) {
+            workspace.members.push(format!("units/{name}"));
+            workspace_file.write(&manifest)?;
+        }
+
         // The config plane depends on every plugin it configures — that is
         // what makes a plugin's settings a type here rather than a map of
         // strings. A path between two crates of one workspace is bookkeeping,
@@ -87,14 +99,22 @@ impl NewCmd {
             ),
         );
 
-        // Where a widget sits and what it is configured with is the one part
-        // of scaffolding that is a decision, so it is printed rather than
-        // written into a file the author owns.
         ui.step(
             Step::Next,
-            format!("put it in a bar in {}:", Paint::path(layout.system_main())),
+            "add this expression to Bar::left(...), Bar::center(...), or Bar::right(...) in your Rust shell layout:",
         );
         ui.detail(Paint::command(Scaffold::placement_hint(name)));
+        ui.detail(format!(
+            "Start at {}; follow its shell module if the layout lives elsewhere.",
+            Paint::path(layout.system_main())
+        ));
+        if layout.shell_import().exists() {
+            ui.detail(format!(
+                "Imported layout: {} (if included by your document).",
+                Paint::path(layout.shell_import())
+            ));
+        }
+        ui.detail("Building starts the plugin; placing its widget is what makes it visible.");
         ui.next("omega build");
     }
 }
