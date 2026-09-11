@@ -6,6 +6,7 @@
   "toml": {
   },
   "excludes": [
+    "CHANGELOG.md",
     "**/*-lock.json"
   ],
   "plugins": [
