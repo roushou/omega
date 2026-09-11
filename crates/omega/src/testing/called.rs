@@ -3,6 +3,7 @@
 use omega_proto::Values;
 use omega_proto::omega::{Value, invoke};
 
+use crate::Input;
 use crate::surface::{Args, Command};
 use crate::testing::state::State;
 
@@ -16,27 +17,33 @@ pub struct Called<T = ()> {
 }
 
 impl Called {
+    /// Invoke a command with a typed input and collect its effects.
+    pub async fn of<C: Command>(state: &State, input: C::Input) -> Called<C::Output> {
+        Self::raw::<C>(state, input.encode()).await
+    }
+
     /// Build a command against some state, call it, and collect both halves.
     /// Collected effects receive simulated success; use `TestDaemon` for wire refusals.
     ///
     /// ```
     /// # tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
-    /// use omega::{Args, Command};
+    /// use omega::Command;
     /// use omega::testing::{Called, State};
     /// #[derive(omega::Command)]
     /// struct Lock { session: omega::effect::Session }
     /// impl Command for Lock {
+    ///     type Input = ();
     ///     type Output = ();
-    ///     async fn call(&self, _: Args) -> Result<(), omega::Error> {
+    ///     async fn call(&self, _: ()) -> Result<(), omega::Error> {
     ///         self.session.lock().await
     ///     }
     /// }
-    /// let called = Called::of::<Lock>(&State::new(), vec![]).await;
+    /// let called = Called::of::<Lock>(&State::new(), ()).await;
     /// assert!(called.answer.is_ok());
     /// assert_eq!(called.effects.len(), 1);
     /// # });
     /// ```
-    pub async fn of<C: Command>(state: &State, args: Vec<Value>) -> Called<C::Output> {
+    pub async fn raw<C: Command>(state: &State, args: Vec<Value>) -> Called<C::Output> {
         Self::configured::<C>(state, &Values::new(), args).await
     }
 
@@ -51,7 +58,7 @@ impl Called {
     ) -> Called<C::Output> {
         let (context, mut effects) = state.context();
         let command = C::build(&context, settings);
-        let answer = command.call(Args::new(args));
+        let answer = async { command.call(C::Input::decode(Args::new(args))?).await };
         tokio::pin!(answer);
 
         let mut queued = Vec::new();

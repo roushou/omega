@@ -122,8 +122,8 @@ helped decide is a binding loop. Three rules follow, and they are the model:
 - Along the way a stack **runs**, room goes only to a node carrying `fill` —
   the direction where handing it out moves everything else.
 
-`ViewNode` draws each node in the room it was given, never less than what it
-draws, so a node squeezed below its own size overflows rather than clips.
+`ViewNode` respects allocated width. Text wraps inside constrained panels,
+and panels scroll when their content exceeds the available height.
 
 Children are held by **key**, not by position. A `Repeater` over a plain
 array rebuilds every delegate whenever the array changes, which is fine for
@@ -230,3 +230,9 @@ link — but does not **watch** one: `inotifywait -r` does not descend through a
 symlink, so saving a file in the checkout fires no event. Edits need
 `omarchy restart shell`, and the widget already on screen keeps running the
 code it was built with until then either way.
+
+Forms carry field `name`, `label`, `placeholder`, `help` and `secret` properties.
+Labels and help remain visible during editing; placeholders disappear when filled.
+The form submits its strings as one map and clears secret fields on success.
+Shared `emphasis` and `tone` properties describe importance and feedback meaning
+independently. They do not disable controls or change command routing.

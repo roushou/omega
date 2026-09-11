@@ -145,7 +145,7 @@ Rectangle {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": row.node,
                     "connection": list.host.connection,
-                    "foreground": list.host.foreground
+                    "foreground": list.host.ink
                 })
             }
 

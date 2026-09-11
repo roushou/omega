@@ -1,15 +1,13 @@
 //! Wi-Fi readings and connection controls. Forms submit once; passwords stay out
 //! of records. Requests acknowledge activation, and Wifi reports its outcome.
 
-use omega::config::Values;
 use omega::effect::WifiControl;
 use omega::reading::{AccessPoint, Network, Wifi, WifiPhase};
 use omega::record::{Own, Watch};
 use omega::ui::{
-    Bind, Button, Column, Field, Form, Glyph, Graph, Icon, List, Progress, Role, Row, Size, Stack,
-    Text,
+    Button, Form, Glyph, Graph, Icon, List, Progress, Row, Section, Size, Stack, Text,
 };
-use omega::{Args, Command, Percent, Ui, Widget};
+use omega::{Command, Percent, Ui, Widget};
 
 /// This unit's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -47,7 +45,7 @@ impl Widget for Indicator {
             return if self.network.is_connected() {
                 Icon::new(Glyph::Link).into()
             } else {
-                Icon::new(Glyph::Globe).dim().into()
+                Icon::new(Glyph::Globe).muted().into()
             };
         };
 
@@ -56,7 +54,7 @@ impl Widget for Indicator {
             .gap(6)
             .child(Icon::new(bars(strength)))
             .child(if strength < self.settings.weak {
-                Text::new(ssid).color(Role::Urgent)
+                Text::new(ssid).warning()
             } else {
                 Text::new(ssid)
             })
@@ -106,20 +104,16 @@ impl Widget for Panel {
             WifiPhase::Disconnected => "Wi-Fi disconnected".to_string(),
             WifiPhase::Unspecified => "Wi-Fi unavailable".to_string(),
         };
-        let mut panel = Column::new()
-            .gap(12)
-            .child(Text::new("Wi-Fi").size(Size::Title).bold())
-            .child(Text::new(state));
+        let mut panel = Section::new("Wi-Fi").child(Text::new(state));
 
         if self.network.is_connected() {
-            let name = self.network.ssid().unwrap_or_else(|| "Wired".to_string());
             panel = panel
                 .child(
                     Row::new()
                         .gap(6)
-                        .child(Icon::new(Glyph::Wifi).dim())
-                        .child(Progress::new(self.network.strength()).fill())
-                        .child(Text::new(self.network.strength()).dim()),
+                        .child(Icon::new(Glyph::Wifi).muted())
+                        .child(Progress::new(self.network.strength()).fill_width())
+                        .child(Text::new(self.network.strength()).muted()),
                 )
                 // Pinned to the whole range: a signal wobbling between 70 and
                 // 74 would otherwise fill the frame and read as a collapse.
@@ -128,9 +122,9 @@ impl Widget for Panel {
                         .range(0.0, 100.0)
                         .height(32),
                 )
-                .child(Button::new("Disconnect").on_press(Bind::call("disconnect").arg(name)));
+                .child(Button::new("Disconnect").on_press(Disconnect));
         } else {
-            panel = panel.child(Text::new("Not connected").dim());
+            panel = panel.child(Text::new("Not connected").muted());
         }
 
         panel
@@ -138,7 +132,7 @@ impl Widget for Panel {
             .child(
                 Text::new("Select a saved or open network to connect.")
                     .size(Size::Caption)
-                    .dim(),
+                    .muted(),
             )
             .child(networks(&self.wifi))
             .child(Text::new("Join with a password").bold())
@@ -156,7 +150,7 @@ fn networks(wifi: &Wifi) -> List {
     List::new()
         .gap(2)
         .children(wifi.networks().iter().map(row))
-        .on_activate(Bind::call("join"))
+        .on_activate(Join)
 }
 
 fn row(point: &AccessPoint) -> Stack {
@@ -168,25 +162,30 @@ fn row(point: &AccessPoint) -> Stack {
     Row::new()
         .gap(6)
         .key(point.ssid())
-        .child(name.fill())
-        .child(Text::new(point.strength()).dim())
+        .child(name.fill_width())
+        .child(Text::new(point.strength()).muted())
         .child(if point.is_secured() {
-            Icon::new(Glyph::Lock).dim()
+            Icon::new(Glyph::Lock).muted()
         } else {
-            Icon::new(Glyph::Globe).dim()
+            Icon::new(Glyph::Globe).muted()
         })
 }
 
 /// The shell owns drafts until both fields are submitted together.
 fn join() -> Form {
-    Form::new("Connect")
-        .field(Field::new("Network").name("ssid"))
-        .field(
-            Field::new("Password (blank for saved/open)")
-                .name("password")
-                .secret(),
-        )
-        .on_submit("connect")
+    Form::new(Connect).submit_label("Connect")
+}
+
+#[derive(omega::Form, Debug)]
+pub struct Credentials {
+    #[omega(label = "Network", placeholder = "Network name")]
+    pub ssid: String,
+    #[omega(
+        label = "Password",
+        help = "Leave blank for saved or open networks",
+        secret
+    )]
+    pub password: String,
 }
 
 #[derive(omega::Command, Debug)]
@@ -194,17 +193,10 @@ pub struct Connect {
     wifi: WifiControl,
 }
 impl Command for Connect {
+    type Input = Credentials;
     type Output = ();
-    async fn call(&self, args: Args) -> omega::Result<()> {
-        let fields = args
-            .get::<Values>(0)
-            .ok_or_else(|| omega::Error::invalid("expected network fields"))?;
-        let ssid = fields
-            .get::<String>("ssid")
-            .filter(|ssid| !ssid.is_empty())
-            .ok_or_else(|| omega::Error::invalid("enter a network name"))?;
-        let password = fields.get::<String>("password").unwrap_or_default();
-        self.wifi.connect(ssid, password).await
+    async fn call(&self, input: Credentials) -> omega::Result<()> {
+        self.wifi.connect(input.ssid, input.password).await
     }
 }
 
@@ -227,8 +219,9 @@ pub struct Sample {
 }
 
 impl Command for Sample {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> Result<(), omega::Error> {
+    async fn call(&self, _: ()) -> Result<(), omega::Error> {
         let strength = f64::from(self.network.strength().whole_percent());
         self.signal
             .update(|signal| *signal = signal.with(strength))
@@ -243,11 +236,9 @@ pub struct Join {
 }
 
 impl Command for Join {
+    type Input = String;
     type Output = ();
-    async fn call(&self, args: Args) -> Result<(), omega::Error> {
-        let Some(ssid) = args.get::<String>(0) else {
-            return Err(omega::Error::invalid("no network"));
-        };
+    async fn call(&self, ssid: String) -> omega::Result<()> {
         self.wifi.connect(ssid, "").await
     }
 }
@@ -259,8 +250,9 @@ pub struct Disconnect {
 }
 
 impl Command for Disconnect {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         self.wifi.disconnect().await
     }
 }
@@ -278,10 +270,10 @@ pub fn plugin() -> omega::Plugin {
     omega::Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
-        .command::<Connect>("connect")
-        .command::<Join>("join")
-        .command::<Sample>("sample")
-        .command::<Disconnect>("disconnect")
+        .command::<Connect>()
+        .command::<Join>()
+        .command::<Sample>()
+        .command::<Disconnect>()
 }
 
 fn main() -> omega::Result<()> {
@@ -291,17 +283,17 @@ fn main() -> omega::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use omega::config::IntoValue;
     use omega::testing::{Called, State, manifest_of};
     #[tokio::test]
     async fn form_fields_become_one_network_request_without_recording_the_password() {
-        let fields = Values::new()
-            .with("ssid", "Home")
-            .with("password", "private");
-        let called = Called::of::<Connect>(&State::new(), vec![fields.into_value()]).await;
+        let input = Credentials {
+            ssid: "Home".to_string(),
+            password: "private".to_string(),
+        };
+        let called = Called::of::<Connect>(&State::new(), input).await;
         assert!(called.answer.is_ok());
         assert_eq!(called.effects.len(), 1);
-        let invalid = Called::of::<Connect>(&State::new(), vec![]).await;
+        let invalid = Called::raw::<Connect>(&State::new(), vec![]).await;
         assert!(invalid.answer.is_err());
         assert!(invalid.effects.is_empty());
     }

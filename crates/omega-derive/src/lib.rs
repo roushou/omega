@@ -9,6 +9,11 @@
 //! a field's own type, which is why the manifest cannot drift from the code:
 //! it is a projection of it.
 
+mod command;
+mod input;
+use command::CommandExpansion;
+use input::InputExpansion;
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, Ident, Type, parse_macro_input};
@@ -22,7 +27,7 @@ pub fn widget(input: TokenStream) -> TokenStream {
 /// A command: does something on request, and may hold anything.
 #[proc_macro_derive(Command, attributes(omega))]
 pub fn command(input: TokenStream) -> TokenStream {
-    wire(input, Marker::Wiring)
+    CommandExpansion::expand(input)
 }
 
 /// A reaction: runs when something happened, and may hold anything.
@@ -325,4 +330,16 @@ fn is_config(field: &syn::Field) -> syn::Result<bool> {
         })?;
     }
     Ok(config)
+}
+
+/// A strict command input map. Missing, mistyped and unknown fields are refused.
+#[proc_macro_derive(Input)]
+pub fn input(tokens: TokenStream) -> TokenStream {
+    InputExpansion::expand(tokens, false)
+}
+
+/// A typed text form. Field attributes are `label`, `placeholder`, `help` and `secret`.
+#[proc_macro_derive(Form, attributes(omega))]
+pub fn form(tokens: TokenStream) -> TokenStream {
+    InputExpansion::expand(tokens, true)
 }

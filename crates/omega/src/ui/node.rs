@@ -53,12 +53,16 @@ impl Node {
     }
 
     /// Draw it quieter than its neighbours.
-    pub fn dim(self) -> Self {
-        self.flag("dim", true)
+    pub fn emphasis(self, emphasis: Emphasis) -> Self {
+        self.text_prop("emphasis", emphasis.as_str())
+    }
+
+    pub fn tone(self, tone: Tone) -> Self {
+        self.text_prop("tone", tone.as_str())
     }
 
     /// Space around the node, in the shell's units.
-    pub fn pad(self, pad: u32) -> Self {
+    pub fn padding(self, pad: u32) -> Self {
         self.number("pad", pad)
     }
 
@@ -75,7 +79,7 @@ impl Node {
     }
 
     /// Bind an event to a call back into this unit.
-    pub(crate) fn on(mut self, event: &str, bind: impl Into<Bind>) -> Self {
+    pub(crate) fn on<I>(mut self, event: &str, bind: impl Into<Bind<I>>) -> Self {
         self.events
             .insert(event.to_string(), bind.into().into_wire());
         self
@@ -161,12 +165,8 @@ impl Node {
 pub enum Role {
     /// What text is drawn in unless it says otherwise.
     Foreground,
-    /// Quieter than its neighbours, and still readable.
-    Muted,
     /// The theme's own highlight.
     Accent,
-    /// Something the user should deal with.
-    Urgent,
     /// The colour behind things, for the rare node that draws on top of it.
     Background,
 }
@@ -175,9 +175,7 @@ impl Role {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Foreground => "foreground",
-            Self::Muted => "muted",
             Self::Accent => "accent",
-            Self::Urgent => "urgent",
             Self::Background => "background",
         }
     }
@@ -231,6 +229,42 @@ impl Align {
         match self {
             Self::Row => "row",
             Self::Column => "column",
+        }
+    }
+}
+
+/// Visual importance, independent of whether an operation succeeded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Emphasis {
+    Primary,
+    Secondary,
+    Muted,
+}
+impl Emphasis {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Primary => "primary",
+            Self::Secondary => "secondary",
+            Self::Muted => "muted",
+        }
+    }
+}
+
+/// The meaning of feedback. The renderer chooses its presentation from the theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone {
+    Neutral,
+    Warning,
+    Error,
+    Success,
+}
+impl Tone {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Neutral => "neutral",
+            Self::Warning => "warning",
+            Self::Error => "error",
+            Self::Success => "success",
         }
     }
 }

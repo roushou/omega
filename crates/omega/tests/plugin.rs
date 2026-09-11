@@ -6,8 +6,8 @@ use omega::reading::{Battery, Clock, Network};
 use omega::record::{Own, UnitState, Watch};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
-    Bind, Button, Field, Glyph, Graph, Grid, Group, Header, Icon, Image, List, Progress, Role, Row,
-    Separator, Slider, Spacer, Text, Toggle,
+    Button, Choice, Field, Glyph, Graph, Grid, Header, Icon, Image, List, Progress, Row, Separator,
+    Slider, Spacer, Text, Toggle,
 };
 use omega::{Args, Command, Percent, Ui, Widget};
 use omega_proto::SystemTopic;
@@ -101,11 +101,13 @@ fn a_view_is_built_out_of_the_things_it_is_made_of() {
 }
 
 #[derive(omega::Command)]
+#[omega(name = "lock")]
 struct LockScreen {
     session: Session,
 }
 
 impl Command for LockScreen {
+    type Input = Args;
     type Output = ();
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
         self.session.lock().await
@@ -117,7 +119,7 @@ fn a_plugin_can_draw_and_do_at_once() {
     let manifest = manifest_of(
         &omega::Plugin::named("battery", "0.1.0")
             .widget::<Charge>()
-            .command::<LockScreen>("lock"),
+            .command::<LockScreen>(),
     );
 
     // Two surfaces, of two kinds, from one plugin — and the union of what
@@ -134,7 +136,7 @@ fn a_plugin_can_draw_and_do_at_once() {
 
 #[tokio::test]
 async fn a_command_is_judged_by_what_it_asked_the_machine_to_do() {
-    let called = Called::of::<LockScreen>(&State::new(), Vec::new()).await;
+    let called = Called::raw::<LockScreen>(&State::new(), Vec::new()).await;
 
     assert!(called.answer.is_ok());
     assert!(called.did(&action::Kind::Lock(Lock {})));
@@ -157,7 +159,7 @@ struct Warned {
 impl Widget for Warned {
     fn render(&self) -> Ui {
         if self.battery.charge() < self.settings.low_threshold {
-            Text::new("low").color(Role::Urgent)
+            Text::new("low").warning()
         } else {
             Text::new(self.battery.charge())
         }
@@ -188,12 +190,14 @@ fn an_instance_is_configured_by_the_document() {
 /// The case a placement cannot serve: a command is never put in a bar, so the
 /// settings its unit was given are the only ones it can ever have.
 #[derive(omega::Command)]
+#[omega(name = "threshold")]
 struct Threshold {
     #[omega(config)]
     settings: Warning,
 }
 
 impl Command for Threshold {
+    type Input = Args;
     type Output = String;
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
         Ok(self.settings.low_threshold.to_string())
@@ -214,15 +218,14 @@ async fn a_command_is_configured_by_its_unit() {
     assert_eq!(answered(&configured.answer).as_deref(), Some("20"));
 
     // ...and falls back to the field's default when the document said nothing.
-    let bare = Called::of::<Threshold>(&state, Vec::new()).await;
+    let bare = Called::raw::<Threshold>(&state, Vec::new()).await;
     assert_eq!(answered(&bare.answer).as_deref(), Some("0"));
 }
 
 #[tokio::test]
 async fn a_unit_is_told_its_settings_at_the_handshake() {
-    let mut daemon = TestDaemon::serving(
-        omega::Plugin::named("battery", "0.1.0").command::<Threshold>("threshold"),
-    );
+    let mut daemon =
+        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").command::<Threshold>());
 
     // There is no later moment that would do: a plugin's fields are built out
     // of its settings, so a unit that was not told them at construction was
@@ -388,11 +391,13 @@ async fn a_document_can_instantiate_one_surface_more_than_once() {
 }
 
 #[derive(omega::Command)]
+#[omega(name = "say")]
 struct Announce {
     notify: Notify,
 }
 
 impl Command for Announce {
+    type Input = Args;
     type Output = String;
     async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
         let Some(text) = args.get::<String>(0) else {
@@ -406,7 +411,7 @@ impl Command for Announce {
 #[tokio::test]
 async fn a_command_answers_over_the_wire() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("announce", "0.1.0").command::<Announce>("say"));
+        TestDaemon::serving(omega::Plugin::named("announce", "0.1.0").command::<Announce>());
     daemon.welcome(&State::new()).await;
 
     let said = daemon
@@ -443,11 +448,13 @@ struct Mode {
 }
 
 #[derive(omega::Command)]
+#[omega(name = "focus")]
 struct Focus {
     mode: Own<Mode>,
 }
 
 impl Command for Focus {
+    type Input = Args;
     type Output = ();
     async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
         let on = args.get::<bool>(0).unwrap_or(true);
@@ -486,7 +493,7 @@ fn owning_state_declares_the_right_to_publish_it() {
     let manifest = manifest_of(
         &omega::Plugin::named("desk", "0.1.0")
             .widget::<Showing>()
-            .command::<Focus>("focus"),
+            .command::<Focus>(),
     );
 
     // Writing needs permission to write; reading somebody's keyspace is what
@@ -507,7 +514,7 @@ fn a_widget_reads_state_that_has_never_been_set() {
 
 #[tokio::test]
 async fn publishing_state_is_an_effect_like_any_other() {
-    let called = Called::of::<Focus>(&State::new(), Vec::new()).await;
+    let called = Called::raw::<Focus>(&State::new(), Vec::new()).await;
 
     // A plugin does not write its own keyspace directly: it asks the daemon,
     // which owns the value from there on and replicates it to whoever reads.
@@ -537,7 +544,7 @@ async fn one_plugin_draws_what_another_published() {
     let mut daemon = TestDaemon::serving(
         omega::Plugin::named("desk", "0.1.0")
             .widget::<Showing>()
-            .command::<Focus>("focus"),
+            .command::<Focus>(),
     );
     daemon.welcome(&State::new()).await;
     assert_eq!(daemon.next_view().await.view.text(), "open");
@@ -567,49 +574,69 @@ fn wire(ui: Ui) -> serde_json::Value {
 /// the shapes the wire carries, the other that every prop on it is a prop the
 /// vocabulary declares. Both are only as exhaustive as this is, so it is one
 /// tree rather than two that drift.
+#[derive(omega::Form)]
+struct FormValues {
+    #[omega(label = "Name")]
+    name: String,
+}
+macro_rules! ui_command {
+    ($ty:ident, $input:ty, $name:literal) => {
+        #[derive(omega::Command)]
+        #[omega(name = $name)]
+        struct $ty {}
+        impl Command for $ty {
+            type Input = $input;
+            type Output = ();
+            async fn call(&self, _: $input) -> omega::Result<()> {
+                Ok(())
+            }
+        }
+    };
+}
+ui_command!(UiToggle, (), "toggle");
+ui_command!(UiConnect, String, "connect");
+ui_command!(UiVolume, Percent, "set");
+ui_command!(UiMute, bool, "mute");
+ui_command!(UiSelect, String, "select");
+ui_command!(UiForget, (), "forget");
+ui_command!(UiCancel, (), "cancel");
+ui_command!(UiBand, String, "band");
+ui_command!(UiSave, FormValues, "save");
+
 fn every_node() -> Ui {
     Row::new()
         .gap(6)
-        .child(Text::new("80%").bold().color(Role::Urgent))
+        .child(Text::new("80%").bold().warning())
         .child(Icon::new(Glyph::Battery))
         .child(Progress::new(Percent::of(0.7)))
-        .child(Button::new("toggle").on_press("toggle"))
-        .child(Button::new("Connect").on_press(Bind::call("connect").arg("home")))
-        .child(Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output")))
-        .child(Toggle::new(true).on_change("mute"))
-        .child(
-            Field::new("Passphrase")
-                .name("password")
-                .secret()
-                .on_submit(Bind::call("connect").arg("home")),
-        )
+        .child(Button::new("toggle").on_press(UiToggle))
+        .child(Button::new("Connect").on_press(UiConnect.with("home".to_string())))
+        .child(Slider::new(Percent::whole(60)).on_change(UiVolume))
+        .child(Toggle::new(true).on_change(UiMute))
+        .child(Field::new("Passphrase").secret().on_submit(UiConnect))
         .child(
             List::new()
                 .child(Text::new("home").key("home"))
-                .on_activate("select"),
+                .on_activate(UiSelect),
         )
         .child(Header::new("Networks"))
         .child(Separator::new())
         .child(Spacer::new().width(8))
         .child(Spacer::new())
-        .child(Button::new("Forget").on_press("forget").disabled())
-        .child(Button::new("Connecting").on_press("cancel").busy())
+        .child(Button::new("Forget").on_press(UiForget).disabled())
+        .child(Button::new("Connecting").on_press(UiCancel).busy())
         .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
         .child(
-            Group::new()
+            Choice::new()
                 .option(Text::new("Auto").key("auto"))
                 .option(Text::new("5 GHz").key("5"))
                 .selected("auto")
-                .on_select("band"),
+                .on_select(UiBand),
         )
         .child(Grid::new(2).gap(4).child(Text::new("Sent")))
         .child(Image::new("/tmp/art.png"))
         .child(Image::new("https://example.invalid/art.png"))
-        .child(
-            omega::ui::Form::new("Submit")
-                .field(Field::new("Name").name("name"))
-                .on_submit("save"),
-        )
+        .child(omega::ui::Form::new(UiSave))
         .into()
 }
 
@@ -629,7 +656,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[0]["type"], "text");
     assert_eq!(children[0]["props"]["text"]["stringValue"], "80%");
     assert_eq!(children[0]["props"]["bold"]["boolValue"], true);
-    assert_eq!(children[0]["props"]["color"]["stringValue"], "urgent");
+    assert_eq!(children[0]["props"]["tone"]["stringValue"], "warning");
 
     assert_eq!(children[1]["type"], "icon");
     assert_eq!(children[1]["props"]["name"]["stringValue"], "battery");
@@ -663,20 +690,12 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[6]["props"]["on"]["boolValue"], true);
     assert_eq!(children[6]["events"]["change"]["command"], "mute");
 
-    // The value the user lands on is appended to these by the shell, so a
-    // unit reads the arguments it chose by position and the reading last.
-    assert_eq!(
-        children[5]["events"]["change"]["args"][0]["stringValue"],
-        "output"
-    );
+    assert!(children[5]["events"]["change"].get("args").is_none());
 
     // A field says how it draws, not what it holds: the buffer is the
     // shell's until the user commits it.
     assert_eq!(children[7]["type"], "field");
-    assert_eq!(
-        children[7]["props"]["placeholder"]["stringValue"],
-        "Passphrase"
-    );
+    assert_eq!(children[7]["props"]["label"]["stringValue"], "Passphrase");
     assert_eq!(children[7]["props"]["secret"]["boolValue"], true);
     assert_eq!(children[7]["events"]["submit"]["command"], "connect");
 
@@ -1050,6 +1069,7 @@ struct IncrementTwice {
 }
 
 impl Command for IncrementTwice {
+    type Input = Args;
     type Output = String;
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
         self.counter
@@ -1068,7 +1088,7 @@ impl Command for IncrementTwice {
 
 #[tokio::test]
 async fn consecutive_record_updates_see_local_writes_before_replication() {
-    let called = Called::of::<IncrementTwice>(&State::new(), Vec::new()).await;
+    let called = Called::raw::<IncrementTwice>(&State::new(), Vec::new()).await;
     assert_eq!(answered(&called.answer).as_deref(), Some("2"));
     assert_eq!(called.effects.len(), 2);
     for (index, effect) in called.effects.iter().enumerate() {
@@ -1086,6 +1106,7 @@ struct FillRecords {
     counter: omega::record::Own<Counter>,
 }
 impl Command for FillRecords {
+    type Input = Args;
     type Output = u32;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
         let mut admitted = 0;
@@ -1112,7 +1133,7 @@ impl Command for FillRecords {
 
 #[tokio::test]
 async fn rejected_record_admission_does_not_change_local_state_or_run_the_update() {
-    let called = Called::of::<FillRecords>(&State::new(), vec![]).await;
+    let called = Called::raw::<FillRecords>(&State::new(), vec![]).await;
     assert_eq!(called.effects.len(), 64);
 }
 
@@ -1121,6 +1142,7 @@ struct ForwardRecord {
     counter: omega::record::Own<Counter>,
 }
 impl Command for ForwardRecord {
+    type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
         self.counter.update(|counter| counter.value += 1).await
@@ -1128,7 +1150,7 @@ impl Command for ForwardRecord {
 }
 #[tokio::test]
 async fn command_fixtures_complete_forwarded_record_publications() {
-    let called = Called::of::<ForwardRecord>(&State::new(), vec![]).await;
+    let called = Called::raw::<ForwardRecord>(&State::new(), vec![]).await;
     assert_eq!(called.effects.len(), 1);
     assert!(called.answer.is_ok());
 }
@@ -1143,6 +1165,7 @@ struct FillRecordBytes {
     record: Own<LargeRecord>,
 }
 impl Command for FillRecordBytes {
+    type Input = Args;
     type Output = bool;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
         let value = LargeRecord {
@@ -1163,7 +1186,7 @@ impl Command for FillRecordBytes {
 
 #[tokio::test]
 async fn exhausted_record_byte_budget_preserves_the_local_record() {
-    let called = Called::of::<FillRecordBytes>(&State::new(), vec![]).await;
+    let called = Called::raw::<FillRecordBytes>(&State::new(), vec![]).await;
     assert_eq!(called.effects.len(), 2);
 }
 
@@ -1172,6 +1195,7 @@ struct OversizedRecord {
     record: Own<LargeRecord>,
 }
 impl Command for OversizedRecord {
+    type Input = Args;
     type Output = bool;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
         assert!(matches!(
@@ -1192,7 +1216,7 @@ impl Command for OversizedRecord {
 
 #[tokio::test]
 async fn oversized_record_result_is_not_committed_and_releases_its_reservation() {
-    let called = Called::of::<OversizedRecord>(&State::new(), vec![]).await;
+    let called = Called::raw::<OversizedRecord>(&State::new(), vec![]).await;
     assert_eq!(called.effects.len(), 1);
 }
 

@@ -2,9 +2,8 @@
 //!
 //! What separates these from the rest of the vocabulary is that the unit
 //! hears about them. A [`Progress`] shows a proportion; a [`Slider`] reports
-//! one. The difference is a [`Bind`], and the value the control carries is
-//! appended to that binding's arguments — so a unit reads its own arguments
-//! by position and the user's value last.
+//! one. A typed [`Bind`] connects the interaction to a command accepting
+//! that value. Decoding happens before the command executes.
 //!
 //! Interaction state is not on the wire. Which row is expanded, where a drag
 //! is right now, what is half-typed — the shell owns all of it, because a
@@ -15,10 +14,11 @@
 
 use std::fmt::Display;
 
-use crate::ui::bind::Bind;
+use crate::ui::bind::{Bind, CommandRef};
 use crate::ui::node::Node;
 use crate::ui::style::styled;
 use crate::units::Percent;
+use crate::{Command, Input};
 
 /// Something to press.
 ///
@@ -40,10 +40,8 @@ impl Button {
     /// What to call when it is pressed. Must be a command this unit
     /// registered, or the daemon refuses the call.
     ///
-    /// Takes a bare command name for a press with nothing to say, or a
-    /// [`Bind`] carrying the arguments the command needs — which is what
-    /// makes one command serve a list of rows instead of one per row.
-    pub fn on_press(mut self, press: impl Into<Bind>) -> Self {
+    /// Accepts a command taking `()`, or a command reference with its input bound.
+    pub fn on_press(mut self, press: impl Into<Bind<()>>) -> Self {
         self.node = self.node.on("press", press);
         self
     }
@@ -53,15 +51,7 @@ styled!(Button);
 
 /// A proportion the user can drag.
 ///
-/// The value it lands on is appended to the binding's arguments as a fraction
-/// between zero and one:
-///
-/// ```
-/// # use omega::ui::{Bind, Slider};
-/// # use omega::Percent;
-/// // `set` is called with ("output", 0.42) when dragged to 42%.
-/// Slider::new(Percent::whole(60)).on_change(Bind::call("set").arg("output"));
-/// ```
+/// Submits a [`Percent`] to the bound command.
 ///
 /// The drag itself is the shell's business. A unit hears where it landed, not
 /// every pixel on the way — a render round trip per frame would make the
@@ -78,9 +68,8 @@ impl Slider {
         }
     }
 
-    /// What to call when the user moves it. The fraction it landed on is
-    /// appended to the binding's arguments.
-    pub fn on_change(mut self, change: impl Into<Bind>) -> Self {
+    /// A command accepting the percentage selected by the user.
+    pub fn on_change(mut self, change: impl Into<Bind<Percent>>) -> Self {
         self.node = self.node.on("change", change);
         self
     }
@@ -108,7 +97,7 @@ impl Toggle {
 
     /// What to call when the user flips it. The state it landed in is
     /// appended to the binding's arguments.
-    pub fn on_change(mut self, change: impl Into<Bind>) -> Self {
+    pub fn on_change(mut self, change: impl Into<Bind<bool>>) -> Self {
         self.node = self.node.on("change", change);
         self
     }
@@ -123,38 +112,29 @@ styled!(Toggle);
 /// in the path of every character — so the unit hears the value once, when
 /// the user commits it:
 ///
-/// ```
-/// # use omega::ui::{Bind, Field};
-/// # let ssid = "home";
-/// Field::new("Passphrase")
-///     .secret()
-///     .on_submit(Bind::call("connect").arg(ssid));
-/// ```
 ///
-/// The submitted text is appended to the binding's arguments, so that command
-/// is called with `(ssid, passphrase)`.
+/// A standalone field submits a `String`; a form submits all its fields together.
 #[derive(Debug, Clone)]
 pub struct Field {
     node: Node,
 }
 
 impl Field {
-    /// Name this field in its enclosing form's submitted map.
-    ///
-    /// ```
-    /// use omega::ui::Field;
-    /// let network = Field::new("Network").name("ssid");
-    /// ```
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.node = self.node.text_prop("name", name);
+    /// A field with a persistent label.
+    pub fn new(label: impl Display) -> Self {
+        Self {
+            node: Node::new("field").text_prop("label", label.to_string()),
+        }
+    }
+    /// An example shown only while the field is empty.
+    pub fn placeholder(mut self, text: impl Display) -> Self {
+        self.node = self.node.text_prop("placeholder", text.to_string());
         self
     }
-
-    /// An empty field, with the given placeholder.
-    pub fn new(placeholder: impl Display) -> Self {
-        Self {
-            node: Node::new("field").text_prop("placeholder", placeholder.to_string()),
-        }
+    /// Instructions that remain visible while editing.
+    pub fn help(mut self, text: impl Display) -> Self {
+        self.node = self.node.text_prop("help", text.to_string());
+        self
     }
 
     /// Draw what is typed as dots.
@@ -180,7 +160,7 @@ impl Field {
 
     /// What to call when the user commits it. The text is appended to the
     /// binding's arguments.
-    pub fn on_submit(mut self, submit: impl Into<Bind>) -> Self {
+    pub fn on_submit(mut self, submit: impl Into<Bind<String>>) -> Self {
         self.node = self.node.on("submit", submit);
         self
     }
@@ -238,7 +218,7 @@ impl List {
 
     /// What to call when a row is activated, by Enter or by clicking it. The
     /// row's key is appended to the binding's arguments.
-    pub fn on_activate(mut self, activate: impl Into<Bind>) -> Self {
+    pub fn on_activate(mut self, activate: impl Into<Bind<String>>) -> Self {
         self.node = self.node.on("activate", activate);
         self
     }
@@ -261,22 +241,14 @@ styled!(List);
 /// Every option carries a [`key`], which is what identifies it and what is
 /// handed back when it is chosen:
 ///
-/// ```
-/// # use omega::ui::{Bind, Group, Text};
-/// Group::new()
-///     .option(Text::new("Auto").key("auto"))
-///     .option(Text::new("5 GHz").key("5"))
-///     .selected("auto")
-///     .on_select(Bind::call("band"));
-/// ```
 ///
 /// [`key`]: crate::ui::Text::key
 #[derive(Debug, Clone)]
-pub struct Group {
+pub struct Choice {
     node: Node,
 }
 
-impl Group {
+impl Choice {
     pub fn new() -> Self {
         Self {
             node: Node::new("group"),
@@ -305,45 +277,69 @@ impl Group {
 
     /// What to call when one is chosen. Its key is appended to the binding's
     /// arguments.
-    pub fn on_select(mut self, select: impl Into<Bind>) -> Self {
+    pub fn on_select(mut self, select: impl Into<Bind<String>>) -> Self {
         self.node = self.node.on("select", select);
         self
     }
 }
 
-impl Default for Group {
+impl Default for Choice {
     fn default() -> Self {
         Self::new()
     }
 }
 
-styled!(Group);
+styled!(Choice);
 
-/// Submit named fields together. Drafts remain in the shell until submission.
+/// An input whose text fields describe a form. Derive `omega::Form`.
+pub trait FormInput: Input {
+    fn fields() -> Vec<(&'static str, Field)>;
+}
+
+/// A form built from its command's input type.
+/// Labels, placeholders and help are declared on the input fields.
 ///
 /// ```
-/// use omega::ui::{Form, Field};
-/// let form = Form::new("Connect")
-///     .field(Field::new("Network").name("ssid"))
-///     .field(Field::new("Password").name("password").secret())
-///     .on_submit("connect");
+/// use omega::{Command, ui::Form};
+/// #[derive(omega::Form)]
+/// struct Credentials {
+///     #[omega(label = "Network", placeholder = "Home")]
+///     ssid: String,
+///     #[omega(label = "Password", help = "Leave blank for saved networks", secret)]
+///     password: String,
+/// }
+/// #[derive(omega::Command)]
+/// struct Connect { wifi: omega::effect::WifiControl }
+/// impl Command for Connect {
+///     type Input = Credentials;
+///     type Output = ();
+///     async fn call(&self, input: Credentials) -> omega::Result<()> {
+///         self.wifi.connect(input.ssid, input.password).await
+///     }
+/// }
+/// let form = Form::new(Connect).submit_label("Connect");
 /// ```
 #[derive(Debug, Clone)]
 pub struct Form {
     node: Node,
 }
 impl Form {
-    pub fn new(label: impl Display) -> Self {
-        Self {
-            node: Node::new("form").text_prop("label", label.to_string()),
+    pub fn new<C: Command>(command: impl Into<CommandRef<C>>) -> Self
+    where
+        C::Input: FormInput,
+    {
+        let mut node = Node::new("form")
+            .text_prop("label", "Submit")
+            .on("submit", command.into());
+        for (name, mut field) in C::Input::fields() {
+            field.node = field.node.text_prop("name", name);
+            node = node.child(field);
         }
+        Self { node }
     }
-    pub fn field(mut self, field: Field) -> Self {
-        self.node = self.node.child(field);
-        self
-    }
-    pub fn on_submit(mut self, command: impl Into<Bind>) -> Self {
-        self.node = self.node.on("submit", command);
+    /// The action described by the submit button, independently of field labels.
+    pub fn submit_label(mut self, label: impl Display) -> Self {
+        self.node = self.node.text_prop("label", label.to_string());
         self
     }
 }

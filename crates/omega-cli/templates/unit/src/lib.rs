@@ -14,7 +14,7 @@
 //! at the bottom of this file call it without a daemon anywhere.
 
 use omega::reading::Battery;
-use omega::ui::{Role, Row, Text};
+use omega::ui::{Row, Text};
 use omega::{Plugin, Ui, Widget};
 
 /// This plugin's name, for the config plane to refer to it by.
@@ -55,7 +55,7 @@ impl Widget for BatteryWidget {
         let low = charge < self.settings.low && !self.battery.is_charging();
 
         let label = if low {
-            Text::new(charge).color(Role::Urgent).bold()
+            Text::new(charge).warning().bold()
         } else {
             Text::new(charge).bold()
         };
@@ -64,7 +64,7 @@ impl Widget for BatteryWidget {
             Some(left) => Row::new()
                 .gap(6)
                 .child(label)
-                .child(Text::new(left).dim())
+                .child(Text::new(left).muted())
                 .into(),
             None => label.into(),
         }
@@ -98,14 +98,14 @@ mod tests {
 
         let drawn = Drawn::configured::<BatteryWidget>(&state, &strict);
         let figure = drawn.first("text").expect("the widget draws the charge");
-        assert_eq!(drawn.color_of(&figure).as_deref(), Some("urgent"));
+        assert_eq!(drawn.prop(&figure, "tone").as_deref(), Some("warning"));
     }
 
     #[test]
     fn a_low_charge_on_the_wall_is_not_urgent() {
         let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.1, true));
         let figure = drawn.first("text").expect("the widget draws the charge");
-        assert_eq!(drawn.color_of(&figure), None);
+        assert_eq!(drawn.prop(&figure, "tone"), None);
     }
 
     #[test]

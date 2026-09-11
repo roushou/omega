@@ -82,4 +82,18 @@ TestCase {
         verify(field.height >= 36)
     }
 
+    Component {
+        id: statusView
+        Renderer.ViewNode {
+            model: ({type:"button",key:"save",props:{label:{stringValue:"Save"},emphasis:{stringValue:"primary"},tone:{stringValue:"error"}}})
+        }
+    }
+    function test_emphasis_does_not_override_status_or_disable_controls() {
+        failOnWarning(/.*/)
+        var button = createTemporaryObject(statusView, test)
+        verify(button !== null)
+        verify(Qt.colorEqual(button.ink, "red"))
+        verify(button.interactive)
+    }
+
 }

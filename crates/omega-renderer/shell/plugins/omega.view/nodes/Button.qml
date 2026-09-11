@@ -22,7 +22,8 @@ Rectangle {
     implicitHeight: Math.max(slot.host.space(36), label.implicitHeight + slot.host.space(16))
 
     radius: slot.host.radius
-    color: slot.hot ? slot.host.hoverFill : slot.host.idleFill
+    color: slot.hot ? slot.host.hoverFill
+        : Props.emphasis(slot.host.model) === "primary" ? slot.host.chosenFill : slot.host.idleFill
     border.width: slot.host.space(1)
     border.color: slot.activeFocus ? slot.host.ink : slot.host.rule
     activeFocusOnTab: true

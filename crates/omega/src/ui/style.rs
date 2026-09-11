@@ -11,6 +11,9 @@
 /// Give a builder the properties every node has, each returning the builder.
 macro_rules! styled {
     ($type:ident) => {
+        styled!($type, |built: $type| built.node);
+    };
+    ($type:ident, $convert:expr) => {
         impl $type {
             /// A colour, by the part it plays. See [`Role`].
             ///
@@ -26,14 +29,45 @@ macro_rules! styled {
             }
 
             /// Draw it quieter than its neighbours.
-            pub fn dim(mut self) -> Self {
-                self.node = self.node.dim();
+            pub fn muted(mut self) -> Self {
+                self.node = self.node.emphasis($crate::ui::Emphasis::Muted);
                 self
             }
 
+            /// The visual importance of this node, independent of its status.
+            pub fn emphasis(mut self, emphasis: $crate::ui::Emphasis) -> Self {
+                self.node = self.node.emphasis(emphasis);
+                self
+            }
+            /// Emphasize the main action or reading.
+            pub fn primary(self) -> Self {
+                self.emphasis($crate::ui::Emphasis::Primary)
+            }
+            /// A supporting action or reading.
+            pub fn secondary(self) -> Self {
+                self.emphasis($crate::ui::Emphasis::Secondary)
+            }
+            /// The meaning of feedback, independent of visual importance.
+            pub fn tone(mut self, tone: $crate::ui::Tone) -> Self {
+                self.node = self.node.tone(tone);
+                self
+            }
+            /// Something needs attention.
+            pub fn warning(self) -> Self {
+                self.tone($crate::ui::Tone::Warning)
+            }
+            /// Something failed.
+            pub fn error(self) -> Self {
+                self.tone($crate::ui::Tone::Error)
+            }
+            /// Something succeeded.
+            pub fn success(self) -> Self {
+                self.tone($crate::ui::Tone::Success)
+            }
+
             /// Space around it, in the shell's units.
-            pub fn pad(mut self, pad: u32) -> Self {
-                self.node = self.node.pad(pad);
+            pub fn padding(mut self, pad: u32) -> Self {
+                self.node = self.node.padding(pad);
                 self
             }
 
@@ -88,7 +122,7 @@ macro_rules! styled {
             /// [`Stack`]: crate::ui::Stack
             /// [`Separator`]: crate::ui::Separator
             /// [`width`]: Self::width
-            pub fn fill(mut self) -> Self {
+            pub fn fill_width(mut self) -> Self {
                 self.node = self.node.flag("fill", true);
                 self
             }
@@ -108,7 +142,7 @@ macro_rules! styled {
 
         impl From<$type> for Node {
             fn from(built: $type) -> Self {
-                built.node
+                ($convert)(built)
             }
         }
     };

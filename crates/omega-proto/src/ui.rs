@@ -159,6 +159,10 @@ nodes! {
         /// no theme chose is a widget that does not belong to the desktop
         /// it is drawn on.
         color: Text,
+        /// Visual importance: primary, secondary or muted.
+        emphasis: Text,
+        /// Feedback meaning: neutral, warning, error or success.
+        tone: Text,
         bold: Flag,
         /// Drawn quieter than its neighbours.
         dim: Flag,
@@ -233,6 +237,8 @@ nodes! {
     /// not the one being typed.
     Form => "form" { label: Text },
     Field => "field" {
+        label: Text,
+        help: Text,
         name: Text,
         placeholder: Text,
         secret: Flag,

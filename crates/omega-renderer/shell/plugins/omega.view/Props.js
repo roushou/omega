@@ -62,6 +62,14 @@ function color(node) {
     return readText(node, "color", "")
 }
 
+function emphasis(node) {
+    return readText(node, "emphasis", "")
+}
+
+function tone(node) {
+    return readText(node, "tone", "")
+}
+
 function bold(node) {
     return readFlag(node, "bold", false)
 }
@@ -169,6 +177,14 @@ function formLabel(node) {
 }
 
 // ---- field ----
+
+function fieldLabel(node) {
+    return readText(node, "label", "")
+}
+
+function fieldHelp(node) {
+    return readText(node, "help", "")
+}
 
 function fieldName(node) {
     return readText(node, "name", "")

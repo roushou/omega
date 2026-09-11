@@ -16,14 +16,14 @@ use crate::ui::style::styled;
 /// Column::new()
 ///     .child(Row::new().child(Text::new(charge).bold()))
 ///     // Spans the panel, because the column it is in does.
-///     .child(Progress::new(charge).fill());
+///     .child(Progress::new(charge).fill_width());
 /// ```
 ///
 /// A row's slack collects at its trailing edge rather than between its
 /// children, so spanning costs nothing to look at. Along the way a stack
 /// *runs*, room goes only to a node that asked — [`fill`], or a [`Spacer`].
 ///
-/// [`fill`]: Stack::fill
+/// [`fill`]: Stack::fill_width
 #[derive(Debug, Clone)]
 pub struct Stack {
     node: Node,
@@ -128,7 +128,7 @@ styled!(Separator);
 /// Row::new()
 ///     .child(Text::new("Bose NC 700"))
 ///     .child(Spacer::new())
-///     .child(Text::new("40%").dim());
+///     .child(Text::new("40%").muted());
 /// ```
 ///
 /// A row spans the column it is in, so there is room to give away; a row that

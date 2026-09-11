@@ -53,21 +53,23 @@ pub trait Widget: Wired {
 /// state must synchronize its own access; record updates already do so.
 ///
 /// ```no_run
-/// use omega::{Args, Command};
+/// use omega::Command;
 /// #[derive(omega::Command)]
 /// struct Lock { session: omega::effect::Session }
 /// impl Command for Lock {
+///     type Input = ();
 ///     type Output = ();
-///     async fn call(&self, _: Args) -> Result<(), omega::Error> {
+///     async fn call(&self, _: ()) -> Result<(), omega::Error> {
 ///         self.session.lock().await
 ///     }
 /// }
 /// ```
-pub trait Command: Wired {
+pub trait Command: Wired + crate::ui::bind::CommandName {
+    type Input: crate::Input;
     type Output: IntoValue + Send;
     fn call(
         &self,
-        args: Args,
+        args: Self::Input,
     ) -> impl std::future::Future<Output = Result<Self::Output, crate::Error>> + Send;
 }
 
@@ -94,6 +96,10 @@ impl Args {
     /// The argument at this position, if it is of this type.
     pub fn get<T: FromValue>(&self, index: usize) -> Option<T> {
         T::from_value(self.values.get(index)?)
+    }
+
+    pub(crate) fn into_values(self) -> Vec<Value> {
+        self.values
     }
 
     pub fn len(&self) -> usize {

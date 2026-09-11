@@ -165,9 +165,15 @@ Item {
     function colorOf() {
         var named = Props.color(node.model)
         var base = named === "" ? node.foreground : node.themed(named)
-        return Props.dim(node.model)
-            ? Qt.rgba(base.r, base.g, base.b, 0.6)
-            : base
+        switch (Props.tone(node.model)) {
+            case "warning":
+            case "error": base = Color.urgent; break
+            case "success": base = Color.accent; break
+        }
+        var emphasis = Props.emphasis(node.model)
+        if (emphasis === "primary" && (Props.tone(node.model) === "" || Props.tone(node.model) === "neutral")) base = Color.accent
+        var alpha = emphasis === "muted" || Props.dim(node.model) ? 0.6 : 1.0
+        return Qt.rgba(base.r, base.g, base.b, base.a * alpha)
     }
 
     // Roles come from the shell's own palette, so a unit inherits the theme

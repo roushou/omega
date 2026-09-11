@@ -9,6 +9,7 @@ use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 use omega_proto::omega::{Capability, Event, EventKind, Value};
 use omega_proto::{IntoValue, SystemTopic, Values};
 
+use crate::Input;
 use crate::context::Context;
 use crate::surface::{Args, Command, Reaction, Widget, Wired};
 use crate::ui::Ui;
@@ -108,7 +109,11 @@ impl<C: Command> CalledCommand for C {
         self: Arc<Self>,
         args: Args,
     ) -> Pin<Box<dyn Future<Output = Result<Value, crate::Error>> + Send>> {
-        Box::pin(async move { Command::call(&*self, args).await.map(IntoValue::into_value) })
+        Box::pin(async move {
+            Command::call(&*self, C::Input::decode(args)?)
+                .await
+                .map(IntoValue::into_value)
+        })
     }
 }
 

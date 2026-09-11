@@ -7,8 +7,8 @@
 use omega::config::{Fields, Values};
 use omega::effect::Notify;
 use omega::record::{Own, UnitState, Watch};
-use omega::ui::{Button, Column, Row, Size, Text};
-use omega::{Args, Command, Plugin, Ui, Widget};
+use omega::ui::{Button, Metric, Row, Section, Text};
+use omega::{Command, Plugin, Ui, Widget};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
@@ -139,30 +139,28 @@ impl Widget for Panel {
             Timer::Complete => "Complete",
         };
         let seconds = timer.remaining().div_ceil(1000);
-        let running = matches!(timer, Timer::Running { .. });
-        Column::new()
-            .gap(12)
-            .child(Text::new("Focus").size(Size::Title).bold())
-            .child(
-                Text::new(format!("{:02}:{:02}", seconds / 60, seconds % 60)).size(Size::Display),
-            )
-            .child(Text::new(label).dim())
+        let action = if matches!(timer, Timer::Running { .. }) {
+            Button::new("Pause").on_press(Pause)
+        } else {
+            Button::new(if matches!(timer, Timer::Paused { .. }) {
+                "Resume"
+            } else {
+                "Start focus"
+            })
+            .on_press(Start)
+        };
+        Section::new("Focus")
+            .child(Metric::new(format!("{:02}:{:02}", seconds / 60, seconds % 60)).label(label))
             .child(
                 Row::new()
                     .gap(8)
+                    .child(action.primary().key("primary").fill_width())
                     .child(
-                        Button::new(if running {
-                            "Pause"
-                        } else if matches!(timer, Timer::Paused { .. }) {
-                            "Resume"
-                        } else {
-                            "Start focus"
-                        })
-                        .on_press(if running { "pause" } else { "start" })
-                        .key("primary")
-                        .fill(),
-                    )
-                    .child(Button::new("Reset").on_press("reset").key("reset")),
+                        Button::new("Reset")
+                            .secondary()
+                            .on_press(Reset)
+                            .key("reset"),
+                    ),
             )
             .into()
     }
@@ -172,8 +170,9 @@ pub struct Start {
     timer: Own<Timer>,
 }
 impl Command for Start {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         self.timer.update(|timer| timer.start(Timer::now())).await
     }
 }
@@ -182,8 +181,9 @@ pub struct Pause {
     timer: Own<Timer>,
 }
 impl Command for Pause {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         self.timer.update(|timer| timer.pause(Timer::now())).await
     }
 }
@@ -192,8 +192,9 @@ pub struct Reset {
     timer: Own<Timer>,
 }
 impl Command for Reset {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         self.timer.set(&Timer::Idle).await
     }
 }
@@ -203,8 +204,9 @@ pub struct Tick {
     notify: Notify,
 }
 impl Command for Tick {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         if !matches!(self.timer.get(), Timer::Running { .. }) {
             return Ok(());
         }
@@ -222,10 +224,10 @@ pub fn plugin() -> Plugin {
     Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
-        .command::<Start>("start")
-        .command::<Pause>("pause")
-        .command::<Reset>("reset")
-        .command::<Tick>("tick")
+        .command::<Start>()
+        .command::<Pause>()
+        .command::<Reset>()
+        .command::<Tick>()
 }
 fn main() -> omega::Result<()> {
     plugin().run()

@@ -43,6 +43,7 @@ extern crate self as omega;
 
 mod context;
 mod error;
+mod input;
 mod mirror;
 mod plugin;
 mod registry;
@@ -79,6 +80,7 @@ pub mod wiring;
 // oddly where `omega::ui::Row` does not.
 
 pub use error::{Error, Result};
+pub use input::Input;
 pub use plugin::Plugin;
 pub use surface::{Args, Command, Reaction, Widget, Wired};
 
@@ -94,7 +96,7 @@ pub use omega_proto::omega::{Event, EventKind};
 /// compared against one.
 pub use units::{Bytes, Percent, Rate, Remaining, Temperature, Uptime};
 
-pub use omega_derive::{Command, Config, Reaction, UnitState, Widget};
+pub use omega_derive::{Command, Config, Form, Input, Reaction, UnitState, Widget};
 
 /// Settings: the values a document hands an instance, and what
 /// `#[derive(Config)]` implements to read them.
@@ -106,10 +108,15 @@ pub mod config {
 /// `#[derive(Widget)]`, not this.
 #[doc(hidden)]
 pub mod internal {
+    pub use crate::Command;
     pub use crate::context::Context;
+    pub use crate::input::Input;
     pub use crate::record::UnitState;
     pub use crate::surface::Wired;
+    pub use crate::ui::bind::CommandName;
+    pub use crate::ui::{Bind, CommandRef, Field, FormInput};
     pub use crate::wiring::{Does, Reads, Wiring};
+    pub use crate::{Args, Error};
     pub use omega_proto::omega::Capability;
     pub use omega_proto::omega::Value;
     pub use omega_proto::{Fields, FromValue, IntoValue, SystemTopic, Values};

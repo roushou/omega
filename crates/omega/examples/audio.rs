@@ -1,8 +1,8 @@
 //! Output volume and mute controls. Run as a unit or place `indicator` and `panel`.
 use omega::effect::Volume;
 use omega::reading::Audio;
-use omega::ui::{Button, Column, Size, Slider, Text};
-use omega::{Args, Command, Percent, Plugin, Ui, Widget};
+use omega::ui::{Button, Metric, Section, Slider, Text};
+use omega::{Command, Percent, Plugin, Ui, Widget};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
@@ -13,7 +13,7 @@ pub struct Indicator {
 impl Widget for Indicator {
     fn render(&self) -> Ui {
         if !self.audio.has_reading() {
-            return Text::new("Audio unavailable").dim().into();
+            return Text::new("Audio unavailable").muted().into();
         }
         Text::new(if self.audio.is_muted() {
             "Muted".to_string()
@@ -33,21 +33,17 @@ impl Widget for Panel {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
         }
-        Column::new()
-            .gap(12)
-            .child(Text::new("Audio").size(Size::Title).bold())
-            .child(Text::new(format!("{}", self.audio.volume())).size(Size::Display))
+        Section::new("Audio")
             .child(
-                Text::new(if self.audio.is_muted() {
+                Metric::new(self.audio.volume()).label(if self.audio.is_muted() {
                     "Output muted"
                 } else {
                     "Output volume"
-                })
-                .dim(),
+                }),
             )
             .child(
                 Slider::new(self.audio.volume())
-                    .on_change("volume")
+                    .on_change(SetVolume)
                     .key("volume"),
             )
             .child(
@@ -56,8 +52,9 @@ impl Widget for Panel {
                 } else {
                     "Mute"
                 })
-                .fill()
-                .on_press("mute")
+                .fill_width()
+                .secondary()
+                .on_press(Mute)
                 .key("mute"),
             )
             .into()
@@ -65,17 +62,15 @@ impl Widget for Panel {
 }
 
 #[derive(omega::Command, Debug)]
+#[omega(name = "volume")]
 pub struct SetVolume {
     volume: Volume,
 }
 impl Command for SetVolume {
+    type Input = Percent;
     type Output = ();
-    async fn call(&self, args: Args) -> omega::Result<()> {
-        let value = args
-            .get::<f64>(0)
-            .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
-            .ok_or_else(|| omega::Error::invalid("volume must be a fraction between 0 and 1"))?;
-        self.volume.set(Percent::of(value)).await
+    async fn call(&self, value: Percent) -> omega::Result<()> {
+        self.volume.set(value).await
     }
 }
 
@@ -84,8 +79,9 @@ pub struct Mute {
     volume: Volume,
 }
 impl Command for Mute {
+    type Input = ();
     type Output = ();
-    async fn call(&self, _: Args) -> omega::Result<()> {
+    async fn call(&self, _: ()) -> omega::Result<()> {
         self.volume.toggle_mute().await
     }
 }
@@ -94,8 +90,8 @@ pub fn plugin() -> Plugin {
     Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
         .widget_as::<Indicator>("indicator")
         .widget_as::<Panel>("panel")
-        .command::<SetVolume>("volume")
-        .command::<Mute>("mute")
+        .command::<SetVolume>()
+        .command::<Mute>()
 }
 fn main() -> omega::Result<()> {
     plugin().run()
@@ -114,11 +110,11 @@ mod tests {
     #[tokio::test]
     async fn invalid_volume_does_not_act() {
         for value in [-1.0, 1.1, f64::NAN] {
-            let called = Called::of::<SetVolume>(&State::new(), vec![value.into_value()]).await;
+            let called = Called::raw::<SetVolume>(&State::new(), vec![value.into_value()]).await;
             assert!(called.answer.is_err());
             assert!(called.effects.is_empty());
         }
-        let called = Called::of::<SetVolume>(&State::new(), vec![0.4.into_value()]).await;
+        let called = Called::of::<SetVolume>(&State::new(), Percent::whole(40)).await;
         assert!(called.answer.is_ok());
         assert_eq!(called.effects.len(), 1);
     }

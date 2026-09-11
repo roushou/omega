@@ -139,7 +139,7 @@ Loader {
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.node,
                 "connection": stack.host.connection,
-                "foreground": stack.host.foreground,
+                "foreground": stack.host.ink,
                 "axis": stack.column ? "column" : "row"
             })
 

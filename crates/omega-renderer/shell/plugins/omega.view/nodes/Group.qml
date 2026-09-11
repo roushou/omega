@@ -53,7 +53,7 @@ Row {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": segment.modelData,
                     "connection": group.host.connection,
-                "foreground": group.host.foreground
+                "foreground": group.host.ink
                 })
             }
 

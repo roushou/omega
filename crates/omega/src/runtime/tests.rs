@@ -302,7 +302,11 @@ impl Wired for Forward {
         }
     }
 }
+impl crate::ui::bind::CommandName for Forward {
+    const NAME: &'static str = "forward";
+}
 impl crate::Command for Forward {
+    type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<(), crate::Error> {
         self.context
@@ -343,7 +347,7 @@ impl Peer {
 #[tokio::test]
 async fn effect_completions_are_correlated_without_blocking_state_or_other_requests() {
     let plugin = Plugin::named("test", "0.1.0")
-        .command::<Forward>("forward")
+        .command::<Forward>()
         .widget_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
     peer.published("battery", "").await;
@@ -384,11 +388,7 @@ async fn effect_completions_are_correlated_without_blocking_state_or_other_reque
 
 #[tokio::test(start_paused = true)]
 async fn a_forwarded_timeout_is_answered_and_a_late_refusal_does_not_kill_the_runtime() {
-    let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").command::<Forward>("forward"),
-        vec![],
-    )
-    .await;
+    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Forward>(), vec![]).await;
     let (command, effect) = peer.command_start().await;
     tokio::time::advance(crate::effect::queue::Effects::TIMEOUT).await;
     let answer = peer.next().await;
@@ -406,11 +406,7 @@ async fn a_forwarded_timeout_is_answered_and_a_late_refusal_does_not_kill_the_ru
 
 #[tokio::test]
 async fn completion_saturation_refuses_new_commands_before_they_submit_effects() {
-    let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").command::<Forward>("forward"),
-        vec![],
-    )
-    .await;
+    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Forward>(), vec![]).await;
     for _ in 0..Runtime::COMMAND_LIMIT {
         peer.command_start().await;
     }
@@ -452,10 +448,12 @@ async fn oversized_pull_results_are_refused_without_installing_or_caching_the_in
 }
 
 #[derive(crate::Command)]
+#[omega(name = "forward")]
 struct Sequence {
     notify: crate::effect::Notify,
 }
 impl crate::Command for Sequence {
+    type Input = Args;
     type Output = String;
     async fn call(&self, _: Args) -> Result<String, crate::Error> {
         self.notify.send("first").await?;
@@ -466,11 +464,7 @@ impl crate::Command for Sequence {
 
 #[tokio::test]
 async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
-    let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").command::<Sequence>("forward"),
-        vec![],
-    )
-    .await;
+    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Sequence>(), vec![]).await;
     let (command, first) = peer.command_start().await;
     peer.quiet().await;
     peer.send(Frame::reply(first, result::Outcome::Ok(Default::default())))
@@ -499,11 +493,7 @@ async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
 
 #[tokio::test]
 async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
-    let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").command::<Sequence>("forward"),
-        vec![],
-    )
-    .await;
+    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Sequence>(), vec![]).await;
     let (command, first) = peer.command_start().await;
     peer.send(omega_proto::Refusal::denied("not allowed").frame(first))
         .await;
@@ -517,10 +507,12 @@ async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
 }
 
 #[derive(crate::Command)]
+#[omega(name = "forward")]
 struct Delayed {
     notify: crate::effect::Notify,
 }
 impl crate::Command for Delayed {
+    type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<(), crate::Error> {
         self.notify.send("started").await?;
@@ -531,11 +523,7 @@ impl crate::Command for Delayed {
 
 #[tokio::test(start_paused = true)]
 async fn disconnect_releases_a_runtime_with_an_unfinished_command() {
-    let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").command::<Delayed>("forward"),
-        vec![],
-    )
-    .await;
+    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Delayed>(), vec![]).await;
     let (_, first) = peer.command_start().await;
     peer.send(Frame::reply(first, result::Outcome::Ok(Default::default())))
         .await;

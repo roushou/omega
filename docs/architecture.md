@@ -127,10 +127,25 @@ escaping can make a JSON request reach its limit sooner.
 ## Commands and effects
 
 Commands derive `Command` to declare their fields and implement the trait with
-an associated `Output` and an async `call` returning `Result<Output, omega::Error>`.
+associated `Input` and `Output` types and an async `call(input)` returning
+`Result<Output, omega::Error>`.
 Outputs implement `IntoValue`; `()` becomes terminal success without a value.
 The runtime converts values and errors to closed protocol outcomes. Authors use
 ordinary return values and `?`; daemon refusals preserve their code.
+
+The derive gives a command one identity, shared by `.command::<SetVolume>()`
+and `.on_change(SetVolume)`. Named-field commands expose a `CommandRef` constant
+in Rust's value namespace; the reference contains no command instance or effects.
+Controls require matching inputs (`Percent`, `bool`, `String` or `()`), and
+`SetVolume.with(value)` binds a complete input for a button. Duplicate registered
+command names are refused. A reference does not register the command: invoking an
+unregistered command remains a runtime refusal.
+
+Scalar inputs consume exactly one argument; `()` consumes none. `derive(Input)`
+decodes a strict map. Missing, mistyped and unknown fields are refused before
+`call` runs, rather than defaulting as configuration and records do. `Args` remains
+an explicit raw input for commands implementing an external argument grammar.
+`Called::of` accepts typed inputs; `Called::raw` exercises malformed wire input.
 
 Effect handles and record writes return an awaitable `Effect`. Admission happens
 when the method is called, including local record updates; awaiting observes
@@ -534,7 +549,11 @@ The SDK examples include audio controls, Wi-Fi and a focus timer. They are ordin
 units with indicator/panel surfaces and explicit commands. The focus timer's `tick`
 command needs a one-second document schedule; Wi-Fi signal history uses `sample`.
 
-`Form` submits its named fields as one map argument. Drafts remain local to the
+`derive(Form)` declares string fields, persistent labels, placeholders, help text
+and secret presentation in one input type. `Form::new(Connect)` takes its fields
+from `Connect::Input`; `submit_label` names the button. Forms currently support
+text inputs, including secret text, rather than arbitrary Rust field types.
+The whole form is submitted as one strictly decoded map. Drafts remain local to the
 shell and secret fields clear after successful submission. The shell correlates
 control requests by stream, disables the submitting control while pending and
 shows refusals. Timeout or disconnect reports an uncertain outcome, not cancellation.
@@ -553,3 +572,10 @@ wall-clock adjustments do not. Tick scheduling remains in the daemon and uses
 Tokio's monotonic deadlines. The timer record survives unit replacement while the
 daemon lives; daemon restart resets it. Completion is recorded before notification,
 so notification is at most once and may be lost if the unit crashes between them.
+
+`Section` and `Metric` compose existing stack/text nodes; they introduce no new
+protocol kinds. `Emphasis` (primary, secondary, muted) describes importance;
+`Tone` (neutral, warning, error, success) describes meaning. Tone takes precedence
+when choosing semantic colors, and neither property changes interactivity.
+The Rust API uses `Choice`, `fill_width`, `padding` and `muted`; established wire
+identifiers such as `group`, `fill` and `pad` remain unchanged.

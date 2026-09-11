@@ -8,7 +8,7 @@
 //! let ui: Ui = Row::new()
 //!     .gap(6)
 //!     .child(Text::new("80%").bold())
-//!     .child(Text::new("charging").dim())
+//!     .child(Text::new("charging").muted())
 //!     .into();
 //! ```
 //!
@@ -20,7 +20,8 @@
 //! them. The exception is a list whose items move, where the identity is the
 //! item's, not the position's — say so with [`Node::key`].
 
-mod bind;
+pub(crate) mod bind;
+mod content;
 mod control;
 mod display;
 mod layout;
@@ -31,11 +32,12 @@ mod text;
 /// The icon set a shell draws: what [`Icon::new`] names.
 pub use omega_proto::Glyph;
 
-pub use bind::Bind;
-pub use control::{Button, Field, Form, Group, List, Slider, Toggle};
+pub use bind::{Bind, CommandRef};
+pub use content::{Metric, Section};
+pub use control::{Button, Choice, Field, Form, FormInput, List, Slider, Toggle};
 pub use display::{Graph, Image, Progress};
 pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
-pub use node::{Align, Node, Role, Size};
+pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};
 
 use omega_proto::omega::ViewTree;

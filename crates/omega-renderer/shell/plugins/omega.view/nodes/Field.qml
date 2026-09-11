@@ -25,13 +25,26 @@ Item {
     Component.onCompleted: input.text = field.given
 
     implicitWidth: host.space(240)
-    implicitHeight: labelHeight + Math.max(host.space(36), input.implicitHeight + host.space(16))
+    implicitHeight: labelHeight + Math.max(host.space(36), input.implicitHeight + host.space(16)) + helpHeight
     readonly property real labelHeight: fieldLabel.visible ? fieldLabel.implicitHeight + host.space(6) : 0
+    readonly property real helpHeight: helpText.visible ? helpText.implicitHeight + host.space(6) : 0
+    Text {
+        id: helpText
+        anchors.bottom: parent.bottom
+        width: parent.width
+        text: Props.fieldHelp(field.host.model)
+        visible: text !== ""
+        wrapMode: Text.Wrap
+        color: field.host.ink
+        opacity: 0.65
+        font.family: field.host.fontFamily
+        font.pixelSize: field.host.fontSize
+    }
     Text {
         id: fieldLabel
         width: parent.width
-        text: Props.fieldPlaceholder(field.host.model)
-        visible: !!field.host.form && text !== ""
+        text: Props.fieldLabel(field.host.model)
+        visible: text !== ""
         wrapMode: Text.Wrap
         color: field.host.ink
         font.family: field.host.fontFamily
@@ -40,6 +53,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         anchors.topMargin: field.labelHeight
+        anchors.bottomMargin: field.helpHeight
         radius: host.radius
         // Through the kit's own function, so a focused field here looks like a
         // focused field anywhere else in the shell.
@@ -74,7 +88,7 @@ Item {
                 color: Qt.darker(field.host.ink, 1.4)
                 font.family: field.host.fontFamily
                 font.pixelSize: field.host.fontSize
-                visible: input.text === "" && !fieldLabel.visible
+                visible: input.text === ""
             }
         }
     }

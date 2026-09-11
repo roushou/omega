@@ -88,8 +88,9 @@ impl Plugin {
     }
 
     /// Answer to being asked to do something.
-    pub fn command<C: Command>(mut self, name: impl Into<String>) -> Self {
-        self.commands.push(CommandEntry::of::<C>(name.into()));
+    pub fn command<C: Command>(mut self) -> Self {
+        self.commands
+            .push(CommandEntry::of::<C>(C::NAME.to_string()));
         self
     }
 
@@ -121,7 +122,14 @@ impl Plugin {
                 SurfaceKind::Widget,
             ));
         }
+        let mut command_names = BTreeSet::new();
         for command in &self.commands {
+            if !command_names.insert(&command.name) {
+                return Err(Error::invalid(format!(
+                    "duplicate command: {}",
+                    command.name
+                )));
+            }
             command.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
                 &omega_proto::SurfaceId::parse(command.name.clone())
