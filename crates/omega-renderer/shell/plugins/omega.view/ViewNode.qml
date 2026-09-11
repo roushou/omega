@@ -106,13 +106,16 @@ Item {
     // two reasons a node is unusable are drawn the same way.
     readonly property bool disabled: Props.disabled(node.model)
     readonly property bool busy: Props.busy(node.model)
-    readonly property bool interactive: !node.disabled && !node.busy && !node.pending
+    // Item.enabled propagates through layouts to every descendant control.
+    enabled: !node.disabled && !node.busy
+    readonly property bool interactive: node.enabled && !node.pending
 
     property var connection: null
     property var form: null
     readonly property bool pending: connection !== null && connection.requests.busy(model ? model.key : "")
     function invoke(bound, value) {
-        if (node.connection) node.connection.press(bound, value, node.model.key)
+        if (!node.interactive || !node.connection) return false
+        return node.connection.press(bound, value, node.model.key)
     }
 
     // What a node asked to be, or what it draws. A panel that has to line

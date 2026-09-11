@@ -38,10 +38,12 @@ QtObject {
         requests.settled(key, !result.error)
     }
 
-    function disconnected() {
-        if (Object.keys(requests.pending).length)
-            requests.error = "Connection lost; command outcome is unknown."
+    function disconnected(reason) {
+        var abandoned = requests.pending
+        if (Object.keys(abandoned).length)
+            requests.error = reason || "Connection lost; command outcome is unknown."
         requests.pending = ({})
+        for (var stream in abandoned) requests.settled(abandoned[stream].key, false)
     }
 
     function expire(now) {

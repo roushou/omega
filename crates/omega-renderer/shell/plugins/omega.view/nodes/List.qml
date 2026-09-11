@@ -26,6 +26,9 @@ Rectangle {
     property int selected: -1
 
     color: "transparent"
+    border.width: rows.activeFocus ? list.host.space(1) : 0
+    border.color: list.host.ink
+    radius: list.host.radius
     implicitWidth: host.space(280)
     // As tall as its rows, up to a point: a list of forty networks in a
     // popout that grew to fit them would be a popout taller than the screen.
@@ -87,8 +90,10 @@ Rectangle {
     }
 
     function activate(index) {
-        if (list.bound === null || index < 0 || index >= held.count) return
-        list.host.invoke(list.bound, held.get(index).key)
+        if (!list.host.interactive || list.bound === null || index < 0 || index >= held.count) return
+        var row = held.get(index)
+        if (Props.disabled(row.node) || Props.busy(row.node)) return
+        list.host.invoke(list.bound, row.key)
     }
 
     // Node payloads are QVariantMaps, including nested children and props.
@@ -103,7 +108,8 @@ Rectangle {
         clip: true
         // Only take keys when there is something to do with them; a list
         // nothing is bound to should not swallow the panel's navigation.
-        focus: list.bound !== null && list.host.interactive
+        activeFocusOnTab: true
+        enabled: list.bound !== null
 
         Keys.onUpPressed: list.selected = Math.max(0, list.selected - 1)
         Keys.onDownPressed: list.selected = Math.min(held.count - 1, list.selected + 1)
@@ -158,10 +164,11 @@ Rectangle {
                 id: point
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: list.bound !== null && list.host.interactive
+                enabled: list.bound !== null && list.host.interactive && !Props.disabled(row.node) && !Props.busy(row.node)
                 acceptedButtons: Qt.LeftButton
                 z: -1
                 onClicked: {
+                    rows.forceActiveFocus()
                     list.selected = row.index
                     list.activate(row.index)
                 }

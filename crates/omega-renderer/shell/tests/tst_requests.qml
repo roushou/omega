@@ -5,7 +5,8 @@ import "../plugins/omega.view"
 TestCase {
     name: "CommandFeedback"
     Requests { id: requests }
-    function init() { requests.disconnected(); requests.error = "" }
+    SignalSpy { id: settled; target: requests; signalName: "settled" }
+    function init() { requests.disconnected(); requests.error = ""; settled.clear() }
     function test_terminal_result_and_refusal() {
         verify(requests.begin(1, "volume", 0))
         verify(!requests.begin(3, "volume", 0))
@@ -31,5 +32,16 @@ TestCase {
         verify(!requests.begin(33, "extra", 0))
         requests.finish(1, { done: true })
         verify(requests.begin(33, "extra", 1))
+    }
+
+    function test_disconnect_settles_each_pending_control_as_unsuccessful() {
+        requests.begin(1, "first", 0)
+        requests.begin(3, "second", 0)
+        requests.disconnected()
+        compare(settled.count, 2)
+        compare(settled.signalArguments[0][1], false)
+        compare(settled.signalArguments[1][1], false)
+        requests.finish(1, {done:true})
+        compare(settled.count, 2)
     }
 }

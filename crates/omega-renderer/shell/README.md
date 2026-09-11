@@ -60,7 +60,10 @@ Views are addressed by `(unit, surface, module)`. The module selects an exact
 placement; an empty module identifies the surface's unplaced instance. The daemon
 authenticates the publishing unit and assigns view revisions. `Connection` routes
 results to pending requests and reconnects after prolonged silence as well as
-reported socket disconnection.
+reported socket disconnection. It subscribes to unit lifecycle state to distinguish
+starting, restarting, stopped, and failed plugins from intentionally empty views.
+Disconnected views are cleared; pending commands report an unknown outcome and
+are never retried automatically.
 
 ## Rendering and interaction
 
@@ -84,7 +87,14 @@ Draft text, slider drags, selection, and pending requests live in the renderer.
 Fields retain drafts across unrelated updates; a changed explicit `value` lets
 the plugin replace them. Lists use row keys for activation. Forms submit named
 text fields as one map, retain labels and help while editing, and clear secret
-fields after successful submission.
+fields after successful submission. Refused submissions retain drafts for retry.
+Disabled or busy containers disable their descendants; pending commands prevent
+repeat activation while retaining keyboard focus.
+
+Tab moves between controls. Enter and Space activate buttons, toggles, and
+choices; arrow keys adjust sliders or navigate lists, and Home/End set slider
+limits. Enter submits a form, and Escape closes its panel. Focused controls have
+a visible indicator.
 
 Shared `emphasis` and `tone` properties express visual importance and feedback
 independently. They do not grant interactivity or change routing. Theme colors

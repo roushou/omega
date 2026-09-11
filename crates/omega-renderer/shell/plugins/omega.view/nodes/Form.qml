@@ -72,12 +72,17 @@ Item {
         }
 
         Rectangle {
+            id: submitButton
             width: rootForm.width
             height: Math.max(rootForm.host.space(36), label.implicitHeight + rootForm.host.space(16))
             radius: rootForm.host.radius
             color: rootForm.host.chosenFill
             activeFocusOnTab: true
+            enabled: Props.bind(rootForm.host.model, "submit") !== null
+            border.width: submitButton.activeFocus ? rootForm.host.space(2) : 0
+            border.color: rootForm.host.ink
             Keys.onReturnPressed: rootForm.submit()
+            Keys.onEnterPressed: rootForm.submit()
             Keys.onSpacePressed: rootForm.submit()
             Text {
                 id: label
@@ -91,7 +96,7 @@ Item {
                 anchors.fill: parent
                 enabled: rootForm.host.interactive
                 cursorShape: Qt.PointingHandCursor
-                onClicked: rootForm.submit()
+                onClicked: { submitButton.forceActiveFocus(); rootForm.submit() }
             }
         }
         Text { text: rootForm.validation; visible: text !== ""; color: rootForm.host.ink }

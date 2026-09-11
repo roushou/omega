@@ -27,6 +27,22 @@ Rectangle {
         function onPendingChanged() { if (!swtch.host.pending) swtch.optimistic = null }
     }
 
+    readonly property bool pressable: swtch.bound !== null && swtch.host.interactive
+    activeFocusOnTab: true
+    enabled: swtch.bound !== null
+    border.width: swtch.activeFocus ? swtch.host.space(2) : 0
+    border.color: swtch.host.foreground
+
+    function activate() {
+        if (!swtch.pressable) return
+        var next = !swtch.checked
+        swtch.optimistic = next
+        if (!swtch.host.invoke(swtch.bound, next)) swtch.optimistic = null
+    }
+    Keys.onReturnPressed: activate()
+    Keys.onEnterPressed: activate()
+    Keys.onSpacePressed: activate()
+
     readonly property int inset: host.space(2)
 
     implicitWidth: host.space(28)
@@ -49,12 +65,11 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        enabled: swtch.bound !== null && swtch.host.interactive
+        enabled: swtch.pressable
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            var next = !swtch.checked
-            swtch.optimistic = next
-            swtch.host.invoke(swtch.bound, next)
+            swtch.forceActiveFocus()
+            swtch.activate()
         }
     }
 }

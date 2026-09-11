@@ -16,13 +16,23 @@ Row {
     readonly property string chosen: Props.groupSelected(host.model)
 
     spacing: host.space(1)
+    readonly property var options: Props.children(group.host.model)
+    property var keys: []
+    function sync() {
+        var next = []
+        for (var i = 0; i < group.options.length; i++) next.push(group.options[i].key || "")
+        if (JSON.stringify(next) !== JSON.stringify(group.keys)) group.keys = next
+    }
+    onOptionsChanged: sync()
+    Component.onCompleted: sync()
 
     Repeater {
-        model: Props.children(group.host.model)
+        model: group.keys
 
         delegate: Rectangle {
             id: segment
-            required property var modelData
+            required property int index
+            readonly property var modelData: group.options[segment.index]
 
             readonly property string key: modelData && modelData.key ? modelData.key : ""
             readonly property bool on: segment.key !== "" && segment.key === group.chosen
@@ -39,6 +49,18 @@ Row {
                 ? group.host.chosenFill
                 : (segment.hot ? group.host.hoverFill : group.host.idleFill)
 
+            readonly property bool pressable: segment.enabled && group.host.interactive
+            activeFocusOnTab: true
+            enabled: group.bound !== null && segment.key !== "" && !Props.disabled(segment.modelData) && !Props.busy(segment.modelData)
+            border.width: segment.activeFocus ? group.host.space(1) : 0
+            border.color: group.host.ink
+            function activate() {
+                if (segment.pressable) group.host.invoke(group.bound, segment.key)
+            }
+            Keys.onReturnPressed: activate()
+            Keys.onEnterPressed: activate()
+            Keys.onSpacePressed: activate()
+
             Behavior on color {
                 ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
@@ -53,17 +75,22 @@ Row {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": segment.modelData,
                     "connection": group.host.connection,
-                "foreground": group.host.ink
+                    "foreground": group.host.ink
                 })
+            }
+
+            Connections {
+                target: segment
+                function onModelDataChanged() { if (label.item) label.item.model = segment.modelData }
             }
 
             MouseArea {
                 id: hover
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: group.bound !== null && group.host.interactive && segment.key !== ""
+                enabled: segment.pressable
                 cursorShape: Qt.PointingHandCursor
-                onClicked: group.host.invoke(group.bound, segment.key)
+                onClicked: { segment.forceActiveFocus(); segment.activate() }
             }
         }
     }

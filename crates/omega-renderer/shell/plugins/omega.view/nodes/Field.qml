@@ -15,6 +15,7 @@ Item {
     id: field
     objectName: Props.fieldName(host.model)
     required property var host
+    enabled: !Props.disabled(host.model) && !Props.busy(host.model)
 
     readonly property var bound: Props.bind(host.model, "submit")
     readonly property string given: Props.fieldValue(host.model)
@@ -72,10 +73,12 @@ Item {
             font.family: field.host.fontFamily
             font.pixelSize: field.host.fontSize
             selectByMouse: true
-            enabled: field.host.interactive && (!field.host.form || field.host.form.host.interactive)
+            activeFocusOnTab: true
+            readOnly: !field.host.interactive || (field.host.form && !field.host.form.host.interactive)
             echoMode: field.secret ? TextInput.Password : TextInput.Normal
 
             onAccepted: {
+                if (input.readOnly) return
                 if (field.host.form) { field.host.form.submit(); return }
                 if (field.bound === null) return
                 field.host.invoke(field.bound, input.text)

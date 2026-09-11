@@ -37,6 +37,34 @@ Item {
     property var tree: null
     // Which unit published the tree currently drawn. A press goes back to it.
     property string drawnBy: ""
+    property bool connected: false
+    property var units: []
+    readonly property string status: {
+        if (!link.connected) return "Waiting for Omega…"
+        var name = link.unit || link.drawnBy
+        if (!name) return ""
+        for (var i = 0; i < link.units.length; i++) {
+            var unit = link.units[i]
+            if (unit.unit !== name) continue
+            switch (unit.phase) {
+                case "UNIT_PHASE_RUNNING": return ""
+                case "UNIT_PHASE_STARTING": return "Starting plugin…"
+                case "UNIT_PHASE_RESTARTING": return "Restarting plugin…"
+                case "UNIT_PHASE_STOPPED": return "Plugin stopped."
+                case "UNIT_PHASE_FAILED": return unit.detail || "Plugin failed to start."
+                default: return "Plugin status unavailable."
+            }
+        }
+        return "Waiting for plugin…"
+    }
+
+    function disconnected(reason) {
+        link.connected = false
+        link.tree = null
+        link.drawnBy = ""
+        link.units = []
+        requests.disconnected(reason)
+    }
     // When the daemon last said anything. A socket whose peer went away does
     // not reliably report itself closed, so silence is what we watch instead.
     property double lastHeard: 0
@@ -62,6 +90,11 @@ Item {
             return
         }
 
+        if (msg.units) {
+            link.units = msg.units.units || []
+            return
+        }
+
         // Only a view line describes a surface. Topics share this stream, and
         // a filter that is empty matches them too — which cleared the tree on
         // every state change the daemon published.
@@ -74,25 +107,16 @@ Item {
         link.tree = msg.view && msg.view.root ? msg.view.root : null
     }
 
-    // This host draws views and reads no state, so it asks for none.
-    //
-    // `replace` rather than a list of what to drop: the daemon holds every
-    // topic there is, and naming the unwanted ones would let each new one
-    // back in as the ontology grows. An empty selection stays empty.
-    //
-    // The daemon sends everything it holds the moment a connection opens, so
-    // this narrows what follows rather than what arrived — one snapshot, and
-    // then only the views this host is here for.
     function allocateStream() {
         var stream = link.nextStream
         link.nextStream += 2
         return stream
     }
 
-    function subscribeToNothing() {
+    function subscribeToUnits() {
         link.send({
             streamId: link.allocateStream(),
-            invoke: { subscribe: { topics: [], events: [], replace: true } }
+            invoke: { subscribe: { topics: ["units"], events: [], replace: true } }
         })
     }
 
@@ -118,16 +142,20 @@ Item {
     // which way a toggle went — appends it *after* those, so a unit reads the
     // arguments it chose by position and the user's value last.
     function press(bound, value, key) {
-        if (!bound || !bound.command || link.drawnBy === "") return
+        if (!bound || !bound.command) return false
+        if (!link.connected || link.drawnBy === "") {
+            requests.error = "Not connected to the plugin; command was not sent."
+            return false
+        }
 
         var args = (bound.args || []).slice()
         if (value !== undefined) {
             var encoded = Props.encode(value)
-            if (encoded === null) { requests.error = "Unsupported control value."; return }
+            if (encoded === null) { requests.error = "Unsupported control value."; return false }
             args.push(encoded)
         }
         var stream = link.allocateStream()
-        if (!requests.begin(stream, key, Date.now())) return
+        if (!requests.begin(stream, key, Date.now())) return false
         var sent = link.send({
             streamId: stream,
             invoke: {
@@ -144,7 +172,11 @@ Item {
                 }
             }
         })
-        if (!sent) requests.disconnected()
+        if (!sent) {
+            requests.finish(stream, { done: true, error: { message: "Not connected; command was not sent." } })
+            return false
+        }
+        return true
     }
 
     Component {
@@ -167,11 +199,10 @@ Item {
             // nobody is taking.
             onConnectedChanged: {
                 if (connected) {
-                    link.subscribeToNothing()
+                    link.connected = true
+                    link.subscribeToUnits()
                 } else {
-                    requests.disconnected()
-                    link.tree = null
-                    link.drawnBy = ""
+                    link.disconnected()
                 }
             }
         }
@@ -204,8 +235,9 @@ Item {
         running: true
         repeat: true
         onTriggered: {
-            if (Date.now() - link.lastHeard < 15000 && !requests.expire(Date.now())) return
-            requests.disconnected()
+            var expired = requests.expire(Date.now())
+            if (Date.now() - link.lastHeard < 15000 && !expired) return
+            link.disconnected(expired ? requests.error : "")
             link.lastHeard = Date.now()
             socketLoader.active = false
             Qt.callLater(function() { socketLoader.active = true })

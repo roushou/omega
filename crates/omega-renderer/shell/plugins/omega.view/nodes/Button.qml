@@ -27,7 +27,9 @@ Rectangle {
     border.width: slot.host.space(1)
     border.color: slot.activeFocus ? slot.host.ink : slot.host.rule
     activeFocusOnTab: true
+    enabled: slot.bound !== null
     Keys.onReturnPressed: if (slot.pressable) slot.host.invoke(slot.bound, undefined)
+    Keys.onEnterPressed: if (slot.pressable) slot.host.invoke(slot.bound, undefined)
     Keys.onSpacePressed: if (slot.pressable) slot.host.invoke(slot.bound, undefined)
 
     Behavior on color {
@@ -54,6 +56,9 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         // A press carries nothing of its own: the binding is the whole
         // message.
-        onClicked: slot.host.invoke(slot.bound, undefined)
+        onClicked: {
+            slot.forceActiveFocus()
+            slot.host.invoke(slot.bound, undefined)
+        }
     }
 }

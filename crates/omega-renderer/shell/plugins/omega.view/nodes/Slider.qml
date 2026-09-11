@@ -22,6 +22,7 @@ Item {
     implicitWidth: host.space(240)
     implicitHeight: host.space(32)
     activeFocusOnTab: true
+    enabled: track.bound !== null
 
     Rectangle {
         anchors.verticalCenter: parent.verticalCenter
@@ -52,6 +53,12 @@ Item {
     }
     Keys.onLeftPressed: adjust(-0.05)
     Keys.onRightPressed: adjust(0.05)
+    Keys.onUpPressed: adjust(0.05)
+    Keys.onDownPressed: adjust(-0.05)
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Home) { adjust(-1); event.accepted = true }
+        else if (event.key === Qt.Key_End) { adjust(1); event.accepted = true }
+    }
 
     MouseArea {
         anchors.fill: parent

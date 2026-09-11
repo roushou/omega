@@ -66,13 +66,23 @@ BarWidget {
     // What the slot's own root node asked to say on hover. The bar owns the
     // tooltip window, so this is the one node in a tree that can have one —
     // a tooltip deeper in would need a host that follows the pointer.
-    tooltipText: link.requests.error || (link.tree ? Props.tooltip(link.tree) : "")
-    hasVisualContent: link.tree !== null
+    tooltipText: link.requests.error || link.status || (link.tree ? Props.tooltip(link.tree) : "")
+    hasVisualContent: link.tree !== null || fallback.visible
     // A button with no label is a button with no width, and the bar lays out
     // by implicit size — so the slot has to follow the tree instead.
-    fixedWidth: view.implicitWidth > 0
-      ? view.implicitWidth + button.scaledHorizontalMargin * 2
+    fixedWidth: view.implicitWidth > 0 || fallback.visible
+      ? Math.max(view.implicitWidth, fallback.visible ? fallback.implicitWidth : 0) + button.scaledHorizontalMargin * 2
       : 0
+
+    Text {
+      id: fallback
+      anchors.centerIn: parent
+      visible: link.tree === null && (link.status !== "" || link.requests.error !== "")
+      text: link.requests.error !== "" ? "!" : "…"
+      color: link.requests.error !== "" ? Color.urgent : button.foreground
+      font.family: Style.font.family
+      font.pixelSize: Style.font.body
+    }
 
     ViewNode {
       id: view
@@ -108,12 +118,14 @@ BarWidget {
       owner: root
       bar: root.bar
       open: root.opened
+      focusTarget: viewport
       contentWidth: fittedContentWidth(
         Math.max(Style.space(320), panelView.implicitWidth + padding * 2), Style.space(480))
       contentHeight: fittedContentHeight(Math.max(Style.space(40), panelContents.implicitHeight))
 
       Flickable {
         id: viewport
+        Keys.onEscapePressed: root.close()
         contentWidth: width
         anchors.fill: parent
         contentHeight: panelContents.implicitHeight
@@ -127,8 +139,8 @@ BarWidget {
           Text {
             width: parent.width
             visible: text !== ""
-            text: panelLink.requests.error
-            color: Color.urgent
+            text: panelLink.requests.error || panelLink.status
+            color: panelLink.requests.error !== "" ? Color.urgent : Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             wrapMode: Text.Wrap
