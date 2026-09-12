@@ -41,6 +41,31 @@ shell layout into Rust without changing its appearance. Existing Omega
 configurations can use `omega shell adopt` to back up the current shell configuration
 and generate a Rust module to review and include in their document.
 
+With an `audio` plugin added, your configuration looks like this:
+
+```text
+~/.config/omega/
+├── Cargo.toml                 # Workspace members and shared dependencies
+├── Cargo.lock                 # Resolved dependency versions
+├── system/
+│   ├── Cargo.toml             # Depends on the plugins you configure
+│   └── src/
+│       ├── main.rs            # Shell layout, plugin settings, and automations
+│       └── shell_import.rs    # Rust layout generated when adopting the shell
+└── units/
+    └── audio/
+        ├── Cargo.toml         # Plugin dependencies
+        └── src/
+            ├── lib.rs         # Widgets, commands, settings, and plugin registration
+            └── main.rs        # Runs the plugin as a separate process
+```
+
+`system/` describes your desktop; each crate under `units/` implements a plugin.
+Plugins expose a library so the system declaration can refer to their settings
+and surfaces through Rust types. `omega new` adds plugin crates to the workspace;
+`shell_import.rs` is created only when importing an existing shell configuration.
+You can keep the whole workspace in Git and use ordinary Cargo tools to work on it.
+
 You can inspect the service and its plugins from the terminal:
 
 ```sh
