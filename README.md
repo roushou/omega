@@ -202,7 +202,8 @@ including panels, forms, and plugin-owned state.
 
 See the [architecture](docs/architecture.md) for how Omega fits together,
 [open design questions](docs/design.md) for work ahead, and
-[contributing guidelines](AGENTS.md) for working on Omega itself. `omega --help`
+[contributing guidelines](AGENTS.md) for working on Omega itself. Maintainers can
+follow the [release process](docs/releasing.md). `omega --help`
 lists the available commands.
 
 ## License

@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to check
+        type: string
+        required: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Install the toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -43,6 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Install qmllint
         # `update`'s exit code is not the signal, for the same reason
@@ -72,6 +87,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - uses: taiki-e/install-action@v2
         with:
@@ -82,3 +100,21 @@ jobs:
 
       - name: Licenses, advisories, bans, sources
         uses: EmbarkStudios/cargo-deny-action@v2
+
+  release-tooling:
+    runs-on: ubuntu-latest
+    steps:
+      # Backfills check the release tooling that runs them, even if the tag predates it.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s .github -p 'test_release.py'
+      - name: Install actionlint
+        env:
+          GOBIN: ${{ runner.temp }}/actionlint-bin
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Lint workflows
+        run: '"$RUNNER_TEMP/actionlint-bin/actionlint"'

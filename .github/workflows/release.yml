@@ -1,0 +1,148 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release (for example v0.2.2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag, changelog, and published crates
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 .github/release.py "$RELEASE_TAG" release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release/notes.md
+          if-no-files-found: error
+
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.commit }}
+
+  build:
+    needs: prepare
+    # Ubuntu 22.04 sets the binary's glibc baseline to 2.35.
+    runs-on: ubuntu-22.04
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the release binary
+        run: cargo build --release --locked -p omega-cli --bin omega --target "$TARGET"
+      - name: Package and smoke-test
+        run: |
+          set -euo pipefail
+          archive="omega-${RELEASE_TAG}-${TARGET}"
+          mkdir -p "staging/$archive" dist
+          install -m755 "target/$TARGET/release/omega" "staging/$archive/omega"
+          cp LICENSE "staging/$archive/LICENSE"
+          cat > "staging/$archive/INSTALL.txt" <<'EOF'
+          Omega for Linux x86-64 (glibc 2.35 or newer).
+          Omarchy and Rust 1.88+ are required to build and run your configuration.
+
+          Install the binary in a persistent directory on your PATH:
+            mkdir -p ~/.local/bin
+            install -m755 omega ~/.local/bin/omega
+
+          First setup:
+            ~/.local/bin/omega init
+
+          Upgrade an existing setup using the newly installed binary:
+            ~/.local/bin/omega shell install
+            ~/.local/bin/omega daemon install
+            ~/.local/bin/omega status --versions
+
+          Documentation: https://github.com/roushou/omega
+          EOF
+          tar -C staging -czf "dist/$archive.tar.gz" "$archive"
+          (cd dist && sha256sum "$archive.tar.gz" > SHA256SUMS)
+          mkdir unpacked
+          tar -xzf "dist/$archive.tar.gz" -C unpacked
+          test "$("unpacked/$archive/omega" --version)" = "omega $RELEASE_VERSION"
+          (cd dist && sha256sum --check SHA256SUMS)
+          OMEGA_CONFIG_DIR="$RUNNER_TEMP/omega-smoke" "unpacked/$archive/omega" init --bare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, checks, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-binaries
+          path: dist
+      - name: Publish the complete release
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+          (cd dist && sha256sum --check SHA256SUMS)
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > draft-state; then
+            if [ "$(cat draft-state)" != true ]; then
+              echo "Release $RELEASE_TAG is already published; refusing to replace its assets." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Omega $RELEASE_TAG" --notes-file release/notes.md
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --notes-file release/notes.md --draft=false
