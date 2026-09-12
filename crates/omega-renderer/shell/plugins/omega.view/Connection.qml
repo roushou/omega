@@ -123,7 +123,7 @@ Item {
     // One write path, guarded: the socket is rebuilt on every retry, so there
     // are moments when there is no object to write to.
     function send(message) {
-        var open = socketLoader.item as Socket
+        var open = link.socket
         if (!open || !open.connected) return false
         open.write(JSON.stringify(message) + "\n")
         return true
@@ -187,13 +187,6 @@ Item {
             parser: SplitParser {
                 onRead: function(line) { link.onLine(line) }
             }
-            // `connected: true` as a static binding can fire before `path` is
-            // set; connect after the component is fully initialized instead.
-            Component.onCompleted: {
-                link.lastHeard = Date.now()
-                connected = true
-            }
-
             // A daemon that went away is not a daemon still saying 91%.
             // Holding the last tree would leave the bar showing a reading
             // nobody is taking.
@@ -208,10 +201,25 @@ Item {
         }
     }
 
-    Loader {
-        id: socketLoader
-        sourceComponent: socketComponent
+    property Socket socket: null
+
+    function openSocket() {
+        // Qt 6.4 Loader creates a context incompatible with this bound component.
+        link.socket = socketComponent.createObject(link)
+        // Both path and the owning reference must exist before connection signals fire.
+        link.lastHeard = Date.now()
+        link.socket.connected = true
     }
+
+    function reconnect(reason) {
+        link.disconnected(reason)
+        link.lastHeard = Date.now()
+        if (link.socket) link.socket.destroy()
+        link.socket = null
+        Qt.callLater(link.openSocket)
+    }
+
+    Component.onCompleted: link.openSocket()
 
     // Recover from a daemon this host cannot currently reach.
     //
@@ -237,10 +245,7 @@ Item {
         onTriggered: {
             var expired = requests.expire(Date.now())
             if (Date.now() - link.lastHeard < 15000 && !expired) return
-            link.disconnected(expired ? requests.error : "")
-            link.lastHeard = Date.now()
-            socketLoader.active = false
-            Qt.callLater(function() { socketLoader.active = true })
+            link.reconnect(expired ? requests.error : "")
         }
     }
 }

@@ -65,4 +65,18 @@ TestCase {
         verify(!link.requests.busy("slider"))
         verify(link.requests.error.indexOf("not sent") >= 0)
     }
+    function test_recreated_socket_subscribes_and_accepts_commands() {
+        var link = connection()
+        verify(link.socket.written.indexOf("units") >= 0)
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text"}}}))
+        verify(link.press({command:"volume"}, 0.5, "slider"))
+        link.reconnect()
+        compare(link.socket, null)
+        compare(link.tree, null)
+        verify(!link.requests.busy("slider"))
+        tryCompare(link, "connected", true)
+        verify(link.socket.written.indexOf("units") >= 0)
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text"}}}))
+        verify(link.press({command:"volume"}, 0.4, "slider"))
+    }
 }
