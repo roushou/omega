@@ -1,3 +1,11 @@
+## What's Changed in 0.2.3
+* feat(cli): inherit scaffolded Rust edition from the workspace
+* fix(renderer): create sockets in their bound QML context
+* ci: automate GitHub releases with notes and binaries
+* docs: add config directory layout in README
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.2.2...v0.2.3
+
 ## What's Changed in 0.2.2
 * feat(cli): wait for build activation and expose JSON status
 * feat(cli): report live deployment status

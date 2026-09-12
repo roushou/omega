@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 homepage = "https://github.com/roushou/omega"
 license = "MIT"
@@ -21,12 +21,12 @@ unimplemented = "warn"
 dbg_macro = "warn"
 
 [workspace.dependencies]
-omega-brokers = { path = "crates/omega-brokers", version = "0.2.2" }
-omega-derive = { path = "crates/omega-derive", version = "0.2.2" }
-omega-document = { path = "crates/omega-document", version = "0.2.2" }
-omega-host = { path = "crates/omega-host", version = "0.2.2" }
-omega-proto = { path = "crates/omega-proto", version = "0.2.2" }
-omega-renderer = { path = "crates/omega-renderer", version = "0.2.2" }
+omega-brokers = { path = "crates/omega-brokers", version = "0.2.3" }
+omega-derive = { path = "crates/omega-derive", version = "0.2.3" }
+omega-document = { path = "crates/omega-document", version = "0.2.3" }
+omega-host = { path = "crates/omega-host", version = "0.2.3" }
+omega-proto = { path = "crates/omega-proto", version = "0.2.3" }
+omega-renderer = { path = "crates/omega-renderer", version = "0.2.3" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
