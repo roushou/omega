@@ -117,8 +117,7 @@ impl TomlSchema for CargoConfig {
 pub struct Workspace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolver: Option<String>,
-    /// `[workspace.package]` — what members inherit with
-    /// `version.workspace = true`.
+    /// `[workspace.package]` — fields members inherit with `workspace = true`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package: Option<WorkspacePackage>,
     #[serde(default)]
@@ -127,8 +126,7 @@ pub struct Workspace {
     pub exclude: Vec<String>,
     #[serde(default, skip_serializing_if = "Dependencies::is_empty")]
     pub dependencies: Dependencies,
-    /// `workspace.package`, `workspace.lints`, and anything else we do not
-    /// model, kept verbatim.
+    /// `workspace.lints` and anything else we do not model, kept verbatim.
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }
@@ -159,11 +157,13 @@ impl Workspace {
     }
 }
 
-/// The fields a workspace's members inherit with `version.workspace = true`.
+/// The package fields a workspace's members can inherit.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspacePackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edition: Option<String>,
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }
@@ -172,23 +172,33 @@ pub struct WorkspacePackage {
 pub struct Package {
     pub name: String,
     pub version: String,
-    pub edition: String,
+    pub edition: Edition,
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }
 
 impl Package {
-    pub fn new(
-        name: impl Into<String>,
-        version: impl Into<String>,
-        edition: impl Into<String>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, version: impl Into<String>, edition: Edition) -> Self {
         Self {
             name: name.into(),
             version: version.into(),
-            edition: edition.into(),
+            edition,
             rest: Table::new(),
         }
+    }
+}
+
+/// Cargo accepts an explicit edition or inheritance from `[workspace.package]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Edition {
+    Explicit(String),
+    Inherited { workspace: bool },
+}
+
+impl Edition {
+    pub fn inherited() -> Self {
+        Self::Inherited { workspace: true }
     }
 }
 

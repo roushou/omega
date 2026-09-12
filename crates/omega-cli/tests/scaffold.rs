@@ -2,7 +2,7 @@
 //! generated workspace build.
 
 use omega_cli::scaffold::{Published, Scaffold, SourceTree, Template};
-use omega_daemon::host::cargo::CargoManifest;
+use omega_daemon::host::cargo::{CargoManifest, Edition, Workspace};
 use omega_host::Toml;
 use omega_proto::UnitName;
 
@@ -80,6 +80,10 @@ fn the_workspace_manifest_is_a_workspace_cargo_would_accept() {
     let workspace = manifest.workspace.as_ref().unwrap();
 
     assert_eq!(workspace.resolver.as_deref(), Some("3"));
+    assert_eq!(
+        workspace.package.as_ref().unwrap().edition.as_deref(),
+        Some("2024")
+    );
     // The config plane is a member alongside the units it configures.
     assert_eq!(workspace.members, vec!["system".to_string()]);
     assert!(
@@ -97,6 +101,10 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
     let system = scaffold.system_manifest();
 
     assert_eq!(system.package.as_ref().unwrap().name, "system");
+    assert_eq!(
+        system.package.as_ref().unwrap().edition,
+        Edition::inherited()
+    );
     // The authoring vocabulary and nothing else: a config says what the
     // machine should be and never names the protocol.
     assert_eq!(
@@ -153,7 +161,18 @@ fn the_unit_crate_is_named_after_the_unit() {
     // The build copies `target/release/<crate name>`, so the crate name and
     // the unit name must be the same string.
     assert_eq!(package.name, unit().as_str());
-    assert_eq!(package.edition, "2024");
+    assert_eq!(package.edition, Edition::inherited());
+}
+
+#[test]
+fn adding_inheritance_preserves_the_workspaces_chosen_edition() {
+    let mut workspace = Workspace::default();
+    assert!(Scaffold::ensure_edition(&mut workspace));
+    let package = workspace.package.as_mut().unwrap();
+    assert_eq!(package.edition.as_deref(), Some("2024"));
+    package.edition = Some("2021".into());
+    assert!(!Scaffold::ensure_edition(&mut workspace));
+    assert_eq!(workspace.package.unwrap().edition.as_deref(), Some("2021"));
 }
 
 #[test]

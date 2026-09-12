@@ -43,6 +43,16 @@ impl InitCmd {
         // alone.
         let workspace = layout.file::<CargoManifest>(CargoSlot::Workspace);
         let founded = workspace.create_new(&scaffold.workspace_manifest())?;
+        if !founded {
+            let mut manifest = workspace.read()?;
+            let root = manifest
+                .workspace
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("the config manifest has no [workspace]"))?;
+            if Scaffold::ensure_edition(root) {
+                workspace.write(&manifest)?;
+            }
+        }
 
         let system = layout.file::<CargoManifest>(CargoSlot::System);
         let plane = system.create_new(&scaffold.system_manifest())?;

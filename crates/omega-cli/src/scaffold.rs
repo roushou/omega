@@ -9,8 +9,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use omega_daemon::host::cargo::{
-    CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Package, Profile,
-    ReleaseProfile, Workspace,
+    CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Edition, Package,
+    Profile, ReleaseProfile, Workspace, WorkspacePackage,
 };
 use omega_host::Layout;
 use omega_host::{Toml, TomlError};
@@ -98,6 +98,16 @@ pub struct Scaffold {
 }
 
 impl Scaffold {
+    /// New members inherit the edition; existing workspace choices remain authoritative.
+    pub fn ensure_edition(workspace: &mut Workspace) -> bool {
+        let package = workspace.package.get_or_insert_with(Default::default);
+        if package.edition.is_some() {
+            return false;
+        }
+        package.edition = Some(EDITION.into());
+        true
+    }
+
     /// What a plugin crate depends on.
     ///
     /// One crate. A plugin holds handles, draws a view, and returns
@@ -159,6 +169,10 @@ impl Scaffold {
         CargoManifest {
             workspace: Some(Workspace {
                 resolver: Some("3".into()),
+                package: Some(WorkspacePackage {
+                    edition: Some(EDITION.into()),
+                    ..Default::default()
+                }),
                 members: vec![Layout::SYSTEM_CRATE.to_string()],
                 dependencies,
                 ..Default::default()
@@ -178,7 +192,7 @@ impl Scaffold {
     /// `units/<name>/Cargo.toml`, inheriting the workspace's dependencies.
     pub fn unit_crate_manifest(&self, name: &UnitName) -> CargoManifest {
         CargoManifest {
-            package: Some(Package::new(name.as_str(), "0.1.0", EDITION)),
+            package: Some(Package::new(name.as_str(), "0.1.0", Edition::inherited())),
             dependencies: Dependencies::from_iter(
                 Self::UNIT_DEPENDENCIES
                     .iter()
@@ -202,7 +216,11 @@ impl Scaffold {
     /// it is written — see [`Scaffold::depends_on`].
     pub fn system_manifest(&self) -> CargoManifest {
         CargoManifest {
-            package: Some(Package::new(Layout::SYSTEM_CRATE, "0.1.0", EDITION)),
+            package: Some(Package::new(
+                Layout::SYSTEM_CRATE,
+                "0.1.0",
+                Edition::inherited(),
+            )),
             dependencies: Dependencies::from_iter(
                 Self::SYSTEM_DEPENDENCIES
                     .iter()

@@ -110,7 +110,11 @@ serde = { path = "vendor/serde" }
 #[test]
 fn cargo_manifest_encodes_the_shape_cargo_expects() {
     let manifest = CargoManifest {
-        package: Some(Package::new("battery-widget", "0.1.0", "2024")),
+        package: Some(Package::new(
+            "battery-widget",
+            "0.1.0",
+            omega_daemon::host::cargo::Edition::Explicit("2024".into()),
+        )),
         dependencies: Dependencies::from_iter([
             ("omega", Dependency::inherited()),
             ("tokio", Dependency::registry("1", &["macros"])),

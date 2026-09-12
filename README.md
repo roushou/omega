@@ -61,6 +61,7 @@ With an `audio` plugin added, your configuration looks like this:
 ```
 
 `system/` describes your desktop; each crate under `units/` implements a plugin.
+Both inherit the Rust edition declared in the root `Cargo.toml`.
 Plugins expose a library so the system declaration can refer to their settings
 and surfaces through Rust types. `omega new` adds plugin crates to the workspace;
 `shell_import.rs` is created only when importing an existing shell configuration.

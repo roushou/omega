@@ -60,9 +60,13 @@ impl NewCmd {
             .workspace
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("the config manifest has no [workspace]"))?;
+        let mut changed = Scaffold::ensure_edition(workspace);
         // Existing membership globs remain authoritative.
         if !workspace.member_dirs(&layout.config)?.contains(&unit_dir) {
             workspace.members.push(format!("units/{name}"));
+            changed = true;
+        }
+        if changed {
             workspace_file.write(&manifest)?;
         }
 
