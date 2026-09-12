@@ -10,6 +10,7 @@
 //! rail width, the colours, the glyphs and the shortening of paths are
 //! decided once, here, which is what makes them consistent everywhere.
 
+mod deployment;
 mod diagnostic;
 mod paint;
 mod shell;

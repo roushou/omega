@@ -17,11 +17,17 @@ pub struct ValidatedBuild {
 }
 
 impl ValidatedBuild {
-    pub(super) fn load(root: &Layout) -> Result<Option<Self>, DaemonError> {
+    pub(super) fn load(
+        root: &Layout,
+        deployment: &super::deployment::Deployment,
+    ) -> Result<Option<Self>, DaemonError> {
         let Some(generation) = Generations::new(root).pin_current()? else {
             return Ok(None);
         };
-        Self::read(generation).map(Some)
+        deployment.candidate(generation.id());
+        Self::read(generation)
+            .inspect_err(|error| deployment.activation_failed(error))
+            .map(Some)
     }
 
     /// Validate a leased generation without changing references or live state.
@@ -82,15 +88,24 @@ impl ValidatedBuild {
         &self,
         root: &Layout,
         overwrite: bool,
+        deployment: &super::deployment::Deployment,
     ) -> Result<(), super::shell::ShellApplyError> {
-        if let Some(shell) = omega_document::shell::CompiledShell::of(&self.document)? {
+        deployment.applying_shell(self.generation.id(), !self.document.shell_json.is_empty());
+        if self.document.shell_json.is_empty() {
+            return Ok(());
+        }
+        let result = (|| {
+            let shell = omega_document::shell::CompiledShell::of(&self.document)?
+                .expect("nonempty shell declaration compiles to a shell");
             omega_host::shell::ShellInstallation::new(root).apply(
                 shell.config(),
                 self.generation.id(),
                 overwrite,
             )?;
-        }
-        Ok(())
+            Ok(())
+        })();
+        deployment.shell_applied(result.as_ref().err());
+        result
     }
 
     pub(super) fn changed_units(

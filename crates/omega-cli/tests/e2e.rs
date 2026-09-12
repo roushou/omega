@@ -278,8 +278,20 @@ fn a_scaffolded_config_builds_and_runs() {
         "external edits must require acknowledgement"
     );
     assert_eq!(std::fs::read_to_string(&shell_path).unwrap(), changed);
+    let deployment = machine.omega(&["status", "--deployment"]).output().unwrap();
+    assert!(deployment.status.success());
+    let details = String::from_utf8_lossy(&deployment.stderr);
+    assert!(details.contains("accepted generation"), "{details}");
+    assert!(details.contains("shell application for"), "{details}");
+    assert!(details.contains("failed:"), "{details}");
+    assert!(String::from_utf8_lossy(&deployment.stdout).contains("battery-widget"));
     machine.run(&["shell", "apply", "--overwrite"]);
     assert_eq!(std::fs::read(&shell_path).unwrap(), first);
+    let deployment = machine.omega(&["status", "--deployment"]).output().unwrap();
+    assert!(deployment.status.success());
+    let details = String::from_utf8_lossy(&deployment.stderr);
+    assert!(details.contains("shell applied from"), "{details}");
+    assert!(!details.contains("failed:"), "{details}");
 
     let source_path = machine.root.join("config/system/src/shell_import.rs");
     let source = std::fs::read_to_string(&source_path).unwrap();

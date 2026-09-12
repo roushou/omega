@@ -20,7 +20,11 @@ pub enum ShellApplyError {
 #[derive(Debug)]
 pub struct ShellApplication;
 impl ShellApplication {
-    pub fn apply(layout: &Layout, overwrite: bool) -> Result<(), ShellApplyError> {
+    pub fn apply(
+        layout: &Layout,
+        overwrite: bool,
+        deployment: &super::deployment::Deployment,
+    ) -> Result<(), ShellApplyError> {
         let generation = Generations::new(layout)
             .pin_current()?
             .ok_or(ShellApplyError::NothingBuilt)?;
@@ -28,6 +32,6 @@ impl ShellApplication {
         if build.document.shell_json.is_empty() {
             return Err(ShellApplyError::NotDeclared);
         }
-        build.apply_shell(layout, overwrite)
+        build.apply_shell(layout, overwrite, deployment)
     }
 }

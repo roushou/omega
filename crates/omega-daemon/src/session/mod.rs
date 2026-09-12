@@ -48,6 +48,7 @@ pub struct Session {
     /// not a daemon, and for a test that is only exercising the protocol.
     brokers: Brokerage,
     layout: Option<omega_host::Layout>,
+    deployment: crate::reconcile::deployment::Deployment,
 }
 
 impl Session {
@@ -56,12 +57,18 @@ impl Session {
         Self {
             supervisor,
             layout: None,
+            deployment: Default::default(),
             brokers: Brokerage::new(hub.clone(), shutdown.clone()),
             units: UnitTable::detached(hub.clone()),
             hub,
             liveness: Liveness::new(),
             shutdown,
         }
+    }
+
+    pub fn with_deployment(mut self, deployment: crate::reconcile::deployment::Deployment) -> Self {
+        self.deployment = deployment;
+        self
     }
 
     pub fn with_layout(mut self, layout: omega_host::Layout) -> Self {
@@ -192,7 +199,8 @@ impl Session {
                 self.units.clone(),
                 self.brokers.clone(),
             )
-            .with_layout(self.layout.clone()),
+            .with_layout(self.layout.clone())
+            .with_deployment(self.deployment.clone()),
         );
         let mut executing = Operations::new();
         let mut liveness = self.liveness.clone();

@@ -38,6 +38,7 @@ pub enum Response {
     State(StatePatch),
     /// Whatever a unit answered with, for an op that asked it something.
     Value(Value),
+    Deployment(omega_proto::omega::DeploymentStatus),
 }
 
 impl Response {
@@ -46,6 +47,7 @@ impl Response {
             Self::Ok => result::Outcome::Ok(Empty {}),
             Self::State(patch) => result::Outcome::State(patch),
             Self::Value(value) => result::Outcome::Value(value),
+            Self::Deployment(status) => result::Outcome::Deployment(status),
         };
         Frame::reply(stream_id, outcome)
     }
@@ -63,6 +65,7 @@ pub struct Dispatcher {
     brokers: Brokerage,
     adopted: Adoptions,
     layout: Option<omega_host::Layout>,
+    deployment: crate::reconcile::deployment::Deployment,
 }
 
 impl Dispatcher {
@@ -70,11 +73,17 @@ impl Dispatcher {
         Self {
             hub,
             layout: None,
+            deployment: Default::default(),
             adopted: Adoptions::new(supervisor.clone()),
             supervisor,
             units,
             brokers,
         }
+    }
+
+    pub fn with_deployment(mut self, deployment: crate::reconcile::deployment::Deployment) -> Self {
+        self.deployment = deployment;
+        self
     }
 
     pub fn with_layout(mut self, layout: Option<omega_host::Layout>) -> Self {
@@ -285,6 +294,11 @@ impl Dispatcher {
                 Ok(Response::Ok)
             }
 
+            invoke::Op::GetDeployment(_) => {
+                let mut status = self.deployment.snapshot();
+                status.units = self.units.statuses();
+                Ok(Response::Deployment(status))
+            }
             invoke::Op::ApplyShell(apply) => {
                 let layout = self
                     .layout
@@ -292,9 +306,14 @@ impl Dispatcher {
                     .ok_or_else(|| Refusal::precondition("shell application is not configured"))?
                     .clone();
                 let overwrite = apply.overwrite;
+                let deployment = self.deployment.clone();
                 let _handover = self.supervisor.handover().await;
                 tokio::task::spawn_blocking(move || {
-                    crate::reconcile::shell::ShellApplication::apply(&layout, overwrite)
+                    crate::reconcile::shell::ShellApplication::apply(
+                        &layout,
+                        overwrite,
+                        &deployment,
+                    )
                 })
                 .await
                 .map_err(|error| Refusal::unavailable(error.to_string()))?

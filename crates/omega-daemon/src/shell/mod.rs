@@ -47,6 +47,7 @@ struct Gateway {
     units: UnitTable,
     brokers: Brokerage,
     layout: Option<omega_host::Layout>,
+    deployment: crate::reconcile::deployment::Deployment,
 }
 
 /// Streams each surface's latest view as a JSON line over a dedicated socket,
@@ -88,7 +89,15 @@ impl ShellServer {
             units,
             brokers,
             layout: None,
+            deployment: Default::default(),
         });
+        self
+    }
+
+    pub fn with_deployment(mut self, deployment: crate::reconcile::deployment::Deployment) -> Self {
+        if let Some(gateway) = &mut self.gateway {
+            gateway.deployment = deployment;
+        }
         self
     }
 
@@ -224,6 +233,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                 gateway.brokers.clone(),
             )
             .with_layout(gateway.layout.clone())
+            .with_deployment(gateway.deployment.clone())
         });
         let dispatcher = dispatcher.map(Arc::new);
         let mut operations = Operations::new();

@@ -138,6 +138,7 @@ impl Drop for Converger {
 /// Everything a pass needs to converge with.
 #[derive(Debug, Clone)]
 pub struct Context {
+    pub deployment: super::deployment::Deployment,
     pub layout: Layout,
     pub supervisor: Supervisor,
     pub units: UnitTable,
@@ -163,12 +164,14 @@ impl Worker {
                 return;
             };
 
+            self.context.deployment.pending();
             if work.reload || reload_pending {
                 match self.reload() {
                     Ok(Some(build)) => {
                         reload_pending = match self.activate(build).await {
                             Ok(()) => false,
                             Err(error) => {
+                                self.context.deployment.activation_failed(&error);
                                 tracing::warn!(%error, "build activation remains pending");
                                 true
                             }
@@ -185,13 +188,16 @@ impl Worker {
                     // daemon that is running the last good one.
                     Err(e) => {
                         reload_pending = false;
+                        self.context.deployment.activation_failed(&e);
                         tracing::error!(error = %e, "cannot adopt the new build; keeping the running one")
                     }
                 }
             }
 
             retry = reload_pending;
-            if let Err(e) = self.converge().await {
+            let result = self.converge().await;
+            self.context.deployment.reconciled(result.as_ref().err());
+            if let Err(e) = result {
                 tracing::warn!(error = %e, "convergence remains pending");
                 retry = true;
             }
@@ -217,7 +223,7 @@ impl Worker {
     /// daemon vouches for are replaced together with the document that says
     /// what to do with them.
     fn reload(&self) -> Result<Option<ValidatedBuild>, DaemonError> {
-        let candidate = ValidatedBuild::load(&self.context.layout);
+        let candidate = ValidatedBuild::load(&self.context.layout, &self.context.deployment);
         if self.build.is_some() || matches!(candidate, Ok(Some(_))) {
             return candidate;
         }
@@ -275,9 +281,11 @@ impl Worker {
                 .map(|name| (name.clone(), build.settings(name)))
                 .collect(),
         );
+        self.context.deployment.accepted(build.generation.id());
         // Shell conflicts must not stop otherwise valid plugins. Explicit apply reports
         // failures to the operator; routine convergence never rewrites external edits.
-        if let Err(error) = build.apply_shell(&self.context.layout, false) {
+        if let Err(error) = build.apply_shell(&self.context.layout, false, &self.context.deployment)
+        {
             tracing::error!(%error, "shell configuration was not applied; use omega shell diff");
         }
         self.build = Some(build);
@@ -429,6 +437,7 @@ mod tests {
                 queue: Arc::new(Queue::default()),
                 build: None,
                 context: Context {
+                    deployment: Default::default(),
                     layout: self.layout(),
                     // Never bound: nothing here spawns a unit.
                     supervisor: Supervisor::new(
@@ -522,7 +531,17 @@ mod tests {
             .unwrap();
         let accepted = generation.commit().unwrap();
         let mut worker = dir.worker();
-        worker.build = worker.reload().unwrap();
+        worker
+            .activate(worker.reload().unwrap().unwrap())
+            .await
+            .unwrap();
+        let before = worker.context.deployment.snapshot();
+        assert!(!before.accepted_generation.is_empty());
+        assert!(before.activation_error.is_empty());
+        assert_eq!(
+            before.shell,
+            omega_proto::omega::ShellApplicationState::NotDeclared as i32
+        );
         let generation = Generations::new(&layout).stage().unwrap();
         generation
             .files()
@@ -535,11 +554,23 @@ mod tests {
             .unwrap();
         generation.commit().unwrap();
         assert!(worker.reload().is_err());
+        let rejected = worker.context.deployment.snapshot();
+        assert_eq!(rejected.accepted_generation, before.accepted_generation);
+        assert_ne!(rejected.candidate_generation, before.accepted_generation);
+        assert!(!rejected.activation_error.is_empty());
         assert_eq!(
             worker.build.as_ref().unwrap().generation.layout().state,
             accepted.state
         );
-        assert!(worker.converge().await.is_ok());
+        let result = worker.converge().await;
+        assert!(result.is_ok());
+        worker.context.deployment.reconciled(result.as_ref().err());
+        let settled = worker.context.deployment.snapshot();
+        assert_eq!(settled.activation_error, rejected.activation_error);
+        assert_eq!(
+            settled.reconciliation,
+            omega_proto::omega::ReconciliationState::Settled as i32
+        );
         assert!(worker.build.as_ref().unwrap().manifests.is_empty());
     }
 

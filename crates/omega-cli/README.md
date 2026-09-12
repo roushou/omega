@@ -25,6 +25,7 @@ its placement declaration for `system/src/main.rs`. The
 omega build
 omega status
 omega status --versions
+omega status --deployment
 omega logs audio
 ```
 
@@ -54,6 +55,14 @@ place its widget on screen.
 validates its placements and schedules without publishing a generation.
 Configurations containing only native Omarchy widgets can be checked and built
 without creating any Omega plugins.
+
+`omega build` publishes a generation for asynchronous daemon activation.
+Use `omega status --deployment` to compare the published and accepted generations,
+inspect activation failures and the last reconciliation pass, and see the last
+shell application result alongside plugin phases. A completed pass does not mean
+every plugin is running. Shell application is reported independently: a conflict
+does not prevent valid plugins from starting. Use `omega shell diff` to check
+the current file for external changes.
 
 Use `omega status --versions` to inspect the CLI executable, the running daemon's
 version, renderer installation, and resolved Omega dependency versions and sources.

@@ -47,7 +47,16 @@ You can inspect the service and its plugins from the terminal:
 omega daemon status
 omega status
 omega status --versions
+omega status --deployment
 ```
+
+`omega build` publishes a generation for asynchronous daemon activation.
+Use `omega status --deployment` to compare the published and accepted generations,
+inspect activation failures and the last reconciliation pass, and see the last
+shell application result alongside plugin phases. A completed pass does not mean
+every plugin is running. Shell application is reported independently: a conflict
+does not prevent valid plugins from starting. Use `omega shell diff` to check
+the current file for external changes.
 
 For foreground operation, `omega daemon` runs the daemon directly.
 

@@ -8,6 +8,7 @@
 pub mod bars;
 mod build;
 pub mod converger;
+pub mod deployment;
 pub mod environment;
 pub mod schedules;
 pub mod shell;

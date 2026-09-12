@@ -37,6 +37,21 @@ impl Operator {
         Self { socket }
     }
 
+    pub async fn deployment(&self) -> Result<omega_proto::omega::DeploymentStatus, OperatorError> {
+        match self
+            .invoke(invoke::Op::GetDeployment(
+                omega_proto::omega::GetDeployment {},
+            ))
+            .await?
+        {
+            result::Outcome::Deployment(status) => Ok(status),
+            _ => Err(OperatorError::Unexpected(
+                "GetDeployment",
+                "deployment status",
+            )),
+        }
+    }
+
     pub async fn daemon_version(&self) -> Result<String, OperatorError> {
         let (_client, welcome) = Client::connect(&self.socket, "", "").await?;
         Ok(welcome.daemon_version)

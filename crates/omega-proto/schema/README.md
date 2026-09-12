@@ -60,6 +60,12 @@ aggregate admission limits (`RESOURCE_EXHAUSTED`), and oversized individual
 payloads (`PAYLOAD_TOO_LARGE`). `DEADLINE_EXCEEDED` means the wait expired; it does
 not establish whether an external action completed.
 
+`GetDeployment` is an operator-only snapshot of generation acceptance, the last
+reconciliation pass, shell application, and current unit phases. Shell results
+carry their own generation because explicit application can precede activation.
+A settled reconciliation pass is not a guarantee that all unit processes are
+running; their phases remain authoritative.
+
 ## Verification
 
 From the repository root:

@@ -145,6 +145,8 @@ impl BuildCmd {
                 Paint::path(&layout.state)
             ),
         );
+        ui.detail("Published for asynchronous daemon activation.");
+        ui.next("omega status --deployment");
         Ok(())
     }
 

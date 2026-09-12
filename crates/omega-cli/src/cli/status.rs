@@ -17,6 +17,9 @@ pub struct StatusCmd {
     /// Show CLI, daemon, renderer, and resolved config dependency versions.
     #[arg(long)]
     pub versions: bool,
+    /// Show live generation acceptance, reconciliation, and shell application.
+    #[arg(long)]
+    pub deployment: bool,
 }
 
 impl StatusCmd {
@@ -36,9 +39,31 @@ impl StatusCmd {
             );
         }
 
-        let units = tokio::time::timeout(Self::TIMEOUT, Self::read_units(&socket))
-            .await
-            .context("the daemon did not report its units in time")??;
+        let units = if self.deployment {
+            let status =
+                tokio::time::timeout(Self::TIMEOUT, crate::operator::Operator::new().deployment())
+                    .await
+                    .context("the daemon did not report deployment status in time")??;
+            let layout = omega_host::Layout::resolve();
+            let published = match omega_host::Generations::new(&layout).pin_current() {
+                Ok(generation) => generation,
+                Err(error) => {
+                    ui.warn(format!("published generation unavailable: {error}"));
+                    None
+                }
+            };
+            ui.deployment(
+                &status,
+                published
+                    .as_ref()
+                    .map(|generation| generation.id().as_str()),
+            );
+            status.units
+        } else {
+            tokio::time::timeout(Self::TIMEOUT, Self::read_units(&socket))
+                .await
+                .context("the daemon did not report its units in time")??
+        };
 
         if units.is_empty() {
             ui.step(Step::Checked, "the daemon is running; no plugins");

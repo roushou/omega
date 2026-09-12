@@ -24,6 +24,7 @@ pub enum OpKind {
     RestartUnit,
     AdoptUnit,
     ApplyShell,
+    GetDeployment,
     CallCommand,
     RenderWidget,
     RemoveWidget,
@@ -42,6 +43,7 @@ impl OpKind {
             invoke::Op::RestartUnit(_) => Self::RestartUnit,
             invoke::Op::AdoptUnit(_) => Self::AdoptUnit,
             invoke::Op::ApplyShell(_) => Self::ApplyShell,
+            invoke::Op::GetDeployment(_) => Self::GetDeployment,
             invoke::Op::CallCommand(_) => Self::CallCommand,
             invoke::Op::RenderWidget(_) => Self::RenderWidget,
             invoke::Op::RemoveWidget(_) => Self::RemoveWidget,
@@ -60,6 +62,7 @@ impl OpKind {
             Self::RestartUnit => "RestartUnit",
             Self::AdoptUnit => "AdoptUnit",
             Self::ApplyShell => "ApplyShell",
+            Self::GetDeployment => "GetDeployment",
             Self::CallCommand => "CallCommand",
             Self::RenderWidget => "RenderWidget",
             Self::RemoveWidget => "RemoveWidget",
@@ -80,6 +83,7 @@ impl OpKind {
             | invoke::Op::Act(_)
             | invoke::Op::EmitEvent(_)
             | invoke::Op::RestartUnit(_)
+            | invoke::Op::GetDeployment(_)
             | invoke::Op::ApplyShell(_)
             | invoke::Op::AdoptUnit(_)
             | invoke::Op::CallCommand(_) => None,
@@ -103,6 +107,12 @@ pub(super) struct OpPolicy {
 /// The ops this daemon serves, and what each demands. Deny by default:
 /// anything absent is refused.
 pub(super) const POLICY: &[OpPolicy] = &[
+    OpPolicy {
+        kind: OpKind::GetDeployment,
+        roles: &[Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
     OpPolicy {
         kind: OpKind::ApplyShell,
         roles: &[Role::Operator],

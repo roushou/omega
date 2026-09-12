@@ -5,6 +5,7 @@ package omega;
 import "omega/action.proto";
 import "omega/event.proto";
 import "omega/state.proto";
+import "omega/state/units.proto";
 import "omega/ui.proto";
 import "omega/unit.proto";
 import "omega/value.proto";
@@ -88,6 +89,7 @@ message Invoke {
     RestartUnit restart_unit = 8;
     AdoptUnit adopt_unit = 9;
     ApplyShell apply_shell = 13;
+    GetDeployment get_deployment = 14;
 
     // ---- daemon -> unit: surface invocations ----
     CallCommand call_command = 10;
@@ -191,6 +193,7 @@ message Result {
     Value value = 4;                // scalar results
     CommandOutput output = 5;       // CallCommand (streaming)
     Empty ok = 6;
+    DeploymentStatus deployment = 8;
   }
   bool done = 7;
 }
@@ -250,3 +253,35 @@ message RemoveWidget {
 
 // Explicitly apply the published generation; overwrite acknowledges external edits.
 message ApplyShell { bool overwrite = 1; }
+
+
+// Operator-only snapshot of live deployment progress.
+message GetDeployment {}
+
+enum ReconciliationState {
+  RECONCILIATION_STATE_UNSPECIFIED = 0;
+  RECONCILIATION_STATE_PENDING = 1;
+  RECONCILIATION_STATE_SETTLED = 2;
+}
+
+enum ShellApplicationState {
+  SHELL_APPLICATION_STATE_UNSPECIFIED = 0;
+  SHELL_APPLICATION_STATE_NOT_DECLARED = 1;
+  SHELL_APPLICATION_STATE_APPLYING = 2;
+  SHELL_APPLICATION_STATE_APPLIED = 3;
+  SHELL_APPLICATION_STATE_FAILED = 4;
+}
+
+message DeploymentStatus {
+  string candidate_generation = 1;
+  string accepted_generation = 2;
+  string activation_error = 3;
+  // The last reconciliation pass, not a health guarantee for running processes.
+  ReconciliationState reconciliation = 4;
+  string reconciliation_error = 5;
+  // Explicit shell application can target a generation still awaiting activation.
+  string shell_generation = 6;
+  ShellApplicationState shell = 7;
+  string shell_error = 8;
+  repeated UnitStatus units = 9;
+}

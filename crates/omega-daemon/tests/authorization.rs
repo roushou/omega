@@ -195,3 +195,37 @@ async fn units_cannot_apply_host_shell_configuration() {
     let refusal = expect_refusal(transport.recv().await.unwrap());
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
 }
+
+#[tokio::test]
+async fn deployment_is_operator_only_and_answers_on_the_request_stream() {
+    let (harness, hash, token) = harness("deployment-operator-only").await;
+    for (credential, allowed) in [(token.as_str(), false), ("", true)] {
+        let mut transport = harness.connect(&hash, credential).await;
+        transport.recv().await.unwrap().unwrap();
+        transport
+            .send(Frame {
+                stream_id: 7,
+                body: Some(frame::Body::Invoke(Invoke {
+                    op: Some(invoke::Op::GetDeployment(
+                        omega_proto::omega::GetDeployment {},
+                    )),
+                })),
+            })
+            .await
+            .unwrap();
+        let response = transport.recv().await.unwrap().unwrap();
+        assert_eq!(response.stream_id, 7);
+        if allowed {
+            assert!(matches!(
+                response.body,
+                Some(frame::Body::Result(omega_proto::omega::Result {
+                    outcome: Some(omega_proto::omega::result::Outcome::Deployment(_)),
+                    done: true
+                }))
+            ));
+        } else {
+            let refusal = expect_refusal(Some(response));
+            assert_eq!(refusal.code, ErrorCode::PermissionDenied);
+        }
+    }
+}

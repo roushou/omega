@@ -34,6 +34,7 @@ pub struct Daemon {
     listener: omega_proto::BoundSocket,
     socket: Socket,
     shell: ShellServer,
+    deployment: crate::reconcile::deployment::Deployment,
     shutdown: Shutdown,
     /// Everything known about the units, including how to reach them.
     units: UnitTable,
@@ -106,6 +107,7 @@ impl Daemon {
         );
         let converger = Converger::spawn(
             Context {
+                deployment: self.deployment.clone(),
                 layout: self.layout.clone(),
                 supervisor: self.supervisor.clone(),
                 units: self.units.clone(),
@@ -249,7 +251,7 @@ impl Daemon {
                 accepted = self.listener.accept(), if sessions.len() < Self::CONNECTION_LIMIT => {
                     let (stream, _) = accepted?;
                     let session = Session::new(self.supervisor.clone(), self.hub.clone())
-                        .with_layout(self.layout.clone())
+                        .with_layout(self.layout.clone()).with_deployment(self.deployment.clone())
                         .with_brokers(self.brokers.clone())
                         .with_shutdown(self.shutdown.clone())
                         .with_units(self.units.clone());
@@ -299,6 +301,7 @@ impl DaemonBuilder {
         let brokers = Brokerage::new(hub.clone(), shutdown.clone());
         let (units, arrivals) = UnitTable::new(hub.clone());
         let supervisor = Supervisor::new(socket.clone(), units.clone(), shutdown.clone());
+        let deployment = crate::reconcile::deployment::Deployment::default();
         let shell = ShellServer::bind_at(
             self.observation.unwrap_or_else(Observation::socket),
             hub.clone(),
@@ -306,7 +309,8 @@ impl DaemonBuilder {
         // A shell draws what a plugin publishes, so it has to be able to
         // press what it drew.
         .serving(supervisor.clone(), units.clone(), brokers.clone())
-        .with_layout(self.layout.clone());
+        .with_layout(self.layout.clone())
+        .with_deployment(deployment.clone());
 
         Ok(Daemon {
             brokers,
@@ -315,6 +319,7 @@ impl DaemonBuilder {
             listener,
             socket,
             shell,
+            deployment,
             shutdown,
             units,
             arrivals: std::sync::Mutex::new(Some(arrivals)),

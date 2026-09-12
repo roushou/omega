@@ -417,6 +417,16 @@ written after validation and handover preparation; it does not certify unit heal
 or completed convergence. Startup tries `current`, then accepted and previous
 builds if the candidate is unusable, leaving a rejected pointer intact for diagnosis.
 
+The convergence worker projects live activation and reconciliation progress into
+`Deployment`. The operator-only `GetDeployment` request returns that snapshot
+with phases read from `UnitTable`; it does not infer acceptance from build files
+or duplicate process state. `omega status --deployment` compares this snapshot
+with the locally published generation. A rejected candidate remains visible while
+the accepted build continues to converge. Shell application records its own
+generation and result because explicit application can precede activation.
+These results describe the current daemon lifetime and the last pass or application,
+not a persistent health history or proof that the shell file has no external edits.
+
 Publication, acceptance, rollback, lease acquisition and cleanup share a store
 transaction lock. Validated builds and supervised executables hold generation
 leases. Children inherit the lease across exec, protecting surviving descendants
