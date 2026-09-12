@@ -1,3 +1,12 @@
+## What's Changed in 0.2.2
+* feat(cli): wait for build activation and expose JSON status
+* feat(cli): report live deployment status
+* feat(cli): show shell changes and version provenance
+* feat(cli): validate configs and support shell-only workspaces
+* feat(cli): add minimal widget and template selection
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.2.1...v0.2.2
+
 ## What's Changed in 0.2.1
 * feat: improve config errors and CLI diagnostics
 * feat(shell): generate Omarchy configuration from Rust

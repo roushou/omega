@@ -21,7 +21,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 miette = { version = "7.6", features = ["fancy-no-backtrace"] }
 omega-brokers.workspace = true
-omega-daemon = { path = "../omega-daemon", version = "0.2.1" }
+omega-daemon = { path = "../omega-daemon", version = "0.2.2" }
 omega-document.workspace = true
 omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
