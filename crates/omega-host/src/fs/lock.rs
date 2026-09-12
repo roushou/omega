@@ -8,12 +8,12 @@ use std::sync::Arc;
 
 /// The kernel releases the lock when its final file descriptor closes.
 #[derive(Debug)]
-pub(crate) struct FileLock {
+pub struct FileLock {
     _file: File,
 }
 
 impl FileLock {
-    pub(crate) fn exclusive(path: &Path) -> io::Result<Self> {
+    pub fn exclusive(path: &Path) -> io::Result<Self> {
         let file = Self::open(path)?;
         Self::acquire(&file, libc::LOCK_EX)?;
         Ok(Self { _file: file })

@@ -140,6 +140,16 @@ impl Layout {
         self.config.join(".cargo").join("config.toml")
     }
 
+    /// Serializes source-workspace mutations across Omega commands.
+    pub fn workspace_lock(&self) -> PathBuf {
+        self.config.join(".cargo/omega.lock")
+    }
+
+    /// Staged plugin sources must stay outside `units/*` membership globs.
+    pub fn workspace_staging(&self) -> PathBuf {
+        self.config.join(".cargo/staging")
+    }
+
     /// `~/.config/omega/.gitignore`.
     pub fn gitignore(&self) -> PathBuf {
         self.config.join(".gitignore")

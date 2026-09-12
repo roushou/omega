@@ -8,7 +8,7 @@
 
 use anyhow::Context;
 
-use crate::scaffold::SourceTree;
+use crate::checkout::SourceTree;
 use crate::ui::{Paint, Step, Ui};
 use omega_renderer::{HostShell, Installed, Renderer};
 
@@ -282,7 +282,7 @@ impl ShellCmd {
     /// The checkout a `--link` means: the one named, else the one found.
     fn checkout(path: &str) -> anyhow::Result<SourceTree> {
         if path.is_empty() {
-            SourceTree::detect().with_context(|| {
+            SourceTree::detect()?.with_context(|| {
                 format!(
                     "no omega checkout to link — name one, or set {}",
                     Paint::name(SourceTree::ENV)

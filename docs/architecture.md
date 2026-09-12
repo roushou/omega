@@ -411,6 +411,23 @@ publishes files through exclusive temporary creation, file sync, rename and
 parent-directory sync. `Directory` establishes and flushes the ancestor chain.
 A flush failure is an error even if the new contents are already visible.
 
+Scaffolding separates content generation (`scaffold/`), workspace mutation
+(`workspace/`), and local checkout overrides (`checkout/`). `ConfigWorkspace`
+holds `.cargo/omega.lock` while commands inspect and change source files.
+Prepared operations validate names, membership, and dependency conflicts before
+publishing. Existing Cargo documents retain comments and unrelated options;
+initialization adds missing ignore entries without replacing the user's rules.
+
+New plugin directories are staged under `.cargo/staging`, outside `units/*`
+membership globs, and published with a no-replace rename. File
+edits retain original bytes, reject stale preparation, and attempt rollback on
+failure without overwriting subsequent edits. This is not a crash-atomic
+multi-file transaction. Incomplete rollback reports the affected paths. A retry
+can complete missing files and matching manifest references; existing plugin
+source is never replaced. Automatic checkout linking applies only to a newly
+created workspace without an existing Cargo config; subsequent source changes
+use `omega link`.
+
 Build generations are immutable through Omega's APIs. Publication flushes a
 private stage before replacing `current`. Acceptance is a separate durable record
 written after validation and handover preparation; it does not certify unit health

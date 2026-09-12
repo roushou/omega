@@ -11,4 +11,4 @@ pub use stage::StageDir;
 pub use temp::TempPath;
 
 mod lock;
-pub(crate) use lock::FileLock;
+pub use lock::FileLock;

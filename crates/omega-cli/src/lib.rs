@@ -8,3 +8,6 @@ pub mod scaffold;
 pub mod service;
 pub mod system;
 pub mod ui;
+
+pub mod checkout;
+mod workspace;

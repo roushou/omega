@@ -146,3 +146,36 @@ fn failed_exchange_preserves_current_installation() {
         b"old"
     );
 }
+
+#[test]
+fn new_publication_refuses_even_an_empty_existing_directory() {
+    let f = Fixture::new();
+    let stage = f.stage();
+    std::fs::create_dir(f.0.join("installed")).unwrap();
+    assert_eq!(
+        stage.publish_new().unwrap_err().kind(),
+        io::ErrorKind::AlreadyExists
+    );
+    assert_eq!(std::fs::read_dir(f.0.join("installed")).unwrap().count(), 0);
+}
+
+#[test]
+fn new_publication_installs_the_complete_stage() {
+    let f = Fixture::new();
+    f.stage().publish_new().unwrap();
+    f.assert_new();
+}
+
+#[test]
+fn separate_staging_directory_does_not_expose_unpublished_members() {
+    let f = Fixture::new();
+    let destination = f.0.join("units/hello");
+    let stage = StageDir::in_directory(&destination, &f.0.join("staging")).unwrap();
+    stage.write("Cargo.toml", b"package").unwrap();
+    assert!(!f.0.join("units").exists());
+    stage.publish_new().unwrap();
+    assert_eq!(
+        std::fs::read(destination.join("Cargo.toml")).unwrap(),
+        b"package"
+    );
+}

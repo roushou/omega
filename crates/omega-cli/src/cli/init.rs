@@ -8,12 +8,10 @@
 //! Each step is the same code the standalone command runs, reported on its
 //! own line, so what this did stays visible and individually re-runnable.
 
-use omega_daemon::host::cargo::{CargoManifest, CargoSlot};
-use omega_host::{AtomicFile, Layout};
-
-use crate::cli::link::LinkCmd;
-use crate::scaffold::Scaffold;
+use crate::checkout::{CheckoutLink, SourceTree};
 use crate::ui::{Paint, Step, Ui};
+use crate::workspace::{ConfigWorkspace, InitialShell};
+use omega_host::Layout;
 
 /// Set omega up on this machine.
 #[derive(Debug, clap::Args)]
@@ -27,53 +25,17 @@ pub struct InitCmd {
 impl InitCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let layout = Layout::resolve();
-        let scaffold = Scaffold::new();
-        // Validate an import before creating a workspace that depends on it.
-        let imported =
-            if !self.bare && !layout.system_manifest().exists() && layout.shell_config.exists() {
-                let source = std::fs::read_to_string(&layout.shell_config)?;
-                let shell = omega_document::shell::Shell::from_omarchy(&source)?;
-                Some((source, shell.rust_source()?))
-            } else {
-                None
-            };
-
-        // Never rewritten: they are the author's files once they exist, so a
-        // second `omega init` sets the machine up again and leaves the config
-        // alone.
-        let workspace = layout.file::<CargoManifest>(CargoSlot::Workspace);
-        let founded = workspace.create_new(&scaffold.workspace_manifest())?;
-        if !founded {
-            let mut manifest = workspace.read()?;
-            let root = manifest
-                .workspace
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("the config manifest has no [workspace]"))?;
-            if Scaffold::ensure_edition(root) {
-                workspace.write(&manifest)?;
-            }
-        }
-
-        let system = layout.file::<CargoManifest>(CargoSlot::System);
-        let plane = system.create_new(&scaffold.system_manifest())?;
-        if plane {
-            if let Some((source, rust)) = imported {
-                AtomicFile::at(layout.shell_import()).write(rust.as_bytes())?;
-                omega_host::shell::ShellInstallation::new(&layout)
-                    .adopt(&serde_json::from_str(&source)?)?;
-                AtomicFile::at(layout.system_main()).write(
-                    b"mod shell_import;
-
-fn main() -> omega_document::Result<()> {
-    omega_document::Document::new().shell(shell_import::shell()?)?.emit()?;
-    Ok(())
-}
-",
-                )?;
-            } else {
-                AtomicFile::at(layout.system_main()).write(scaffold.system_main().as_bytes())?;
-            }
-        }
+        let workspace = ConfigWorkspace::open(layout.clone())?;
+        let shell = if !self.bare && !layout.system_main().exists() && layout.shell_config.exists()
+        {
+            InitialShell::import(&std::fs::read_to_string(&layout.shell_config)?)?
+        } else {
+            InitialShell::Default
+        };
+        let prepared = workspace.prepare_init(shell)?;
+        let founded = prepared.founded;
+        let plane = prepared.source_created;
+        prepared.apply()?;
 
         if founded {
             ui.step(
@@ -97,15 +59,20 @@ fn main() -> omega_document::Result<()> {
             );
         }
 
-        // A first config on a machine that has an omega checkout is built
-        // against it: before there is anything published, that is every
-        // machine, and it is what makes the scaffold work out of the box.
-        if let Some(tree) = LinkCmd::on_init(&layout)? {
+        // Existing configs retain their dependency-source choice on repeated init.
+        if founded
+            && !layout.cargo_config().exists()
+            && let Some(tree) = SourceTree::detect()?
+        {
+            CheckoutLink::new(&workspace)
+                .prepare(Some(&tree))?
+                .apply()?;
             ui.step(
                 Step::Linked,
                 format!("building against {}", Paint::path(tree.root())),
             );
         }
+        drop(workspace);
 
         if !self.bare {
             super::daemon::DaemonCmd::setup(ui)?;

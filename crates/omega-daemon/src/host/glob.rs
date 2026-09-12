@@ -54,6 +54,17 @@ impl<'a> PathPattern<'a> {
         Self(pattern)
     }
 
+    /// Match a relative path even when its directory does not exist yet.
+    pub fn matches(&self, path: &str) -> bool {
+        let pattern = self.0.trim_start_matches("./").trim_end_matches('/');
+        let path = path.trim_start_matches("./").trim_end_matches('/');
+        pattern.split('/').count() == path.split('/').count()
+            && pattern
+                .split('/')
+                .zip(path.split('/'))
+                .all(|(p, s)| Glob::new(p).matches(s))
+    }
+
     pub fn expand(&self, root: &Path) -> Result<Vec<PathBuf>, PatternError> {
         let mut matches = vec![PathBuf::new()];
 
@@ -82,11 +93,17 @@ impl<'a> PathPattern<'a> {
         glob: Glob<'_>,
     ) -> Result<Vec<PathBuf>, PatternError> {
         let dir = root.join(base);
-        let entries = std::fs::read_dir(&dir).map_err(|source| PatternError::Expand {
-            pattern: self.0.to_string(),
-            dir: dir.clone(),
-            source,
-        })?;
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(source) => {
+                return Err(PatternError::Expand {
+                    pattern: self.0.to_string(),
+                    dir,
+                    source,
+                });
+            }
+        };
 
         let mut matched = Vec::new();
         for entry in entries {

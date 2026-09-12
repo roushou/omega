@@ -1,8 +1,9 @@
 //! What `omega init` generates, checked against the invariants that make a
 //! generated workspace build.
 
-use omega_cli::scaffold::{Published, Scaffold, SourceTree, Template};
-use omega_daemon::host::cargo::{CargoManifest, Edition, Workspace};
+use omega_cli::checkout::SourceTree;
+use omega_cli::scaffold::{PluginName, Published, Scaffold, Template};
+use omega_daemon::host::cargo::{CargoManifest, Edition};
 use omega_host::Toml;
 use omega_proto::UnitName;
 
@@ -165,17 +166,6 @@ fn the_unit_crate_is_named_after_the_unit() {
 }
 
 #[test]
-fn adding_inheritance_preserves_the_workspaces_chosen_edition() {
-    let mut workspace = Workspace::default();
-    assert!(Scaffold::ensure_edition(&mut workspace));
-    let package = workspace.package.as_mut().unwrap();
-    assert_eq!(package.edition.as_deref(), Some("2024"));
-    package.edition = Some("2021".into());
-    assert!(!Scaffold::ensure_edition(&mut workspace));
-    assert_eq!(workspace.package.unwrap().edition.as_deref(), Some("2021"));
-}
-
-#[test]
 fn the_bundled_plugin_declares_by_holding() {
     let main = Template::Minimal.library();
 
@@ -194,7 +184,9 @@ fn the_bundled_plugin_declares_by_holding() {
 
 #[test]
 fn the_program_is_the_library_and_a_call() {
-    let main = Scaffold::new().unit_main(&unit()).unwrap();
+    let main = Scaffold::new()
+        .unit_main(&PluginName::parse(unit().as_str()).unwrap())
+        .unwrap();
 
     // A plugin is a library so the config plane can depend on it. What is
     // left in the program is the call that runs what the library declared.
@@ -225,7 +217,7 @@ fn the_program_uses_the_rust_crate_identifier() {
     let hyphenated = UnitName::parse("battery-widget").unwrap();
     assert!(
         scaffold
-            .unit_main(&hyphenated)
+            .unit_main(&PluginName::parse(hyphenated.as_str()).unwrap())
             .unwrap()
             .contains("battery_widget::plugin()"),
         "the program should reach its library by its Rust name"
@@ -271,7 +263,9 @@ fn a_config_names_the_published_crates_whoever_scaffolded_it() {
 
 #[test]
 fn a_checkout_is_an_override_rather_than_a_manifest() {
-    let tree = SourceTree::detect().expect("the tests run from a checkout");
+    let tree = SourceTree::detect()
+        .unwrap()
+        .expect("the tests run from a checkout");
     let patched = tree.patch().unwrap();
 
     // Building against a checkout is cargo's `[patch]`, in a file the
@@ -316,7 +310,7 @@ fn a_checkout_cargo_owns_is_not_one_to_link() {
         "a tree cargo owns is not a checkout to point a config at"
     );
     assert!(
-        SourceTree::detect().is_some(),
+        SourceTree::detect().unwrap().is_some(),
         "the tests run from a checkout somebody keeps"
     );
 }
@@ -332,7 +326,7 @@ fn a_path_that_is_not_a_checkout_says_so() {
 
 #[test]
 fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
-    let hint = Scaffold::placement_hint(&unit());
+    let hint = Scaffold::placement_hint(&PluginName::parse(unit().as_str()).unwrap());
     let lib = Template::Minimal.library();
 
     // The hint is pasted into a Rust file and has to compile there, so every

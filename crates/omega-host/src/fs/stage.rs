@@ -22,7 +22,22 @@ pub struct StageDir {
 impl StageDir {
     /// Reserve a fresh stage for `final_dir`. Existing directories are never reused.
     pub fn new(final_dir: &Path) -> io::Result<Self> {
-        let staging = TempPath::sibling(final_dir, "stage");
+        Self::reserve(final_dir, TempPath::sibling(final_dir, "stage"))
+    }
+
+    /// Stage outside directories scanned by consumers. Both locations must be
+    /// on the same filesystem for atomic publication.
+    pub fn in_directory(final_dir: &Path, staging_parent: &Path) -> io::Result<Self> {
+        let name = final_dir.file_name().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "destination has no name")
+        })?;
+        Self::reserve(
+            final_dir,
+            TempPath::sibling(&staging_parent.join(name), "stage"),
+        )
+    }
+
+    fn reserve(final_dir: &Path, staging: PathBuf) -> io::Result<Self> {
         if let Some(parent) = staging
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -78,6 +93,17 @@ impl StageDir {
         Ok(())
     }
 
+    /// Publish only if the destination is absent; never replace a user's directory.
+    pub fn publish_new(mut self) -> io::Result<()> {
+        if let Some(parent) = self.final_dir.parent() {
+            Directory::create_all(parent)?;
+        }
+        Directory::sync(&self.staging)?;
+        self.rename(libc::RENAME_NOREPLACE)?;
+        self.committed = true;
+        self.sync_publication()
+    }
+
     /// Publish atomically, exchanging an existing entry with the stage.
     ///
     /// The filesystem must support Linux atomic rename flags. An error after
@@ -101,7 +127,7 @@ impl StageDir {
         self.committed = true;
         #[cfg(test)]
         self.checkpoint("published")?;
-        Self::sync_parent(&self.final_dir)?;
+        self.sync_publication()?;
         #[cfg(test)]
         self.checkpoint("durable")?;
         if replaced {
@@ -111,7 +137,7 @@ impl StageDir {
             } else {
                 std::fs::remove_file(&self.staging)?;
             }
-            Self::sync_parent(&self.final_dir)?;
+            self.sync_publication()?;
         }
         Ok(())
     }
@@ -138,8 +164,14 @@ impl StageDir {
         }
     }
 
-    fn sync_parent(path: &Path) -> io::Result<()> {
-        Directory::sync(path.parent().unwrap_or(Path::new(".")))
+    fn sync_publication(&self) -> io::Result<()> {
+        let destination = self.final_dir.parent().unwrap_or(Path::new("."));
+        let source = self.staging.parent().unwrap_or(Path::new("."));
+        Directory::sync(destination)?;
+        if source != destination {
+            Directory::sync(source)?;
+        }
+        Ok(())
     }
 
     #[cfg(test)]

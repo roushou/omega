@@ -5,21 +5,20 @@
 //! it — every entry inherited with `workspace = true` — so the two can never
 //! drift apart.
 
-use std::io;
-use std::path::{Path, PathBuf};
-
 use omega_daemon::host::cargo::{
     CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Edition, Package,
     Profile, ReleaseProfile, Workspace, WorkspacePackage,
 };
 use omega_host::Layout;
-use omega_host::{Toml, TomlError};
 use omega_proto::UnitName;
+
+mod name;
+pub use name::PluginName;
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.
-const UNIT_MAIN: &str = include_str!("../templates/unit/src/main.rs");
-const SYSTEM_MAIN: &str = include_str!("../templates/system/src/main.rs");
+const UNIT_MAIN: &str = include_str!("../../templates/unit/src/main.rs");
+const SYSTEM_MAIN: &str = include_str!("../../templates/system/src/main.rs");
 
 const CRATE_TOKEN: &str = "{unit_snake}";
 
@@ -35,8 +34,8 @@ pub enum Template {
 impl Template {
     pub fn library(self) -> &'static str {
         match self {
-            Self::Minimal => include_str!("../templates/minimal/src/lib.rs"),
-            Self::Battery => include_str!("../templates/battery/src/lib.rs"),
+            Self::Minimal => include_str!("../../templates/minimal/src/lib.rs"),
+            Self::Battery => include_str!("../../templates/battery/src/lib.rs"),
         }
     }
 }
@@ -46,26 +45,14 @@ const EDITION: &str = "2024";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScaffoldError {
-    #[error("cannot resolve the path to {crate_name}: {source}")]
-    CratePath {
-        crate_name: &'static str,
-        #[source]
-        source: io::Error,
-    },
     #[error("the bundled program template no longer contains `{token}`")]
     ProgramTemplate { token: &'static str },
-    #[error("{} is not an omega checkout: it has no crates/omega", path.display())]
-    NotACheckout { path: PathBuf },
-    #[error("the checkout declares no workspace version")]
-    NoVersion,
-    #[error("cannot read the checkout: {0}")]
-    Toml(#[from] TomlError),
 }
 
 /// Where a generated config gets omega's crates from: always the published
 /// ones, because a config is a git repository that must build on every
 /// machine it is cloned onto. Building against a checkout is a `[patch]`
-/// override instead — see [`SourceTree`].
+/// override instead — see [`crate::checkout::SourceTree`].
 #[derive(Debug, Clone)]
 pub struct Published {
     version: String,
@@ -98,16 +85,6 @@ pub struct Scaffold {
 }
 
 impl Scaffold {
-    /// New members inherit the edition; existing workspace choices remain authoritative.
-    pub fn ensure_edition(workspace: &mut Workspace) -> bool {
-        let package = workspace.package.get_or_insert_with(Default::default);
-        if package.edition.is_some() {
-            return false;
-        }
-        package.edition = Some(EDITION.into());
-        true
-    }
-
     /// What a plugin crate depends on.
     ///
     /// One crate. A plugin holds handles, draws a view, and returns
@@ -204,7 +181,7 @@ impl Scaffold {
 
     /// `units/<name>/src/main.rs`: the program, which is the library and a
     /// call.
-    pub fn unit_main(&self, name: &UnitName) -> Result<String, ScaffoldError> {
+    pub fn unit_main(&self, name: &PluginName) -> Result<String, ScaffoldError> {
         Self::stamp(UNIT_MAIN, name)
     }
 
@@ -244,8 +221,9 @@ impl Scaffold {
     /// qualified so it compiles wherever it lands. Lives beside the plugin
     /// template because every name in it must exist there; a test holds the
     /// two together.
-    pub fn placement_hint(unit: &UnitName) -> String {
-        let krate = unit.as_str().replace('-', "_");
+    pub fn placement_hint(unit: &PluginName) -> String {
+        let krate = unit.rust_ident();
+        let unit = unit.package();
         format!("omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::UNIT).into()")
     }
 
@@ -259,13 +237,18 @@ impl Scaffold {
         SYSTEM_MAIN
     }
 
+    /// Entry point for a configuration initialized from an imported shell.
+    pub fn imported_system_main(&self) -> &'static str {
+        include_str!("../../templates/system-import/src/main.rs")
+    }
+
     /// A template with the unit's name in it, or a loud failure.
     ///
     /// A `str::replace` that matches nothing is silent, and the failure it
     /// produces arrives commands later as a config that does not build. This
     /// is where it is caught.
-    fn stamp(template: &str, name: &UnitName) -> Result<String, ScaffoldError> {
-        let stamped = template.replace(CRATE_TOKEN, &name.as_str().replace('-', "_"));
+    fn stamp(template: &str, name: &PluginName) -> Result<String, ScaffoldError> {
+        let stamped = template.replace(CRATE_TOKEN, name.rust_ident());
 
         // A `str::replace` that matched nothing is silent, and a template
         // that still has a token in it is a file that will not compile.
@@ -292,116 +275,5 @@ impl Scaffold {
 impl Default for Scaffold {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// An omega checkout on this machine.
-///
-/// Only ever a local override. A config's manifest names the published
-/// crates; this is what `[patch]` points them at instead, so somebody working
-/// on omega's internals builds their desktop against their own tree without
-/// that tree's path ever reaching a committed file.
-#[derive(Debug, Clone)]
-pub struct SourceTree {
-    crates_dir: PathBuf,
-}
-
-impl SourceTree {
-    /// The variable that names a checkout, for whoever's clone is not the one
-    /// this binary was built from.
-    pub const ENV: &'static str = "OMEGA_SOURCE";
-
-    /// The checkout to build against: `$OMEGA_SOURCE`, else the tree this
-    /// binary was compiled from. Never a tree cargo owns — `cargo install
-    /// --git` unpacks into `$CARGO_HOME` and may delete it afterwards.
-    pub fn detect() -> Option<Self> {
-        if let Some(named) = std::env::var_os(Self::ENV) {
-            return Self::at(named).ok();
-        }
-
-        let built_from = Self::built_from();
-        if Self::is_cargos_own(&built_from) {
-            None
-        } else {
-            Self::at(built_from).ok()
-        }
-    }
-
-    /// Whether a path is inside cargo's own storage, and so nobody's to keep.
-    fn is_cargos_own(path: &Path) -> bool {
-        let home = std::env::var_os("CARGO_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")));
-
-        home.is_some_and(|home| path.starts_with(home))
-    }
-
-    /// A checkout at a path, checked for actually being one.
-    pub fn at(path: impl Into<PathBuf>) -> Result<Self, ScaffoldError> {
-        let root = path.into();
-        let crates_dir = if root.ends_with("crates") {
-            root.clone()
-        } else {
-            root.join("crates")
-        };
-
-        // A path that is not an omega checkout would produce a patch that
-        // cargo rejects three commands later, naming a file nobody wrote.
-        if crates_dir.join("omega").join("Cargo.toml").exists() {
-            Ok(Self { crates_dir })
-        } else {
-            Err(ScaffoldError::NotACheckout { path: root })
-        }
-    }
-
-    /// The tree this binary was compiled from.
-    fn built_from() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf()
-    }
-
-    /// Where this checkout is, as a person reads it.
-    pub fn root(&self) -> &Path {
-        self.crates_dir.parent().unwrap_or(&self.crates_dir)
-    }
-
-    /// The version the crates in this checkout carry, so a config that is
-    /// linked to it asks for a version the patch can satisfy.
-    pub fn version(&self) -> Result<String, ScaffoldError> {
-        // The crates inherit the workspace's version, so the answer is one
-        // directory up from any of them.
-        let root = self.root().join("Cargo.toml");
-        let source = std::fs::read_to_string(&root).map_err(|source| ScaffoldError::CratePath {
-            crate_name: "the workspace manifest",
-            source,
-        })?;
-
-        Toml::decode::<CargoManifest>(&source)?
-            .workspace
-            .and_then(|workspace| workspace.package)
-            .and_then(|package| package.version)
-            .ok_or(ScaffoldError::NoVersion)
-    }
-
-    /// The patch that points a config's dependencies at this checkout.
-    pub fn patch(&self) -> Result<Dependencies, ScaffoldError> {
-        let mut patched = Dependencies::new();
-        for spec in Scaffold::omega_crates() {
-            let path = self.crate_path(spec.name)?;
-            patched.insert(spec.package(), Dependency::local(path, &[]));
-        }
-        Ok(patched)
-    }
-
-    /// An absolute, canonical path. Fails loudly rather than emitting a
-    /// relative path that would break the moment cargo resolves it.
-    fn crate_path(&self, crate_name: &'static str) -> Result<String, ScaffoldError> {
-        let path = self.crates_dir.join(crate_name);
-        let canonical = path
-            .canonicalize()
-            .map_err(|source| ScaffoldError::CratePath { crate_name, source })?;
-        Ok(canonical.display().to_string())
     }
 }

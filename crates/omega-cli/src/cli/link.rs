@@ -12,10 +12,11 @@
 
 use anyhow::{Context, bail};
 
-use omega_daemon::host::cargo::{CargoConfig, CargoManifest, CargoSlot, Dependencies, Dependency};
-use omega_host::{AtomicFile, Layout};
+use crate::checkout::{CheckoutLink, SourceTree};
+use crate::workspace::ConfigWorkspace;
+use omega_daemon::host::cargo::CargoConfig;
+use omega_host::Layout;
 
-use crate::scaffold::SourceTree;
 use crate::ui::{Paint, Step, Ui};
 
 /// Point this config at a checkout of omega, or back at the published crates.
@@ -38,7 +39,7 @@ impl LinkCmd {
             bail!(
                 "{} is not a Rust workspace — start one with {}",
                 Paint::path(&layout.config),
-                Paint::command("omega init <name>")
+                Paint::command("omega init")
             );
         }
 
@@ -52,7 +53,7 @@ impl LinkCmd {
     fn link(self, layout: &Layout, ui: &mut Ui) -> anyhow::Result<()> {
         let tree = match self.path {
             Some(path) => SourceTree::at(path)?,
-            None => SourceTree::detect().with_context(|| {
+            None => SourceTree::detect()?.with_context(|| {
                 format!(
                     "no omega checkout to link — name one, or set {}",
                     Paint::name(SourceTree::ENV)
@@ -60,14 +61,16 @@ impl LinkCmd {
             })?,
         };
 
-        Self::write_patch(layout, tree.patch()?)?;
+        let workspace = ConfigWorkspace::open(layout.clone())?;
+        CheckoutLink::new(&workspace)
+            .prepare(Some(&tree))?
+            .apply()?;
 
         // A patch only applies to a requirement it satisfies, so linking also
         // makes the config ask for the version the checkout carries. Without
         // this, a checkout that has moved on leaves cargo reporting a patch
         // that "was not used" and no way to see why.
         let version = tree.version()?;
-        Self::require(layout, &version)?;
 
         ui.step(
             Step::Linked,
@@ -81,7 +84,8 @@ impl LinkCmd {
     }
 
     fn unlink(layout: &Layout, ui: &mut Ui) -> anyhow::Result<()> {
-        Self::write_patch(layout, Dependencies::new())?;
+        let workspace = ConfigWorkspace::open(layout.clone())?;
+        CheckoutLink::new(&workspace).prepare(None)?.apply()?;
         ui.step(
             Step::Linked,
             format!(
@@ -90,59 +94,6 @@ impl LinkCmd {
             ),
         );
         Ok(())
-    }
-
-    /// Replace the patch table, leaving anything else in the file alone: it
-    /// is cargo's config, not omega's, and somebody may have put their own
-    /// settings in it.
-    fn write_patch(layout: &Layout, patched: Dependencies) -> anyhow::Result<()> {
-        let file = layout.file::<CargoConfig>(());
-        let mut config = file.read_or_default()?;
-        config.replace_patch(patched);
-
-        match config.is_empty() {
-            // Nothing left to say. A file that says nothing is a file that
-            // invites the question of what it is for.
-            true if file.path().exists() => Ok(std::fs::remove_file(file.path())?),
-            true => Ok(()),
-            false => Ok(file.write(&config)?),
-        }
-    }
-
-    /// Ask for the version the checkout carries.
-    fn require(layout: &Layout, version: &str) -> anyhow::Result<()> {
-        let file = layout.file::<CargoManifest>(CargoSlot::Workspace);
-        file.edit(|manifest| {
-            let Some(workspace) = manifest.workspace.as_mut() else {
-                return;
-            };
-            for spec in crate::scaffold::Scaffold::omega_crates() {
-                if workspace.dependencies.contains(spec.name) {
-                    let updated = match spec.package {
-                        None => Dependency::registry(version, &[]),
-                        Some(package) => Dependency::renamed(package, version, &[]),
-                    };
-                    workspace.dependencies.insert(spec.name, updated);
-                }
-            }
-        })?;
-        Ok(())
-    }
-
-    /// What `omega init` writes when it can see a checkout: the same patch,
-    /// so a contributor's first config builds without a second command.
-    pub fn on_init(layout: &Layout) -> anyhow::Result<Option<SourceTree>> {
-        // True whether or not there is a checkout to link: the build output
-        // and this machine's opinion of where omega lives are never a config
-        // repository's business.
-        AtomicFile::at(layout.gitignore())
-            .write(crate::scaffold::Scaffold::new().gitignore().as_bytes())?;
-
-        let Some(tree) = SourceTree::detect() else {
-            return Ok(None);
-        };
-        Self::write_patch(layout, tree.patch()?)?;
-        Ok(Some(tree))
     }
 
     /// Why a build might have failed to resolve omega at all.
