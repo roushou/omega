@@ -3,11 +3,9 @@
 use std::time::Duration;
 
 use anstyle::{AnsiColor, Effects, Style};
-use anyhow::{Context, bail};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use anyhow::Context;
 
-use omega_proto::omega::{UnitPhase, UnitStatus, state_topic};
-use omega_proto::{Observation, Socket, SystemTopic};
+use omega_proto::omega::{UnitPhase, UnitStatus};
 
 use crate::ui::{Cell, Column, Paint, Step, Table, Ui};
 
@@ -17,9 +15,9 @@ pub struct StatusCmd {
     /// Show CLI, daemon, renderer, and resolved config dependency versions.
     #[arg(long)]
     pub versions: bool,
-    /// Show live generation acceptance, reconciliation, and shell application.
-    #[arg(long)]
-    pub deployment: bool,
+    /// Print the daemon snapshot as JSON for scripts.
+    #[arg(long, conflicts_with = "versions")]
+    pub json: bool,
 }
 
 impl StatusCmd {
@@ -30,40 +28,30 @@ impl StatusCmd {
         if self.versions {
             Self::versions(ui).await;
         }
-        let socket = Observation::socket();
-        if !socket.is_live() {
-            bail!(
-                "no daemon is listening on {} — start one with {}",
-                Paint::path(socket.path()),
-                Paint::command("omega daemon")
-            );
-        }
-
-        let units = if self.deployment {
-            let status =
-                tokio::time::timeout(Self::TIMEOUT, crate::operator::Operator::new().deployment())
-                    .await
-                    .context("the daemon did not report deployment status in time")??;
-            let layout = omega_host::Layout::resolve();
-            let published = match omega_host::Generations::new(&layout).pin_current() {
-                Ok(generation) => generation,
-                Err(error) => {
-                    ui.warn(format!("published generation unavailable: {error}"));
-                    None
-                }
-            };
-            ui.deployment(
-                &status,
-                published
-                    .as_ref()
-                    .map(|generation| generation.id().as_str()),
-            );
-            status.units
-        } else {
-            tokio::time::timeout(Self::TIMEOUT, Self::read_units(&socket))
+        let status =
+            tokio::time::timeout(Self::TIMEOUT, crate::operator::Operator::new().deployment())
                 .await
-                .context("the daemon did not report its units in time")??
+                .context("the daemon did not report status in time")?
+                .context("cannot read daemon status; ensure omega daemon is running")?;
+        if self.json {
+            ui.line(serde_json::to_string(&status)?);
+            return Ok(());
+        }
+        let layout = omega_host::Layout::resolve();
+        let published = match omega_host::Generations::new(&layout).pin_current() {
+            Ok(generation) => generation,
+            Err(error) => {
+                ui.warn(format!("published build unavailable: {error}"));
+                None
+            }
         };
+        ui.deployment(
+            &status,
+            published
+                .as_ref()
+                .map(|generation| generation.id().as_str()),
+        );
+        let units = status.units;
 
         if units.is_empty() {
             ui.step(Step::Checked, "the daemon is running; no plugins");
@@ -153,30 +141,6 @@ impl StatusCmd {
             Ok(Err(error)) => ui.warn(format!("config dependency versions unavailable: {error}")),
             Err(_) => ui.warn("config dependency version lookup timed out"),
         }
-    }
-
-    /// Read the observation socket until the `units` topic arrives. The
-    /// daemon sends its whole current state on connect, so this is one
-    /// round-trip, not a subscription.
-    async fn read_units(socket: &Socket) -> anyhow::Result<Vec<UnitStatus>> {
-        let stream = socket.connect_stream().await?;
-        let mut lines = BufReader::new(stream).lines();
-
-        // Views and topics share the stream, so most lines are not this one.
-        while let Some(line) = lines.next_line().await? {
-            let Some(topic) = Observation::topic(&line) else {
-                continue;
-            };
-            if topic.topic != *SystemTopic::Units.as_str() {
-                continue;
-            }
-            match topic.value {
-                Some(state_topic::Value::Units(units)) => return Ok(units.units),
-                other => bail!("the daemon sent a units topic carrying {other:?}"),
-            }
-        }
-
-        Ok(Vec::new())
     }
 
     /// One row per unit. Phase carries the colour, because it is the column

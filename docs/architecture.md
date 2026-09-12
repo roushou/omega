@@ -420,10 +420,16 @@ builds if the candidate is unusable, leaving a rejected pointer intact for diagn
 The convergence worker projects live activation and reconciliation progress into
 `Deployment`. The operator-only `GetDeployment` request returns that snapshot
 with phases read from `UnitTable`; it does not infer acceptance from build files
-or duplicate process state. `omega status --deployment` compares this snapshot
+or duplicate process state. `omega status` compares this snapshot
 with the locally published generation. A rejected candidate remains visible while
 the accepted build continues to converge. Shell application records its own
 generation and result because explicit application can precede activation.
+Ordinary `omega status` uses this operator snapshot; `--json` writes its protocol
+JSON to stdout, including generation identities. `omega build --wait` captures the
+identity from its own reserved stage before publication and waits for that exact
+build's acceptance, settled reconciliation, and successful shell application (or
+no shell declaration). Rejection, shell failure, and superseding publication fail
+the wait. A timeout bounds observation, not daemon work; the build stays published.
 These results describe the current daemon lifetime and the last pass or application,
 not a persistent health history or proof that the shell file has no external edits.
 

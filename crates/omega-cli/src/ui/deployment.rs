@@ -5,30 +5,19 @@ impl Ui {
     /// Report a live daemon snapshot separately from the locally published selection.
     pub fn deployment(&mut self, status: &DeploymentStatus, published: Option<&str>) {
         match published {
-            Some(id) => self.step(Step::Built, format!("published generation {id}")),
-            None => self.detail("No published generation selected."),
+            Some(_) => self.step(Step::Built, "configuration published"),
+            None => self.detail("No published build available."),
         }
         if status.accepted_generation.is_empty() {
-            self.detail("The daemon has not accepted a generation yet.");
+            self.detail("The daemon has not accepted a build yet.");
         } else {
-            self.step(
-                Step::Checked,
-                format!("accepted generation {}", status.accepted_generation),
-            );
+            self.step(Step::Checked, "the daemon has accepted a build");
         }
         if published.is_some_and(|id| id != status.accepted_generation) {
-            self.detail("The published generation is not the daemon's accepted generation.");
+            self.detail("The latest build is not active yet.");
         }
         if !status.activation_error.is_empty() {
-            self.warn(format!(
-                "activation of {}: {}",
-                if status.candidate_generation.is_empty() {
-                    "unknown generation"
-                } else {
-                    &status.candidate_generation
-                },
-                status.activation_error
-            ));
+            self.warn(format!("build activation: {}", status.activation_error));
         }
         match ReconciliationState::try_from(status.reconciliation) {
             Ok(ReconciliationState::Settled) => self.step(
@@ -48,22 +37,17 @@ impl Ui {
             )),
         }
         match ShellApplicationState::try_from(status.shell) {
-            Ok(ShellApplicationState::Applied) => self.step(
-                Step::Installed,
-                format!("shell applied from {}", status.shell_generation),
-            ),
+            Ok(ShellApplicationState::Applied) => {
+                self.step(Step::Installed, "last shell application succeeded")
+            }
             Ok(ShellApplicationState::NotDeclared) => {
                 self.detail("Accepted document declares no shell.")
             }
-            Ok(ShellApplicationState::Applying) => self.step(
-                Step::Checking,
-                format!("applying shell from {}", status.shell_generation),
-            ),
+            Ok(ShellApplicationState::Applying) => {
+                self.step(Step::Checking, "applying shell configuration")
+            }
             Ok(ShellApplicationState::Failed) => {
-                self.warn(format!(
-                    "shell application for {} failed: {}",
-                    status.shell_generation, status.shell_error
-                ));
+                self.warn(format!("shell application failed: {}", status.shell_error));
                 self.next("omega shell diff");
             }
             Ok(ShellApplicationState::Unspecified) => {
@@ -96,11 +80,11 @@ mod tests {
         );
         let text = transcript.err();
         for expected in [
-            "published generation new",
-            "accepted generation old",
+            "configuration published",
+            "the daemon has accepted a build",
             "invalid document",
             "last reconciliation pass completed",
-            "shell application for old failed: external edit",
+            "shell application failed: external edit",
             "omega shell diff",
         ] {
             assert!(text.contains(expected), "{text}");

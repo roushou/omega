@@ -21,6 +21,18 @@ impl GenerationStage {
             .expect("a stage is available until commit")
     }
 
+    /// The identity reserved for this stage, including after another build publishes.
+    pub fn id(&self) -> super::GenerationId {
+        super::GenerationId::parse(
+            self.target
+                .file_name()
+                .expect("a generation has a name")
+                .to_str()
+                .expect("generated names are ASCII"),
+        )
+        .expect("the store reserves valid generation names")
+    }
+
     pub fn commit(mut self) -> io::Result<Layout> {
         let store = Generations::new(&self.layout);
         let _transaction = store.transaction()?;

@@ -49,6 +49,7 @@ name = "omega"
 path = "src/main.rs"
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 # Reading this repository's own manifests, which use `workspace = true`
 # inheritance that the generated-manifest model does not describe.
 toml = "1"

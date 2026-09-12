@@ -278,26 +278,60 @@ fn a_scaffolded_config_builds_and_runs() {
         "external edits must require acknowledgement"
     );
     assert_eq!(std::fs::read_to_string(&shell_path).unwrap(), changed);
-    let deployment = machine.omega(&["status", "--deployment"]).output().unwrap();
+    let deployment = machine.omega(&["status"]).output().unwrap();
     assert!(deployment.status.success());
     let details = String::from_utf8_lossy(&deployment.stderr);
-    assert!(details.contains("accepted generation"), "{details}");
-    assert!(details.contains("shell application for"), "{details}");
+    assert!(
+        details.contains("the daemon has accepted a build"),
+        "{details}"
+    );
+    assert!(details.contains("shell application failed"), "{details}");
     assert!(details.contains("failed:"), "{details}");
     assert!(String::from_utf8_lossy(&deployment.stdout).contains("battery-widget"));
+    let waiting = machine
+        .omega(&["build", "--debug", "--wait"])
+        .output()
+        .unwrap();
+    assert!(!waiting.status.success());
+    let error = String::from_utf8_lossy(&waiting.stderr);
+    assert!(error.contains("shell application failed"), "{error}");
+    assert!(error.contains("omega shell diff"), "{error}");
+    assert_eq!(std::fs::read_to_string(&shell_path).unwrap(), changed);
     machine.run(&["shell", "apply", "--overwrite"]);
     assert_eq!(std::fs::read(&shell_path).unwrap(), first);
-    let deployment = machine.omega(&["status", "--deployment"]).output().unwrap();
+    let deployment = machine.omega(&["status"]).output().unwrap();
     assert!(deployment.status.success());
     let details = String::from_utf8_lossy(&deployment.stderr);
-    assert!(details.contains("shell applied from"), "{details}");
+    assert!(
+        details.contains("last shell application succeeded"),
+        "{details}"
+    );
     assert!(!details.contains("failed:"), "{details}");
 
     let source_path = machine.root.join("config/system/src/shell_import.rs");
     let source = std::fs::read_to_string(&source_path).unwrap();
     std::fs::write(&source_path, source.replace("HH:mm", "HH:mm:ss")).unwrap();
-    machine.run(&["build", "--debug"]);
-    machine.run(&["shell", "apply"]);
+    machine.run(&["build", "--debug", "--wait", "--timeout", "30s"]);
+    let snapshot = machine.omega(&["status", "--json"]).output().unwrap();
+    assert!(
+        snapshot.status.success(),
+        "{}",
+        String::from_utf8_lossy(&snapshot.stderr)
+    );
+    assert!(snapshot.stderr.is_empty());
+    let snapshot: omega_proto::omega::DeploymentStatus =
+        serde_json::from_slice(&snapshot.stdout).unwrap();
+    let selected = std::fs::read_to_string(machine.root.join("state/current")).unwrap();
+    assert_eq!(snapshot.accepted_generation, selected.trim());
+    assert_eq!(snapshot.shell_generation, selected.trim());
+    assert_eq!(
+        snapshot.reconciliation,
+        omega_proto::omega::ReconciliationState::Settled as i32
+    );
+    assert_eq!(
+        snapshot.shell,
+        omega_proto::omega::ShellApplicationState::Applied as i32
+    );
     assert!(
         std::fs::read_to_string(&shell_path)
             .unwrap()
