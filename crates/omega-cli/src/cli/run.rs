@@ -17,7 +17,8 @@ pub struct RunCmd {
     pub unit: String,
     /// The command surface's id, as its manifest declares it.
     pub command: String,
-    /// Arguments, passed through as strings.
+    /// Arguments decoded by the command: e.g. 40%, balanced, true, or text.
+    #[arg(allow_negative_numbers = true)]
     pub args: Vec<String>,
 }
 
@@ -42,6 +43,7 @@ impl RunCmd {
         Ok(())
     }
 
+    // The command owns its input type; guessing here would corrupt text inputs.
     fn text(argument: &str) -> Value {
         Value {
             kind: Some(value::Kind::StringValue(argument.to_string())),
@@ -56,6 +58,23 @@ impl RunCmd {
             Some(value::Kind::DoubleValue(number)) => number.to_string(),
             Some(value::Kind::BoolValue(flag)) => flag.to_string(),
             other => format!("{other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cli::{Cli, Command};
+    use clap::Parser;
+
+    #[test]
+    fn run_preserves_arguments_for_type_directed_decoding() {
+        for argument in ["-42", "40%", "001", "true", "two words"] {
+            let cli = Cli::try_parse_from(["omega", "run", "example", "set", argument]).unwrap();
+            let Command::Run(run) = cli.command else {
+                panic!("expected run")
+            };
+            assert_eq!(run.args, [argument]);
         }
     }
 }

@@ -34,6 +34,19 @@ to apply. `omega build --watch --debug` rebuilds as you edit. `omega dev audio`
 temporarily replaces the supervised plugin with a development process in your
 terminal.
 
+Command arguments are decoded by the plugin's input type. For plugins exposing
+these commands:
+
+```sh
+omega run brightness set-level 40%
+omega run power profile balanced
+```
+
+Percentages also accept fractions (`0.4`); boolean inputs accept `true` or `false`.
+Numeric inputs accept numbers, including negatives. Text inputs stay literal,
+so `001` or `true` remains text when the command expects a string. Rebuild plugins
+against the updated SDK to enable typed text input.
+
 Configuration errors identify duplicate placement locations and list available
 widget surfaces. When `omega shell adopt` encounters malformed JSON, it shows
 the offending source location. Diagnostics go to stderr, keeping command results

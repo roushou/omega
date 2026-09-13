@@ -216,7 +216,19 @@ async fn input_refusals_travel_through_the_real_runtime() {
     daemon.welcome(&State::new()).await;
     assert_eq!(
         daemon.call("volume", vec![true.into_value()]).await,
-        Err("expected Percent".to_string())
+        Err("expected a percentage from 0% to 100% or a fraction from 0 to 1".to_string())
+    );
+    assert!(
+        daemon
+            .call("volume", vec!["40%".into_value()])
+            .await
+            .is_ok()
+    );
+    assert!(
+        daemon
+            .call("volume", vec!["101%".into_value()])
+            .await
+            .is_err()
     );
     assert!(
         daemon

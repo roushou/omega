@@ -188,6 +188,14 @@ decodes a strict map. Missing, mistyped and unknown fields are refused before
 an explicit raw input for commands implementing an external argument grammar.
 `Called::of` accepts typed inputs; `Called::raw` exercises malformed wire input.
 
+`omega run` sends arguments as text; scalar `Input` implementations parse them
+according to the command's declared type. Numbers and booleans use Rust's text
+syntax. `Percent` accepts `40%` or `0.4`, rejecting out-of-range and non-finite
+values; power profiles accept `saver` (`power-saver`), `balanced`, and
+`performance`, as well as their wire names. Strings are preserved verbatim.
+This conversion is confined to command inputs: `FromValue`, configuration,
+records, and derived input maps retain their strict value types.
+
 Effect handles and record writes return an awaitable `Effect`. Admission happens
 when the method is called, including local record updates; awaiting observes
 terminal success or failure. `Effect::receipt` exposes admission and a unique
