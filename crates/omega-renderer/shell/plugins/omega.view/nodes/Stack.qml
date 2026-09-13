@@ -139,7 +139,7 @@ Loader {
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.node,
                 "connection": stack.host.connection,
-                "foreground": stack.host.ink,
+                "foreground": Qt.binding(function() { return stack.host.ink }),
                 "axis": stack.column ? "column" : "row"
             })
 

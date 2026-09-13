@@ -96,4 +96,53 @@ TestCase {
         verify(button.interactive)
     }
 
+    Component {
+        id: coloredTree
+        Renderer.ViewNode { width: 360; foreground: "gray" }
+    }
+    function renderedNode(item, key) {
+        if (item.model && item.model.key === key && item.ink !== undefined) return item
+        var children = item.children || []
+        for (var i = 0; i < children.length; ++i) {
+            var found = renderedNode(children[i], key)
+            if (found !== null) return found
+        }
+        return null
+    }
+    function test_children_follow_foreground_data() {
+        return [{tag:"row",type:"stack",align:"row"},
+                {tag:"column",type:"stack",align:"column"},
+                {tag:"grid",type:"grid"},
+                {tag:"list",type:"list"},
+                {tag:"group",type:"group"}]
+    }
+    function test_children_follow_foreground(data) {
+        failOnWarning(/.*/)
+        var tree = createTemporaryObject(coloredTree, test, {model:{
+            type:data.type,key:"colored",props:{align:{stringValue:data.align || ""},height:{intValue:"120"}},
+            children:[{type:"stack",key:"nested",children:[
+                {type:"text",key:"inherited",props:{text:{stringValue:"Title"}}},
+                {type:"icon",key:"muted",props:{name:{stringValue:"wifi"},emphasis:{stringValue:"muted"}}},
+                {type:"text",key:"warning",props:{text:{stringValue:"Warning"},tone:{stringValue:"warning"}}}
+            ]}]
+        }})
+        verify(tree !== null)
+        tryVerify(function() { return renderedNode(tree, "inherited") !== null })
+        var inherited = renderedNode(tree, "inherited")
+        var muted = renderedNode(tree, "muted")
+        var warning = renderedNode(tree, "warning")
+        compare(inherited.ink, tree.ink)
+        tree.foreground = "white"
+        compare(inherited.ink, tree.ink)
+        verify(Math.abs(muted.ink.a - 0.6) < 0.01)
+        compare(muted.ink.r, tree.ink.r)
+        verify(Qt.colorEqual(warning.ink, "red"))
+        tree.foreground = "blue"
+        compare(inherited.ink, tree.ink)
+        compare(renderedNode(tree, "inherited"), inherited)
+        compare(muted.ink.r, tree.ink.r)
+        compare(muted.ink.b, tree.ink.b)
+        verify(Qt.colorEqual(warning.ink, "red"))
+    }
+
 }

@@ -30,7 +30,7 @@ Grid {
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.modelData,
                 "connection": grid.host.connection,
-                "foreground": grid.host.ink
+                "foreground": Qt.binding(function() { return grid.host.ink })
             })
         }
     }

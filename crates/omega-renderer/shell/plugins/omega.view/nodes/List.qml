@@ -151,7 +151,7 @@ Rectangle {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": row.node,
                     "connection": list.host.connection,
-                    "foreground": list.host.ink
+                    "foreground": Qt.binding(function() { return list.host.ink })
                 })
             }
 

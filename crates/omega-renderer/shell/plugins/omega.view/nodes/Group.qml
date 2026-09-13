@@ -75,7 +75,7 @@ Row {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": segment.modelData,
                     "connection": group.host.connection,
-                    "foreground": group.host.ink
+                    "foreground": Qt.binding(function() { return group.host.ink })
                 })
             }
 
