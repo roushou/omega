@@ -6,6 +6,12 @@ struct Fixture;
 impl Fixture {
     fn valid() -> Vec<action::Kind> {
         vec![
+            action::Kind::ConnectBluetooth(ConnectBluetooth {
+                device_id: "/org/bluez/hci0/dev_60_AB_D2_25_8C_49".into(),
+            }),
+            action::Kind::DisconnectBluetooth(DisconnectBluetooth {
+                device_id: "/org/bluez/hci0/dev_60_AB_D2_25_8C_49".into(),
+            }),
             action::Kind::ConnectWifi(ConnectWifi {
                 ssid: "home".into(),
                 password: String::new(),

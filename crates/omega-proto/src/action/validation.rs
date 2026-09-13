@@ -54,6 +54,16 @@ impl action::Kind {
                 )?;
             }
             Self::DisconnectWifi(_) => {}
+            Self::ConnectBluetooth(target) => input.require(
+                "device_id",
+                crate::BluetoothDeviceId::parse(target.device_id.clone()).is_ok(),
+                "must name a Bluetooth device",
+            )?,
+            Self::DisconnectBluetooth(target) => input.require(
+                "device_id",
+                crate::BluetoothDeviceId::parse(target.device_id.clone()).is_ok(),
+                "must name a Bluetooth device",
+            )?,
             Self::RunCommand(run) => input.text("command", &run.command)?,
             Self::SetSetting(set) => {
                 input.text("setting_id", &set.setting_id)?;

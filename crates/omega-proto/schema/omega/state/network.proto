@@ -95,10 +95,11 @@ message BluetoothDevice {
   bool paired = 4;
   string icon = 5;              // BlueZ's own icon name: "audio-headphones"
 
-  // 0 is unknown, not empty. BlueZ reports a battery only for a connected
-  // device that has one, and a device at zero percent is off and not
-  // reporting anything.
-  uint32 battery_percent = 6;
+  // Absence means the device does not report a battery; zero is a real reading.
+  optional uint32 battery_percent = 6;
+  string id = 7;               // adapter-qualified device endpoint
+  bool can_connect = 8;        // paired, adapter powered, and not blocked
+
 }
 
 // The tunnels the machine is running through.

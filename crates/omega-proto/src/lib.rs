@@ -1,4 +1,5 @@
 pub mod action;
+pub mod bluetooth;
 pub mod client;
 pub mod codec;
 pub mod handshake;
@@ -20,6 +21,7 @@ pub mod ui;
 pub mod values;
 
 pub use action::ActionKind;
+pub use bluetooth::{BluetoothDeviceId, BluetoothDeviceIdError};
 pub use client::{Client, ClientError};
 pub use codec::{CodecError, FrameCodec, MAX_FRAME_LEN};
 pub use handshake::{Handshake, HandshakeError};

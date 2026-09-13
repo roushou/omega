@@ -970,13 +970,13 @@ impl Widget for Devices {
         }
         let charged = self
             .bluetooth
-            .connected()
+            .connected_devices()
             .into_iter()
             .filter_map(|device| device.battery())
             .count();
         Text::new(format!(
             "{} paired, {charged} reporting",
-            self.bluetooth.devices().len()
+            self.bluetooth.known_devices().len()
         ))
         .into()
     }
@@ -984,21 +984,19 @@ impl Widget for Devices {
 
 #[test]
 fn a_handle_reads_its_topic_through_the_types_it_carries() {
-    // `bluetooth` was brokered, coalesced and replicated for a dozen commits
-    // with no way for a unit to name it. It has a handle now, and typed
-    // accessors over it — including the one that matters here, where BlueZ's
-    // nought means "does not report a battery" rather than a flat one.
     let state = State::new().with(omega_proto::omega::BluetoothState {
         available: true,
         powered: true,
         discovering: false,
         devices: vec![omega_proto::omega::BluetoothDevice {
+            id: "/org/bluez/hci0/dev_60_AB_D2_25_8C_49".into(),
+            can_connect: true,
             address: "60:AB:D2:25:8C:49".into(),
             name: "Bose NC 700".into(),
             connected: true,
             paired: true,
             icon: "audio-headphones".into(),
-            battery_percent: 72,
+            battery_percent: Some(72),
         }],
     });
 

@@ -40,7 +40,7 @@ mod wifi;
 mod window;
 mod workspaces;
 
-pub use bluetooth::BluetoothDevice;
+pub use bluetooth::{BluetoothDevice, BluetoothStatus};
 pub use clock::Weekday;
 pub use disk::Mount;
 pub use media::{Playback, Player};

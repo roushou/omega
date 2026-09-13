@@ -4,9 +4,7 @@
 //! and every device under it, with all their interfaces — so a reading is one
 //! round trip rather than a walk.
 //!
-//! Woken by signals and polled underneath. BlueZ reports a property changing;
-//! a device being paired or forgotten is an object appearing or going, which
-//! the floor notices.
+//! Property and object signals wake the broker; polling also reconciles state.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -16,8 +14,10 @@ use futures_util::StreamExt;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
-use omega_proto::SystemTopic;
-use omega_proto::omega::{BluetoothDevice, BluetoothState, StatePatch, StateTopic, state_topic};
+use omega_proto::omega::{
+    BluetoothDevice, BluetoothState, StatePatch, StateTopic, action, state_topic,
+};
+use omega_proto::{ActionKind, BluetoothDeviceId, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
 use crate::dbus;
@@ -30,8 +30,10 @@ pub struct Adapter {
 }
 
 /// One device, as `org.bluez.Device1` describes it.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Device {
+    pub id: BluetoothDeviceId,
+    pub can_connect: bool,
     pub address: String,
     /// The alias, which is what a person renamed it to. BlueZ falls back to
     /// the name the device broadcasts, so this is always the better one.
@@ -49,6 +51,24 @@ pub struct Device {
 pub struct Objects;
 
 impl Objects {
+    /// Resolve only the requested known endpoint; never select another adapter.
+    pub fn target<'a>(
+        devices: &'a [Device],
+        id: &BluetoothDeviceId,
+        connect: bool,
+    ) -> Result<&'a Device, BrokerError> {
+        let device = devices
+            .iter()
+            .find(|device| &device.id == id && (device.paired || device.connected))
+            .ok_or_else(|| {
+                BrokerError::Unreadable("Bluetooth device is no longer available".into())
+            })?;
+        if connect && !device.can_connect {
+            return Err(BrokerError::Unreadable("Bluetooth device cannot connect: it must be paired, unblocked, and its adapter powered".into()));
+        }
+        Ok(device)
+    }
+
     /// The machine's own devices, connected first.
     ///
     /// Only what is paired or connected. BlueZ also lists whatever it has
@@ -67,6 +87,7 @@ impl Objects {
             b.connected
                 .cmp(&a.connected)
                 .then_with(|| a.alias.cmp(&b.alias))
+                .then_with(|| a.id.cmp(&b.id))
         });
 
         BluetoothState {
@@ -76,16 +97,24 @@ impl Objects {
             devices: mine
                 .into_iter()
                 .map(|device| BluetoothDevice {
+                    id: device.id.to_string(),
+                    can_connect: device.can_connect,
                     address: device.address.clone(),
                     name: device.alias.clone(),
                     connected: device.connected,
                     paired: device.paired,
                     icon: device.icon.clone(),
-                    battery_percent: u32::from(device.battery.unwrap_or(0)),
+                    battery_percent: device.battery.map(u32::from),
                 })
                 .collect(),
         }
     }
+}
+
+#[zbus::proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
+trait DeviceControl {
+    fn connect(&self) -> zbus::Result<()>;
+    fn disconnect(&self) -> zbus::Result<()>;
 }
 
 /// The system bus, and the subscription to everything BlueZ says.
@@ -110,10 +139,6 @@ impl Link {
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .sender(Self::SERVICE)
-            .map_err(BrokerError::unreadable)?
-            .interface("org.freedesktop.DBus.Properties")
-            .map_err(BrokerError::unreadable)?
-            .member("PropertiesChanged")
             .map_err(BrokerError::unreadable)?
             .build();
 
@@ -149,23 +174,34 @@ impl Link {
 
         for interfaces in objects.values() {
             if let Some(properties) = interfaces.get(Self::ADAPTER) {
-                // The first adapter. A machine with two is rare enough that
-                // picking one is better than inventing a way to choose.
-                adapter.get_or_insert(Adapter {
-                    powered: dbus::field(properties, "Powered").unwrap_or(false),
-                    discovering: dbus::field(properties, "Discovering").unwrap_or(false),
-                });
+                let found = adapter.get_or_insert(Adapter::default());
+                found.powered |= dbus::field(properties, "Powered").unwrap_or(false);
+                found.discovering |= dbus::field(properties, "Discovering").unwrap_or(false);
             }
-
+        }
+        for (path, interfaces) in &objects {
             if let Some(properties) = interfaces.get(Self::DEVICE) {
+                let id =
+                    BluetoothDeviceId::parse(path.to_string()).map_err(BrokerError::unreadable)?;
+                let adapter_path: OwnedObjectPath =
+                    dbus::field(properties, "Adapter").ok_or_else(|| {
+                        BrokerError::Unreadable(format!("device {id} has no adapter"))
+                    })?;
+                let powered = objects
+                    .get(&adapter_path)
+                    .and_then(|interfaces| interfaces.get(Self::ADAPTER))
+                    .and_then(|properties| dbus::field::<bool>(properties, "Powered"))
+                    .unwrap_or(false);
+                let paired = dbus::field(properties, "Paired").unwrap_or(false);
+                let blocked: bool = dbus::field(properties, "Blocked").unwrap_or(false);
                 devices.push(Device {
+                    id,
+                    can_connect: paired && powered && !blocked,
                     address: dbus::field(properties, "Address").unwrap_or_default(),
                     alias: dbus::field(properties, "Alias").unwrap_or_default(),
                     connected: dbus::field(properties, "Connected").unwrap_or(false),
-                    paired: dbus::field(properties, "Paired").unwrap_or(false),
+                    paired,
                     icon: dbus::field(properties, "Icon").unwrap_or_default(),
-                    // On the same object, so no second call: BlueZ puts the
-                    // battery interface on a device that has one.
                     battery: interfaces
                         .get(Self::BATTERY)
                         .and_then(|battery| dbus::field(battery, "Percentage")),
@@ -174,6 +210,20 @@ impl Link {
         }
 
         Ok((adapter, devices))
+    }
+    async fn call(&self, id: &BluetoothDeviceId, connect: bool) -> Result<(), BrokerError> {
+        let device = DeviceControlProxy::builder(&self.connection)
+            .path(id.as_str())
+            .map_err(BrokerError::unreadable)?
+            .build()
+            .await
+            .map_err(BrokerError::unreadable)?;
+        if connect {
+            device.connect().await
+        } else {
+            device.disconnect().await
+        }
+        .map_err(BrokerError::unreadable)
     }
 }
 
@@ -192,8 +242,7 @@ impl Default for BlueZ {
 }
 
 impl BlueZ {
-    /// The floor under the signals: a device being paired or forgotten is an
-    /// object appearing or going, which no property change reports.
+    /// Periodic reconciliation supplements BlueZ signals.
     pub const REFRESH: Duration = Duration::from_secs(10);
 
     pub fn new() -> Self {
@@ -222,6 +271,27 @@ impl Broker for BlueZ {
 
     fn topics(&self) -> &'static [SystemTopic] {
         &[SystemTopic::Bluetooth]
+    }
+
+    fn actions(&self) -> &'static [ActionKind] {
+        &[
+            ActionKind::ConnectBluetooth,
+            ActionKind::DisconnectBluetooth,
+        ]
+    }
+
+    async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
+        let (id, connect) = match action {
+            action::Kind::ConnectBluetooth(target) => (&target.device_id, true),
+            action::Kind::DisconnectBluetooth(target) => (&target.device_id, false),
+            _ => return Err(BrokerError::Unserved(ActionKind::of(action))),
+        };
+        let id = BluetoothDeviceId::parse(id.clone()).map_err(BrokerError::unreadable)?;
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        let (_, devices) = link.read().await?;
+        let target = Objects::target(&devices, &id, connect)?;
+        link.call(&target.id, connect).await?;
+        Ok(None)
     }
 
     fn disconnect(&mut self) {

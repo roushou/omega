@@ -97,6 +97,8 @@ actions! {
     SetPowerProfile => SystemControl,
     ConnectWifi => Network,
     DisconnectWifi => Network,
+    ConnectBluetooth => Bluetooth,
+    DisconnectBluetooth => Bluetooth,
 }
 
 mod validation;

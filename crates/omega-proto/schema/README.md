@@ -90,3 +90,11 @@ be upgraded together so an older reader cannot discard the target field.
 `PlayerInfo.can_*` describes the endpoint's advertised transport abilities,
 independent of a unit's manifest grants. A method reply is an acknowledgement,
 not a substitute for observing playback state.
+
+## Bluetooth targeting
+
+Protocol v4 requires an adapter-qualified `BluetoothDevice.id` and preserves
+presence for `battery_percent`: absent is unknown, zero is empty. Bluetooth
+connect/disconnect actions require the Bluetooth capability and a validated
+device ID. A vanished endpoint is refused without selecting another adapter.
+Rebuild units and upgrade the daemon together.

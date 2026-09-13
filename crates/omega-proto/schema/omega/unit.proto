@@ -19,6 +19,7 @@ enum Capability {
   CAPABILITY_SCREENSHOT = 9;
   CAPABILITY_CLIPBOARD = 10;
   CAPABILITY_NETWORK = 11;
+  CAPABILITY_BLUETOOTH = 12;
 }
 
 // The kinds of surface a unit can expose ("one unit type, many surfaces").

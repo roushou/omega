@@ -64,9 +64,9 @@ pub use state::State;
 /// [`SystemTopic`]: omega_proto::SystemTopic
 pub mod topic {
     pub use omega_proto::omega::{
-        AudioState, BacklightState, BatteryState, BluetoothState, DiskState, IdleState, InputState,
-        MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState, PowerProfileState,
-        SystemState, ThermalsState, ThroughputState, TimeState, UnitsState, VpnState, WifiState,
-        WindowState, WorkspacesState,
+        AudioState, BacklightState, BatteryState, BluetoothDevice, BluetoothState, DiskState,
+        IdleState, InputState, MainsState, MediaState, MonitorsState, NetworkState,
+        PeripheralsState, PowerProfileState, SystemState, ThermalsState, ThroughputState,
+        TimeState, UnitsState, VpnState, WifiState, WindowState, WorkspacesState,
     };
 }

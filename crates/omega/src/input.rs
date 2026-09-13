@@ -55,6 +55,7 @@ scalar_input!(
     Percent,
     omega_proto::omega::PowerProfile,
     omega_proto::PlayerId,
+    omega_proto::BluetoothDeviceId,
     Option<omega_proto::PlayerId>
 );
 

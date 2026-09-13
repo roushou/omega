@@ -37,6 +37,8 @@ message Action {
     SetPowerProfile set_power_profile = 22;
     ConnectWifi connect_wifi = 23;
     DisconnectWifi disconnect_wifi = 24;
+    ConnectBluetooth connect_bluetooth = 25;
+    DisconnectBluetooth disconnect_bluetooth = 26;
   }
 }
 
@@ -199,3 +201,7 @@ message ConnectWifi {
   string password = 2;
 }
 message DisconnectWifi {}
+
+// Only a paired or connected endpoint from the Bluetooth reading may be targeted.
+message ConnectBluetooth { string device_id = 1; }
+message DisconnectBluetooth { string device_id = 1; }

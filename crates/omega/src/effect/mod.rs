@@ -15,6 +15,7 @@
 //! # }
 //! ```
 
+pub(crate) mod bluetooth;
 pub(crate) mod brightness;
 mod completion;
 pub(crate) mod queue;

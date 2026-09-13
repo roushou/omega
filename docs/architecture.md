@@ -124,7 +124,8 @@ types are shared by the daemon, the CLI, and every user crate: `Keybind` in
 the daemon and `Keybind` in a config are the same type, with no translation
 layer where a lie can live.
 
-Protocol v3 requires `RemoveWidget` and explicitly targeted media actions.
+Protocol v4 requires `RemoveWidget`, explicitly targeted media actions, and
+Bluetooth device identities with optional battery readings.
 Rebuild older units and update the daemon together; an older daemon must never
 ignore a player target and act on another player. Action and adoption execution is bounded per control or
 observation connection and runs concurrently with frame reception, so a unit can receive a command while its
@@ -713,3 +714,10 @@ Adoption emits a Rust module for review and never rewrites arbitrary Rust source
 Fresh non-bare initialization imports an existing shell configuration before
 taking ownership. Unknown settings are preserved through explicit extensions;
 ambiguous Omega entries and unsupported layout shapes fail rather than disappear.
+
+Bluetooth controls use `BluetoothControl` and a `bluetooth::DeviceId` taken from
+a reading. The identity includes the adapter; connect and disconnect never
+fall back to another device. Only paired or connected devices are exposed.
+`can_connect()` requires pairing, an unblocked device, and a powered adapter.
+Battery absence stays distinct from 0%. See `examples/bluetooth.rs` for an
+indicator and panel with typed commands. Pairing remains in Bluetooth settings.
