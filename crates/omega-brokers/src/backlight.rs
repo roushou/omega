@@ -1,4 +1,4 @@
-//! Screen brightness from sysfs, in both directions.
+//! Screen brightness from sysfs, with logind for writes requiring permission.
 //!
 //! The kernel exposes a raw scale per device — 0..`max_brightness`, which is
 //! 255 on one panel and 96000 on the next — and the ontology speaks percent.
@@ -83,9 +83,53 @@ impl Sysfs {
         })
     }
 
-    fn write(&self, raw: u32) -> Result<(), BrokerError> {
-        std::fs::write(self.dir.join("brightness"), raw.to_string())?;
-        Ok(())
+    fn needs_logind(&self, error: &std::io::Error) -> bool {
+        // Fixture roots must never redirect a write to real hardware.
+        self.dir.parent() == Some(std::path::Path::new(Self::ROOT))
+            && error.kind() == std::io::ErrorKind::PermissionDenied
+    }
+
+    async fn write(&self, raw: u32) -> Result<(), BrokerError> {
+        match std::fs::write(self.dir.join("brightness"), raw.to_string()) {
+            Ok(()) => Ok(()),
+            Err(error) if self.needs_logind(&error) => {
+                let device = self
+                    .dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or_else(|| {
+                        BrokerError::Unreadable("invalid backlight device name".into())
+                    })?;
+                tokio::time::timeout(Duration::from_secs(3), LogindBacklight::set(device, raw))
+                    .await
+                    .map_err(|_| {
+                        BrokerError::Unreadable("logind brightness request timed out".into())
+                    })?
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+}
+
+struct LogindBacklight;
+impl LogindBacklight {
+    async fn set(device: &str, raw: u32) -> Result<(), BrokerError> {
+        let connection = zbus::Connection::system()
+            .await
+            .map_err(BrokerError::unreadable)?;
+        // `auto` also resolves the user's session for a systemd user service.
+        let session = zbus::Proxy::new(
+            &connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1/session/auto",
+            "org.freedesktop.login1.Session",
+        )
+        .await
+        .map_err(BrokerError::unreadable)?;
+        session
+            .call::<_, _, ()>("SetBrightness", &("backlight", device, raw))
+            .await
+            .map_err(BrokerError::unreadable)
     }
 }
 
@@ -179,7 +223,7 @@ impl Backlight {
         }
     }
 
-    fn set(&mut self, set: &SetBacklight) -> Result<Option<StatePatch>, BrokerError> {
+    async fn set(&mut self, set: &SetBacklight) -> Result<Option<StatePatch>, BrokerError> {
         let Some(change) = set.change.as_ref() else {
             return Err(BrokerError::Unreadable(
                 "SetBacklight carries no change".into(),
@@ -204,7 +248,7 @@ impl Backlight {
         // Reborrowed: `target` reads `self`, and the write needs the device
         // again afterwards.
         let sysfs = self.sysfs().expect("discovered just above");
-        sysfs.write(Self::to_raw(percent, max))?;
+        sysfs.write(Self::to_raw(percent, max)).await?;
 
         // The broker that just set it knows the new value. Waiting a second
         // for the poll to notice is a slider that lags its own drag.
@@ -237,8 +281,27 @@ impl Broker for Backlight {
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
         match action {
-            action::Kind::SetBacklight(set) => self.set(set),
+            action::Kind::SetBacklight(set) => self.set(set).await,
             other => Err(BrokerError::Unserved(ActionKind::of(other))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_permission_failures_on_real_backlights_use_logind() {
+        let real = Sysfs {
+            dir: PathBuf::from("/sys/class/backlight/amdgpu_bl1"),
+        };
+        let fixture = Sysfs {
+            dir: PathBuf::from("/tmp/backlight/amdgpu_bl1"),
+        };
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert!(real.needs_logind(&denied));
+        assert!(!fixture.needs_logind(&denied));
+        assert!(!real.needs_logind(&std::io::Error::from(std::io::ErrorKind::NotFound)));
     }
 }
