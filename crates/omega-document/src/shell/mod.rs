@@ -7,8 +7,8 @@
 //!     .bar(Bar::top()
 //!         .left([Native::menu().into()])
 //!         .center([Native::clock().into()])
-//!         .right([PluginWidget::new("audio", "audio")
-//!             .surface("indicator").panel("panel").into()]))
+//!         .right([PluginWidget::named("audio", "audio")
+//!             .surface_named("indicator").panel_named("panel").into()]))
 //!     .idle(Idle::new().lock_after(Duration::from_secs(300)));
 //! let document = omega_document::Document::new().shell(shell)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -261,6 +261,64 @@ pub struct PluginWidget {
     settings: BTreeMap<String, omega_proto::omega::Value>,
 }
 impl PluginWidget {
+    /// Place a widget using its defining crate and declared surface name.
+    ///
+    /// ```
+    /// use omega::{View, Widget, ui::Text};
+    /// use omega_document::shell::PluginWidget;
+    /// #[derive(omega::Widget)]
+    /// struct Indicator;
+    /// impl Widget for Indicator { fn render(&self) -> View { Text::new("Ready").into() } }
+    /// let placement = PluginWidget::new("status", Indicator);
+    /// ```
+    ///
+    /// Commands cannot be placed as widgets:
+    /// ```compile_fail
+    /// use omega::Command;
+    /// use omega_document::shell::PluginWidget;
+    /// #[derive(omega::Command)]
+    /// struct Refresh {}
+    /// impl Command for Refresh {
+    ///     type Input = (); type Output = ();
+    ///     async fn call(&self, _: ()) -> Result<(), omega::Error> { Ok(()) }
+    /// }
+    /// PluginWidget::new("status", Refresh);
+    /// ```
+    pub fn new<W: omega::Widget + omega::ui::WidgetIdentity>(
+        id: &str,
+        reference: impl Into<omega::ui::WidgetRef<W>>,
+    ) -> Self {
+        let reference = reference.into();
+        Self::named(id, reference.unit()).surface_named(reference.surface())
+    }
+
+    /// Attach a widget from the same unit as this placement.
+    /// The built manifest also verifies that both surfaces were registered.
+    pub fn panel<W: omega::Widget + omega::ui::WidgetIdentity>(
+        self,
+        reference: impl Into<omega::ui::WidgetRef<W>>,
+    ) -> Self {
+        self.try_panel(reference)
+            .expect("panel must belong to the placed unit")
+    }
+
+    /// Attach a typed panel, reporting a cross-unit reference as a config error.
+    pub fn try_panel<W: omega::Widget + omega::ui::WidgetIdentity>(
+        self,
+        reference: impl Into<omega::ui::WidgetRef<W>>,
+    ) -> Result<Self, ShellError> {
+        let reference = reference.into();
+        if self.unit.as_str() != reference.unit() {
+            return Err(ShellError::Invalid(format!(
+                "panel {} belongs to {}, not {}",
+                reference.surface(),
+                reference.unit(),
+                self.unit
+            )));
+        }
+        Ok(self.panel_named(reference.surface()))
+    }
+
     /// Parse placement and unit identities at the authoring boundary.
     pub fn try_new(id: impl Into<String>, unit: impl Into<String>) -> Result<Self, ShellError> {
         Ok(Self {
@@ -274,14 +332,14 @@ impl PluginWidget {
         })
     }
     /// For literal names. Dynamic names should use `try_new`.
-    pub fn new(id: &str, unit: &str) -> Self {
+    pub fn named(id: &str, unit: &str) -> Self {
         Self::try_new(id, unit).expect("valid placement and unit names")
     }
-    pub fn surface(mut self, surface: impl Into<String>) -> Self {
+    pub fn surface_named(mut self, surface: impl Into<String>) -> Self {
         self.surface = surface.into();
         self
     }
-    pub fn panel(mut self, panel: impl Into<String>) -> Self {
+    pub fn panel_named(mut self, panel: impl Into<String>) -> Self {
         self.panel = Some(panel.into());
         self
     }

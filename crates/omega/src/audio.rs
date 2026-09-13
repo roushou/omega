@@ -33,7 +33,7 @@
 //!     }
 //! }
 //!
-//! omega::plugin!().widget::<Panel>().command::<SetVolume>().run()?;
+//! omega::plugin!().widget(Panel).command::<SetVolume>().run()?;
 //! # Ok::<(), omega::Error>(())
 //! ```
 //!

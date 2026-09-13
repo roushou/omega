@@ -55,10 +55,10 @@ impl Shell {
                             plugin.unit.as_str()
                         );
                         if !plugin.surface.is_empty() {
-                            item.push_str(&format!(".surface({:?})", plugin.surface));
+                            item.push_str(&format!(".surface_named({:?})", plugin.surface));
                         }
                         if let Some(panel) = &plugin.panel {
-                            item.push_str(&format!(".panel({panel:?})"));
+                            item.push_str(&format!(".panel_named({panel:?})"));
                         }
                         if !plugin.settings.is_empty() {
                             return Err(ShellError::Invalid("Rust import requires typed placement settings to be supplied by the config author".into()));

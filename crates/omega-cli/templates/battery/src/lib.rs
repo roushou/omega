@@ -73,7 +73,7 @@ impl Widget for BatteryWidget {
 
 /// Everything this plugin offers. `main` runs it; a test can inspect it.
 pub fn plugin() -> Plugin {
-    omega::plugin!().widget::<BatteryWidget>()
+    omega::plugin!().widget(BatteryWidget)
 }
 
 #[cfg(test)]

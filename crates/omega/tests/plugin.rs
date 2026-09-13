@@ -58,7 +58,7 @@ fn a_reading_prints_itself() {
 
 #[test]
 fn a_plugins_manifest_is_the_sum_of_its_fields() {
-    let manifest = manifest_of(&omega::Plugin::named("charge", "0.1.0").widget::<Charge>());
+    let manifest = manifest_of(&omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
 
     // Nothing here was typed by an author. Holding a `Battery` is what asks
     // to read the battery topic, and asking to read is what costs the
@@ -121,7 +121,7 @@ impl Command for LockScreen {
 fn a_plugin_can_draw_and_do_at_once() {
     let manifest = manifest_of(
         &omega::Plugin::named("battery", "0.1.0")
-            .widget::<Charge>()
+            .widget_default::<Charge>()
             .command::<LockScreen>(),
     );
 
@@ -276,7 +276,7 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
     }
 
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").widget::<Labelled>());
+        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").widget_default::<Labelled>());
 
     let unit = Look {
         low_threshold: 20,
@@ -308,12 +308,12 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
 #[tokio::test]
 async fn a_plugin_publishes_its_view_and_keeps_publishing() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
 
     let hello = daemon.welcome(&State::new().battery(0.5, true)).await;
     assert_eq!(
         hello.manifest_hash,
-        manifest_of(&omega::Plugin::named("charge", "0.1.0").widget::<Charge>()).hash(),
+        manifest_of(&omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>()).hash(),
         "a plugin presents the hash of the manifest it derived from itself"
     );
 
@@ -326,7 +326,7 @@ async fn a_plugin_publishes_its_view_and_keeps_publishing() {
 #[tokio::test]
 async fn a_widget_is_not_asked_to_draw_a_machine_it_cannot_see() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
 
     // No battery in the snapshot: a widget that declared one has nothing
     // truthful to draw, so it is not asked to.
@@ -356,8 +356,9 @@ impl Widget for MaybeCharge {
 
 #[tokio::test]
 async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
-    let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<MaybeCharge>());
+    let mut daemon = TestDaemon::serving(
+        omega::Plugin::named("charge", "0.1.0").widget_default::<MaybeCharge>(),
+    );
 
     // A desktop has no battery, and the daemon says so by publishing the
     // topic with no value. That is an answer, so the widget draws — where
@@ -495,7 +496,7 @@ fn a_topics_address_comes_from_where_it_is_defined() {
 fn owning_state_declares_the_right_to_publish_it() {
     let manifest = manifest_of(
         &omega::Plugin::named("desk", "0.1.0")
-            .widget::<Showing>()
+            .widget_default::<Showing>()
             .command::<Focus>(),
     );
 
@@ -546,7 +547,7 @@ async fn publishing_state_is_an_effect_like_any_other() {
 async fn one_plugin_draws_what_another_published() {
     let mut daemon = TestDaemon::serving(
         omega::Plugin::named("desk", "0.1.0")
-            .widget::<Showing>()
+            .widget_default::<Showing>()
             .command::<Focus>(),
     );
     daemon.welcome(&State::new()).await;
@@ -830,7 +831,7 @@ fn a_widget_that_draws_nothing_says_so() {
 #[tokio::test]
 async fn anonymous_and_placed_instances_keep_their_own_addresses() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
     daemon.welcome(&State::new().battery(0.5, false)).await;
     assert_eq!(daemon.next_view().await.module, "");
     daemon
@@ -1008,8 +1009,9 @@ fn a_handle_reads_its_topic_through_the_types_it_carries() {
 fn a_handle_declares_the_topic_its_type_names() {
     // The manifest comes from the fields, so holding `Bluetooth` is what asks
     // for the topic — there is no string anywhere to get wrong.
-    let manifest =
-        omega::testing::manifest_of(&omega::Plugin::named("devices", "0.1.0").widget::<Devices>());
+    let manifest = omega::testing::manifest_of(
+        &omega::Plugin::named("devices", "0.1.0").widget_default::<Devices>(),
+    );
     assert_eq!(manifest.state_topics, vec!["bluetooth"]);
 }
 
@@ -1032,7 +1034,8 @@ fn a_composite_declares_every_topic_it_is_made_of() {
     // The point of it being a field like any other: the manifest is still the
     // union of what the fields declare, and a composite is one field that
     // declares two topics.
-    let manifest = manifest_of(&omega::Plugin::named("situation", "0.1.0").widget::<Situation>());
+    let manifest =
+        manifest_of(&omega::Plugin::named("situation", "0.1.0").widget_default::<Situation>());
     assert_eq!(manifest.state_topics, vec!["battery", "mains"]);
 }
 

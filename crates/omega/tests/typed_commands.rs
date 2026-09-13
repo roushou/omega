@@ -39,7 +39,7 @@ impl Widget for Controls {
 #[test]
 fn bindings_share_registration_identity_without_acquiring_command_capabilities() {
     let plugin = Plugin::named("audio", "1")
-        .widget::<Controls>()
+        .widget_default::<Controls>()
         .command::<SetVolume>();
     let manifest = plugin.manifest().unwrap();
     assert!(
@@ -50,7 +50,7 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
     );
     assert!(
         Plugin::named("controls", "1")
-            .widget::<Controls>()
+            .widget_default::<Controls>()
             .manifest()
             .unwrap()
             .capabilities

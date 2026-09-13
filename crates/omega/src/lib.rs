@@ -28,7 +28,7 @@
 //! }
 //!
 //! fn main() -> omega::Result<()> {
-//!     omega::plugin!().widget::<Charge>().run()
+//!     omega::plugin!().widget(Charge).run()
 //! }
 //! ```
 //!
@@ -110,7 +110,7 @@ pub mod internal {
     pub use crate::record::UnitState;
     pub use crate::surface::Wired;
     pub use crate::ui::bind::CommandName;
-    pub use crate::ui::{Bind, CommandRef, Field, FormInput};
+    pub use crate::ui::{Bind, CommandRef, Field, FormInput, WidgetIdentity, WidgetRef};
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use crate::{Args, Error};
     pub use omega_proto::omega::Capability;

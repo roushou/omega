@@ -4,7 +4,7 @@ use omega::{Plugin, View, Widget};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
-#[derive(omega::Widget)]
+#[derive(Debug, omega::Widget)]
 pub struct Hello;
 
 impl Widget for Hello {
@@ -14,7 +14,7 @@ impl Widget for Hello {
 }
 
 pub fn plugin() -> Plugin {
-    omega::plugin!().widget::<Hello>()
+    omega::plugin!().widget(Hello)
 }
 
 #[cfg(test)]

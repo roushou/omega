@@ -33,7 +33,7 @@ impl Widget for Charge {
 }
 
 fn main() -> omega::Result<()> {
-    omega::plugin!().widget::<Charge>().run()
+    omega::plugin!().widget(Charge).run()
 }
 ```
 

@@ -170,7 +170,7 @@ fn the_bundled_plugin_declares_by_holding() {
     let main = Template::Minimal.library();
 
     // The shortest useful plugin: hold what you need, draw what you know.
-    assert!(main.contains("#[derive(omega::Widget)]"), "{main}");
+    assert!(main.contains("omega::Widget"), "{main}");
     assert!(main.contains("impl Widget for"), "{main}");
     assert!(main.contains("omega::plugin!()"), "{main}");
 
@@ -326,14 +326,17 @@ fn a_path_that_is_not_a_checkout_says_so() {
 
 #[test]
 fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
-    let hint = Scaffold::placement_hint(&PluginName::parse(unit().as_str()).unwrap());
+    let hint = Scaffold::placement_hint(
+        &PluginName::parse(unit().as_str()).unwrap(),
+        Template::Minimal,
+    );
     let lib = Template::Minimal.library();
 
     // The hint is pasted into a Rust file and has to compile there, so every
     // name in it has to exist in the plugin it names. These are the two
     // halves, and they are edited a file apart.
-    assert!(hint.contains("battery_widget::UNIT"), "{hint}");
-    assert!(lib.contains("pub const UNIT"), "{lib}");
+    assert!(hint.contains("battery_widget::Hello"), "{hint}");
+    assert!(lib.contains("pub struct Hello"), "{lib}");
     assert!(!hint.contains("Settings"), "{hint}");
 
     // Fully qualified: a hint that needs a second hint about an import is a

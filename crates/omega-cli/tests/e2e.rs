@@ -384,7 +384,18 @@ fn both_templates_build_with_their_printed_placements() {
         .output()
         .unwrap();
     let mut hints = Vec::new();
-    for (name, output) in [("hello-widget", minimal), ("power-widget", battery)] {
+    for (name, output, template) in [
+        (
+            "hello-widget",
+            minimal,
+            omega_cli::scaffold::Template::Minimal,
+        ),
+        (
+            "power-widget",
+            battery,
+            omega_cli::scaffold::Template::Battery,
+        ),
+    ] {
         assert!(
             output.status.success(),
             "{}",
@@ -394,6 +405,7 @@ fn both_templates_build_with_their_printed_placements() {
         let output = String::from_utf8_lossy(&output.stderr);
         let hint = omega_cli::scaffold::Scaffold::placement_hint(
             &omega_cli::scaffold::PluginName::parse(name).unwrap(),
+            template,
         );
         assert!(output.contains(&hint), "{output}");
         hints.push(hint);
@@ -469,15 +481,15 @@ fn shell_only_configs_build_and_check_never_publishes() {
         (
             r#"omega_document::Document::new().shell(
             omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
-                omega_document::shell::PluginWidget::new("hello", "hello").surface("missing").into()
+                omega_document::shell::PluginWidget::named("hello", "hello").surface_named("missing").into()
             ])))?.emit()"#,
             "declares no widget",
         ),
         (
             r#"omega_document::Document::new().shell(
             omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
-                omega_document::shell::PluginWidget::new("same", "hello").into(),
-                omega_document::shell::PluginWidget::new("same", "hello").into()
+                omega_document::shell::PluginWidget::named("same", "hello").into(),
+                omega_document::shell::PluginWidget::named("same", "hello").into()
             ])))?.emit()"#,
             "duplicate placement",
         ),

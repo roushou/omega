@@ -158,7 +158,7 @@ impl Command for SetVolume {
 
 fn main() -> omega::Result<()> {
     omega::plugin!()
-        .widget::<Panel>()
+        .widget(Panel)
         .command::<SetVolume>()
         .run()
 }

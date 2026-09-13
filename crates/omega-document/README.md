@@ -18,9 +18,8 @@ fn main() -> omega_document::Result<()> {
                 .left([Native::menu().into(), Native::workspaces().into()])
                 .center([Native::clock().into()])
                 .right([
-                    PluginWidget::new("audio", "audio")
-                        .surface("indicator")
-                        .panel("panel")
+                    PluginWidget::new("audio", audio::Indicator)
+                        .panel(audio::Panel)
                         .into(),
                 ]),
         ))?
@@ -28,6 +27,11 @@ fn main() -> omega_document::Result<()> {
     Ok(())
 }
 ```
+
+`audio::Indicator` and `audio::Panel` are public widget types from the audio
+plugin. `#[derive(Widget)]` supplies their references; the plugin registers them
+with `.widget(Indicator).widget(Panel)`. Imported or dynamic configuration can use
+`PluginWidget::named(id, unit).surface_named(surface).panel_named(panel)`.
 
 A plugin placement generates both its Omarchy bar entry and its Omega render
 instances. Its ID distinguishes placements of the same plugin; `settings(&value)`

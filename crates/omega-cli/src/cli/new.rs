@@ -29,12 +29,12 @@ impl NewCmd {
         let name = PluginName::parse(&self.name)?;
         let workspace = ConfigWorkspace::open(Layout::resolve())?;
         let created = workspace.prepare_plugin(name, self.template)?.apply()?;
-        Self::report(ui, workspace.layout(), &created);
+        Self::report(ui, workspace.layout(), &created, self.template);
         Ok(())
     }
 
     /// What was written, and the one line omega will not write.
-    fn report(ui: &mut Ui, layout: &Layout, name: &PluginName) {
+    fn report(ui: &mut Ui, layout: &Layout, name: &PluginName, template: Template) {
         let path = layout
             .unit_lib_src(name.unit())
             .strip_prefix(&layout.config)
@@ -54,7 +54,7 @@ impl NewCmd {
             Step::Next,
             "add this expression to Bar::left(...), Bar::center(...), or Bar::right(...) in your Rust shell layout:",
         );
-        ui.detail(Paint::command(Scaffold::placement_hint(name)));
+        ui.detail(Paint::command(Scaffold::placement_hint(name, template)));
         ui.detail(format!(
             "Start at {}; follow its shell module if the layout lives elsewhere.",
             Paint::path(layout.system_main())

@@ -21,6 +21,7 @@ type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mu
 /// instance of it.
 pub(crate) struct WidgetEntry {
     pub(crate) surface: String,
+    pub(crate) unit: Option<&'static str>,
     declare: Declaration,
     make: fn(&Context, &Values) -> Box<dyn RenderedWidget>,
 }
@@ -29,6 +30,7 @@ impl WidgetEntry {
     pub(crate) fn of<W: Widget>(surface: String) -> Self {
         Self {
             surface,
+            unit: None,
             declare: declare::<W>,
             make: |context, settings| Box::new(W::build(context, settings)),
         }

@@ -11,6 +11,7 @@
 
 mod command;
 mod input;
+mod widget;
 use command::CommandExpansion;
 use input::InputExpansion;
 
@@ -21,7 +22,7 @@ use syn::{Data, DeriveInput, Fields, Ident, Type, parse_macro_input};
 /// A widget: draws, and may hold only state.
 #[proc_macro_derive(Widget, attributes(omega))]
 pub fn widget(input: TokenStream) -> TokenStream {
-    wire(input, Marker::Reads)
+    widget::WidgetExpansion::expand(input)
 }
 
 /// A command: does something on request, and may hold anything.

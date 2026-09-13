@@ -15,7 +15,7 @@
 //! #     fn render(&self) -> View { Text::new(self.battery.charge()).into() }
 //! # }
 //! fn main() -> omega::Result<()> {
-//!     omega::plugin!().widget::<Charge>().run()
+//!     omega::plugin!().widget(Charge).run()
 //! }
 //! ```
 
@@ -73,9 +73,30 @@ impl Plugin {
         }
     }
 
+    /// Register the identity supplied by `derive(Widget)`.
+    ///
+    /// ```
+    /// use omega::{View, Widget, ui::Text};
+    /// #[derive(omega::Widget)]
+    /// struct Indicator;
+    /// impl Widget for Indicator { fn render(&self) -> View { Text::new("Ready").into() } }
+    /// let plugin = omega::plugin!().widget(Indicator);
+    /// assert_eq!(plugin.manifest().unwrap().surfaces[0].id, "indicator");
+    /// ```
+    pub fn widget<W: Widget + crate::ui::WidgetIdentity>(
+        mut self,
+        reference: impl Into<crate::ui::WidgetRef<W>>,
+    ) -> Self {
+        let reference = reference.into();
+        let mut entry = WidgetEntry::of::<W>(reference.surface().into());
+        entry.unit = Some(reference.unit());
+        self.widgets.push(entry);
+        self
+    }
+
     /// Draw something. The surface takes the plugin's own name, which is what
     /// a document refers to it by.
-    pub fn widget<W: Widget>(self) -> Self {
+    pub fn widget_default<W: Widget>(self) -> Self {
         let id = self.name.clone();
         self.widget_as::<W>(id)
     }
@@ -114,7 +135,22 @@ impl Plugin {
         let mut keyspaces = BTreeSet::new();
         let mut surfaces = Vec::new();
 
+        let mut widget_names = BTreeSet::new();
         for widget in &self.widgets {
+            if let Some(unit) = widget.unit
+                && unit != self.name
+            {
+                return Err(Error::invalid(format!(
+                    "widget {} belongs to {unit}, not {}",
+                    widget.surface, self.name
+                )));
+            }
+            if !widget_names.insert(&widget.surface) {
+                return Err(Error::invalid(format!(
+                    "duplicate widget: {}",
+                    widget.surface
+                )));
+            }
             widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Surface::new(
                 &omega_proto::SurfaceId::parse(widget.surface.clone())

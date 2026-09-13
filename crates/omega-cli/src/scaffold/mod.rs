@@ -221,10 +221,14 @@ impl Scaffold {
     /// qualified so it compiles wherever it lands. Lives beside the plugin
     /// template because every name in it must exist there; a test holds the
     /// two together.
-    pub fn placement_hint(unit: &PluginName) -> String {
+    pub fn placement_hint(unit: &PluginName, template: Template) -> String {
         let krate = unit.rust_ident();
         let unit = unit.package();
-        format!("omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::UNIT).into()")
+        let widget = match template {
+            Template::Minimal => "Hello",
+            Template::Battery => "BatteryWidget",
+        };
+        format!("omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::{widget}).into()")
     }
 
     /// `system/src/main.rs`: a document with an empty bar.

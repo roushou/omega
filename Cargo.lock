@@ -799,6 +799,7 @@ version = "0.2.3"
 dependencies = [
  "omega-host",
  "omega-proto",
+ "omega-rs",
  "serde",
  "serde_json",
  "thiserror",

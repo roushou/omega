@@ -23,6 +23,8 @@ mod layout;
 mod node;
 mod style;
 mod text;
+mod widget;
+pub use widget::{WidgetIdentity, WidgetRef};
 
 /// The icon set a shell draws: what [`Icon::new`] names.
 pub use omega_proto::Glyph;

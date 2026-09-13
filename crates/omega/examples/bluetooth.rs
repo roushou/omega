@@ -311,7 +311,7 @@ mod tests {
         assert!(called.effects.is_empty());
         let manifest = manifest_of(
             &Plugin::named("bluetooth", "0.1.0")
-                .widget::<Panel>()
+                .widget_as::<Panel>("bluetooth")
                 .command::<Connect>()
                 .command::<Disconnect>(),
         );

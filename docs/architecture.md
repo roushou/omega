@@ -681,6 +681,15 @@ plugin placement generates both its shell entry and its render-instance
 declaration; unit, surface, placement identity, panel, and settings cannot drift
 between independently authored layouts.
 
+`derive(Widget)` supplies a `WidgetRef<T>` whose identity is the defining crate
+and the kebab-case type name; `#[omega(name = "...")]` pins the surface name.
+Registration (`.widget(Indicator)`) and placement
+(`PluginWidget::new("audio", audio::Indicator).panel(audio::Panel)`) consume the
+same reference. Commands cannot be passed as widgets. Registration checks the
+owning unit, and panel attachment checks that both widgets belong to the same
+unit. Manifest validation still proves that the selected widgets are registered.
+Explicit named APIs support imported and dynamic configuration.
+
 The host-specific shell declaration is carried opaquely in `StateDocument`;
 `omega-document` owns its interpretation and compilation. Plugin SDK consumers
 do not acquire Omarchy configuration dependencies. Compilation is pure and

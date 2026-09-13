@@ -260,8 +260,8 @@ fn duplicate_placement_diagnostics_identify_both_locations() {
     let error = Shell::new()
         .bar(
             Bar::top()
-                .left([PluginWidget::new("audio", "audio").into()])
-                .right([PluginWidget::new("audio", "audio").into()]),
+                .left([PluginWidget::named("audio", "audio").into()])
+                .right([PluginWidget::named("audio", "audio").into()]),
         )
         .compile()
         .unwrap_err();

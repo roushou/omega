@@ -5,12 +5,12 @@ fn placement_is_the_source_of_both_outputs() {
     let shell = Shell::new().bar(
         Bar::top().right([
             Native::tray().into(),
-            PluginWidget::new("audio-main", "audio")
-                .surface("indicator")
-                .panel("panel")
+            PluginWidget::named("audio-main", "audio")
+                .surface_named("indicator")
+                .panel_named("panel")
                 .into(),
-            PluginWidget::new("audio-other", "audio")
-                .surface("indicator")
+            PluginWidget::named("audio-other", "audio")
+                .surface_named("indicator")
                 .into(),
         ]),
     );
@@ -31,8 +31,8 @@ fn placement_is_the_source_of_both_outputs() {
 #[test]
 fn duplicate_placements_and_competing_bars_are_rejected() {
     let shell = Shell::new().bar(Bar::top().right([
-        PluginWidget::new("same", "audio").into(),
-        PluginWidget::new("same", "audio").into(),
+        PluginWidget::named("same", "audio").into(),
+        PluginWidget::named("same", "audio").into(),
     ]));
     let ShellError::DuplicatePlacement { id, first, second } = shell.compile().unwrap_err() else {
         panic!("expected duplicate placement");
@@ -89,7 +89,9 @@ fn unsupported_versions_and_ambiguous_imports_fail_loudly() {
 #[test]
 fn document_validation_checks_shell_surfaces_against_manifests() {
     let document = crate::Document::new()
-        .shell(Shell::new().bar(Bar::top().right([PluginWidget::new("missing", "missing").into()])))
+        .shell(
+            Shell::new().bar(Bar::top().right([PluginWidget::named("missing", "missing").into()])),
+        )
         .unwrap()
         .into_inner();
     assert!(
