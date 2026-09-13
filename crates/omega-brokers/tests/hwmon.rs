@@ -26,9 +26,7 @@ fn fixture(tag: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn a_sensor_reading_nought_is_one_that_is_not_there() {
-    // This laptop's thinkpad chip reports eight zones and several read 0.
-    // Drawing them would put a frozen CPU beside a warm one in every list.
+fn zero_and_negative_temperatures_are_valid_readings() {
     let root = fixture("nought");
     chip(
         &root,
@@ -38,13 +36,17 @@ fn a_sensor_reading_nought_is_one_that_is_not_there() {
             ("temp1_input", "44000"),
             ("temp1_label", "CPU"),
             ("temp2_input", "0"),
+            ("temp3_input", "-5000"),
+            ("temp4_input", "unreadable"),
         ],
     );
 
     let sensors = Hwmon::at(&root).reading().sensors;
-    assert_eq!(sensors.len(), 1, "{sensors:?}");
+    assert_eq!(sensors.len(), 3, "{sensors:?}");
     assert_eq!(sensors[0].label, "CPU");
     assert_eq!(sensors[0].millicelsius, 44_000);
+    assert_eq!(sensors[1].millicelsius, 0);
+    assert_eq!(sensors[2].millicelsius, -5000);
 
     let _ = std::fs::remove_dir_all(&root);
 }

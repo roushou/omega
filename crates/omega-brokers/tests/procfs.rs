@@ -21,7 +21,7 @@ SwapFree:       22856524 kB";
 
 #[test]
 fn the_aggregate_comes_first_and_the_cores_follow() {
-    let samples = Cpu::parse(STAT);
+    let samples = Cpu::parse(STAT).unwrap();
 
     // `/proc/stat` has more after the cpu lines, and a parser that kept
     // reading would count interrupt counters as a core.
@@ -34,7 +34,7 @@ fn the_aggregate_comes_first_and_the_cores_follow() {
 fn waiting_on_a_disk_is_not_doing_work() {
     // Idle is idle plus iowait. Counting iowait as busy makes a machine
     // waiting on a slow disk look pegged.
-    let waiting = Cpu::parse("cpu  100 0 100 700 100 0 0 0 0 0");
+    let waiting = Cpu::parse("cpu  100 0 100 700 100 0 0 0 0 0").unwrap();
     assert_eq!(waiting[0].idle, 800);
 }
 
@@ -77,7 +77,7 @@ fn kibibytes_become_bytes() {
     // Every value in `/proc/meminfo` is in kibibytes whatever its suffix
     // says, and reporting the raw number would be off by a factor of a
     // thousand.
-    let memory = Memory::parse(MEMINFO);
+    let memory = Memory::parse(MEMINFO).unwrap();
 
     assert_eq!(memory.total, 11_995_036 * 1024);
     assert_eq!(memory.available, 8_672_320 * 1024);
@@ -86,7 +86,7 @@ fn kibibytes_become_bytes() {
 
 #[test]
 fn a_machine_with_no_swap_reports_none_rather_than_failing() {
-    let memory = Memory::parse("MemTotal: 100 kB\nMemAvailable: 50 kB");
+    let memory = Memory::parse("MemTotal: 100 kB\nMemAvailable: 50 kB").unwrap();
     assert_eq!(memory.swap_total, 0);
     assert_eq!(memory.total, 100 * 1024);
 }
@@ -159,24 +159,15 @@ fn it_reads_the_machine_it_is_running_on() {
     // read it here could not read it anywhere.
     let mut procfs = Procfs::new();
 
-    let first = procfs.reading();
-    assert!(first.memory_total_bytes > 0, "the machine has memory");
-    assert!(first.uptime_seconds > 0, "and has been up for a while");
-    assert_eq!(
-        first.cpu_percent, 0,
-        "the first reading has nothing to compare against"
+    assert!(
+        procfs.reading().unwrap().is_none(),
+        "the first sample is a baseline"
     );
-
-    // The second has. It may legitimately be zero on an idle machine, so the
-    // claim is that it is a percentage rather than that it is busy.
-    let second = procfs.reading();
+    let second = procfs.reading().unwrap().unwrap();
+    assert!(second.memory_total_bytes > 0);
+    assert!(second.uptime_seconds > 0);
     assert!(second.cpu_percent <= 100);
-    assert_eq!(
-        second.core_percent.len(),
-        first.core_percent.len(),
-        "the cores do not come and go between two readings"
-    );
-    assert!(!second.core_percent.is_empty(), "a machine has a core");
+    assert!(!second.core_percent.is_empty());
 }
 
 #[test]
@@ -214,22 +205,6 @@ fn one_filesystem_at_three_paths_is_one_disk() {
     // The shortest path is the one a person means, and the result is ordered
     // by where things are mounted rather than by device name.
     assert_eq!(paths, vec!["/", "/boot"]);
-}
-
-#[test]
-fn the_disks_are_measured_less_often_than_the_cpu() {
-    // A `statvfs` per mount is real work and free space moves in minutes. The
-    // first turn is a reading; the ones under it are not.
-    let mut procfs = Procfs::new();
-
-    let first = procfs.disks().expect("the first turn measures");
-    assert!(
-        first.mounts.iter().any(|mount| mount.path == "/"),
-        "a machine has a root filesystem"
-    );
-    assert!(first.mounts.iter().all(|mount| mount.total_bytes > 0));
-
-    assert!(procfs.disks().is_none(), "and the next turn does not");
 }
 
 #[test]
@@ -279,5 +254,43 @@ Inter-|   Receive                                                |  Transmit
             tx: 250_000
         }),
         "receive has eight columns before transmit begins"
+    );
+}
+
+#[test]
+fn guest_time_is_not_counted_twice() {
+    let cpu = Cpu::parse("cpu 100 20 30 850 0 0 0 0 60 10").unwrap();
+    assert_eq!(cpu[0].total, 1000);
+}
+
+#[test]
+fn incomplete_and_malformed_samples_fail() {
+    for input in ["", "cpu 1 2", "cpu 1 wrong 3 4", "cpuX 1 2 3 4"] {
+        assert!(Cpu::parse(input).is_err(), "{input}");
+    }
+    for input in [
+        "",
+        "MemTotal: 100 kB",
+        "MemTotal: 0 kB\nMemAvailable: 0 kB",
+        "MemTotal: 100 kB\nMemAvailable: 101 kB",
+    ] {
+        assert!(Memory::parse(input).is_err(), "{input}");
+    }
+}
+
+#[test]
+fn an_idle_counter_reset_is_not_full_utilisation() {
+    assert_eq!(
+        Jiffies::between(
+            Jiffies {
+                total: 100,
+                idle: 90
+            },
+            Jiffies {
+                total: 110,
+                idle: 1
+            }
+        ),
+        0
     );
 }

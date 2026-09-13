@@ -56,8 +56,7 @@ message Sensor {
 message Fan {
   string chip = 1;
   string label = 2;
-  // Nought is a fan that is stopped, which is a real and interesting state —
-  // unlike a temperature of nought, which is a sensor that is not there.
+  // Zero is a stopped fan.
   uint32 rpm = 3;
 }
 

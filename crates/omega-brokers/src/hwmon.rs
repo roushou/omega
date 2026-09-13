@@ -6,12 +6,8 @@
 //! all read the same number. Nothing here tries to pick the important one —
 //! that is a decision about what to draw, and it belongs to whatever draws it.
 //!
-//! Two asymmetries the kernel forces and this has to respect. A sensor that is
-//! present but disabled fails its read with `ENXIO` rather than reporting
-//! anything, so a read error is a sensor to skip and not a broker that is
-//! broken. And a temperature of nought is a sensor that is not really there,
-//! while a fan of nought is a fan that is stopped — which is a real state, and
-//! the interesting one on a quiet machine.
+//! Unreadable sensors may be disabled or removed. Numeric zero is a valid
+//! temperature or stopped fan, and is preserved.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -89,15 +85,11 @@ impl Hwmon {
 
             for index in 1..=Self::MOST {
                 if let Some(millicelsius) = Self::number::<i32>(&chip, "temp", index, "input") {
-                    // Nought is a sensor that is not there. Reporting it would
-                    // put a frozen CPU beside a warm one in every list.
-                    if millicelsius != 0 {
-                        sensors.push(Sensor {
-                            chip: name.clone(),
-                            label: Self::label(&chip, "temp", index),
-                            millicelsius,
-                        });
-                    }
+                    sensors.push(Sensor {
+                        chip: name.clone(),
+                        label: Self::label(&chip, "temp", index),
+                        millicelsius,
+                    });
                 }
                 if let Some(rpm) = Self::number::<u32>(&chip, "fan", index, "input") {
                     fans.push(Fan {
