@@ -245,3 +245,18 @@ impl<T: FromValue> FromValue for Option<T> {
         }
     }
 }
+
+/// Power-profile commands use the schema's stable string names.
+impl FromValue for crate::omega::PowerProfile {
+    fn from_value(value: &Value) -> Option<Self> {
+        match Self::from_str_name(&String::from_value(value)?)? {
+            Self::Unspecified => None,
+            profile => Some(profile),
+        }
+    }
+}
+impl IntoValue for crate::omega::PowerProfile {
+    fn into_value(self) -> Value {
+        self.as_str_name().into_value()
+    }
+}

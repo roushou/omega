@@ -640,6 +640,13 @@ profiles. Newly supplied credentials create a volatile NetworkManager profile,
 not a persistent saved network. Hidden networks, enterprise authentication and
 adapter selection require explicit additional APIs.
 
+`Choice<T>` separates a string-backed value from its presentation. `ChoiceValue`
+keys must decode through the same type's `Input` implementation; the command
+binding accepts that type, while the renderer continues submitting a stable key.
+Power-profile inputs reject unknown names and the unspecified sentinel before
+executing a command. `disabled_if(bool)` sets conditional availability directly
+on any styled node; `disabled()` is its unconditional shorthand.
+
 `audio::Media` observes players; `audio::MediaControl` requests playback effects.
 `PlayerId` validates a well-known MPRIS bus-name suffix and travels unchanged
 through readings, command inputs, bindings, and records. `active()` resolves at

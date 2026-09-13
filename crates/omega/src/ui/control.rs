@@ -243,64 +243,113 @@ impl Default for List {
 
 styled!(List);
 
-/// One of a few, chosen.
-///
-/// A row of options where exactly one is on — a band picker, a mode switch.
-/// Drawn joined, so it reads as one control with several settings rather than
-/// several controls.
-///
-/// Every option carries a [`key`], which is what identifies it and what is
-/// handed back when it is chosen:
-///
-///
-/// [`key`]: crate::ui::Text::key
-#[derive(Debug, Clone)]
-pub struct Choice {
-    node: Node,
+/// A choice value encoded as a stable string key.
+/// Implementations must decode `key()` as the same value through [`Input`].
+/// Labels may change independently of keys.
+pub trait ChoiceValue: Input {
+    fn key(&self) -> &str;
 }
 
-impl Choice {
+impl ChoiceValue for String {
+    fn key(&self) -> &str {
+        self.as_str()
+    }
+}
+impl ChoiceValue for omega_proto::PlayerId {
+    fn key(&self) -> &str {
+        self.as_str()
+    }
+}
+impl ChoiceValue for omega_proto::omega::PowerProfile {
+    fn key(&self) -> &str {
+        self.as_str_name()
+    }
+}
+
+/// A row of mutually exclusive options with typed values and separate labels.
+///
+/// ```
+/// use omega::{Command, power::{PowerProfile, SetProfile}, ui::{Choice, Text}};
+/// #[derive(omega::Command)]
+/// struct SetPowerProfile { profiles: SetProfile }
+/// impl Command for SetPowerProfile {
+///     type Input = PowerProfile;
+///     type Output = ();
+///     async fn call(&self, profile: PowerProfile) -> omega::Result<()> {
+///         self.profiles.set(profile).await
+///     }
+/// }
+/// let picker = Choice::new()
+///     .option(PowerProfile::Balanced, Text::new("Balanced"))
+///     .option(PowerProfile::Saver, Text::new("Save power"))
+///     .selected(Some(PowerProfile::Balanced))
+///     .on_select(SetPowerProfile);
+/// ```
+///
+/// A choice cannot invoke a command expecting a different value type:
+///
+/// ```compile_fail
+/// use omega::{Command, power::PowerProfile, ui::{Choice, Text}};
+/// #[derive(omega::Command)]
+/// struct Rename {}
+/// impl Command for Rename {
+///     type Input = String;
+///     type Output = ();
+///     async fn call(&self, _: String) -> omega::Result<()> { Ok(()) }
+/// }
+/// Choice::new().option(PowerProfile::Balanced, Text::new("Balanced")).on_select(Rename);
+/// ```
+#[derive(Debug, Clone)]
+pub struct Choice<T: ChoiceValue = String> {
+    node: Node,
+    value: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T: ChoiceValue> Choice<T> {
     pub fn new() -> Self {
         Self {
             node: Node::new("group"),
+            value: std::marker::PhantomData,
         }
     }
 
-    pub fn option(mut self, option: impl Into<Node>) -> Self {
-        self.node = self.node.child(option);
+    /// Add a value and its presentation. The value supplies the option's key.
+    pub fn option(mut self, value: T, label: impl Into<Node>) -> Self {
+        self.node = self.node.child(label.into().key(value.key()));
         self
     }
 
-    pub fn options<C: Into<Node>>(mut self, options: impl IntoIterator<Item = C>) -> Self {
-        for option in options {
-            self.node = self.node.child(option);
+    /// Add options from an iterator of values and labels.
+    pub fn options<N: Into<Node>>(mut self, options: impl IntoIterator<Item = (T, N)>) -> Self {
+        for (value, label) in options {
+            self = self.option(value, label);
         }
         self
     }
 
-    /// Which one is on, by key. A key no option carries selects nothing,
-    /// which is what a group whose value came from somewhere else should
-    /// show rather than guessing at the first.
-    pub fn selected(mut self, key: impl Into<String>) -> Self {
-        self.node = self.node.text_prop("selected", key);
+    /// Select a value. `None` or a value absent from the options selects nothing.
+    pub fn selected(mut self, value: Option<T>) -> Self {
+        self.node = self.node.text_prop(
+            "selected",
+            value.as_ref().map(ChoiceValue::key).unwrap_or_default(),
+        );
         self
     }
 
-    /// What to call when one is chosen. Its key is appended to the binding's
-    /// arguments.
-    pub fn on_select(mut self, select: impl Into<Bind<String>>) -> Self {
+    /// Invoke a command accepting this choice's value type.
+    pub fn on_select(mut self, select: impl Into<Bind<T>>) -> Self {
         self.node = self.node.on("select", select);
         self
     }
 }
 
-impl Default for Choice {
+impl<T: ChoiceValue> Default for Choice<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-styled!(Choice);
+styled!(Choice<T: ChoiceValue>);
 
 /// An input whose text fields describe a form. Derive `omega::Form`.
 pub trait FormInput: Input {

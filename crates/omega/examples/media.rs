@@ -87,11 +87,6 @@ pub struct Panel {
     media: Media,
     selection: Watch<Selection>,
 }
-impl Panel {
-    fn available(button: Button, available: bool) -> Button {
-        if available { button } else { button.disabled() }
-    }
-}
 impl Widget for Panel {
     fn render(&self) -> Ui {
         if !self.media.has_reading() {
@@ -124,43 +119,38 @@ impl Widget for Panel {
                 Row::new()
                     .gap(8)
                     .child(
-                        Self::available(
-                            Button::new("Previous").icon(Glyph::Previous),
-                            player.can_go_previous(),
-                        )
-                        .secondary()
-                        .fill_width()
-                        .key("previous")
-                        .on_press(Previous.with(id.clone())),
+                        Button::new("Previous")
+                            .icon(Glyph::Previous)
+                            .disabled_if(!player.can_go_previous())
+                            .secondary()
+                            .fill_width()
+                            .key("previous")
+                            .on_press(Previous.with(id.clone())),
                     )
                     .child(
-                        Self::available(
-                            Button::new(if player.is_playing() { "Pause" } else { "Play" }).icon(
-                                if player.is_playing() {
-                                    Glyph::Pause
-                                } else {
-                                    Glyph::Play
-                                },
-                            ),
-                            if player.is_playing() {
-                                player.can_pause()
+                        Button::new(if player.is_playing() { "Pause" } else { "Play" })
+                            .icon(if player.is_playing() {
+                                Glyph::Pause
                             } else {
-                                player.can_play()
-                            },
-                        )
-                        .fill_width()
-                        .key("play")
-                        .on_press(PlayPause.with(id.clone())),
+                                Glyph::Play
+                            })
+                            .disabled_if(if player.is_playing() {
+                                !player.can_pause()
+                            } else {
+                                !player.can_play()
+                            })
+                            .fill_width()
+                            .key("play")
+                            .on_press(PlayPause.with(id.clone())),
                     )
                     .child(
-                        Self::available(
-                            Button::new("Next").icon(Glyph::Next),
-                            player.can_go_next(),
-                        )
-                        .secondary()
-                        .fill_width()
-                        .key("next")
-                        .on_press(Next.with(id)),
+                        Button::new("Next")
+                            .icon(Glyph::Next)
+                            .disabled_if(!player.can_go_next())
+                            .secondary()
+                            .fill_width()
+                            .key("next")
+                            .on_press(Next.with(id)),
                     ),
             );
         if players.len() > 1 || selected.player.is_some() {

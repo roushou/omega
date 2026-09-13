@@ -34,7 +34,7 @@ pub use omega_proto::Glyph;
 
 pub use bind::{Bind, CommandRef};
 pub use content::{Metric, Section};
-pub use control::{Button, Choice, Field, Form, FormInput, List, Slider, Toggle};
+pub use control::{Button, Choice, ChoiceValue, Field, Form, FormInput, List, Slider, Toggle};
 pub use display::{Graph, Image, Progress};
 pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};

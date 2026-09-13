@@ -631,9 +631,9 @@ fn every_node() -> Ui {
         .child(Graph::new(vec![14.0, 19.0, 12.0]).range(0.0, 100.0))
         .child(
             Choice::new()
-                .option(Text::new("Auto").key("auto"))
-                .option(Text::new("5 GHz").key("5"))
-                .selected("auto")
+                .option("auto".to_string(), Text::new("Auto"))
+                .option("5".to_string(), Text::new("5 GHz"))
+                .selected(Some("auto".to_string()))
                 .on_select(UiBand),
         )
         .child(Grid::new(2).gap(4).child(Text::new("Sent")))

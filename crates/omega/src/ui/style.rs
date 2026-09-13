@@ -14,7 +14,13 @@ macro_rules! styled {
         styled!($type, |built: $type| built.node);
     };
     ($type:ident, $convert:expr) => {
-        impl $type {
+        styled!(@impl [] $type, $convert);
+    };
+    ($type:ident<$param:ident: $bound:path>) => {
+        styled!(@impl [<$param: $bound>] $type<$param>, |built: $type<$param>| built.node);
+    };
+    (@impl [$($generics:tt)*] $type:ty, $convert:expr) => {
+        impl $($generics)* $type {
             /// A colour, by the part it plays. See [`Role`].
             ///
             /// [`Role`]: crate::ui::Role
@@ -82,8 +88,19 @@ macro_rules! styled {
             /// A control the unit cannot serve right now — a Wi-Fi row while
             /// something else is connecting. Removing it instead would make
             /// the list jump under the cursor.
-            pub fn disabled(mut self) -> Self {
-                self.node = self.node.flag("disabled", true);
+            pub fn disabled(self) -> Self {
+                self.disabled_if(true)
+            }
+
+            /// Disable this node when the condition is true.
+            ///
+            /// ```
+            /// use omega::ui::Button;
+            /// let can_advance = false;
+            /// let next = Button::new("Next").disabled_if(!can_advance);
+            /// ```
+            pub fn disabled_if(mut self, disabled: bool) -> Self {
+                self.node = self.node.flag("disabled", disabled);
                 self
             }
 
@@ -140,7 +157,7 @@ macro_rules! styled {
             }
         }
 
-        impl From<$type> for Node {
+        impl $($generics)* From<$type> for Node {
             fn from(built: $type) -> Self {
                 ($convert)(built)
             }

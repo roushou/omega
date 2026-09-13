@@ -53,6 +53,7 @@ scalar_input!(
     i64,
     u64,
     Percent,
+    omega_proto::omega::PowerProfile,
     omega_proto::PlayerId,
     Option<omega_proto::PlayerId>
 );
