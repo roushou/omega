@@ -15,7 +15,7 @@
 
 use omega::power::Battery;
 use omega::ui::{Row, Text};
-use omega::{Plugin, Ui, Widget};
+use omega::{Plugin, View, Widget};
 
 /// This plugin's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -41,12 +41,12 @@ pub struct BatteryWidget {
 }
 
 impl Widget for BatteryWidget {
-    fn render(&self) -> Ui {
+    fn render(&self) -> View {
         // A desktop has no battery, and a broker that is down has no reading
         // either. Both are nothing to draw — not a charge of zero, which this
         // widget would then colour as urgent.
         if !self.battery.has_reading() {
-            return Ui::empty();
+            return View::empty();
         }
 
         let charge = self.battery.charge();

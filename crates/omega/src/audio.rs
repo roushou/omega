@@ -7,13 +7,13 @@
 //! ```no_run
 //! use omega::audio::{Audio, Volume};
 //! use omega::ui::{Metric, Section, Slider};
-//! use omega::{Command, Percent, Ui, Widget};
+//! use omega::{Command, Percent, View, Widget};
 //!
 //! #[derive(omega::Widget)]
 //! struct Panel { audio: Audio }
 //!
 //! impl Widget for Panel {
-//!     fn render(&self) -> Ui {
+//!     fn render(&self) -> View {
 //!         Section::new("Audio")
 //!             .child(Metric::new(self.audio.volume()).label("Output volume"))
 //!             .child(Slider::new(self.audio.volume()).on_change(SetVolume))

@@ -1,6 +1,6 @@
 //! A minimal widget. Run its tests with `cargo test`.
 use omega::ui::Text;
-use omega::{Plugin, Ui, Widget};
+use omega::{Plugin, View, Widget};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
@@ -8,7 +8,7 @@ pub const UNIT: &str = env!("CARGO_PKG_NAME");
 pub struct Hello;
 
 impl Widget for Hello {
-    fn render(&self) -> Ui {
+    fn render(&self) -> View {
         Text::new("Hello from Omega").into()
     }
 }

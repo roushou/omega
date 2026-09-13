@@ -12,14 +12,14 @@ use crate::units::Percent;
 /// ```no_run
 /// # use omega::desktop::Backlight;
 /// # use omega::ui::Text;
-/// # use omega::{Ui, Widget};
+/// # use omega::{View, Widget};
 /// #[derive(omega::Widget)]
 /// struct Brightness {
 ///     backlight: Backlight,
 /// }
 ///
 /// impl Widget for Brightness {
-///     fn render(&self) -> Ui {
+///     fn render(&self) -> View {
 ///         Text::new(self.backlight.level()).into()
 ///     }
 /// }

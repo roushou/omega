@@ -215,12 +215,12 @@ impl List {
         self
     }
 
-    pub fn child(mut self, child: impl Into<Node>) -> Self {
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
         self.node = self.node.child(child);
         self
     }
 
-    pub fn children<C: Into<Node>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+    pub fn children<C: Into<crate::View>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
         for child in children {
             self.node = self.node.child(child);
         }
@@ -314,13 +314,16 @@ impl<T: ChoiceValue> Choice<T> {
     }
 
     /// Add a value and its presentation. The value supplies the option's key.
-    pub fn option(mut self, value: T, label: impl Into<Node>) -> Self {
+    pub fn option(mut self, value: T, label: impl Into<crate::View>) -> Self {
         self.node = self.node.child(label.into().key(value.key()));
         self
     }
 
     /// Add options from an iterator of values and labels.
-    pub fn options<N: Into<Node>>(mut self, options: impl IntoIterator<Item = (T, N)>) -> Self {
+    pub fn options<N: Into<crate::View>>(
+        mut self,
+        options: impl IntoIterator<Item = (T, N)>,
+    ) -> Self {
         for (value, label) in options {
             self = self.option(value, label);
         }

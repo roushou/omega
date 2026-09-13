@@ -92,4 +92,66 @@ TestCase {
         compare(slider.shown, 0.75)
     }
 
+
+    QtObject {
+        id: selectionHost
+        property var model: ({})
+        property bool interactive: true
+        property color ink: "white"
+        property color foreground: "white"
+        property color chosenFill: "gray"
+        property color trackFill: "gray"
+        property color hoverFill: "gray"
+        property string fontFamily: "sans-serif"
+        property int fontSize: 14
+        property real radius: 3
+        property var connection: testConnection
+        function space(value) { return value }
+        function controlFill(focused, hot) { return "gray" }
+        function invoke(bound, value) { test.submitted = value }
+    }
+    Component { id: groupFactory; Nodes.Group { host: selectionHost } }
+    Component { id: listFactory; Nodes.List { host: selectionHost; width: 200; height: 100 } }
+
+    function selectionModel(kind, key, value) {
+        var props = {text:{stringValue:"Option"}}
+        if (value !== null) props.selection_key = {stringValue:value}
+        return {key:"instance/control",type:kind,
+            props:{selected:{stringValue:value === null ? key : value}},
+            events:{select:{command:"choose"},activate:{command:"choose"}},
+            children:[{key:key,type:"text",props:props}]}
+    }
+    function test_scoped_choice_submits_domain_value_data() {
+        return [
+            {tag:"scoped", key:"instance/value", value:"value"},
+            {tag:"empty", key:"instance/", value:""},
+            {tag:"legacy", key:"original", value:null}
+        ]
+    }
+    function test_scoped_choice_submits_domain_value(data) {
+        selectionHost.model = selectionModel("group", data.key, data.value)
+        var group = createTemporaryObject(groupFactory, test)
+        verify(group !== null)
+        var segment = null
+        for (var i = 0; i < group.children.length; i++) {
+            if (typeof group.children[i].activate === "function") segment = group.children[i]
+        }
+        verify(segment !== null)
+        verify(segment.on)
+        test.submitted = null
+        segment.activate()
+        compare(test.submitted, data.value === null ? data.key : data.value)
+    }
+    function test_scoped_list_submits_domain_value_data() {
+        return test_scoped_choice_submits_domain_value_data()
+    }
+    function test_scoped_list_submits_domain_value(data) {
+        selectionHost.model = selectionModel("list", data.key, data.value)
+        var list = createTemporaryObject(listFactory, test)
+        verify(list !== null)
+        test.submitted = null
+        list.activate(0)
+        compare(test.submitted, data.value === null ? data.key : data.value)
+    }
+
 }

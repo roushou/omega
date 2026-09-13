@@ -1,86 +1,60 @@
-//! The properties every node shares.
-//!
-//! A macro rather than a trait: inherent methods need no import at the call
-//! site, and the typed path has to be the short one. Each returns the builder
-//! rather than a [`Node`], so styling something never changes what it is —
-//! two arms of a `match` that both draw text both have type [`Text`].
-//!
-//! [`Node`]: crate::ui::Node
-//! [`Text`]: crate::ui::Text
+//! Shared modifiers preserve built-in builders and style component roots without wrappers.
 
-/// Give a builder the properties every node has, each returning the builder.
-macro_rules! styled {
-    ($type:ident) => {
-        styled!($type, |built: $type| built.node);
-    };
-    ($type:ident, $convert:expr) => {
-        styled!(@impl [] $type, $convert);
-    };
-    ($type:ident<$param:ident: $bound:path>) => {
-        styled!(@impl [<$param: $bound>] $type<$param>, |built: $type<$param>| built.node);
-    };
-    (@impl [$($generics:tt)*] $type:ty, $convert:expr) => {
-        impl $($generics)* $type {
+macro_rules! modifiers {
+    ($visibility:vis, $output:ty) => {
             /// A colour, by the part it plays. See [`Role`].
             ///
             /// [`Role`]: crate::ui::Role
-            pub fn color(mut self, role: $crate::ui::Role) -> Self {
-                self.node = self.node.color(role);
-                self
+            $visibility fn color(self, role: $crate::ui::Role) -> $output {
+                self.map_node(|node| node.color(role))
             }
 
-            pub fn bold(mut self) -> Self {
-                self.node = self.node.bold();
-                self
+            $visibility fn bold(self) -> $output {
+                self.map_node(|node| node.bold())
             }
 
             /// Draw it quieter than its neighbours.
-            pub fn muted(mut self) -> Self {
-                self.node = self.node.emphasis($crate::ui::Emphasis::Muted);
-                self
+            $visibility fn muted(self) -> $output {
+                self.map_node(|node| node.emphasis($crate::ui::Emphasis::Muted))
             }
 
             /// The visual importance of this node, independent of its status.
-            pub fn emphasis(mut self, emphasis: $crate::ui::Emphasis) -> Self {
-                self.node = self.node.emphasis(emphasis);
-                self
+            $visibility fn emphasis(self, emphasis: $crate::ui::Emphasis) -> $output {
+                self.map_node(|node| node.emphasis(emphasis))
             }
             /// Emphasize the main action or reading.
-            pub fn primary(self) -> Self {
+            $visibility fn primary(self) -> $output {
                 self.emphasis($crate::ui::Emphasis::Primary)
             }
             /// A supporting action or reading.
-            pub fn secondary(self) -> Self {
+            $visibility fn secondary(self) -> $output {
                 self.emphasis($crate::ui::Emphasis::Secondary)
             }
             /// The meaning of feedback, independent of visual importance.
-            pub fn tone(mut self, tone: $crate::ui::Tone) -> Self {
-                self.node = self.node.tone(tone);
-                self
+            $visibility fn tone(self, tone: $crate::ui::Tone) -> $output {
+                self.map_node(|node| node.tone(tone))
             }
             /// Something needs attention.
-            pub fn warning(self) -> Self {
+            $visibility fn warning(self) -> $output {
                 self.tone($crate::ui::Tone::Warning)
             }
             /// Something failed.
-            pub fn error(self) -> Self {
+            $visibility fn error(self) -> $output {
                 self.tone($crate::ui::Tone::Error)
             }
             /// Something succeeded.
-            pub fn success(self) -> Self {
+            $visibility fn success(self) -> $output {
                 self.tone($crate::ui::Tone::Success)
             }
 
             /// Space around it, in the shell's units.
-            pub fn padding(mut self, pad: u32) -> Self {
-                self.node = self.node.padding(pad);
-                self
+            $visibility fn padding(self, pad: u32) -> $output {
+                self.map_node(|node| node.padding(pad))
             }
 
             /// Text to show when someone hovers it.
-            pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
-                self.node = self.node.tooltip(tooltip);
-                self
+            $visibility fn tooltip(self, tooltip: impl Into<String>) -> $output {
+                self.map_node(|node| node.tooltip(tooltip))
             }
 
             /// Draw it, but do not let it be used.
@@ -88,7 +62,7 @@ macro_rules! styled {
             /// A control the unit cannot serve right now — a Wi-Fi row while
             /// something else is connecting. Removing it instead would make
             /// the list jump under the cursor.
-            pub fn disabled(self) -> Self {
+            $visibility fn disabled(self) -> $output {
                 self.disabled_if(true)
             }
 
@@ -99,9 +73,8 @@ macro_rules! styled {
             /// let can_advance = false;
             /// let next = Button::new("Next").disabled_if(!can_advance);
             /// ```
-            pub fn disabled_if(mut self, disabled: bool) -> Self {
-                self.node = self.node.flag("disabled", disabled);
-                self
+            $visibility fn disabled_if(self, disabled: bool) -> $output {
+                self.map_node(|node| node.flag("disabled", disabled))
             }
 
             /// Something is happening to it.
@@ -110,21 +83,18 @@ macro_rules! styled {
             /// say so differently — a spinner rather than a grey. The unit
             /// knows which of the two it means; both would be `disabled` and
             /// only one is waiting on an answer.
-            pub fn busy(mut self) -> Self {
-                self.node = self.node.flag("busy", true);
-                self
+            $visibility fn busy(self) -> $output {
+                self.map_node(|node| node.flag("busy", true))
             }
 
             /// How wide it is, in the shell's units. Unset, it is as wide as
             /// what it draws.
-            pub fn width(mut self, width: u32) -> Self {
-                self.node = self.node.number("width", width);
-                self
+            $visibility fn width(self, width: u32) -> $output {
+                self.map_node(|node| node.number("width", width))
             }
 
-            pub fn height(mut self, height: u32) -> Self {
-                self.node = self.node.number("height", height);
-                self
+            $visibility fn height(self, height: u32) -> $output {
+                self.map_node(|node| node.number("height", height))
             }
 
             /// As wide as the room it is in, rather than as wide as what
@@ -139,9 +109,8 @@ macro_rules! styled {
             /// [`Stack`]: crate::ui::Stack
             /// [`Separator`]: crate::ui::Separator
             /// [`width`]: Self::width
-            pub fn fill_width(mut self) -> Self {
-                self.node = self.node.flag("fill", true);
-                self
+            $visibility fn fill_width(self) -> $output {
+                self.map_node(|node| node.flag("fill", true))
             }
 
             /// Name it, for a list whose items move.
@@ -151,18 +120,33 @@ macro_rules! styled {
             /// and the shell keeps the node it already built for that key
             /// rather than rebuilding it — which is what stops a slider
             /// losing the drag in progress when its neighbours reorder.
-            pub fn key(mut self, key: impl Into<String>) -> Self {
-                self.node = self.node.key(key);
+            $visibility fn key(self, key: impl Into<String>) -> $output {
+                self.map_node(|node| node.key(key))
+            }
+    };
+}
+pub(crate) use modifiers;
+
+macro_rules! styled {
+    ($type:ident) => { styled!($type, |built: $type| built.node); };
+    ($type:ident, $convert:expr) => { styled!(@impl [] $type, $convert); };
+    ($type:ident<$param:ident: $bound:path>) => {
+        styled!(@impl [<$param: $bound>] $type<$param>, |built: $type<$param>| built.node);
+    };
+    (@impl [$($generics:tt)*] $type:ty, $convert:expr) => {
+        impl $($generics)* $type {
+            fn map_node(mut self, apply: impl FnOnce($crate::ui::Node) -> $crate::ui::Node) -> Self {
+                self.node = apply(self.node);
                 self
             }
+            $crate::ui::style::modifiers!(pub, Self);
         }
-
         impl $($generics)* From<$type> for Node {
-            fn from(built: $type) -> Self {
-                ($convert)(built)
-            }
+            fn from(built: $type) -> Self { ($convert)(built) }
+        }
+        impl $($generics)* From<$type> for $crate::View {
+            fn from(built: $type) -> Self { Self::from(Node::from(built)) }
         }
     };
 }
-
 pub(crate) use styled;

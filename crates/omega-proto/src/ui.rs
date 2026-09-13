@@ -168,6 +168,8 @@ nodes! {
         dim: Flag,
         /// Space around it, in the shell's units.
         pad: Number,
+        /// Original list or choice value, independent of its scoped render key.
+        selection_key: Text = "null",
         /// Shown when someone hovers it.
         tooltip: Text,
         /// Drawn, but not usable.

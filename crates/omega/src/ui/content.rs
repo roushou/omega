@@ -24,11 +24,11 @@ impl Section {
                 .into(),
         }
     }
-    pub fn child(mut self, child: impl Into<Node>) -> Self {
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
         self.node = self.node.child(child);
         self
     }
-    pub fn children<N: Into<Node>>(mut self, children: impl IntoIterator<Item = N>) -> Self {
+    pub fn children<N: Into<crate::View>>(mut self, children: impl IntoIterator<Item = N>) -> Self {
         for child in children {
             self.node = self.node.child(child);
         }

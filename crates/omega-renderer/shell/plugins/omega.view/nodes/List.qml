@@ -93,7 +93,8 @@ Rectangle {
         if (!list.host.interactive || list.bound === null || index < 0 || index >= held.count) return
         var row = held.get(index)
         if (Props.disabled(row.node) || Props.busy(row.node)) return
-        list.host.invoke(list.bound, row.key)
+        var value = Props.selection_key(row.node)
+        list.host.invoke(list.bound, value === null ? row.key : value)
     }
 
     // Node payloads are QVariantMaps, including nested children and props.

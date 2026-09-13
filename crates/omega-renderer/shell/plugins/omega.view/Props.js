@@ -82,6 +82,10 @@ function pad(node) {
     return readNumber(node, "pad", 0)
 }
 
+function selection_key(node) {
+    return readText(node, "selection_key", null)
+}
+
 function tooltip(node) {
     return readText(node, "tooltip", "")
 }

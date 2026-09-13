@@ -42,7 +42,7 @@ impl Stack {
         self
     }
 
-    pub fn child(mut self, child: impl Into<Node>) -> Self {
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
         self.node = self.node.child(child);
         self
     }
@@ -54,7 +54,7 @@ impl Stack {
     /// control mid-interaction survives its neighbours reordering.
     ///
     /// [`key`]: crate::ui::Text::key
-    pub fn children<C: Into<Node>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+    pub fn children<C: Into<crate::View>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
         for child in children {
             self.node = self.node.child(child);
         }
@@ -183,12 +183,12 @@ impl Grid {
         self
     }
 
-    pub fn child(mut self, child: impl Into<Node>) -> Self {
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
         self.node = self.node.child(child);
         self
     }
 
-    pub fn children<C: Into<Node>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+    pub fn children<C: Into<crate::View>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
         for child in children {
             self.node = self.node.child(child);
         }

@@ -8,7 +8,7 @@
 //! use omega::testing::{Drawn, State};
 //! use omega::power::Battery;
 //! use omega::ui::Text;
-//! use omega::{Ui, Widget};
+//! use omega::{View, Widget};
 //!
 //! #[derive(omega::Widget)]
 //! struct Charge {
@@ -16,7 +16,7 @@
 //! }
 //!
 //! impl Widget for Charge {
-//!     fn render(&self) -> Ui {
+//!     fn render(&self) -> View {
 //!         Text::new(self.battery.charge()).into()
 //!     }
 //! }

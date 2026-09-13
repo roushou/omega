@@ -4,21 +4,16 @@
 //!
 //! ```
 //! # use omega::ui::{Row, Text};
-//! # use omega::Ui;
-//! let ui: Ui = Row::new()
+//! # use omega::View;
+//! let ui: View = Row::new()
 //!     .gap(6)
 //!     .child(Text::new("80%").bold())
 //!     .child(Text::new("charging").muted())
 //!     .into();
 //! ```
 //!
-//! Two rules make it read like that. Anything node-shaped converts into a
-//! [`Ui`], so a widget that draws one piece of text writes `Text::new(…)
-//! .into()` and nothing else — there is no tree to wrap it in. And keys are
-//! positional: the reconciler needs one per node, and computing them from a
-//! node's place in the tree is more reliable than asking an author to invent
-//! them. The exception is a list whose items move, where the identity is the
-//! item's, not the position's — say so with [`Node::key`].
+//! Containers accept primitives, [`View`] values and user-defined [`Component`]s.
+//! Keys are finalized at publication; component instances scope their internal keys.
 
 pub(crate) mod bind;
 mod content;
@@ -40,58 +35,19 @@ pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};
 
-use omega_proto::omega::ViewTree;
+/// Compatibility name for [`View`]. New widgets and components return `View`.
+pub type Ui = View;
 
-/// A finished view: what `Widget::render` hands back.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Ui {
-    tree: ViewTree,
-}
-
-impl Ui {
-    /// An empty view — a widget that has decided to draw nothing.
-    ///
-    /// The shell renders it as absent rather than as a gap, so a widget with
-    /// nothing to say can say so.
-    pub fn empty() -> Self {
-        Self {
-            tree: ViewTree::default(),
-        }
-    }
-
-    /// The wire form. Revisions are the daemon's to assign, so this leaves
-    /// the tree's at zero: units publish values.
-    pub fn into_tree(self) -> ViewTree {
-        self.tree
-    }
-}
-
-impl<T: Into<Node>> From<T> for Ui {
-    fn from(node: T) -> Self {
-        let mut root = node.into();
-        root.assign_keys();
-        Self {
-            tree: ViewTree {
-                root: Some(root.into_wire()),
-                revision: 0,
-            },
-        }
-    }
-}
-
-impl Default for Ui {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
+mod view;
+pub use view::{Component, View};
 
 #[cfg(test)]
 mod tests {
-    use super::{Column, Row, Text, Ui};
+    use super::{Column, Row, Text, View};
 
     #[test]
     fn positional_keys_follow_explicit_parent_keys() {
-        let ui: Ui = Column::new()
+        let ui: View = Column::new()
             .child(Text::new("first"))
             .child(Row::new().key("named").child(Text::new("nested")))
             .child(Row::new().child(Text::new("last")))
@@ -106,7 +62,7 @@ mod tests {
 
     #[test]
     fn explicit_empty_keys_and_named_descendants_are_preserved() {
-        let ui: Ui = Row::new()
+        let ui: View = Row::new()
             .key("")
             .child(Text::new("positional"))
             .child(Text::new("named").key("stable"))

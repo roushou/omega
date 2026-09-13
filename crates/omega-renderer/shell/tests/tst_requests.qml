@@ -44,4 +44,16 @@ TestCase {
         requests.finish(1, {done:true})
         compare(settled.count, 2)
     }
+
+    function test_component_instances_settle_independently() {
+        verify(requests.begin(1, "left/volume", 0))
+        verify(!requests.busy("right/volume"))
+        verify(requests.begin(3, "right/volume", 0))
+        requests.finish(1, {done:true,error:{message:"Left failed"}})
+        verify(!requests.busy("left/volume"))
+        verify(requests.busy("right/volume"))
+        compare(settled.signalArguments[0][0], "left/volume")
+        requests.finish(3, {done:true})
+        compare(settled.signalArguments[1][0], "right/volume")
+    }
 }

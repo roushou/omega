@@ -35,7 +35,9 @@ Row {
             readonly property var modelData: group.options[segment.index]
 
             readonly property string key: modelData && modelData.key ? modelData.key : ""
-            readonly property bool on: segment.key !== "" && segment.key === group.chosen
+            readonly property var selection: Props.selection_key(segment.modelData)
+            readonly property string value: selection === null ? key : selection
+            readonly property bool on: segment.key !== "" && segment.value === group.chosen
             readonly property bool hot:
                 hover.containsMouse && group.bound !== null
                 && group.host.interactive && segment.key !== ""
@@ -55,7 +57,7 @@ Row {
             border.width: segment.activeFocus ? group.host.space(1) : 0
             border.color: group.host.ink
             function activate() {
-                if (segment.pressable) group.host.invoke(group.bound, segment.key)
+                if (segment.pressable) group.host.invoke(group.bound, segment.value)
             }
             Keys.onReturnPressed: activate()
             Keys.onEnterPressed: activate()

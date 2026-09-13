@@ -5,7 +5,7 @@ use omega_proto::omega::{ViewNode, value};
 
 use crate::surface::Widget;
 use crate::testing::state::State;
-use crate::ui::Ui;
+use crate::ui::View;
 
 /// What a widget drew, asked questions rather than destructured.
 #[derive(Debug, Clone)]
@@ -22,10 +22,23 @@ impl Drawn {
     /// The same, for one instance the document configured.
     pub fn configured<W: Widget>(state: &State, settings: &Values) -> Self {
         let (context, _effects) = state.context();
-        Self::of_ui(W::build(&context, settings).render())
+        Self::of_view(W::build(&context, settings).render())
     }
 
-    pub fn of_ui(ui: Ui) -> Self {
+    /// Render a component, primitive or composed view without a daemon.
+    ///
+    /// ```
+    /// use omega::{testing::Drawn, ui::Text};
+    /// assert_eq!(Drawn::of_view(Text::new("Ready")).text(), "Ready");
+    /// ```
+    pub fn of_view(view: impl Into<View>) -> Self {
+        Self {
+            tree: view.into().into_tree(),
+        }
+    }
+
+    /// Compatibility entry point; use [`Self::of_view`] for components and views.
+    pub fn of_ui(ui: View) -> Self {
         Self {
             tree: ui.into_tree(),
         }

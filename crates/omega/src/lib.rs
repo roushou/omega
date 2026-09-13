@@ -9,7 +9,7 @@
 //! ```no_run
 //! use omega::power::Battery;
 //! use omega::ui::Text;
-//! use omega::{Ui, Widget};
+//! use omega::{View, Widget};
 //!
 //! #[derive(omega::Widget)]
 //! struct Charge {
@@ -17,7 +17,7 @@
 //! }
 //!
 //! impl Widget for Charge {
-//!     fn render(&self) -> Ui {
+//!     fn render(&self) -> View {
 //!         if self.battery.is_charging() {
 //!             Text::new(format!("{} charging", self.battery.charge()))
 //!         } else {
@@ -82,7 +82,7 @@ pub use surface::{Args, Command, Reaction, Widget};
 
 /// What `Widget::render` hands back. Part of the surface's contract, so it
 /// lives beside the trait rather than with the nodes it is built from.
-pub use ui::Ui;
+pub use ui::{Ui, View};
 
 /// What a reaction is called with.
 pub use omega_proto::omega::{Event, EventKind};

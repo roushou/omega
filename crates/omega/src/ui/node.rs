@@ -14,6 +14,7 @@ use crate::ui::bind::Bind;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     kind: &'static str,
+    pub(super) scope: bool,
     key: Option<String>,
     props: HashMap<String, Value>,
     events: HashMap<String, WireBind>,
@@ -24,6 +25,7 @@ impl Node {
     pub(crate) fn new(kind: &'static str) -> Self {
         Self {
             kind,
+            scope: false,
             key: None,
             props: HashMap::new(),
             events: HashMap::new(),
@@ -73,8 +75,10 @@ impl Node {
 
     // ---- building ----
 
-    pub(crate) fn child(mut self, child: impl Into<Node>) -> Self {
-        self.children.push(child.into());
+    pub(crate) fn child(mut self, child: impl Into<crate::View>) -> Self {
+        if let Some(child) = child.into().root {
+            self.children.push(child);
+        }
         self
     }
 
@@ -135,11 +139,42 @@ impl Node {
     /// it: `0`, `0.1`, `0.1.0`. Stable across renders for as long as the
     /// shape is, which is exactly when positional identity is the truth.
     pub(crate) fn assign_keys(&mut self) {
-        let parent = self.key.get_or_insert_with(|| "root".to_string());
+        self.assign_in("root".into(), None);
+    }
+
+    fn assign_in(&mut self, positional: String, scope: Option<&str>) {
+        let key = match (&self.key, scope) {
+            (Some(key), Some(scope)) => format!("{scope}/{}", Self::key_segment(key)),
+            (Some(key), None) => key.clone(),
+            (None, _) => positional,
+        };
+        self.key = Some(key.clone());
+        let scope = if self.scope || scope.is_some() {
+            Some(key.as_str())
+        } else {
+            scope
+        };
+        let selectable = matches!(self.kind, "list" | "group");
         for (index, child) in self.children.iter_mut().enumerate() {
-            child.key.get_or_insert_with(|| format!("{parent}.{index}"));
-            child.assign_keys();
+            let value = child.key.clone();
+            let positional = if scope.is_some() {
+                format!("{key}/~p{index}")
+            } else {
+                format!("{key}.{index}")
+            };
+            child.assign_in(positional, scope);
+            if selectable && scope.is_some() {
+                // Domain values must not change when render identities are scoped.
+                child.set(
+                    "selection_key",
+                    value::Kind::StringValue(value.unwrap_or_else(|| child.key.clone().unwrap())),
+                );
+            }
         }
+    }
+
+    fn key_segment(key: &str) -> String {
+        key.replace('~', "~0").replace('/', "~1")
     }
 
     pub(crate) fn into_wire(self) -> ViewNode {

@@ -8,7 +8,7 @@ use omega_proto::omega::{Capability, Event, Value};
 use omega_proto::{FromValue, IntoValue, SystemTopic, Values};
 
 use crate::context::Context;
-use crate::ui::Ui;
+use crate::ui::View;
 
 /// What a derive knows about a plugin type that the runtime needs.
 ///
@@ -41,7 +41,7 @@ pub trait Wired: Sized + Send + Sync + 'static {
 /// The runtime suppresses identical trees per instance before sending them.
 /// Rendering holds only readings; effects are excluded by the `Reads` bound.
 pub trait Widget: Wired {
-    fn render(&self) -> Ui;
+    fn render(&self) -> View;
 }
 
 /// Something to be asked to do.

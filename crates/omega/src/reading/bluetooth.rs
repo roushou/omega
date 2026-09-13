@@ -90,12 +90,12 @@ impl Bluetooth {
     /// Interpret the current reading once, from availability through power.
     ///
     /// ```
-    /// use omega::{bluetooth::{Bluetooth, BluetoothStatus}, Ui, Widget};
+    /// use omega::{bluetooth::{Bluetooth, BluetoothStatus}, View, Widget};
     /// use omega::ui::Text;
     /// #[derive(omega::Widget)]
     /// struct Indicator { bluetooth: Bluetooth }
     /// impl Widget for Indicator {
-    ///     fn render(&self) -> Ui {
+    ///     fn render(&self) -> View {
     ///         Text::new(match self.bluetooth.status() {
     ///             BluetoothStatus::Unavailable => "Bluetooth state unavailable",
     ///             BluetoothStatus::NoAdapter => "No Bluetooth adapter",

@@ -12,7 +12,7 @@ use omega_proto::{IntoValue, SystemTopic, Values};
 use crate::Input;
 use crate::context::Context;
 use crate::surface::{Args, Command, Reaction, Widget, Wired};
-use crate::ui::Ui;
+use crate::ui::View;
 
 /// What every entry can do, whatever it was registered as.
 type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mut BTreeSet<String>);
@@ -58,11 +58,11 @@ impl WidgetEntry {
 /// A widget with its type forgotten. Only `render` survives, which is all the
 /// runtime ever wanted from it.
 pub(crate) trait RenderedWidget: Send + Sync {
-    fn render(&self) -> Ui;
+    fn render(&self) -> View;
 }
 
 impl<W: Widget> RenderedWidget for W {
-    fn render(&self) -> Ui {
+    fn render(&self) -> View {
         Widget::render(self)
     }
 }

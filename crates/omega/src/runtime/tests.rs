@@ -1,6 +1,6 @@
 use super::*;
 use crate::surface::{Widget, Wired};
-use crate::ui::{Text, Ui};
+use crate::ui::{Text, View};
 use omega_proto::omega::Result as OpResult;
 use omega_proto::omega::{
     BatteryState, Capability, NetworkState, RemoveWidget, RenderWidget, StatePatch, StateSnapshot,
@@ -36,7 +36,7 @@ impl<const KIND: u8> Wired for Probe<KIND> {
     }
 }
 impl<const KIND: u8> Widget for Probe<KIND> {
-    fn render(&self) -> Ui {
+    fn render(&self) -> View {
         assert!(
             self.context.holds(&Self::topics()),
             "rendered before its inputs arrived"
@@ -49,7 +49,7 @@ impl<const KIND: u8> Widget for Probe<KIND> {
         }
         match self.context.topic::<BatteryState>() {
             Some(battery) => Text::new(format!("{}{}", self.label, battery.level)).into(),
-            None => Ui::empty(),
+            None => View::empty(),
         }
     }
 }

@@ -8,11 +8,11 @@
 //! ```no_run
 //! # use omega::power::Battery;
 //! # use omega::ui::Text;
-//! # use omega::{Ui, Widget};
+//! # use omega::{View, Widget};
 //! # #[derive(omega::Widget)]
 //! # struct Charge { battery: Battery }
 //! # impl Widget for Charge {
-//! #     fn render(&self) -> Ui { Text::new(self.battery.charge()).into() }
+//! #     fn render(&self) -> View { Text::new(self.battery.charge()).into() }
 //! # }
 //! fn main() -> omega::Result<()> {
 //!     omega::plugin!().widget::<Charge>().run()

@@ -12,14 +12,14 @@ use crate::reading::Clock;
 /// ```no_run
 /// # use omega::time::Clock;
 /// # use omega::ui::Text;
-/// # use omega::{Ui, Widget};
+/// # use omega::{View, Widget};
 /// #[derive(omega::Widget)]
 /// struct Bar {
 ///     clock: Clock,
 /// }
 ///
 /// impl Widget for Bar {
-///     fn render(&self) -> Ui {
+///     fn render(&self) -> View {
 ///         Text::new(self.clock.time()).into()
 ///     }
 /// }

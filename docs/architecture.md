@@ -721,3 +721,27 @@ fall back to another device. Only paired or connected devices are exposed.
 `can_connect()` requires pairing, an unblocked device, and a powered adapter.
 Battery absence stays distinct from 0%. See `examples/bluetooth.rs` for an
 indicator and panel with typed commands. Pairing remains in Bluetooth settings.
+
+### Composable views
+
+`Widget::render` returns `View`, an owned subtree that containers also accept.
+`View::empty()` contributes no node or layout gap. `Ui` remains an alias for
+source compatibility. Key assignment and wire encoding happen at publication,
+so converting a helper to `View` does not finalize its position in a larger tree.
+
+`ui::Component` describes reusable presentation from ordinary values and typed
+`Bind<I>` inputs. Components have no registration, subscriptions, effects or
+independent lifecycle; their parent widget owns those responsibilities. Containers
+accept components directly, including borrowed instances. Shared modifiers apply
+to the component's root and return a `View`, without introducing a layout wrapper.
+
+Each component instance scopes its internal keys by their full parent path. Moving instances need
+stable caller-supplied keys. Local key segments escape `~` and `/`; generated
+positions use a reserved segment so they cannot collide with explicit local keys.
+Calling `Component::render` directly bypasses its boundary; compose the component
+itself or convert it into `View`. `Drawn::of_view` exercises the same conversion.
+
+List and choice values remain independent of scoped node identities. When scoping
+changes those identities, the SDK carries the original value in `selection_key`.
+The renderer distinguishes an absent property from an explicitly empty value and
+falls back to node keys for views without that property.
