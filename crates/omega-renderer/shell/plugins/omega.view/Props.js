@@ -158,6 +158,10 @@ function buttonLabel(node) {
     return readText(node, "label", "")
 }
 
+function buttonIcon(node) {
+    return readText(node, "icon", "")
+}
+
 // ---- slider ----
 
 function sliderValue(node) {

@@ -86,6 +86,11 @@ glyphs! {
     Headphones => "headphones": '\u{f025}',
     Microphone => "microphone": '\u{f130}',
     MicrophoneOff => "microphone-off": '\u{f131}',
+    Play => "play": '\u{f04b}',
+    Pause => "pause": '\u{f04c}',
+    Stop => "stop": '\u{f04d}',
+    Next => "next": '\u{f051}',
+    Previous => "previous": '\u{f048}',
     Music => "music": '\u{f001}',
     // Machine.
     Cpu => "cpu": '\u{f2db}',

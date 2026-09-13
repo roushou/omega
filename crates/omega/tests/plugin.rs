@@ -612,7 +612,7 @@ fn every_node() -> Ui {
         .child(Text::new("80%").bold().warning())
         .child(Icon::new(Glyph::Battery))
         .child(Progress::new(Percent::of(0.7)))
-        .child(Button::new("toggle").on_press(UiToggle))
+        .child(Button::new("toggle").icon(Glyph::Play).on_press(UiToggle))
         .child(Button::new("Connect").on_press(UiConnect.with("home".to_string())))
         .child(Slider::new(Percent::whole(60)).on_change(UiVolume))
         .child(Toggle::new(true).on_change(UiMute))
@@ -668,6 +668,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[2]["props"]["value"]["doubleValue"], 0.7);
 
     assert_eq!(children[3]["type"], "button");
+    assert_eq!(children[3]["props"]["icon"]["stringValue"], "play");
     assert_eq!(children[3]["props"]["label"]["stringValue"], "toggle");
     // What a node *does* is not a prop. A binding lives beside them, so the
     // shell reads behaviour from one place rather than sniffing prop names.

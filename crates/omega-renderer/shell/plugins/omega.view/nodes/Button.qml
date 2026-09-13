@@ -1,5 +1,6 @@
 import QtQuick
 import "../Props.js" as Props
+import "../Icons.js" as Icons
 
 // Something to press.
 //
@@ -18,8 +19,8 @@ Rectangle {
 
     // A `Group` segment's paddings, so both controls share a height without
     // either naming a number.
-    implicitWidth: label.implicitWidth + slot.host.space(24)
-    implicitHeight: Math.max(slot.host.space(36), label.implicitHeight + slot.host.space(16))
+    implicitWidth: content.implicitWidth + slot.host.space(24)
+    implicitHeight: Math.max(slot.host.space(36), content.implicitHeight + slot.host.space(16))
 
     radius: slot.host.radius
     color: slot.hot ? slot.host.hoverFill
@@ -36,16 +37,30 @@ Rectangle {
         ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
     }
 
-    Text {
-        id: label
+    Row {
+        id: content
         anchors.centerIn: parent
+        spacing: slot.host.space(6)
 
-        text: Props.buttonLabel(slot.host.model)
-        color: slot.hot ? slot.host.hoverInk : slot.host.ink
-        font.family: slot.host.fontFamily
-        font.pixelSize: slot.host.fontSize
-        font.bold: Props.bold(slot.host.model)
-        verticalAlignment: Text.AlignVCenter
+        Text {
+            readonly property string name: Props.buttonIcon(slot.host.model)
+            visible: name !== ""
+            text: Icons.glyph(name) || name
+            color: label.color
+            font.family: slot.host.fontFamily
+            font.pixelSize: slot.host.fontSize
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+            id: label
+            text: Props.buttonLabel(slot.host.model)
+            color: slot.hot ? slot.host.hoverInk : slot.host.ink
+            font.family: slot.host.fontFamily
+            font.pixelSize: slot.host.fontSize
+            font.bold: Props.bold(slot.host.model)
+            anchors.verticalCenter: parent.verticalCenter
+        }
     }
 
     MouseArea {

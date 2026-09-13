@@ -37,6 +37,17 @@ impl Button {
         }
     }
 
+    /// Add a named glyph beside the button's label.
+    ///
+    /// ```
+    /// use omega::ui::{Button, Glyph};
+    /// let pause = Button::new("Pause").icon(Glyph::Pause);
+    /// ```
+    pub fn icon(mut self, glyph: super::Glyph) -> Self {
+        self.node = self.node.text_prop("icon", glyph.name());
+        self
+    }
+
     /// What to call when it is pressed. Must be a command this unit
     /// registered, or the daemon refuses the call.
     ///

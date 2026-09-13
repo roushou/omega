@@ -225,7 +225,7 @@ nodes! {
         gap: Number,
     },
     /// Something to press.
-    Button => "button" { label: Text },
+    Button => "button" { label: Text, icon: Text },
     /// A reading the user can drag.
     Slider => "slider" { value: Fraction },
     /// Something on or off.
