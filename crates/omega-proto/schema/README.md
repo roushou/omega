@@ -79,3 +79,14 @@ Protocol tests cover wire shapes and validation. Broker coverage checks that
 state and action declarations have implementations. Changes to UI properties
 also require regenerating the renderer's readers and running its checks; see the
 [renderer guide](https://github.com/roushou/omega/blob/main/crates/omega-renderer/shell/README.md).
+
+## Media targeting
+
+Protocol v3 requires support for `MediaKey.player_id`. Absence means automatic
+selection at execution time; a present value must parse as a `PlayerId`, and an
+unavailable explicit target is refused. Empty is invalid. Daemons and units must
+be upgraded together so an older reader cannot discard the target field.
+
+`PlayerInfo.can_*` describes the endpoint's advertised transport abilities,
+independent of a unit's manifest grants. A method reply is an acknowledgement,
+not a substitute for observing playback state.

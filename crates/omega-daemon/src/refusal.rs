@@ -81,7 +81,7 @@ impl<T, E: Refusable> RefusableResult<T> for Result<T, E> {
 impl Refusable for omega_brokers::BrokerError {
     fn refusal(&self) -> Refusal {
         match self {
-            Self::Unserved(_) => Refusal::unimplemented(self.to_string()),
+            Self::Unserved(_) | Self::Unsupported(_) => Refusal::unimplemented(self.to_string()),
             Self::Io(_) | Self::Unreadable(_) => Refusal::unavailable(self.to_string()),
             Self::Timeout => Refusal::deadline(self.to_string()),
             Self::Full => Refusal::exhausted(self.to_string()),

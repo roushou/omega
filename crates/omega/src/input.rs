@@ -46,7 +46,16 @@ macro_rules! scalar_input {
         }
     )* };
 }
-scalar_input!(String, bool, f64, i64, u64, Percent);
+scalar_input!(
+    String,
+    bool,
+    f64,
+    i64,
+    u64,
+    Percent,
+    omega_proto::PlayerId,
+    Option<omega_proto::PlayerId>
+);
 
 impl FromValue for Percent {
     fn from_value(value: &Value) -> Option<Self> {

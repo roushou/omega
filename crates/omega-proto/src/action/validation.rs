@@ -106,19 +106,28 @@ impl action::Kind {
                     "a file or clipboard destination is required",
                 )?;
             }
-            Self::MediaKey(key) => input.require(
-                "key",
-                matches!(
-                    media_key::Key::try_from(key.key),
-                    Ok(media_key::Key::MediaPlay
-                        | media_key::Key::MediaPause
-                        | media_key::Key::MediaPlayPause
-                        | media_key::Key::MediaNext
-                        | media_key::Key::MediaPrevious
-                        | media_key::Key::MediaStop)
-                ),
-                "must name a media operation",
-            )?,
+            Self::MediaKey(key) => {
+                if let Some(id) = &key.player_id {
+                    input.require(
+                        "player_id",
+                        crate::PlayerId::parse(id.clone()).is_ok(),
+                        "must name a media player",
+                    )?;
+                }
+                input.require(
+                    "key",
+                    matches!(
+                        media_key::Key::try_from(key.key),
+                        Ok(media_key::Key::MediaPlay
+                            | media_key::Key::MediaPause
+                            | media_key::Key::MediaPlayPause
+                            | media_key::Key::MediaNext
+                            | media_key::Key::MediaPrevious
+                            | media_key::Key::MediaStop)
+                    ),
+                    "must name a media operation",
+                )?;
+            }
             Self::SetVolume(set) => match set.change {
                 Some(set_volume::Change::Absolute(level)) => input.require(
                     "change.absolute",

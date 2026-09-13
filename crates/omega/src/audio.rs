@@ -1,7 +1,8 @@
 //! Audio output and media playback.
 //!
 //! [`Audio`] observes output state; [`Volume`] controls it from a command or
-//! reaction. [`Media`] reports players and their playback state.
+//! reaction. [`Media`] reports players and their playback state; [`MediaControl`]
+//! requests playback changes for the active player or a specific [`PlayerId`].
 //!
 //! ```no_run
 //! use omega::audio::{Audio, Volume};
@@ -46,3 +47,13 @@
 
 pub use crate::effect::volume::Volume;
 pub use crate::reading::{Audio, Media, Playback, Player};
+
+pub use crate::effect::media::{MediaControl, PlayerControl};
+/// A validated media endpoint, usable directly as a command input.
+///
+/// ```
+/// use omega::audio::PlayerId;
+/// let id = PlayerId::parse("vlc.instance123").unwrap();
+/// assert_eq!(id.as_str(), "vlc.instance123");
+/// ```
+pub use omega_proto::{PlayerId, PlayerIdError};

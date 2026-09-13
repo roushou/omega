@@ -48,6 +48,7 @@ impl Fixture {
             }),
             action::Kind::MediaKey(MediaKey {
                 key: media_key::Key::MediaPlayPause as i32,
+                player_id: None,
             }),
             action::Kind::SetVolume(SetVolume {
                 change: Some(set_volume::Change::Absolute(0.0)),
@@ -118,7 +119,10 @@ fn absent_changes_invalid_numbers_and_unknown_enums_are_refused() {
         }));
     }
     for value in [0, -1, 999] {
-        invalid.push(action::Kind::MediaKey(MediaKey { key: value }));
+        invalid.push(action::Kind::MediaKey(MediaKey {
+            key: value,
+            player_id: None,
+        }));
         invalid.push(action::Kind::SetPowerProfile(SetPowerProfile {
             profile: value,
         }));

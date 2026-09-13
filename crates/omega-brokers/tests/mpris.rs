@@ -8,13 +8,18 @@ use omega_proto::omega::{MediaKey, Playback, media_key, state_topic};
 
 fn player(id: &str, status: &str) -> Player {
     Player {
-        id: id.into(),
+        id: omega_proto::PlayerId::parse(id).unwrap(),
         identity: id.into(),
         status: status.into(),
         title: "Track".into(),
         artists: vec!["Someone".into()],
         album: "Album".into(),
         length_us: 210_000_000,
+        can_control: true,
+        can_play: true,
+        can_pause: true,
+        can_go_next: true,
+        can_go_previous: true,
     }
 }
 
@@ -91,7 +96,12 @@ fn a_length_a_player_does_not_know_is_not_a_negative_track() {
 
 #[test]
 fn every_media_key_has_a_method() {
-    let method = |key| Players::method(&MediaKey { key: key as i32 });
+    let method = |key| {
+        Players::method(&MediaKey {
+            key: key as i32,
+            player_id: None,
+        })
+    };
 
     assert_eq!(method(media_key::Key::MediaPlayPause), Some("PlayPause"));
     assert_eq!(method(media_key::Key::MediaNext), Some("Next"));
@@ -124,4 +134,180 @@ async fn it_reads_the_desktop_it_is_running_on() {
         common::waits(&mut mpris).await,
         "a second reading should wait"
     );
+}
+
+#[test]
+fn explicit_targets_never_fall_back_and_unsupported_operations_fail() {
+    let players = vec![player("chromium", "Paused"), player("spotify", "Playing")];
+    let mut key = MediaKey {
+        key: media_key::Key::MediaPlayPause as i32,
+        player_id: Some("chromium".into()),
+    };
+    assert_eq!(
+        Players::target(&players, &key).unwrap().id.as_str(),
+        "chromium"
+    );
+    key.player_id = Some("gone".into());
+    assert!(Players::target(&players, &key).is_err());
+    key.player_id = Some(String::new());
+    assert!(Players::target(&players, &key).is_err());
+    key.player_id = None;
+    assert_eq!(
+        Players::target(&players, &key).unwrap().id.as_str(),
+        "spotify"
+    );
+    let players = vec![Player {
+        can_pause: false,
+        ..player("spotify", "Playing")
+    }];
+    assert!(matches!(
+        Players::target(&players, &key),
+        Err(omega_brokers::BrokerError::Unsupported(_))
+    ));
+    key.key = media_key::Key::MediaPlay as i32;
+    assert!(Players::target(&players, &key).is_ok());
+}
+
+mod isolated {
+    use super::*;
+    use omega_brokers::Broker;
+    use omega_proto::omega::action;
+    use std::{
+        collections::HashMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+    use zbus::zvariant::OwnedValue;
+
+    struct Root;
+    #[zbus::interface(name = "org.mpris.MediaPlayer2")]
+    impl Root {
+        #[zbus(property)]
+        fn identity(&self) -> &str {
+            "Omega test player"
+        }
+    }
+    struct Transport {
+        calls: Arc<AtomicUsize>,
+    }
+    #[zbus::interface(name = "org.mpris.MediaPlayer2.Player")]
+    impl Transport {
+        fn play_pause(&self) {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+        }
+        fn next(&self) -> zbus::fdo::Result<()> {
+            Err(zbus::fdo::Error::Failed("track unavailable".into()))
+        }
+        #[zbus(property)]
+        fn playback_status(&self) -> &str {
+            "Playing"
+        }
+        #[zbus(property)]
+        fn metadata(&self) -> HashMap<String, OwnedValue> {
+            HashMap::new()
+        }
+        #[zbus(property)]
+        fn can_control(&self) -> bool {
+            true
+        }
+        #[zbus(property)]
+        fn can_play(&self) -> bool {
+            true
+        }
+        #[zbus(property)]
+        fn can_pause(&self) -> bool {
+            true
+        }
+        #[zbus(property)]
+        fn can_go_next(&self) -> bool {
+            true
+        }
+        #[zbus(property)]
+        fn can_go_previous(&self) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "run under dbus-run-session to isolate desktop players"]
+    async fn selected_player_routes_and_reports_refusal_and_disappearance() {
+        let first = Arc::new(AtomicUsize::new(0));
+        let second = Arc::new(AtomicUsize::new(0));
+        let first_bus = zbus::connection::Builder::session()
+            .unwrap()
+            .name("org.mpris.MediaPlayer2.omega_first")
+            .unwrap()
+            .serve_at("/org/mpris/MediaPlayer2", Root)
+            .unwrap()
+            .serve_at(
+                "/org/mpris/MediaPlayer2",
+                Transport {
+                    calls: first.clone(),
+                },
+            )
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        let _second_bus = zbus::connection::Builder::session()
+            .unwrap()
+            .name("org.mpris.MediaPlayer2.omega_second")
+            .unwrap()
+            .serve_at("/org/mpris/MediaPlayer2", Root)
+            .unwrap()
+            .serve_at(
+                "/org/mpris/MediaPlayer2",
+                Transport {
+                    calls: second.clone(),
+                },
+            )
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        let mut broker = Mpris::new();
+        broker.connect().await.unwrap();
+        let patch = broker.read().await.unwrap();
+        let Some(state_topic::Value::Media(media)) = &patch.topics[0].value else {
+            panic!("expected media")
+        };
+        assert_eq!(media.players.len(), 2);
+        assert!(media.players[0].can_pause);
+        assert!(!media.players[0].can_go_previous);
+        let mut key = MediaKey {
+            key: media_key::Key::MediaPlayPause as i32,
+            player_id: Some("omega_second".into()),
+        };
+        broker
+            .act(&action::Kind::MediaKey(key.clone()))
+            .await
+            .unwrap();
+        assert_eq!(first.load(Ordering::SeqCst), 0);
+        assert_eq!(second.load(Ordering::SeqCst), 1);
+        key.player_id = Some("omega_first".into());
+        key.key = media_key::Key::MediaNext as i32;
+        assert!(
+            broker
+                .act(&action::Kind::MediaKey(key.clone()))
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("track unavailable")
+        );
+        key.key = media_key::Key::MediaPrevious as i32;
+        assert!(matches!(
+            broker.act(&action::Kind::MediaKey(key.clone())).await,
+            Err(omega_brokers::BrokerError::Unsupported(_))
+        ));
+        first_bus
+            .release_name("org.mpris.MediaPlayer2.omega_first")
+            .await
+            .unwrap();
+        key.key = media_key::Key::MediaPlayPause as i32;
+        assert!(broker.act(&action::Kind::MediaKey(key)).await.is_err());
+        assert_eq!(first.load(Ordering::SeqCst), 0);
+        assert_eq!(second.load(Ordering::SeqCst), 1);
+    }
 }

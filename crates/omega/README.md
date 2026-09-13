@@ -48,6 +48,11 @@ construction settings, `record` holds plugin state, and `testing` lets you rende
 widgets and exercise commands without a running daemon. Shared values such as
 `Percent` are available at the root.
 
+See [`examples/media.rs`](examples/media.rs) for a media indicator and panel
+with typed icons, player selection, and playback commands. `Media` reads;
+`MediaControl` acts through the daemon. Bind `PlayerId` directly to a command
+so a click targets the displayed endpoint even if the active player changes.
+
 Omega targets Linux and requires Rust 1.88 or newer. Visible widgets currently
 use Omarchy's Quickshell shell.
 

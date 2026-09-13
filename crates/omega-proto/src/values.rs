@@ -230,3 +230,18 @@ impl IntoValue for () {
         Value::default()
     }
 }
+
+/// An optional value is encoded as an absent kind when it is `None`.
+impl<T: IntoValue> IntoValue for Option<T> {
+    fn into_value(self) -> Value {
+        self.map(IntoValue::into_value).unwrap_or_default()
+    }
+}
+impl<T: FromValue> FromValue for Option<T> {
+    fn from_value(value: &Value) -> Option<Self> {
+        match value.kind {
+            None => Some(None),
+            Some(_) => T::from_value(value).map(Some),
+        }
+    }
+}

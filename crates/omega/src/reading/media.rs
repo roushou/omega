@@ -8,7 +8,7 @@ pub use omega_proto::omega::Playback;
 /// One player, as MPRIS reports it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Player {
-    id: String,
+    id: omega_proto::PlayerId,
     identity: String,
     playback: Playback,
     title: String,
@@ -16,6 +16,11 @@ pub struct Player {
     album: String,
     length: Option<Remaining>,
     active: bool,
+    can_control: bool,
+    can_play: bool,
+    can_pause: bool,
+    can_go_next: bool,
+    can_go_previous: bool,
 }
 
 impl Player {
@@ -28,17 +33,22 @@ impl Player {
                 0 => None,
                 us => Some(Remaining::of(std::time::Duration::from_micros(us))),
             },
-            id: player.id,
+            id: omega_proto::PlayerId::parse(player.id).expect("daemon supplied a valid player id"),
             identity: player.identity,
             title: player.title,
             artist: player.artist,
             album: player.album,
             active: player.active,
+            can_control: player.can_control,
+            can_play: player.can_play,
+            can_pause: player.can_pause,
+            can_go_next: player.can_go_next,
+            can_go_previous: player.can_go_previous,
         }
     }
 
-    /// The bus name's suffix: `chromium`. Stable, so a list keys by it.
-    pub fn id(&self) -> &str {
+    /// The bus name's suffix: `chromium`. A restarted app may reuse it.
+    pub fn id(&self) -> &omega_proto::PlayerId {
         &self.id
     }
 
@@ -66,6 +76,27 @@ impl Player {
 
     pub fn is_playing(&self) -> bool {
         self.playback == Playback::Playing
+    }
+
+    /// Whether this player accepts transport controls.
+    pub fn can_control(&self) -> bool {
+        self.can_control
+    }
+    /// Whether playback can be started.
+    pub fn can_play(&self) -> bool {
+        self.can_control && self.can_play
+    }
+    /// Whether playback can be paused.
+    pub fn can_pause(&self) -> bool {
+        self.can_control && self.can_pause
+    }
+    /// Whether the next track is available.
+    pub fn can_go_next(&self) -> bool {
+        self.can_control && self.can_go_next
+    }
+    /// Whether the previous track is available.
+    pub fn can_go_previous(&self) -> bool {
+        self.can_control && self.can_go_previous
     }
 
     /// How long the track runs. Prints itself as `3m`.

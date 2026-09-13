@@ -19,6 +19,7 @@ pub(crate) mod brightness;
 mod completion;
 pub(crate) mod queue;
 pub use completion::{Completion, Effect, EffectError, Receipt, Submission};
+pub(crate) mod media;
 pub(crate) mod notify;
 pub(crate) mod power_profile;
 pub(crate) mod session;

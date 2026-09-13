@@ -179,6 +179,8 @@ impl Cadence {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BrokerError {
+    #[error("{0}")]
+    Unsupported(String),
     #[error("broker operation deadline elapsed; execution may have started")]
     Timeout,
     #[error("broker action capacity exhausted")]

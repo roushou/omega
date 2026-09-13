@@ -7,6 +7,7 @@ pub mod ident;
 pub mod manifest;
 #[cfg(feature = "json")]
 pub mod observation;
+pub mod player;
 pub mod protocol;
 pub mod refusal;
 mod reply;
@@ -28,6 +29,7 @@ pub use manifest::ManifestError;
 #[cfg(feature = "json")]
 pub use observation::Observation;
 pub use omega::{Manifest, Surface};
+pub use player::{PlayerId, PlayerIdError};
 pub use protocol::{MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, effective_version, omega};
 pub use refusal::Refusal;
 pub use schedule::{Cadence, CadenceError};

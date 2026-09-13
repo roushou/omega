@@ -124,8 +124,9 @@ types are shared by the daemon, the CLI, and every user crate: `Keybind` in
 the daemon and `Keybind` in a config are the same type, with no translation
 layer where a lie can live.
 
-Protocol v2 requires `RemoveWidget` support. Rebuild v1 units before connecting
-them to a v2 daemon. Action and adoption execution is bounded per control or
+Protocol v3 requires `RemoveWidget` and explicitly targeted media actions.
+Rebuild older units and update the daemon together; an older daemon must never
+ignore a player target and act on another player. Action and adoption execution is bounded per control or
 observation connection and runs concurrently with frame reception, so a unit can receive a command while its
 request is outstanding. Deadlines bound queue admission and response waits; a
 timeout does not prove an external action was not performed. Both encodings use
@@ -617,7 +618,7 @@ needed before adding capabilities.
 
 ## Dogfooding plugins
 
-The SDK examples include audio controls, Wi-Fi and a focus timer. They are ordinary
+The SDK examples include audio controls, media playback, Wi-Fi and a focus timer. They are ordinary
 units with indicator/panel surfaces and explicit commands. The focus timer's `tick`
 command needs a one-second document schedule; Wi-Fi signal history uses `sample`.
 
@@ -638,6 +639,18 @@ wireless adapter, visible networks and open/personal authentication or saved
 profiles. Newly supplied credentials create a volatile NetworkManager profile,
 not a persistent saved network. Hidden networks, enterprise authentication and
 adapter selection require explicit additional APIs.
+
+`audio::Media` observes players; `audio::MediaControl` requests playback effects.
+`PlayerId` validates a well-known MPRIS bus-name suffix and travels unchanged
+through readings, command inputs, bindings, and records. `active()` resolves at
+execution time; `player(&id)` refuses an absent endpoint without falling back.
+An id identifies an endpoint, not a process lifetime: a restarted application
+may reuse it. The broker resolves the current unique bus owner before calling,
+so disappearance after resolution cannot activate or redirect to a new process.
+The broker exposes MPRIS control abilities and refuses unsupported operations.
+A successful method reply acknowledges the request; the subsequent reading is
+the authority on playback state. Transport methods use a typed proxy within the
+broker, and effects retain the shared capability and completion contract.
 
 The focus timer uses Linux boot time through rustix's safe API: suspend counts,
 wall-clock adjustments do not. Tick scheduling remains in the daemon and uses

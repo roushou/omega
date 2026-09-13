@@ -124,6 +124,8 @@ message MediaKey {
     MEDIA_STOP = 6;
   }
   Key key = 1;
+  // Absent selects the active player at execution time. Present never falls back.
+  optional string player_id = 2;
 }
 
 message SetVolume {

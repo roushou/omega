@@ -30,6 +30,11 @@ message PlayerInfo {
 
   // The one a media key reaches: whichever is playing, or the first there is.
   bool active = 8;
+  bool can_control = 9;
+  bool can_play = 10;
+  bool can_pause = 11;
+  bool can_go_next = 12;
+  bool can_go_previous = 13;
 
   // Position is deliberately absent. MPRIS does not report it changing — by
   // its own spec — so it would have to be polled, and a field that moved every
