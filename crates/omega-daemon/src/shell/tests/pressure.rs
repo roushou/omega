@@ -17,7 +17,7 @@ struct Fixture {
 impl Fixture {
     fn new(hub: &Hub) -> Self {
         let (server, client) = tokio::io::duplex(64);
-        Self {
+        let fixture = Self {
             connection: ShellConnection::new(
                 server,
                 hub.subscribe_views().1,
@@ -27,22 +27,57 @@ impl Fixture {
                 None,
             ),
             reader: BufReader::new(client),
-        }
+        };
+        super::RendererFixture::attach(&fixture.connection, "example");
+        fixture
     }
 
     fn view(id: usize, payload: &str) -> ViewUpdate {
-        ViewUpdate {
-            surface: SurfaceRef::new(
+        {
+            let surface = SurfaceRef::new(
                 UnitName::parse("example").unwrap(),
                 SurfaceId::parse(format!("panel{id}")).unwrap(),
-            ),
-            view: ViewTree {
-                root: Some(ViewNode {
-                    key: payload.into(),
-                    ..Default::default()
-                }),
-                revision: 1,
-            },
+            );
+            ViewUpdate {
+                instance: omega_proto::instance::InstanceKey {
+                    id: omega_proto::instance::InstanceId::parse(format!(
+                        "test-{}-{}-{}",
+                        surface.unit,
+                        surface.surface,
+                        surface
+                            .module
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default()
+                    ))
+                    .unwrap(),
+                    incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                        .unwrap(),
+                },
+                presentation: omega_proto::omega::Presentation {
+                    kind: Some(omega_proto::omega::presentation::Kind::Window(
+                        omega_proto::omega::WindowPresentation {
+                            title: "Test".into(),
+                            app_id: "org.omega.example".into(),
+                            width: 480,
+                            height: 320,
+                            min_width: 1,
+                            min_height: 1,
+                        },
+                    )),
+                },
+                requested: 2,
+                observed: 2,
+                destroyed: false,
+                surface,
+                view: ViewTree {
+                    root: Some(ViewNode {
+                        key: payload.into(),
+                        ..Default::default()
+                    }),
+                    revision: 1,
+                },
+            }
         }
     }
 }
@@ -125,6 +160,7 @@ async fn expired_snapshots_release_evicted_views_and_reconnects_receive_current_
             Err(Refusal::denied("test")),
             None,
         );
+        super::RendererFixture::attach(&connection, "example");
         let surface = snapshot[0].surface.clone();
         hub.drop_surface(&surface);
         for sequence in 0..70 {

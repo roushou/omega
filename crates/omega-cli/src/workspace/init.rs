@@ -1,6 +1,7 @@
 use super::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits};
 use anyhow::{Result, ensure};
-use omega_host::{Toml, shell::ShellInstallation};
+use omega_host::Toml;
+use omega_omarchy::installation::ShellInstallation;
 
 #[derive(Debug)]
 pub(crate) enum InitialShell {
@@ -13,7 +14,7 @@ pub(crate) enum InitialShell {
 
 impl InitialShell {
     pub(crate) fn import(source: &str) -> Result<Self> {
-        let shell = omega_document::shell::Shell::from_omarchy(source)?;
+        let shell = omega_omarchy::shell::Shell::from_omarchy(source)?;
         Ok(Self::Imported {
             source: serde_json::from_str(source)?,
             rust: shell.rust_source()?,

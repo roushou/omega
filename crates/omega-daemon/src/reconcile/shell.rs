@@ -13,9 +13,9 @@ pub enum ShellApplyError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Install(#[from] omega_host::shell::InstallError),
+    Install(#[from] omega_omarchy::installation::InstallError),
     #[error(transparent)]
-    Compile(#[from] omega_document::shell::ShellError),
+    Compile(#[from] omega_omarchy::shell::ShellError),
 }
 #[derive(Debug)]
 pub struct ShellApplication;

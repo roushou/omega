@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail, ensure};
-use omega_daemon::host::cargo::{CargoManifest, Dependency};
-use omega_daemon::host::glob::PathPattern;
 use omega_host::Toml;
+use omega_host::workspace::PathPattern;
+use omega_host::workspace::cargo::{CargoManifest, Dependency};
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 /// Edits only the Cargo entries Omega owns, retaining the surrounding source.
@@ -188,6 +188,14 @@ impl CargoEditor {
             self.document.remove("patch");
         }
         Ok(())
+    }
+
+    pub(crate) fn has_workspace_dependency(&self, name: &str) -> bool {
+        self.document
+            .get("workspace")
+            .and_then(|w| w.get("dependencies"))
+            .and_then(|d| d.get(name))
+            .is_some()
     }
 
     pub(crate) fn require(&mut self, names: &[&str], version: &str) -> Result<()> {

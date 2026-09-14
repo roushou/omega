@@ -86,7 +86,7 @@ impl Daemon {
 
     /// Start a broker: its topics are published into the hub, and it stops
     /// when the daemon does.
-    pub fn add_broker(&self, broker: Box<dyn omega_brokers::Broker>) {
+    pub fn add_broker(&self, broker: Box<dyn omega_platform::Broker>) {
         self.brokers.add(broker);
     }
 
@@ -114,6 +114,16 @@ impl Daemon {
                 schedules: schedules.clone(),
             },
             self.shutdown.clone(),
+        );
+
+        let hosts = tokio::spawn(
+            crate::presentations::Hosts::new(
+                self.hub.clone(),
+                self.layout.clone(),
+                self.shell.path().to_path_buf(),
+                self.shutdown.clone(),
+            )
+            .run(),
         );
 
         let mut arrivals = self
@@ -172,6 +182,7 @@ impl Daemon {
         };
 
         self.shutdown.trigger();
+        let _ = hosts.await;
         converger.stop().await;
         schedules.shutdown().await;
         sessions.shutdown().await;
@@ -185,7 +196,7 @@ impl Daemon {
 
     /// The next settled change to the state dir, or never when it could not
     /// be watched.
-    async fn rebuilt(changes: Option<&mut crate::host::Changes>) -> Option<()> {
+    async fn rebuilt(changes: Option<&mut omega_host::fs::Changes>) -> Option<()> {
         match changes {
             Some(changes) => changes.next().await,
             None => std::future::pending().await,

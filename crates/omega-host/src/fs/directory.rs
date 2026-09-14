@@ -5,6 +5,29 @@ use std::{fs::File, io, os::unix::fs::OpenOptionsExt, path::Path};
 pub struct Directory;
 
 impl Directory {
+    /// Move a directory without replacing even an empty destination.
+    /// A flush error may occur after the rename; callers must inspect both paths.
+    pub fn rename_new(source: &Path, destination: &Path) -> io::Result<()> {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+        let old = CString::new(source.as_os_str().as_bytes())?;
+        let new = CString::new(destination.as_os_str().as_bytes())?;
+        // Both owned C strings remain alive throughout renameat2.
+        if unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                old.as_ptr(),
+                libc::AT_FDCWD,
+                new.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        } != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Self::sync(source.parent().unwrap_or(Path::new(".")))?;
+        Self::sync(destination.parent().unwrap_or(Path::new(".")))
+    }
+
     /// Create a directory tree and flush its ancestor chain, including existing
     /// directories. Retrying after a failed flush must establish durability even
     /// when the preceding attempt already created every directory.

@@ -44,7 +44,7 @@ fn a_detail_line_starts_where_its_step_subject_started() {
 
 #[test]
 fn a_column_of_messages_lines_up() {
-    let paths = ["units/battery/src/lib.rs", "system/src/main.rs"];
+    let paths = ["plugins/battery/src/lib.rs", "system/src/main.rs"];
     let width = Ui::width(paths);
 
     let padded: Vec<String> = paths
@@ -223,7 +223,7 @@ fn a_size_reads_as_a_disk_is_sold() {
 #[test]
 fn malformed_shell_json_has_a_source_snippet_and_keeps_context() {
     let input = "{\n  \"version\": !\n}";
-    let error = omega_document::shell::Shell::from_omarchy(input).unwrap_err();
+    let error = omega_omarchy::shell::Shell::from_omarchy(input).unwrap_err();
     let error = anyhow::Error::new(error).context("cannot adopt the desktop configuration");
     let (mut ui, transcript) = Ui::recording();
     ui.error(&error);
@@ -256,7 +256,7 @@ fn widget_errors_list_the_available_surfaces_through_configuration_errors() {
 
 #[test]
 fn duplicate_placement_diagnostics_identify_both_locations() {
-    use omega_document::shell::{Bar, PluginWidget, Shell};
+    use omega_omarchy::shell::{Bar, PluginWidget, Shell};
     let error = Shell::new()
         .bar(
             Bar::top()
@@ -277,7 +277,7 @@ fn duplicate_placement_diagnostics_identify_both_locations() {
 #[test]
 fn invalid_json_at_eof_or_after_unicode_can_be_reported() {
     for input in ["", "{", "{\"界\": !}", "{\n"] {
-        let error = omega_document::shell::Shell::from_omarchy(input).unwrap_err();
+        let error = omega_omarchy::shell::Shell::from_omarchy(input).unwrap_err();
         let (mut ui, transcript) = Ui::recording();
         ui.error(&anyhow::Error::new(error));
         assert!(transcript.err().contains("omega::shell::json"));

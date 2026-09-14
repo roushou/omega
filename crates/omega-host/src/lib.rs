@@ -1,4 +1,4 @@
-//! The host side: where things live on disk, and how they get written there.
+//! Host filesystem, build generations, and source workspace contracts.
 //!
 //! None of this crosses a socket, which is why it is not in `omega-proto`.
 //! A unit talks to the daemon and never reads the config workspace, stages a
@@ -12,9 +12,10 @@
 pub mod fs;
 pub mod generation;
 pub mod layout;
-pub mod shell;
+pub mod package;
 pub mod state;
 pub mod toml;
+pub mod workspace;
 
 pub use fs::{AtomicFile, Directory, StageDir, TempPath};
 pub use generation::{Generation, GenerationId, GenerationStage, Generations, Rollback};

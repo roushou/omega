@@ -5,10 +5,10 @@
 //! Completion is notified at most once; a crash between recording completion
 //! and notification may lose that notification.
 use omega::config::{Fields, Values};
-use omega::notification::Notify;
+use omega::platform::notification::Notify;
 use omega::record::{Own, UnitState, Watch};
 use omega::ui::{Button, Metric, Row, Section, Text};
-use omega::{Command, Plugin, Ui, Widget};
+use omega::{Command, Plugin, Surface, Ui};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
@@ -114,22 +114,22 @@ impl Fields for Timer {
     }
 }
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Indicator {
     timer: Watch<Timer>,
 }
-impl Widget for Indicator {
+impl Surface for Indicator {
     fn render(&self) -> Ui {
         let timer = self.timer.get();
         let seconds = timer.remaining().div_ceil(1000);
         Text::new(format!("Focus {:02}:{:02}", seconds / 60, seconds % 60)).into()
     }
 }
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Panel {
     timer: Watch<Timer>,
 }
-impl Widget for Panel {
+impl Surface for Panel {
     fn render(&self) -> Ui {
         let timer = self.timer.get();
         let label = match timer {
@@ -222,8 +222,8 @@ impl Command for Tick {
 }
 pub fn plugin() -> Plugin {
     Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
-        .widget_as::<Indicator>("indicator")
-        .widget_as::<Panel>("panel")
+        .surface_as::<Indicator>("indicator")
+        .surface_as::<Panel>("panel")
         .command::<Start>()
         .command::<Pause>()
         .command::<Reset>()

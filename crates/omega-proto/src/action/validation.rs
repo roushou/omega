@@ -36,12 +36,32 @@ impl action::Kind {
                 input.text("desktop_id", &app.desktop_id)?;
                 input.require(
                     "desktop_id",
-                    !app.desktop_id.contains('/') && !matches!(app.desktop_id.as_str(), "." | ".."),
+                    crate::ApplicationId::parse(app.desktop_id.clone()).is_ok(),
                     "must be a desktop-entry id, not a path",
                 )?;
-                for arg in &app.args {
-                    input.string("args", arg)?;
+                input.require("uris", app.uris.len() <= 64, "at most 64 URIs")?;
+                for uri in &app.uris {
+                    input.text("uris", uri)?;
+                    input.require(
+                        "uris",
+                        uri.len() <= 8192
+                            && uri.split_once(':').is_some_and(|(scheme, _)| {
+                                !scheme.is_empty()
+                                    && scheme.bytes().enumerate().all(|(i, b)| {
+                                        b.is_ascii_alphabetic()
+                                            || (i > 0
+                                                && (b.is_ascii_digit() || b"+.-".contains(&b)))
+                                    })
+                            }),
+                        "must be an absolute URI",
+                    )?;
                 }
+                input.string("activation_token", &app.activation_token)?;
+                input.require(
+                    "activation_token",
+                    app.activation_token.len() <= 4096,
+                    "at most 4096 bytes",
+                )?;
             }
             Self::ConnectWifi(connect) => {
                 input.text("ssid", &connect.ssid)?;

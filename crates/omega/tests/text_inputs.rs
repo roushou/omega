@@ -1,4 +1,4 @@
-use omega::{Args, Input, Percent, config::IntoValue, power::PowerProfile};
+use omega::{Args, Input, Percent, config::IntoValue, platform::power::PowerProfile};
 
 struct TextInput;
 impl TextInput {

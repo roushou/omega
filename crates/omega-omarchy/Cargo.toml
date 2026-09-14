@@ -1,0 +1,29 @@
+[package]
+name = "omega-omarchy"
+version.workspace = true
+categories = ["config", "gui", "os::linux-apis"]
+edition.workspace = true
+homepage.workspace = true
+keywords = ["omega", "omarchy", "desktop", "shell"]
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+description = "Omarchy integration for Omega: shell authoring, compilation, and host installation."
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1"
+omega = { package = "omega-rs", path = "../omega", version = "0.2.3" }
+omega-document.workspace = true
+omega-host.workspace = true
+omega-proto = { workspace = true, features = ["json"] }
+omega-renderer.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

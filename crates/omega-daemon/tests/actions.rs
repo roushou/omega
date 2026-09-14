@@ -30,7 +30,7 @@ fn act(stream_id: u64, kind: action::Kind) -> Frame {
 ///
 /// Standing in for the real one on purpose: what the daemon owes is that an
 /// action reaches the broker claiming its kind. Whether sysfs then took the
-/// write is `omega-brokers`' business, and dragging a device tree in here
+/// write is `omega-platform`' business, and dragging a device tree in here
 /// would test that twice and this once.
 #[derive(Debug, Clone, Default)]
 struct Recorder {
@@ -38,7 +38,7 @@ struct Recorder {
 }
 
 #[async_trait::async_trait]
-impl omega_brokers::Broker for Recorder {
+impl omega_platform::Broker for Recorder {
     fn name(&self) -> &'static str {
         "recorder"
     }
@@ -56,7 +56,7 @@ impl omega_brokers::Broker for Recorder {
     async fn act(
         &mut self,
         action: &action::Kind,
-    ) -> Result<Option<StatePatch>, omega_brokers::BrokerError> {
+    ) -> Result<Option<StatePatch>, omega_platform::BrokerError> {
         self.served
             .lock()
             .unwrap_or_else(|e| e.into_inner())

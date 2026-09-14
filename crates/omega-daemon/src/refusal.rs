@@ -25,6 +25,18 @@ impl Refusable for IdentError {
     }
 }
 
+impl Refusable for omega_document::ValidationError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
+impl Refusable for omega_proto::instance::PresentationError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
 impl Refusable for AddressError {
     fn refusal(&self) -> Refusal {
         Refusal::invalid(self.to_string())
@@ -78,7 +90,7 @@ impl<T, E: Refusable> RefusableResult<T> for Result<T, E> {
     }
 }
 
-impl Refusable for omega_brokers::BrokerError {
+impl Refusable for omega_platform::BrokerError {
     fn refusal(&self) -> Refusal {
         match self {
             Self::Unserved(_) | Self::Unsupported(_) => Refusal::unimplemented(self.to_string()),
@@ -131,7 +143,7 @@ mod tests {
     use super::*;
     #[test]
     fn broker_operation_failures_are_not_missing_handlers() {
-        use omega_brokers::BrokerError;
+        use omega_platform::BrokerError;
         use omega_proto::omega::ErrorCode;
         for (error, code) in [
             (BrokerError::Timeout, ErrorCode::DeadlineExceeded),

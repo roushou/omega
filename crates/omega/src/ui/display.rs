@@ -101,6 +101,23 @@ pub struct Image {
 }
 
 impl Image {
+    /// A freedesktop theme icon name or absolute file path. Resolution belongs
+    /// to the host; an unavailable icon falls back to the host's application icon.
+    ///
+    /// ```
+    /// let icon = omega::ui::Image::icon("org.gnome.Nautilus").width(32).height(32);
+    /// ```
+    pub fn icon(name: &str) -> Self {
+        if name.starts_with('/') {
+            return Self::new(name);
+        }
+        let mut node = Node::new("image");
+        if !name.is_empty() && !name.contains(['/', '\\']) && !name.chars().any(char::is_control) {
+            node = node.text_prop("source", format!("icon://{name}"));
+        }
+        Self { node }
+    }
+
     pub fn new(source: impl Into<String>) -> Self {
         let source = source.into();
         let mut node = Node::new("image");

@@ -14,8 +14,7 @@ use omega_proto::UnitName;
 use omega_proto::omega::UnitPhase;
 use omega_proto::{Socket, SystemTopic};
 
-/// A table holding the manifests a test declares, which is what a supervisor
-/// now needs instead of a manifest store of its own.
+/// Seed the supervisor’s authoritative table with the test manifests.
 fn table_with(manifests: ManifestStore) -> UnitTable {
     let units = UnitTable::detached(Hub::new());
     units.adopt(&manifests);

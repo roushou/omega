@@ -19,7 +19,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, timeout_at};
 
-use omega_brokers::{Broker, BrokerError};
+use omega_platform::{Broker, BrokerError};
 use omega_proto::ActionKind;
 use omega_proto::omega::action;
 
@@ -90,7 +90,7 @@ impl Brokerage {
             for kind in broker.actions() {
                 // Two brokers claiming one kind would make the route depend
                 // on registration order, which is not a thing to debug at
-                // three in the morning. `omega-brokers` has a test.
+                // three in the morning. `omega-platform` has a test.
                 debug_assert!(
                     !routes.contains_key(kind),
                     "{} is claimed by more than one broker",

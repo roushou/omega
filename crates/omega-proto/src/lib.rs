@@ -5,10 +5,13 @@ pub mod codec;
 pub mod handshake;
 pub mod icons;
 pub mod ident;
+pub mod instance;
 pub mod manifest;
 #[cfg(feature = "json")]
 pub mod observation;
 pub mod player;
+#[cfg(feature = "json")]
+pub mod preview;
 pub mod protocol;
 pub mod refusal;
 mod reply;
@@ -43,3 +46,6 @@ pub use ui::{NodeKind, Prop, PropKind};
 pub use values::{Fields, FromValue, IntoValue, Values};
 
 pub use omega::Frame;
+
+mod application;
+pub use application::{ApplicationId, ApplicationIdError};

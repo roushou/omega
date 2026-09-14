@@ -16,8 +16,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "omega/event.proto",
         "omega/unit.proto",
         "omega/ui.proto",
+        "omega/instance.proto",
         "omega/document.proto",
         "omega/wire.proto",
+        "omega/preview.proto",
     ];
 
     // Where protoc comes from.

@@ -20,7 +20,7 @@ use omega_host::Layout;
 
 use super::build::ValidatedBuild;
 use crate::DaemonError;
-use crate::reconcile::{BarProvider, EnvironmentProvider, ScheduleProvider, UnitProvider};
+use crate::reconcile::{EnvironmentProvider, PresentationProvider, ScheduleProvider, UnitProvider};
 use crate::schedule::Schedules;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
@@ -304,14 +304,15 @@ impl Worker {
         );
         let environment = EnvironmentProvider::new(&self.context.layout);
         let schedules = ScheduleProvider::new(self.context.schedules.clone());
-        let bars = BarProvider::new(self.context.units.clone(), build.manifests.clone());
+        let presentations =
+            PresentationProvider::new(self.context.units.clone(), build.manifests.clone());
 
         // Validate every plan before the first effect. A failed application
         // stops the pass; the retry plans again against actual ownership.
         let unit_changes = units.plan(&build.document)?;
         let environment_change = environment.plan(&build.document)?;
         let schedule_changes = schedules.plan(&build.document)?;
-        let instance_changes = bars.plan(&build.document)?;
+        let instance_changes = presentations.plan(&build.document)?;
 
         units.apply(&unit_changes).await?;
         if let Some(change) = environment_change {
@@ -319,7 +320,7 @@ impl Worker {
         }
         // The first tick is immediate, so units must be supervised first.
         schedules.apply(&schedule_changes).await?;
-        bars.apply(&instance_changes).await?;
+        presentations.apply(&instance_changes).await?;
 
         self.context.supervisor.publish_status();
         Ok(())

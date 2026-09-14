@@ -5,6 +5,7 @@ package omega;
 import "omega/action.proto";
 import "omega/event.proto";
 import "omega/value.proto";
+import "omega/instance.proto";
 
 // The configuration plane compiles to this document. It is the desired state
 // of the machine, not a script: the reconciler diffs it against actual state
@@ -26,6 +27,7 @@ message StateDocument {
 
   // omega-document owns this host-specific declaration; units do not interpret it.
   string shell_json = 11;
+  repeated ConfiguredPresentation presentations = 12;
 }
 
 // Desired display layout. Distinct from MonitorInfo (actual state).
@@ -175,4 +177,12 @@ message UnitRef {
 message EnvironmentVariable {
   string key = 1;
   string value = 2;
+}
+
+message ConfiguredPresentation {
+  string id = 1;
+  string unit = 2;
+  string surface = 3;
+  map<string, Value> config = 4;
+  Presentation presentation = 5;
 }

@@ -1,19 +1,8 @@
-//! The observation socket: everything the daemon holds, as newline-delimited
-//! JSON — published views and state topics as they change — and the one way
-//! back for a shell that draws them.
+//! Newline-delimited protocol JSON for state observers and scoped renderers.
 //!
-//! Quickshell (QML) reads the views directly with `Socket`; `omega status`
-//! reads the `units` topic from the same stream. Reading needs no handshake
-//! and is granted to anyone who can open the socket.
-//!
-//! Asking is different. A shell cannot encode protobuf, so a request is the
-//! same [`Frame`] carrying the same `Invoke`, written as JSON, and is
-//! authorized the way every other request is: the peer must be the daemon's
-//! own user, and the op must be one the [`POLICY`] table serves an operator.
-//! A JSON request reaches the same [`Dispatcher`] a framed one does.
-//!
-//! [`POLICY`]: crate::session::dispatch
-//! [`Frame`]: omega_proto::omega::Frame
+//! State topics are openly observable. Private views require an owner-created
+//! renderer attachment; subsequent operations use that attachment's authority.
+//! Requests share the binary protocol's dispatcher, policy and correlated replies.
 
 use crate::session::operations::Operations;
 use std::path::Path;
@@ -174,7 +163,8 @@ struct ShellConnection<S> {
     /// asking does.
     peer: Result<Arc<Peer>, Refusal>,
     gateway: Option<Gateway>,
-    sent_views: std::collections::BTreeMap<crate::hub::SurfaceRef, u64>,
+    attachment: crate::session::dispatch::attachment::RendererAttachment,
+    sent_views: std::collections::BTreeMap<omega_proto::instance::InstanceKey, Arc<ViewUpdate>>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
@@ -195,6 +185,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
     ) -> Self {
         let (reader, writer) = tokio::io::split(stream);
         Self {
+            attachment: Default::default(),
             writer,
             requests: Requests::new(reader),
             sent_views: Default::default(),
@@ -232,6 +223,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                 gateway.units.clone(),
                 gateway.brokers.clone(),
             )
+            .with_attachment(self.attachment.clone())
             .with_layout(gateway.layout.clone())
             .with_deployment(gateway.deployment.clone())
         });
@@ -286,8 +278,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                                 self.write_answer(&refusal.frame(frame.stream_id)).await?;
                             }
                         } else {
+                            let attaching = matches!(&frame.body, Some(frame::Body::Invoke(Invoke { op: Some(omega_proto::omega::invoke::Op::AttachRenderer(_)) })));
                             let answer = self.answer(dispatcher.as_deref(), &mut subscriptions, frame).await;
+                            let accepted = Refusal::of(&answer).is_none();
                             self.write_answer(&answer).await?;
+                            if attaching && accepted { self.resync_views().await?; }
                         }
                     }
                     // The observer hung up. Its views have nowhere to go.
@@ -297,7 +292,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                     let answer = result.map_err(|error| std::io::Error::other(error.to_string()))?;
                     self.write_answer(&answer).await?;
                 },
-                _ = beat.tick() => self.write_line(&Heartbeat { heartbeat: true }).await?,
+                _ = beat.tick() => {
+                    let replaced = self.attachment.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|attachment| !attachment.active.load(std::sync::atomic::Ordering::Acquire));
+                    if replaced { self.write_answer(&Refusal::precondition("renderer attachment has been replaced").frame(0)).await?; return Ok(()); }
+                    self.write_line(&Heartbeat { heartbeat: true }).await?;
+                },
             }
         }
     }
@@ -344,17 +343,26 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
         let (snapshot, receiver) = self.hub.subscribe_views();
         self.views = receiver;
         let current: std::collections::BTreeSet<_> =
-            snapshot.iter().map(|view| &view.surface).collect();
+            snapshot.iter().map(|view| &view.instance).collect();
         let removed: Vec<_> = self
             .sent_views
             .iter()
             .filter(|(surface, _)| !current.contains(surface))
-            .map(|(surface, revision)| {
+            .map(|(_, previous)| {
                 Arc::new(ViewUpdate {
-                    surface: surface.clone(),
+                    destroyed: true,
+                    instance: previous.instance.clone(),
+                    surface: previous.surface.clone(),
+                    presentation: previous.presentation.clone(),
+                    requested: omega_proto::omega::PresentationState::Closed as i32,
+                    observed: omega_proto::omega::PresentationState::Closed as i32,
                     view: omega_proto::omega::ViewTree {
                         root: None,
-                        revision: revision.checked_add(1).expect("view revision exhausted"),
+                        revision: previous
+                            .view
+                            .revision
+                            .checked_add(1)
+                            .expect("view revision exhausted"),
                     },
                 })
             })
@@ -369,12 +377,40 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
     ) -> Result<(), ShellError> {
         tokio::time::timeout(Self::WRITE_TIMEOUT, async {
             for view in views {
+                let accepts = {
+                    let attachment = self.attachment.lock().unwrap_or_else(|e| e.into_inner());
+                    attachment
+                        .as_ref()
+                        .is_some_and(|attachment| attachment.accepts(&view))
+                };
+                if !accepts {
+                    continue;
+                }
+                let supported = self
+                    .attachment
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .as_ref()
+                    .expect("attached renderer")
+                    .validate(&view);
+                if let Err(refusal) = supported {
+                    self.write_answer(&refusal.clone().frame(0)).await?;
+                    return Err(ShellError::Renderer(refusal));
+                }
                 self.write_line(view.as_ref()).await?;
                 if view.view.root.is_some() {
-                    self.sent_views
-                        .insert(view.surface.clone(), view.view.revision);
+                    self.sent_views.insert(
+                        view.instance.clone(),
+                        Arc::new(ViewUpdate {
+                            view: omega_proto::omega::ViewTree {
+                                root: None,
+                                revision: view.view.revision,
+                            },
+                            ..view.as_ref().clone()
+                        }),
+                    );
                 } else {
-                    self.sent_views.remove(&view.surface);
+                    self.sent_views.remove(&view.instance);
                 }
             }
             Ok(())
@@ -410,6 +446,22 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
     }
 
     async fn write_answer(&mut self, answer: &Frame) -> Result<(), ShellError> {
+        if let Some(frame::Body::Result(omega_proto::omega::Result {
+            outcome: Some(omega_proto::omega::result::Outcome::Instances(instances)),
+            ..
+        })) = &answer.body
+        {
+            let attachment = self.attachment.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(attachment) = attachment.as_ref() {
+                for snapshot in &instances.instances {
+                    let metadata = attachment
+                        .metadata(snapshot)
+                        .map_err(ShellError::Renderer)?;
+                    self.sent_views
+                        .insert(metadata.instance.clone(), Arc::new(metadata));
+                }
+            }
+        }
         self.write(Observation::line(answer)?).await
     }
 
@@ -438,6 +490,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
 /// What serving the shell socket can fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum ShellError {
+    #[error("renderer refused: {0}")]
+    Renderer(Refusal),
     #[error("observer snapshot batch deadline elapsed")]
     SnapshotTimeout,
     #[error("observer write deadline elapsed")]

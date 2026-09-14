@@ -96,10 +96,14 @@ fn schedule_payload_errors_identify_the_schedule_and_reject_empty_envelopes() {
 #[test]
 fn scheduled_commands_must_name_a_built_units_command_surface() {
     use omega_proto::omega::{Action, InvokeUnit, Schedule, action};
-    let manifest = Fixture::manifest().exposing([
-        Surface::new(&SurfaceId::parse("time").unwrap(), SurfaceKind::Widget),
-        Surface::new(&SurfaceId::parse("refresh").unwrap(), SurfaceKind::Command),
-    ]);
+    let manifest = Fixture::manifest()
+        .exposing([Surface::new(
+            &SurfaceId::parse("time").unwrap(),
+            SurfaceKind::Widget,
+        )])
+        .serving([omega_proto::omega::CommandEndpoint {
+            id: "refresh".into(),
+        }]);
     for (unit, command, valid) in [
         ("clock", "refresh", true),
         ("missing", "refresh", false),

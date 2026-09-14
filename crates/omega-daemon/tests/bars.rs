@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::reconcile::{Action, BarProvider};
+use omega_daemon::reconcile::{Action, PresentationProvider};
 use omega_daemon::units::{Request, UnitTable};
 use omega_document::{Bars, Document, Modules};
 use omega_proto::omega::{StateDocument, SurfaceKind, ViewTree, invoke, module, result};
@@ -11,7 +11,7 @@ use omega_proto::{Manifest, Surface, SurfaceId, UnitName};
 struct Fixture {
     hub: Hub,
     units: UnitTable,
-    provider: BarProvider,
+    provider: PresentationProvider,
 }
 
 impl Fixture {
@@ -22,7 +22,8 @@ impl Fixture {
             Surface::new(&SurfaceId::parse("indicator").unwrap(), SurfaceKind::Widget),
             Surface::new(&SurfaceId::parse("details").unwrap(), SurfaceKind::Widget),
         ]);
-        let provider = BarProvider::new(
+        units.adopt(&ManifestStore::from_manifests([manifest.clone()]));
+        let provider = PresentationProvider::new(
             units.clone(),
             Arc::new(ManifestStore::from_manifests([manifest])),
         );
@@ -73,7 +74,7 @@ async fn both_surfaces_are_configured_updated_and_removed() {
     let fixture = Fixture::new();
     let (requests, inbox) = tokio::sync::mpsc::channel(8);
     let _guard = fixture.units.connected(&Fixture::name(), requests);
-    let responder = tokio::spawn(Fixture::answer(inbox, 6));
+    let responder = tokio::spawn(Fixture::answer(inbox, 8));
     let mut document = Fixture::document();
     let plan = fixture.provider.plan(&document).unwrap();
     assert_eq!(plan.len(), 2);
@@ -108,9 +109,9 @@ async fn both_surfaces_are_configured_updated_and_removed() {
             _ => panic!(),
         })
         .collect();
-    assert_eq!(surfaces, ["details", "indicator"]);
+    assert_eq!(surfaces, ["indicator", "details"]);
     assert!(
-        operations[4..]
+        operations[6..]
             .iter()
             .all(|op| matches!(op, invoke::Op::RemoveWidget(_)))
     );

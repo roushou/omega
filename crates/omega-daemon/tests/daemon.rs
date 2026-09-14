@@ -528,14 +528,14 @@ async fn daemon_shutdown_joins_control_and_observation_connections() {
 
 struct PanickingBroker;
 #[async_trait::async_trait]
-impl omega_brokers::Broker for PanickingBroker {
+impl omega_platform::Broker for PanickingBroker {
     fn name(&self) -> &'static str {
         "panicking-test"
     }
     fn topics(&self) -> &'static [omega_proto::SystemTopic] {
         &[]
     }
-    async fn connect(&mut self) -> Result<(), omega_brokers::BrokerError> {
+    async fn connect(&mut self) -> Result<(), omega_platform::BrokerError> {
         panic!("test broker invariant");
     }
 }

@@ -52,8 +52,8 @@ which compiles a scaffolded config through the real binaries.
   `EventKind::from_str_name`).
 - The observation socket carries the same `Frame`/`Invoke`/`POLICY` as the
   control socket, JSON-encoded because a shell cannot encode protobuf. A
-  second encoding, never a second taxonomy. Reading is open; asking is the
-  operator's.
+  second encoding, never a second taxonomy. State reading is open; private views require a scoped renderer
+  attachment. Bootstrap and lifecycle operations belong to the operator.
 
 ## Trust
 
@@ -90,14 +90,17 @@ which compiles a scaffolded config through the real binaries.
 - Desired state is a document, never a script. `system/` computes it with no
   side effects; providers `plan` purely, then `apply`. Convergence is per
   entity id.
-- A built unit the document never mentions runs. Putting a crate in the
-  workspace is the declaration; the document exists to override it.
-- Views end with the session (`Hub::forget_unit` from
-  `UnitTable::disconnected`). `BarProvider::rendered` reads "the unit knows
-  about this instance" from the hub, and that knowledge lived in the unit's
-  process — a view outliving it means a restarted unit is never told about its
-  instances again. Observers get an empty tree, because a shell that is not
-  told cannot stop drawing.
+- A built plugin the document never mentions runs. Membership under `plugins/`
+  declares execution; libraries never do. The document supplies overrides.
+- Instances and views end with the plugin session. `PresentationProvider` projects
+  configured placements into `UnitTable` instances; transient presentations use the
+  same registry. Runtime identity is `(InstanceId, IncarnationId)`, not a placement.
+  Expiration emits tombstones so renderers cannot keep drawing stale instances.
+- Renderer attachments narrow an owner connection to one plugin's standalone views
+  or one embedded/popup placement. Replacing a scope revokes its old attachment.
+  Interactions resolve retained bindings by instance, revision, node key and event.
+- Requested and observed presentation state are distinct. Native close records
+  closed intent; reconciliation and host restart must not reopen a dismissed view.
 - Events are transitions of state, derived in one place: "AC unplugged" and
   `battery.charging == false` are one fact and may not disagree. Events are
   not stored.
@@ -124,19 +127,20 @@ which compiles a scaffolded config through the real binaries.
   because a build replaces the state dir and the log explaining the last
   crash has to outlive it.
 
-- A field is a **reading** (`omega::reading` — one topic, no interpretation), a
-  **composite** (`omega::composite` — several topics, interpretation once), a
-  **record** (`omega::record` — this unit's own memory) or an **effect**
-  (`omega::effect`). That is the distinction `wiring`'s `Reads`/`Does` already
-  makes; `state` named the plane instead of the thing.
+- A field is a **reading** (one topic, no interpretation), a **composite**
+  (several topics, interpretation once), a **record** (this plugin’s own memory),
+  or an **effect**. `platform/<domain>/` owns service handles, accessors,
+  composites, and controls. Private `wiring` supplies common construction and
+  capability mechanics; it does not centrally define domain handles.
 - A topic is the unit of _what wakes a widget_, so two facts that move at
   different rates are two topics: `battery` changes on every poll and `mains`
   when the cable moves. What spans them is a composite, not a wider topic.
-- The SDK's root is what every unit uses whatever it does — the three
-  surfaces, `Ui`, `Args`/`Answer`, and the reading types. Everything else is
-  in a module named for the kind of thing it is: `omega::state`,
-  `omega::ui`, `omega::effect`, `omega::config`. A flat root said nothing
-  about which of thirty-five names was a handle and which was a node.
+- The SDK root exposes surface/command/reaction contracts, derives, `View`, and
+  shared reading values. `platform` groups external service domains; `plugin`
+  owns Omega registration and supervision. `surface` owns UI declarations and
+  references; `command` owns endpoints, input, and command references; `reaction`
+  owns event behavior. `ui`, `config`, `record`, `effect`, and `testing` expose
+  their respective APIs. Runtime context/mirror and wiring stay private.
 - The derives expand into `::omega::internal::`, never the root. Reaching
   through the root tied a macro to where a type happened to be re-exported.
 - `omega new`'s template is compiled by `crates/omega/tests/scaffold.rs`. It
@@ -155,17 +159,15 @@ which compiles a scaffolded config through the real binaries.
   `Modules::widget` sets one placement's, and an instance is the second over
   the first (`Values::over`). A command or reaction is never placed, so its
   unit's settings are the only ones it can have.
-- A view is addressed by (unit, surface, module). `module` is an address, not
-  a filter: empty means the surface's single instance, so a surface also
-  placed in a bar has _two_ views in the hub. Matching modules loosely latches
-  onto whichever spoke last.
-- The daemon pulls an instance's first render (`RenderWidget`, to hand the
-  unit its configuration); the unit pushes every one after.
+- A placement is desired configuration; an instance owns runtime identity, settings,
+  and presentation state. There are no automatic unplaced widget instances.
+- The daemon creates an instance and pulls its first render with construction
+  settings; the unit pushes later trees with that instance's identity.
 
 ## SDK
 
 - A plugin declares what it needs by holding it. A `Battery` field is the
-  topic and the capability; `#[derive(Widget)]` sums the fields and that sum
+  topic and the capability; `#[derive(Surface)]` sums the fields and that sum
   _is_ the manifest — `omega build` asks the binary (`--omega-manifest`). No
   `manifest.toml`, no `include_str!`, no `SURFACE` const. The cost is that
   `omega check` compiles.
@@ -176,10 +178,9 @@ which compiles a scaffolded config through the real binaries.
   <key>`, `Watch<T>` reads anyone's, and `#[derive(UnitState)]` takes the unit
   from the defining crate and the key from the type — `Watch<lamp::Power>`,
   not a string a rename breaks. Writing is a `Does`; reading is not.
-- A widget may hold only state; commands and reactions may hold effects.
-  Rendering runs on every reported change and identical trees are dropped, so
-  an effect there fires on every percent. The `Reads` bound says so at compile
-  time.
+- Render declarations hold only readings. Commands, reactions, and stateful
+  behavior may hold effects. The `Reads` bound enforces the render-side rule;
+  dependency/model invalidation controls rendering, and identical trees are dropped.
 - A struct crossing a boundary as a map derives `Fields` both directions.
   Reading is total — a missing field takes `Default`, so adding one never
   breaks a writer that predates it.
@@ -224,13 +225,15 @@ which compiles a scaffolded config through the real binaries.
 
 ```
 omega-proto    wire format, manifest, identifiers — what crosses a socket
-omega-host     where files live, atomic writes, staging, TOML documents
+omega-host     files, generations, Cargo workspace documents, discovery, watching
 omega          the SDK — what a unit is written against
 omega-document the desired-state document
 omega-derive   proc-macros
-omega-brokers  the subsystems the daemon brokers: state out, actions in
-omega-daemon   the daemon, plus host/ (watching, globs, discovery)
-omega-renderer the QML it ships, and how that installs
+omega-platform  the subsystems the daemon brokers: state out, actions in
+omega-daemon   runtime authority, supervision, routing, and convergence
+omega-renderer host-independent QML controls and generated readers
+omega-omarchy  Omarchy authoring, compilation, transport, and installation
+omega-preview  development cases and isolated surface sessions
 omega-cli      the binary
 ```
 
@@ -239,7 +242,7 @@ omega-cli      the binary
   `units.toml`).
 - A unit author's build is a design constraint. `omega` depends on
   `omega-proto` and `omega-derive` and nothing else; host machinery lives in
-  `omega-host` and `omega-daemon::host`, and a unit compiles neither. Before
+  `omega-host`, and a unit compiles none of it. Before
   putting something shared in `omega-proto`, ask whether it crosses a socket
   — if it does not, it belongs in `omega-host`.
 - `omega-proto`'s `json` feature carries the pbjson serde impls, which are
@@ -253,6 +256,13 @@ omega-cli      the binary
   compute.
 
 ## CLI
+
+- `cli/` owns arguments and command entry points. `build/` owns compilation,
+  validation, generation planning/publication, and activation waits. Build helpers
+  must not depend on command parser types or resolve their own workspace environment.
+- `omega-host::workspace` owns Cargo schemas, member patterns, roles, and plugin
+  discovery. `omega-host::fs` owns settled watching under its optional `watch`
+  feature. The daemon owns runtime generation selection, not source-workspace tools.
 
 - Every line goes through `ui::Ui`: decoration to stderr, answers to stdout
   (so `omega run … | jq` gets a value), verbs from the closed `Step` enum on
@@ -295,10 +305,9 @@ omega-cli      the binary
 - Every TOML document is a `TomlSchema` declared once with its kind and
   location. Address one with `Layout::file::<S>(key)`; never join a path at a
   call site. Invariants beyond parsing go in `Validated`.
-- Generated dependencies come from `Scaffold::UNIT_DEPENDENCIES` or
-  `SYSTEM_DEPENDENCIES`, never a second list. Two lists because two
-  audiences: a unit speaks the protocol, the config plane computes a document
-  and exits.
+- Generated dependencies come from `Scaffold::UNIT_DEPENDENCIES`,
+  `SYSTEM_DEPENDENCIES`, and optional `PREVIEW_DEPENDENCIES`. Keep production
+  plugin, configuration-plane, and development dependencies separate.
 
 ## Docs
 
@@ -306,3 +315,56 @@ omega-cli      the binary
 - `docs/design.md` — open design questions and feature boundaries
 - `crates/omega-proto/schema/README.md` — schema rules
 - `crates/omega-renderer/shell/README.md` — the renderer and the shell socket
+
+## Desktop workspace foundations
+
+- Config members are `system/`, `plugins/<name>/`, or `libraries/<name>/`.
+  Only plugins are queried for manifests and supervised. Libraries never imply
+  execution. Runtime generation paths remain `units/`.
+- `omega migrate` journals source edits before moving `units/` to `plugins/`.
+  Recovery preserves external edits and refuses ambiguous mixed layouts. Source
+  mutations and builds hold the same workspace lock.
+- `Document::with` composes a `DocumentExtension`. Core document validation never
+  interprets Omarchy payloads: `omega-omarchy` handles and projects them first.
+- QML controls live in `omega-renderer/shell/core`, without `qs.*` imports.
+  Omarchy installs its adapter and the embedded core together. Theme, assets, and
+  session propagate as bindings to preserve dynamic host updates. The fixture
+  harness has no live connection or process-spawning capability.
+
+## Stateful surfaces
+
+- `Surface` is read-only; `StatefulSurface` opts into instance-owned Model/Message
+  and a separate Effects declaration. `derive(Surface)` still requires Reads;
+  effects are passed only to updates/lifecycle hooks, never to render.
+- Runtime instances serialize messages and own the current render's local binding
+  registry. IDs are unique across the process; captures never cross the protocol.
+  Stale or foreign-instance bindings are refused, never decoded with new captures.
+- Cache views between dependency/model invalidations. Publication acknowledgments
+  must not rebuild local bindings and trigger an endless publication loop.
+- Task keys replace generations immediately. Close cancels delivery; hide retains
+  work. A started blocking worker keeps its admission permit until actual exit.
+- Controlled edits and resets carry independent revisions. Newer local text must
+  survive older views, and incomplete IME composition must not emit committed edits.
+- `SurfaceHarness` uses the production scheduler with isolated effects. Fixture
+  completions are explicit; never fall through to a real backend.
+
+## Applications
+
+- GIO objects stay on the applications worker's GLib main-context thread. The SDK
+  depends on no native application service libraries.
+- The catalogue is bounded shared state; queries and selection are instance-local.
+  Activation accepts typed desktop IDs and literal URIs, never shell fragments.
+- Activation success is admission. Unknown outcomes must not be replayed.
+- A surface may close/hide its own current instance. Lifecycle requests must leave
+  the connection reader free to receive the plugin's acknowledgement.
+
+## Previews
+
+- `omega-preview` is development tooling: register cases in explicit library tests,
+  never production manifests. Preview sessions use `SurfaceHarness` and captured
+  effects, with no fallback to live services.
+- Preview epochs reset both Rust model state and renderer-local drafts. View
+  revisions still gate interactions within an epoch.
+- Captures compare decoded pixels only under matching recorded raster environments.
+  Baseline updates are explicit. Software capture uses fixed local fixture images,
+  not native theme-icon providers.

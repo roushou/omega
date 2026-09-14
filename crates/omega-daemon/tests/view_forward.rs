@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use common::{TempSocket, unit_name};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use omega_daemon::hub::{Hub, SurfaceRef, ViewUpdate};
 use omega_daemon::shell::ShellServer;
@@ -44,9 +44,41 @@ fn view_with_text(text: &str) -> ViewTree {
 
 /// The battery widget's surface, as the daemon would qualify it.
 fn battery(text: &str) -> ViewUpdate {
-    ViewUpdate {
-        surface: SurfaceRef::new(unit_name("battery-widget"), surface("battery")),
-        view: view_with_text(text),
+    {
+        let surface = SurfaceRef::new(unit_name("battery-widget"), surface("battery"));
+        ViewUpdate {
+            instance: omega_proto::instance::InstanceKey {
+                id: omega_proto::instance::InstanceId::parse(format!(
+                    "test-{}-{}-{}",
+                    surface.unit,
+                    surface.surface,
+                    surface
+                        .module
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                ))
+                .unwrap(),
+                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+            },
+            presentation: omega_proto::omega::Presentation {
+                kind: Some(omega_proto::omega::presentation::Kind::Window(
+                    omega_proto::omega::WindowPresentation {
+                        title: "Test".into(),
+                        app_id: "org.omega.example".into(),
+                        width: 480,
+                        height: 320,
+                        min_width: 1,
+                        min_height: 1,
+                    },
+                )),
+            },
+            requested: 2,
+            observed: 2,
+            destroyed: false,
+            surface,
+            view: view_with_text(text),
+        }
     }
 }
 
@@ -99,9 +131,41 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
     assert_eq!(second.view.root, view_b.root);
 
     // The global sequence also advances across different surface addresses.
-    hub.publish_view(ViewUpdate {
-        surface: SurfaceRef::new(unit_name("clock-widget"), surface("battery")),
-        view: view_with_text("12:00"),
+    hub.publish_view({
+        let surface = SurfaceRef::new(unit_name("clock-widget"), surface("battery"));
+        ViewUpdate {
+            instance: omega_proto::instance::InstanceKey {
+                id: omega_proto::instance::InstanceId::parse(format!(
+                    "test-{}-{}-{}",
+                    surface.unit,
+                    surface.surface,
+                    surface
+                        .module
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                ))
+                .unwrap(),
+                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+            },
+            presentation: omega_proto::omega::Presentation {
+                kind: Some(omega_proto::omega::presentation::Kind::Window(
+                    omega_proto::omega::WindowPresentation {
+                        title: "Test".into(),
+                        app_id: "org.omega.example".into(),
+                        width: 480,
+                        height: 320,
+                        min_width: 1,
+                        min_height: 1,
+                    },
+                )),
+            },
+            requested: 2,
+            observed: 2,
+            destroyed: false,
+            surface,
+            view: view_with_text("12:00"),
+        }
     })
     .unwrap();
     let clock = rx.recv().await.unwrap();
@@ -114,7 +178,7 @@ async fn shell_socket_streams_views() {
     let hub = Hub::new();
     let path = TempSocket::new("shell");
     let socket = path.socket();
-    let server = ShellServer::bind_at(socket.clone(), hub.clone()).unwrap();
+    let server = ViewFixture::server(socket.clone(), hub.clone());
     tokio::spawn(async move {
         let _ = server.run().await;
     });
@@ -125,8 +189,7 @@ async fn shell_socket_streams_views() {
     let stream = socket.connect_stream().await.unwrap();
     let mut reader = BufReader::new(stream);
 
-    let mut first = String::new();
-    reader.read_line(&mut first).await.unwrap();
+    let first = ViewFixture::attach(&mut reader).await;
     assert_eq!(surface_of(&first), "battery-widget.battery");
     assert_eq!(text_of(&first), "50%");
 
@@ -190,23 +253,7 @@ async fn the_observation_socket_streams_state_as_it_changes() {
 
 #[tokio::test]
 async fn a_view_line_is_not_mistaken_for_a_topic() {
-    let hub = Hub::new();
-    let path = TempSocket::new("observer-views");
-    let socket = path.socket();
-    let server = ShellServer::bind_at(socket.clone(), hub.clone()).unwrap();
-    tokio::spawn(async move {
-        let _ = server.run().await;
-    });
-
-    hub.publish_view(battery("50%")).unwrap();
-
-    let stream = socket.connect_stream().await.unwrap();
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
-
-    // Both halves share one stream, so a reader that wanted topics has to be
-    // able to tell it did not get one.
+    let line = serde_json::to_string(&battery("50%")).unwrap();
     assert!(Observation::topic(&line).is_none(), "{line}");
 }
 
@@ -235,9 +282,41 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
 
     // A unit connects, is asked for an instance, and shows it.
     let guard = units.connected(&unit, tokio::sync::mpsc::channel(1).0);
-    hub.publish_view(ViewUpdate {
-        surface: SurfaceRef::module(unit.clone(), surface("battery"), module("top-bar-1")),
-        view: view_with_text("80%"),
+    hub.publish_view({
+        let surface = SurfaceRef::module(unit.clone(), surface("battery"), module("top-bar-1"));
+        ViewUpdate {
+            instance: omega_proto::instance::InstanceKey {
+                id: omega_proto::instance::InstanceId::parse(format!(
+                    "test-{}-{}-{}",
+                    surface.unit,
+                    surface.surface,
+                    surface
+                        .module
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                ))
+                .unwrap(),
+                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+            },
+            presentation: omega_proto::omega::Presentation {
+                kind: Some(omega_proto::omega::presentation::Kind::Window(
+                    omega_proto::omega::WindowPresentation {
+                        title: "Test".into(),
+                        app_id: "org.omega.example".into(),
+                        width: 480,
+                        height: 320,
+                        min_width: 1,
+                        min_height: 1,
+                    },
+                )),
+            },
+            requested: 2,
+            observed: 2,
+            destroyed: false,
+            surface,
+            view: view_with_text("80%"),
+        }
     })
     .unwrap();
     assert_eq!(hub.view_snapshot().len(), 1);
@@ -266,4 +345,53 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
 
 fn module(id: &str) -> ModuleId {
     ModuleId::parse(id).unwrap()
+}
+
+struct ViewFixture;
+impl ViewFixture {
+    fn server(socket: omega_proto::Socket, hub: Hub) -> ShellServer {
+        let units = omega_daemon::units::UnitTable::detached(hub.clone());
+        units.adopt(&omega_daemon::manifest::ManifestStore::from_manifests([
+            common::widget_manifest("battery-widget", "battery"),
+        ]));
+        let stop = omega_daemon::Shutdown::new();
+        ShellServer::bind_at(socket.clone(), hub.clone())
+            .unwrap()
+            .serving(
+                omega_daemon::supervisor::Supervisor::new(socket, units.clone(), stop.clone()),
+                units,
+                omega_daemon::broker::Brokerage::new(hub, stop),
+            )
+    }
+    async fn attach(reader: &mut BufReader<tokio::net::UnixStream>) -> String {
+        let request = omega_proto::Observation::request(
+            1,
+            omega_proto::omega::invoke::Op::AttachRenderer(omega_proto::omega::AttachRenderer {
+                scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
+                    "battery-widget".into(),
+                )),
+                features: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            }),
+        );
+        reader
+            .get_mut()
+            .write_all((Observation::line(&request).unwrap() + "\n").as_bytes())
+            .await
+            .unwrap();
+        loop {
+            let mut line = String::new();
+            tokio::time::timeout(Duration::from_secs(2), reader.read_line(&mut line))
+                .await
+                .unwrap()
+                .unwrap();
+            let json: serde_json::Value = serde_json::from_str(&line).unwrap();
+            if json.get("view").is_some() {
+                return line;
+            }
+            if json.get("result").is_some() {
+                assert!(json["result"]["error"].is_null(), "{json}");
+                continue;
+            }
+        }
+    }
 }

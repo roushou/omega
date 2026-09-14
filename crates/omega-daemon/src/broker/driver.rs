@@ -24,7 +24,7 @@ use tokio::time::{Instant, timeout, timeout_at};
 
 use tokio::sync::mpsc;
 
-use omega_brokers::{Broker, BrokerError};
+use omega_platform::{Broker, BrokerError};
 use omega_proto::ActionKind;
 
 use super::Request;
@@ -398,7 +398,7 @@ mod tests {
         async fn act(
             &mut self,
             _: &action::Kind,
-        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_platform::BrokerError> {
             self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(None)
         }
@@ -468,7 +468,7 @@ mod tests {
         );
         assert!(
             driver
-                .pause(omega_brokers::BrokerError::unreadable("lost connection"))
+                .pause(omega_platform::BrokerError::unreadable("lost connection"))
                 .await
                 .is_continue()
         );
@@ -515,7 +515,7 @@ mod tests {
         fn disconnect(&mut self) {
             self.live.store(false, std::sync::atomic::Ordering::SeqCst);
         }
-        async fn connect(&mut self) -> Result<(), omega_brokers::BrokerError> {
+        async fn connect(&mut self) -> Result<(), omega_platform::BrokerError> {
             assert!(!self.is_live(), "reconnect retained old connection");
             self.live.store(true, std::sync::atomic::Ordering::SeqCst);
             let attempt = self.opens.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -527,7 +527,7 @@ mod tests {
         }
         async fn read(
             &mut self,
-        ) -> Result<omega_proto::omega::StatePatch, omega_brokers::BrokerError> {
+        ) -> Result<omega_proto::omega::StatePatch, omega_platform::BrokerError> {
             if self.block == "read" && self.opens.load(std::sync::atomic::Ordering::SeqCst) == 1 {
                 std::future::pending().await
             } else {
@@ -537,7 +537,7 @@ mod tests {
         async fn act(
             &mut self,
             _: &action::Kind,
-        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_platform::BrokerError> {
             std::future::pending().await
         }
     }
@@ -579,7 +579,7 @@ mod tests {
         assert!(driver.serve(request).await.is_continue());
         assert!(matches!(
             receive.await.unwrap(),
-            Err(omega_brokers::BrokerError::Timeout)
+            Err(omega_platform::BrokerError::Timeout)
         ));
         assert!(tokio::time::Instant::now() - started >= super::super::Brokerage::ACTION_TIMEOUT);
         assert!(!broker.is_live());
@@ -598,7 +598,7 @@ mod tests {
         assert!(driver.serve(request).await.is_continue());
         assert!(matches!(
             receive.await.unwrap(),
-            Err(omega_brokers::BrokerError::Timeout)
+            Err(omega_platform::BrokerError::Timeout)
         ));
         assert!(broker.is_live());
     }
@@ -613,7 +613,7 @@ mod tests {
         fn topics(&self) -> &'static [SystemTopic] {
             &[]
         }
-        async fn connect(&mut self) -> Result<(), omega_brokers::BrokerError> {
+        async fn connect(&mut self) -> Result<(), omega_platform::BrokerError> {
             std::future::pending().await
         }
     }

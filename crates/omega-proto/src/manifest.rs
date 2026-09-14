@@ -30,6 +30,7 @@ impl Manifest {
             version: version.into(),
             capabilities: Vec::new(),
             surfaces: Vec::new(),
+            commands: Vec::new(),
             state_topics: Vec::new(),
             events: Vec::new(),
         }
@@ -42,6 +43,14 @@ impl Manifest {
 
     pub fn exposing(mut self, surfaces: impl IntoIterator<Item = Surface>) -> Self {
         self.surfaces = surfaces.into_iter().collect();
+        self
+    }
+
+    pub fn serving(
+        mut self,
+        commands: impl IntoIterator<Item = crate::omega::CommandEndpoint>,
+    ) -> Self {
+        self.commands = commands.into_iter().collect();
         self
     }
 
@@ -85,6 +94,8 @@ impl Manifest {
             .surfaces
             .sort_unstable_by(|a, b| (&a.id, a.kind).cmp(&(&b.id, b.kind)));
         canonical.surfaces.dedup();
+        canonical.commands.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+        canonical.commands.dedup();
 
         canonical.encode_to_vec()
     }
@@ -160,6 +171,12 @@ impl Manifest {
         }
         self.granted()?;
         self.surface_kinds()?;
+        for command in &self.commands {
+            SurfaceId::parse(&command.id)?;
+        }
+        for surface in &self.surfaces {
+            surface.surface_id()?;
+        }
         self.addresses()?;
         self.event_kinds()?;
         Ok(())

@@ -14,11 +14,11 @@
 
 use std::fmt::Display;
 
-use crate::ui::bind::{Bind, CommandRef};
 use crate::ui::node::Node;
 use crate::ui::style::styled;
 use crate::units::Percent;
 use crate::{Command, Input};
+use crate::{command::CommandRef, ui::Bind};
 
 /// Something to press.
 ///
@@ -131,6 +131,33 @@ pub struct Field {
 }
 
 impl Field {
+    /// Route Up/Down and Enter to a list in the same component/instance scope.
+    pub fn navigate(mut self, list: impl Display) -> Self {
+        self.node = self.node.text_prop("navigation", list.to_string());
+        self
+    }
+
+    /// Model-owned text with edit/reset revisions; use with `on_change`.
+    pub fn controlled(mut self, value: &crate::surface::TextValue) -> Self {
+        self.node = self
+            .node
+            .text_prop("value", value.text())
+            .number("edit_revision", value.revision())
+            .number("reset_revision", value.reset_revision())
+            .flag("controlled", true);
+        self
+    }
+    /// Notify local behavior of committed edits while typing remains immediate.
+    pub fn on_change(mut self, change: impl Into<Bind<crate::surface::TextEdit>>) -> Self {
+        self.node = self.node.on("change", change);
+        self
+    }
+    /// Give this field initial keyboard focus when its instance appears.
+    pub fn autofocus(mut self) -> Self {
+        self.node = self.node.flag("autofocus", true);
+        self
+    }
+
     /// A field with a persistent label.
     pub fn new(label: impl Display) -> Self {
         Self {
@@ -182,10 +209,9 @@ styled!(Field);
 /// Rows to choose from.
 ///
 /// A [`Stack`] draws children in a line; a list is the one the user moves
-/// through. Arrows change the selection and Enter activates it, and neither
-/// reaches the unit — where the cursor is right now is what the user is
-/// doing, not something the machine knows. The unit hears the key of the row
-/// that was activated, appended to the binding's arguments.
+/// through. Arrows change selection and Enter activates it. Selection can be
+/// controlled with `selected` and `on_select`; activation delivers the row key
+/// to the binding.
 ///
 /// Give every child a [`key`]: it is the identity the selection is kept
 /// against and the one handed back on activation, so a list of networks
@@ -203,6 +229,18 @@ pub struct List {
 }
 
 impl List {
+    /// Control selection by the row's stable domain key.
+    pub fn selected(mut self, key: impl Display) -> Self {
+        self.node = self.node.text_prop("selected", key.to_string());
+        self
+    }
+    /// Receive the selected row key. The input must decode a string, such as
+    /// `String` or `applications::ApplicationId`.
+    pub fn on_select<I: crate::Input>(mut self, select: impl Into<Bind<I>>) -> Self {
+        self.node = self.node.on("select", select);
+        self
+    }
+
     pub fn new() -> Self {
         Self {
             node: Node::new("list"),
@@ -228,8 +266,9 @@ impl List {
     }
 
     /// What to call when a row is activated, by Enter or by clicking it. The
-    /// row's key is appended to the binding's arguments.
-    pub fn on_activate(mut self, activate: impl Into<Bind<String>>) -> Self {
+    /// row's key is appended to the binding's arguments. The input must decode
+    /// a string, such as `String` or `applications::ApplicationId`.
+    pub fn on_activate<I: crate::Input>(mut self, activate: impl Into<Bind<I>>) -> Self {
         self.node = self.node.on("activate", activate);
         self
     }
@@ -269,7 +308,7 @@ impl ChoiceValue for omega_proto::omega::PowerProfile {
 /// A row of mutually exclusive options with typed values and separate labels.
 ///
 /// ```
-/// use omega::{Command, power::{PowerProfile, SetProfile}, ui::{Choice, Text}};
+/// use omega::{Command, platform::power::{PowerProfile, SetProfile}, ui::{Choice, Text}};
 /// #[derive(omega::Command)]
 /// struct SetPowerProfile { profiles: SetProfile }
 /// impl Command for SetPowerProfile {
@@ -289,7 +328,7 @@ impl ChoiceValue for omega_proto::omega::PowerProfile {
 /// A choice cannot invoke a command expecting a different value type:
 ///
 /// ```compile_fail
-/// use omega::{Command, power::PowerProfile, ui::{Choice, Text}};
+/// use omega::{Command, platform::power::PowerProfile, ui::{Choice, Text}};
 /// #[derive(omega::Command)]
 /// struct Rename {}
 /// impl Command for Rename {
@@ -372,7 +411,7 @@ pub trait FormInput: Input {
 ///     password: String,
 /// }
 /// #[derive(omega::Command)]
-/// struct Connect { wifi: omega::network::WifiControl }
+/// struct Connect { wifi: omega::platform::network::WifiControl }
 /// impl Command for Connect {
 ///     type Input = Credentials;
 ///     type Output = ();

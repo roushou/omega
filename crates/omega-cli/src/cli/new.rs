@@ -1,24 +1,23 @@
-//! `omega new`: write a plugin.
+//! Scaffold a plugin or library and connect its Cargo dependencies.
 //!
-//! Not `add`: `omarchy plugin add <git-url>` already means *install somebody
-//! else's plugin*, and omega will want that word for the same thing one day.
-//! This is cargo's `new` — it makes something that did not exist.
-//!
-//! It stops one step short of putting the widget on screen, and that step is
-//! deliberate. Adding the plugin to the workspace is bookkeeping, so it is
-//! done; deciding which bar it belongs in and what to configure it with is
-//! not, so the line is printed rather than written into a file the author
-//! owns.
+//! Placement belongs to the config author. Print its declaration without changing
+//! the system's layout.
 
 use crate::scaffold::{Scaffold, Template};
 use crate::ui::{Paint, Step, Ui};
 use crate::workspace::{ConfigWorkspace, PluginName};
 use omega_host::Layout;
 
-/// Scaffold a plugin into `~/.config/omega/units/<name>`.
+/// Scaffold a plugin into `~/.config/omega/plugins/<name>`.
 #[derive(Debug, clap::Args)]
 pub struct NewCmd {
     pub name: String,
+    /// Create a shared Rust library, which Omega never supervises.
+    #[arg(long, conflicts_with = "template")]
+    pub lib: bool,
+    /// Add the library as a dependency of a member (system, plugins/name, libraries/name).
+    #[arg(long, requires = "lib", value_name = "MEMBER")]
+    pub into: Vec<std::path::PathBuf>,
     /// Choose the plugin's starting point.
     #[arg(long, value_enum, default_value = "minimal")]
     pub template: Template,
@@ -28,6 +27,20 @@ impl NewCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let name = PluginName::parse(&self.name)?;
         let workspace = ConfigWorkspace::open(Layout::resolve())?;
+        if self.lib {
+            let created = workspace.prepare_library(name, &self.into)?.apply()?;
+            ui.step(
+                Step::Created,
+                Paint::path(workspace.layout().library_src_dir(&created)),
+            );
+            for consumer in self.into {
+                ui.step(
+                    Step::Linked,
+                    format!("{} → {}", consumer.display(), created.package()),
+                );
+            }
+            return Ok(());
+        }
         let created = workspace.prepare_plugin(name, self.template)?.apply()?;
         Self::report(ui, workspace.layout(), &created, self.template);
         Ok(())

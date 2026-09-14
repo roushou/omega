@@ -42,7 +42,7 @@ fi
 # ignore the build.
 fatal='\[(syntax|var-used-before-declaration|required|incompatible-type|duplicate-property-binding|duplicated-name|duplicate-import|duplicate-enum-entries|duplicate-inline-component)\]'
 
-found=$(find "$(dirname "$0")/plugins" -name '*.qml' | sort)
+found=$(find "$(dirname "$0")/core" "$(dirname "$0")/fixtures" "$(dirname "$0")/desktop" "$(dirname "$0")/preview" "$(dirname "$0")/shell.qml" "$(dirname "$0")/../../omega-omarchy/shell" -name '*.qml' | sort)
 # qmllint's own exit code is not the signal: it varies by version, and it
 # counts warnings we have chosen not to care about.
 report=$(printf '%s\n' "$found" | xargs "$lint" 2>&1 || true)

@@ -115,7 +115,10 @@ impl TestDaemon {
             stream,
             invoke::Op::RenderWidget(RenderWidget {
                 surface_id: surface.to_string(),
-                module_id: module.to_string(),
+                instance: Some(omega_proto::omega::InstanceRef {
+                    id: format!("test-{surface}-{module}"),
+                    incarnation: "test-session".into(),
+                }),
                 config,
             }),
         )
@@ -159,14 +162,17 @@ impl TestDaemon {
                 op:
                     Some(invoke::Op::PublishView(PublishView {
                         surface_id,
-                        module_id,
+                        instance,
                         view: Some(view),
                     })),
             })) = self.next().await.body
             {
                 return Published {
                     surface: surface_id,
-                    module: module_id,
+                    instance: omega_proto::instance::InstanceKey::parse(
+                        &instance.expect("published instance"),
+                    )
+                    .expect("valid instance"),
                     view: Drawn { tree: view },
                 };
             }
@@ -238,7 +244,7 @@ impl TestDaemon {
 #[derive(Debug, Clone)]
 pub struct Published {
     pub surface: String,
-    pub module: String,
+    pub instance: omega_proto::instance::InstanceKey,
     pub view: Drawn,
 }
 

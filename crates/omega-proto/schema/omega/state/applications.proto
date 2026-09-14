@@ -1,0 +1,18 @@
+syntax = "proto3";
+package omega;
+
+// Visible desktop entries in XDG precedence order, localized by the service.
+// A catalogue is bounded to 4096 entries and 512 KiB encoded. Search is local.
+message ApplicationsState {
+  repeated Application applications = 1;
+}
+message Application {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string generic_name = 4;
+  repeated string keywords = 5;
+  // An absolute file path or a freedesktop theme icon name.
+  string icon = 6;
+  bool terminal = 7;
+}

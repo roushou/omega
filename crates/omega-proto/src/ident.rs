@@ -13,10 +13,10 @@ use serde::{Deserialize, Serialize};
 
 /// The shared rule. Kept private: a caller names the *kind* of identifier it
 /// wants, and the kind decides what is allowed.
-struct Ident;
+pub(crate) struct Ident;
 
 impl Ident {
-    fn parse(kind: &'static str, name: String) -> Result<String, IdentError> {
+    pub(crate) fn parse(kind: &'static str, name: String) -> Result<String, IdentError> {
         if name.is_empty()
             || !name
                 .chars()
@@ -103,6 +103,8 @@ impl fmt::Display for ModuleId {
 /// The kind is carried so the message says what was being named.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum IdentError {
+    #[error("{kind} exceeds 128 bytes")]
+    TooLong { kind: &'static str },
     #[error("{kind} must be lowercase letters, digits, hyphens and underscores: {name:?}")]
     InvalidCharacters { kind: &'static str, name: String },
     #[error("{kind} must start with a lowercase letter: {name:?}")]

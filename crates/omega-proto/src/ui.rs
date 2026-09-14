@@ -239,6 +239,7 @@ nodes! {
     /// not the one being typed.
     Form => "form" { label: Text },
     Field => "field" {
+        navigation: Text, controlled: Flag, edit_revision: Number, reset_revision: Number, autofocus: Flag,
         label: Text,
         help: Text,
         name: Text,
@@ -247,9 +248,9 @@ nodes! {
         value: Text,
     },
     /// Rows to pick from, which owns its own cursor.
-    List => "list" { gap: Number },
+    List => "list" { gap: Number, selected: Text = "null" },
     /// One of several options, chosen by key.
-    Group => "group" { selected: Text },
+    Group => "group" { selected: Text = "null" },
     /// How full something is.
     Progress => "progress" { value: Fraction },
     /// A series, drawn against a fixed range.

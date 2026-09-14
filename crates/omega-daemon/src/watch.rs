@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use crate::host::{Changes, Recursion, WatchError};
 use omega_host::Layout;
+use omega_host::fs::{Changes, Recursion, WatchError};
 
 /// The active reference contents, independent of filesystem timestamp precision.
 #[derive(Debug, Clone, PartialEq, Eq)]

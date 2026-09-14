@@ -1,29 +1,29 @@
 //! What a plugin author writes, and what it costs them.
 
 use omega::config::{Fields, Values};
-use omega::network::Network;
-use omega::notification::Notify;
-use omega::power::Battery;
+use omega::platform::network::Network;
+use omega::platform::notification::Notify;
+use omega::platform::power::Battery;
+use omega::platform::session::Session;
+use omega::platform::time::Clock;
 use omega::record::{Own, UnitState, Watch};
-use omega::session::Session;
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
-use omega::time::Clock;
 use omega::ui::{
     Button, Choice, Field, Glyph, Graph, Grid, Header, Icon, Image, List, Progress, Row, Separator,
     Slider, Spacer, Text, Toggle,
 };
-use omega::{Args, Command, Percent, Ui, Widget};
+use omega::{Args, Command, Percent, Surface, Ui};
 use omega_proto::SystemTopic;
 use omega_proto::omega::{Capability, Lock, SurfaceKind, action, value};
 
 // ---- the shortest plugin anyone will write ----
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Charge {
     battery: Battery,
 }
 
-impl Widget for Charge {
+impl Surface for Charge {
     fn render(&self) -> Ui {
         if self.battery.is_charging() {
             Text::new(format!("{} charging", self.battery.charge()))
@@ -58,7 +58,8 @@ fn a_reading_prints_itself() {
 
 #[test]
 fn a_plugins_manifest_is_the_sum_of_its_fields() {
-    let manifest = manifest_of(&omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
+    let manifest =
+        manifest_of(&omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
 
     // Nothing here was typed by an author. Holding a `Battery` is what asks
     // to read the battery topic, and asking to read is what costs the
@@ -76,12 +77,12 @@ fn a_plugins_manifest_is_the_sum_of_its_fields() {
 
 // ---- composition ----
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Signal {
     network: Network,
 }
 
-impl Widget for Signal {
+impl Surface for Signal {
     fn render(&self) -> Ui {
         Row::new()
             .gap(6)
@@ -121,16 +122,11 @@ impl Command for LockScreen {
 fn a_plugin_can_draw_and_do_at_once() {
     let manifest = manifest_of(
         &omega::Plugin::named("battery", "0.1.0")
-            .widget_default::<Charge>()
+            .surface_default::<Charge>()
             .command::<LockScreen>(),
     );
 
-    // Two surfaces, of two kinds, from one plugin — and the union of what
-    // both need.
-    assert_eq!(
-        manifest.surface_kinds().unwrap(),
-        vec![SurfaceKind::Widget, SurfaceKind::Command]
-    );
+    assert_eq!(manifest.surface_kinds().unwrap(), vec![SurfaceKind::Widget]);
     assert_eq!(
         manifest.granted().unwrap(),
         vec![Capability::StateRead, Capability::SystemControl]
@@ -152,14 +148,14 @@ struct Warning {
     low_threshold: u8,
 }
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Warned {
     battery: Battery,
     #[omega(config)]
     settings: Warning,
 }
 
-impl Widget for Warned {
+impl Surface for Warned {
     fn render(&self) -> Ui {
         if self.battery.charge() < self.settings.low_threshold {
             Text::new("low").warning()
@@ -256,14 +252,14 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
         label: String,
     }
 
-    #[derive(omega::Widget)]
+    #[derive(omega::Surface)]
     struct Labelled {
         battery: Battery,
         #[omega(config)]
         settings: Look,
     }
 
-    impl Widget for Labelled {
+    impl Surface for Labelled {
         fn render(&self) -> Ui {
             let charge = self.battery.charge();
             if charge < self.settings.low_threshold {
@@ -276,7 +272,7 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
     }
 
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").widget_default::<Labelled>());
+        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").surface_default::<Labelled>());
 
     let unit = Look {
         low_threshold: 20,
@@ -287,8 +283,14 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
         .welcome_configured(&State::new().battery(0.15, false), &unit)
         .await;
 
-    // Before it is placed anywhere, a widget draws with its unit's settings.
-    assert_eq!(daemon.next_view().await.view.text(), "batt low");
+    // Instance settings layer over the unit settings.
+    assert_eq!(
+        daemon
+            .render("battery", "test", Default::default())
+            .await
+            .text(),
+        "batt low"
+    );
 
     // A placement that names one key must not silently reset the others: the
     // threshold it says nothing about is still the unit's 20, not the
@@ -308,16 +310,22 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
 #[tokio::test]
 async fn a_plugin_publishes_its_view_and_keeps_publishing() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
 
     let hello = daemon.welcome(&State::new().battery(0.5, true)).await;
     assert_eq!(
         hello.manifest_hash,
-        manifest_of(&omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>()).hash(),
+        manifest_of(&omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>()).hash(),
         "a plugin presents the hash of the manifest it derived from itself"
     );
 
-    assert_eq!(daemon.next_view().await.view.text(), "50% charging");
+    assert_eq!(
+        daemon
+            .render("charge", "test", Default::default())
+            .await
+            .text(),
+        "50% charging"
+    );
 
     daemon.publish(&State::new().battery(0.2, false)).await;
     assert_eq!(daemon.next_view().await.view.text(), "20%");
@@ -326,11 +334,12 @@ async fn a_plugin_publishes_its_view_and_keeps_publishing() {
 #[tokio::test]
 async fn a_widget_is_not_asked_to_draw_a_machine_it_cannot_see() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
 
     // No battery in the snapshot: a widget that declared one has nothing
     // truthful to draw, so it is not asked to.
     daemon.welcome(&State::new()).await;
+    let _pending = daemon.render("charge", "test", Default::default()).await;
     daemon.publish(&State::new().battery(0.42, false)).await;
 
     // The first view it ever publishes is of a real reading.
@@ -338,12 +347,12 @@ async fn a_widget_is_not_asked_to_draw_a_machine_it_cannot_see() {
 }
 
 /// The shape an author writes once a topic can report nothing.
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct MaybeCharge {
     battery: Battery,
 }
 
-impl Widget for MaybeCharge {
+impl Surface for MaybeCharge {
     fn render(&self) -> Ui {
         if self.battery.has_reading() {
             Text::new(self.battery.charge())
@@ -357,7 +366,7 @@ impl Widget for MaybeCharge {
 #[tokio::test]
 async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
     let mut daemon = TestDaemon::serving(
-        omega::Plugin::named("charge", "0.1.0").widget_default::<MaybeCharge>(),
+        omega::Plugin::named("charge", "0.1.0").surface_default::<MaybeCharge>(),
     );
 
     // A desktop has no battery, and the daemon says so by publishing the
@@ -367,15 +376,21 @@ async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
         .welcome(&State::new().absent(SystemTopic::Battery))
         .await;
 
-    assert_eq!(daemon.next_view().await.view.text(), "no battery");
+    assert_eq!(
+        daemon
+            .render("charge", "test", Default::default())
+            .await
+            .text(),
+        "no battery"
+    );
 }
 
 #[tokio::test]
 async fn a_document_can_instantiate_one_surface_more_than_once() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("warned", "0.1.0").widget_as::<Warned>("warned"));
+        TestDaemon::serving(omega::Plugin::named("warned", "0.1.0").surface_as::<Warned>("warned"));
     daemon.welcome(&State::new().battery(0.15, false)).await;
-    let _first = daemon.next_view().await;
+    let _first = daemon.render("warned", "test", Default::default()).await;
 
     let strict = Warning { low_threshold: 20 }.write().into_map();
 
@@ -466,12 +481,12 @@ impl Command for Focus {
     }
 }
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Showing {
     mode: Watch<Mode>,
 }
 
-impl Widget for Showing {
+impl Surface for Showing {
     fn render(&self) -> Ui {
         if self.mode.get().focus {
             Text::new("focus").into()
@@ -496,7 +511,7 @@ fn a_topics_address_comes_from_where_it_is_defined() {
 fn owning_state_declares_the_right_to_publish_it() {
     let manifest = manifest_of(
         &omega::Plugin::named("desk", "0.1.0")
-            .widget_default::<Showing>()
+            .surface_default::<Showing>()
             .command::<Focus>(),
     );
 
@@ -547,11 +562,17 @@ async fn publishing_state_is_an_effect_like_any_other() {
 async fn one_plugin_draws_what_another_published() {
     let mut daemon = TestDaemon::serving(
         omega::Plugin::named("desk", "0.1.0")
-            .widget_default::<Showing>()
+            .surface_default::<Showing>()
             .command::<Focus>(),
     );
     daemon.welcome(&State::new()).await;
-    assert_eq!(daemon.next_view().await.view.text(), "open");
+    assert_eq!(
+        daemon
+            .render("desk", "test", Default::default())
+            .await
+            .text(),
+        "open"
+    );
 
     // The daemon replicates a keyspace like any other topic, so a widget
     // watching one re-renders when it moves — whoever moved it.
@@ -829,19 +850,21 @@ fn a_widget_that_draws_nothing_says_so() {
 }
 
 #[tokio::test]
-async fn anonymous_and_placed_instances_keep_their_own_addresses() {
+async fn independent_instances_keep_their_own_addresses() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").widget_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
     daemon.welcome(&State::new().battery(0.5, false)).await;
-    assert_eq!(daemon.next_view().await.module, "");
+    daemon
+        .render("charge", "window-1", Default::default())
+        .await;
     daemon
         .render("charge", "top-bar-1", Default::default())
         .await;
     daemon.publish(&State::new().battery(0.2, false)).await;
     let anonymous = daemon.next_view().await;
     let placed = daemon.next_view().await;
-    assert_eq!(anonymous.module, "");
-    assert_eq!(placed.module, "top-bar-1");
+    assert_eq!(anonymous.instance.id.as_str(), "test-charge-window-1");
+    assert_eq!(placed.instance.id.as_str(), "test-charge-top-bar-1");
     assert_eq!(anonymous.view.text(), "20%");
     assert_eq!(placed.view.text(), "20%");
 }
@@ -913,12 +936,12 @@ fn one_unreadable_element_is_not_a_shorter_list() {
 
 // ---- the clock ----
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct BarClock {
     clock: Clock,
 }
 
-impl Widget for BarClock {
+impl Surface for BarClock {
     fn render(&self) -> Ui {
         Text::new(format!(
             "{} {}",
@@ -959,12 +982,12 @@ fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
 // ---- a topic nobody wrote accessors for ----
 
 /// Reading a topic that has no typed accessors, only the floor `get()` gives.
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Devices {
-    bluetooth: omega::bluetooth::Bluetooth,
+    bluetooth: omega::platform::bluetooth::Bluetooth,
 }
 
-impl Widget for Devices {
+impl Surface for Devices {
     fn render(&self) -> Ui {
         if !self.bluetooth.has_reading() {
             return Ui::empty();
@@ -1010,7 +1033,7 @@ fn a_handle_declares_the_topic_its_type_names() {
     // The manifest comes from the fields, so holding `Bluetooth` is what asks
     // for the topic — there is no string anywhere to get wrong.
     let manifest = omega::testing::manifest_of(
-        &omega::Plugin::named("devices", "0.1.0").widget_default::<Devices>(),
+        &omega::Plugin::named("devices", "0.1.0").surface_default::<Devices>(),
     );
     assert_eq!(manifest.state_topics, vec!["bluetooth"]);
 }
@@ -1018,12 +1041,12 @@ fn a_handle_declares_the_topic_its_type_names() {
 // ---- composites ----------------------------------------------------------
 
 /// A widget holding a composite rather than its two parts.
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Situation {
-    power: omega::power::Power,
+    power: omega::platform::power::Power,
 }
 
-impl Widget for Situation {
+impl Surface for Situation {
     fn render(&self) -> Ui {
         Text::new(self.power.status().label()).into()
     }
@@ -1035,7 +1058,7 @@ fn a_composite_declares_every_topic_it_is_made_of() {
     // union of what the fields declare, and a composite is one field that
     // declares two topics.
     let manifest =
-        manifest_of(&omega::Plugin::named("situation", "0.1.0").widget_default::<Situation>());
+        manifest_of(&omega::Plugin::named("situation", "0.1.0").surface_default::<Situation>());
     assert_eq!(manifest.state_topics, vec!["battery", "mains"]);
 }
 

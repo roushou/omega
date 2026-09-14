@@ -1,6 +1,7 @@
 mod editor;
 mod files;
 mod init;
+mod migration;
 mod plugin;
 
 pub(crate) use crate::scaffold::PluginName;

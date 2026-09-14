@@ -4,8 +4,8 @@ use omega_proto::Values;
 use omega_proto::omega::{Value, invoke};
 
 use crate::Input;
-use crate::surface::{Args, Command};
 use crate::testing::state::State;
+use crate::{Args, Command};
 
 /// What a command did: what it answered, and what it asked the machine to do.
 #[derive(Debug)]
@@ -30,7 +30,7 @@ impl Called {
     /// use omega::Command;
     /// use omega::testing::{Called, State};
     /// #[derive(omega::Command)]
-    /// struct Lock { session: omega::session::Session }
+    /// struct Lock { session: omega::platform::session::Session }
     /// impl Command for Lock {
     ///     type Input = ();
     ///     type Output = ();

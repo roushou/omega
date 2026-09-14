@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../plugins/omega.view" as Renderer
+import "../core" as Renderer
 
 TestCase {
     id: test
@@ -39,7 +39,7 @@ TestCase {
     Renderer.ViewNode {
         id: listView
         y: 100
-        connection: listConnection
+        session: listConnection
         model: ({type:"list",key:"networks",props:{height:{intValue:"100"}},events:{activate:{command:"join"}},children:[
             {type:"text",key:"home",props:{text:{stringValue:"Home"}}},
             {type:"text",key:"office",props:{text:{stringValue:"Office"}}}
@@ -92,7 +92,7 @@ TestCase {
         failOnWarning(/.*/)
         var button = createTemporaryObject(statusView, test)
         verify(button !== null)
-        verify(Qt.colorEqual(button.ink, "red"))
+        verify(Qt.colorEqual(button.ink, button.theme.urgent))
         verify(button.interactive)
     }
 
@@ -136,13 +136,17 @@ TestCase {
         compare(inherited.ink, tree.ink)
         verify(Math.abs(muted.ink.a - 0.6) < 0.01)
         compare(muted.ink.r, tree.ink.r)
-        verify(Qt.colorEqual(warning.ink, "red"))
+        verify(Qt.colorEqual(warning.ink, tree.theme.urgent))
         tree.foreground = "blue"
         compare(inherited.ink, tree.ink)
         compare(renderedNode(tree, "inherited"), inherited)
+        tree.theme.urgent = "orange"
+        verify(Qt.colorEqual(warning.ink, "orange"))
+        tree.theme.font = {family:"monospace",body:20,caption:18,icon:22,subtitle:24,title:26,heading:30,display:36}
+        compare(inherited.fontSize, 20)
         compare(muted.ink.r, tree.ink.r)
         compare(muted.ink.b, tree.ink.b)
-        verify(Qt.colorEqual(warning.ink, "red"))
+        verify(Qt.colorEqual(warning.ink, tree.theme.urgent))
     }
 
 }

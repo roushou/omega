@@ -4,8 +4,8 @@ The `omega` command builds and runs a desktop configuration written in Rust.
 It creates plugin projects, manages the daemon and renderer, and lets you inspect
 plugins or run them against the live desktop during development.
 
-Omega requires Linux with a systemd user manager and Rust 1.88 or newer. Widgets
-are displayed through Omarchy's Quickshell shell. Install this package with
+Omega requires Linux with a systemd user manager and Rust 1.88 or newer.
+Quickshell renders independent windows and overlays; Omarchy hosts bar placements. Install this package with
 `cargo install omega-cli`; the [project README](https://github.com/roushou/omega)
 describes source installation for changes ahead of the published releases.
 
@@ -44,8 +44,7 @@ omega run power profile balanced
 
 Percentages also accept fractions (`0.4`); boolean inputs accept `true` or `false`.
 Numeric inputs accept numbers, including negatives. Text inputs stay literal,
-so `001` or `true` remains text when the command expects a string. Rebuild plugins
-against the updated SDK to enable typed text input.
+so `001` or `true` remains text when the command expects a string.
 
 Configuration errors identify duplicate placement locations and list available
 widget surfaces. When `omega shell adopt` encounters malformed JSON, it shows
@@ -100,3 +99,9 @@ Run `omega --help` or `omega <command> --help` for the full command reference.
 [Architecture](https://github.com/roushou/omega/blob/main/docs/architecture.md)
 
 Licensed under MIT.
+
+`omega preview <package>` opens isolated development cases from a plugin or library,
+including private components. It watches edits, keeps failed builds visibly stale,
+and captures effects for explicit simulated outcomes. `--capture` and `--baseline`
+compare deterministic viewport images. See [the preview guide](../../docs/previews.md)
+for registration, reset, and fixture requirements.

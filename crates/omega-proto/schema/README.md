@@ -8,17 +8,19 @@ at build time. Edit the schemas, not generated Rust or JSON implementations.
 
 Schema paths below are relative to `schema/omega/`.
 
-| Schema           | Responsibility                                   |
-| ---------------- | ------------------------------------------------ |
-| `wire.proto`     | Frames, handshake, and bidirectional requests    |
-| `value.proto`    | Generic values for settings and command payloads |
-| `state.proto`    | Topic envelope and replicated patches            |
-| `state/*.proto`  | State payloads grouped by domain                 |
-| `action.proto`   | Actions and keybindings                          |
-| `event.proto`    | Events                                           |
-| `unit.proto`     | Manifests, surfaces, and capabilities            |
-| `ui.proto`       | Declarative view trees                           |
-| `document.proto` | Desired desktop configuration                    |
+| Schema           | Responsibility                                           |
+| ---------------- | -------------------------------------------------------- |
+| `wire.proto`     | Frames, handshake, and bidirectional requests            |
+| `value.proto`    | Generic values for settings and command payloads         |
+| `state.proto`    | Topic envelope and replicated patches                    |
+| `state/*.proto`  | State payloads grouped by domain                         |
+| `action.proto`   | Actions and keybindings                                  |
+| `event.proto`    | Events                                                   |
+| `unit.proto`     | Manifests, surfaces, and capabilities                    |
+| `instance.proto` | Instance identity, presentations, renderer attachment    |
+| `ui.proto`       | Declarative view trees                                   |
+| `document.proto` | Desired desktop configuration                            |
+| `preview.proto`  | Isolated development sessions, separate from live frames |
 
 ## Contract
 
@@ -30,8 +32,8 @@ stable, and reserve removed fields.
 Desired configuration and observed state have separate messages. The daemon
 owns topic and view revisions. A topic with its payload unset explicitly reports
 absence, such as a missing battery or an unavailable broker. An unpublished topic
-is not equivalent to an absent one: plugins wait for their declared topics before
-rendering.
+is not equivalent to an absent one. Required readings gate surface startup;
+optional readings retain subscriptions without delaying the first render.
 
 Choose topic boundaries and update resolution around what should wake consumers.
 For example, the clock topic reports minute-resolution time. Payloads should not
@@ -72,7 +74,7 @@ From the repository root:
 
 ```sh
 cargo test -p omega-proto
-cargo test -p omega-brokers --test coverage
+cargo test -p omega-platform --test coverage
 ```
 
 Protocol tests cover wire shapes and validation. Broker coverage checks that
@@ -82,7 +84,7 @@ also require regenerating the renderer's readers and running its checks; see the
 
 ## Media targeting
 
-Protocol v3 requires support for `MediaKey.player_id`. Absence means automatic
+`MediaKey.player_id` selects the target. Absence means automatic
 selection at execution time; a present value must parse as a `PlayerId`, and an
 unavailable explicit target is refused. Empty is invalid. Daemons and units must
 be upgraded together so an older reader cannot discard the target field.
@@ -93,8 +95,67 @@ not a substitute for observing playback state.
 
 ## Bluetooth targeting
 
-Protocol v4 requires an adapter-qualified `BluetoothDevice.id` and preserves
+`BluetoothDevice.id` is adapter-qualified. The schema preserves
 presence for `battery_percent`: absent is unknown, zero is empty. Bluetooth
 connect/disconnect actions require the Bluetooth capability and a validated
 device ID. A vanished endpoint is refused without selecting another adapter.
 Rebuild units and upgrade the daemon together.
+
+## Instances and renderer authority
+
+UI declarations and command endpoints are separate manifest fields. RenderWidget,
+RemoveWidget, and PublishView carry an explicit InstanceRef; removed module_id
+fields are reserved. Instances are allocated by the daemon and expire with their
+unit session. Placement IDs locate desired configuration, never runtime authority.
+
+AttachRenderer is owner-only on the observation socket. It narrows that connection
+to a plugin's standalone presentations or one embedded/popup placement, requiring
+explicit supported features. Reattachment revokes the previous scope holder.
+The reply carries metadata; full views follow separately to bound individual frames.
+InspectInstances is an owner diagnostic. Unattached observers receive no view trees.
+
+Interact supplies identity, revision, node key, event, and optional value; binding
+resolution uses the daemon's retained tree. Renderer operations cannot invoke
+arbitrary commands or destroy instances. ChangePresentation separates requested
+intent from ReportPresentation observations. Closed observations also record closed
+intent so renderer recovery cannot reopen dismissed windows. Destroy expires the
+identity and emits a tombstone; a repeated destroy is FAILED_PRECONDITION.
+
+## Local surface behavior
+
+A Bind targets either a declared command or a nonzero local ID, never both.
+Local bindings cannot carry command arguments. SurfaceEvent is daemon-to-plugin
+only: the daemon resolves the retained tree before forwarding ID, instance and
+value. The plugin validates current registry ownership and typed input. IDs from
+another render, instance or incarnation are not valid capabilities.
+
+SurfaceLifecycle acknowledges presented/hidden/closed intent in the plugin's
+serialized runtime. Close cancels local task delivery; hide retains it. The
+command surface enum value is reserved; commands use CommandEndpoint exclusively.
+Renderer attachment requires LOCAL_MESSAGES and CONTROLLED_INPUTS in addition to
+instance and scoped-interaction features. Deploy daemon, plugins and renderer
+coherently; the accepted version range is defined in `src/protocol.rs`
+(relative to the crate root).
+
+## Application services
+
+`ApplicationsState` is a bounded full catalogue on the `applications` topic.
+`Application.id` and `LaunchApp.desktop_id` are validated desktop-entry IDs.
+`LaunchApp.uris` contains absolute URIs, not shell arguments; admission is an
+Action result on the requesting stream. An optional activation token is never inferred from a
+long-running daemon's inherited environment.
+
+`OverlayPresentation.dismiss_on_outside` opts into outside-click dismissal.
+Units may request Hide/Close only for their own current instance identities.
+Lifecycle acknowledgement and the original request outcome use separate streams
+on the same connection; the original request must not block frame reception.
+
+## Development preview transport
+
+`preview.proto` defines bounded JSON messages for private development sessions.
+It is not accepted by daemon dispatch or the observation socket. The CLI checks
+both connected peers against its spawned runner/renderer PIDs. Versioning is
+independent of the production handshake. Case epochs identify a fresh model
+lifetime; revisions identify its rendered bindings. Input from an old revision
+is refused. Effect IDs resolve once, and snapshots expose operation kinds rather
+than arguments. A reset invalidates pending effects and renderer-local drafts.

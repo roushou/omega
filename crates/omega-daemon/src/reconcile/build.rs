@@ -36,13 +36,13 @@ impl ValidatedBuild {
         let config = layout.file::<StateConfig>(()).read()?;
         let manifests = Arc::new(ManifestStore::load(&config, layout)?);
         let document = DocumentFile::of(layout).read()?;
-        omega_document::DocumentValidation::validate(
+        omega_omarchy::DocumentValidation::validate(
             &document,
             manifests.iter().map(|(_, entry)| &entry.manifest),
         )
         .map_err(|error| crate::reconcile::ProviderError::new("document", error.to_string()))?;
         if let Some(shell) =
-            omega_document::shell::CompiledShell::of(&document).map_err(std::io::Error::other)?
+            omega_omarchy::shell::CompiledShell::of(&document).map_err(std::io::Error::other)?
         {
             let staged: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(layout.compiled_shell())?)
@@ -95,9 +95,9 @@ impl ValidatedBuild {
             return Ok(());
         }
         let result = (|| {
-            let shell = omega_document::shell::CompiledShell::of(&self.document)?
+            let shell = omega_omarchy::shell::CompiledShell::of(&self.document)?
                 .expect("nonempty shell declaration compiles to a shell");
-            omega_host::shell::ShellInstallation::new(root).apply(
+            omega_omarchy::installation::ShellInstallation::new(root).apply(
                 shell.config(),
                 self.generation.id(),
                 overwrite,

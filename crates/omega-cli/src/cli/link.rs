@@ -14,7 +14,6 @@ use anyhow::{Context, bail};
 
 use crate::checkout::{CheckoutLink, SourceTree};
 use crate::workspace::ConfigWorkspace;
-use omega_daemon::host::cargo::CargoConfig;
 use omega_host::Layout;
 
 use crate::ui::{Paint, Step, Ui};
@@ -94,28 +93,5 @@ impl LinkCmd {
             ),
         );
         Ok(())
-    }
-
-    /// Why a build might have failed to resolve omega at all.
-    ///
-    /// A config that is not linked and asks for crates nobody has published
-    /// fails in cargo's words, which name a package and say nothing about
-    /// omega. This is the sentence that was missing.
-    pub fn unlinked(layout: &Layout) -> Option<String> {
-        let linked = layout
-            .file::<CargoConfig>(())
-            .read_or_default()
-            .ok()
-            .and_then(|config| config.patched().map(|patched| !patched.is_empty()))
-            .unwrap_or(false);
-
-        if linked {
-            None
-        } else {
-            Some(format!(
-                "this config is not linked to a checkout of omega, and asks for crates that may not be published yet — point it at one with {}",
-                Paint::command("omega link <path>")
-            ))
-        }
     }
 }

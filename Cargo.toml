@@ -21,10 +21,12 @@ unimplemented = "warn"
 dbg_macro = "warn"
 
 [workspace.dependencies]
-omega-brokers = { path = "crates/omega-brokers", version = "0.2.3" }
 omega-derive = { path = "crates/omega-derive", version = "0.2.3" }
 omega-document = { path = "crates/omega-document", version = "0.2.3" }
 omega-host = { path = "crates/omega-host", version = "0.2.3" }
+omega-omarchy = { path = "crates/omega-omarchy", version = "0.2.3" }
+omega-platform = { path = "crates/omega-platform", version = "0.2.3" }
+omega-preview = { path = "crates/omega-preview", version = "0.2.3" }
 omega-proto = { path = "crates/omega-proto", version = "0.2.3" }
 omega-renderer = { path = "crates/omega-renderer", version = "0.2.3" }
 serde = { version = "1", features = ["derive"] }

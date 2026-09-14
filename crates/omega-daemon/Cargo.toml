@@ -19,11 +19,12 @@ async-trait = "0.1"
 futures-util = "0.3"
 getrandom = "0.3"
 libc = "0.2"
-notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
-omega-brokers.workspace = true
 omega-document.workspace = true
-omega-host.workspace = true
+omega-host = { workspace = true, features = ["watch"] }
+omega-omarchy.workspace = true
+omega-platform.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
+omega-renderer.workspace = true
 prost = "0.14"
 serde.workspace = true
 serde_json.workspace = true
@@ -38,7 +39,6 @@ tokio = { workspace = true, features = [
   "sync",
   "process",
 ] }
-toml = "1"
 tracing.workspace = true
 
 [dev-dependencies]

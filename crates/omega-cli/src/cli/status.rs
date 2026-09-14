@@ -81,16 +81,16 @@ impl StatusCmd {
             Ok(Err(error)) => ui.warn(format!("daemon version unavailable: {error}")),
             Err(_) => ui.warn("daemon version request timed out"),
         }
-        if let Some(shell) = omega_renderer::HostShell::detect() {
-            for renderer in omega_renderer::Renderer::ALL {
-                use omega_renderer::Installed;
+        if let Some(shell) = omega_omarchy::HostShell::detect() {
+            for renderer in omega_omarchy::Renderer::ALL {
+                use omega_omarchy::Installed;
                 match renderer.installed(&shell.plugins()) {
                     Installed::Current => ui.step(
                         Step::Checked,
                         format!(
                             "{} {} matches this CLI",
                             renderer.id,
-                            omega_renderer::Renderer::VERSION
+                            omega_omarchy::Renderer::VERSION
                         ),
                     ),
                     Installed::Missing => ui.warn(format!("{} is not installed", renderer.id)),
@@ -117,7 +117,7 @@ impl StatusCmd {
         }
         match tokio::time::timeout(
             Duration::from_secs(10),
-            crate::cargo::Cargo::new(&layout).packages(),
+            crate::build::cargo::Cargo::new(&layout).packages(),
         )
         .await
         {

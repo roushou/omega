@@ -88,6 +88,9 @@ pub(crate) struct Request {
     pending: PendingEffect,
 }
 impl Request {
+    pub(crate) fn operation(&self) -> &invoke::Op {
+        &self.op
+    }
     pub(crate) fn complete(mut self, result: Completion) -> Result<invoke::Op, EffectError> {
         self.pending.complete(result)?;
         Ok(self.op)

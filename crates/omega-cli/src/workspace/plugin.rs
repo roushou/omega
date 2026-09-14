@@ -1,7 +1,7 @@
 use super::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits, PluginName};
-use crate::scaffold::{Scaffold, Template};
+use crate::scaffold::Template;
 use anyhow::{Context, Result, ensure};
-use omega_daemon::host::cargo::CargoManifest;
+use omega_host::workspace::cargo::CargoManifest;
 use omega_host::{StageDir, Toml};
 
 #[derive(Debug)]
@@ -10,7 +10,8 @@ pub(crate) struct PreparedPlugin<'a> {
     name: PluginName,
     manifest: String,
     library: &'static str,
-    main: String,
+    main: Option<String>,
+    destination: std::path::PathBuf,
     edits: FileEdits,
 }
 
@@ -20,7 +21,29 @@ impl ConfigWorkspace {
         name: PluginName,
         template: Template,
     ) -> Result<PreparedPlugin<'_>> {
-        let destination = self.layout.unit_src_dir(name.unit());
+        self.prepare_package(name, Some(template), &[std::path::PathBuf::from("system")])
+    }
+
+    pub(crate) fn prepare_library(
+        &self,
+        name: PluginName,
+        consumers: &[std::path::PathBuf],
+    ) -> Result<PreparedPlugin<'_>> {
+        self.prepare_package(name, None, consumers)
+    }
+
+    fn prepare_package(
+        &self,
+        name: PluginName,
+        template: Option<Template>,
+        consumers: &[std::path::PathBuf],
+    ) -> Result<PreparedPlugin<'_>> {
+        use omega_host::workspace::WorkspaceRole;
+        WorkspaceRole::check_layout(&self.layout)?;
+        let destination = match template {
+            Some(_) => self.layout.unit_src_dir(name.unit()),
+            None => self.layout.library_src_dir(&name),
+        };
         ensure!(
             !destination.try_exists()? && std::fs::symlink_metadata(&destination).is_err(),
             "{} already exists",
@@ -31,24 +54,25 @@ impl ConfigWorkspace {
             root.exists(),
             "this is not a config workspace; run omega init first"
         );
-        let mut system = FileEdit::read(self.layout.system_manifest())?;
-        ensure!(
-            system.exists(),
-            "missing system/Cargo.toml; run omega init first"
-        );
         let mut editor = CargoEditor::parse(root.source())?;
         editor.workspace(&self.scaffold.workspace_manifest())?;
-        editor.member(&format!("units/{}", name.package()))?;
+        editor.member(
+            destination
+                .strip_prefix(&self.layout.config)?
+                .to_str()
+                .context("non-UTF-8 member path")?,
+        )?;
         // Discovery needs only workspace fields, not a model of user package inheritance.
         let document: toml_edit::DocumentMut = root.source().parse()?;
         let mut workspace_only = toml_edit::DocumentMut::new();
         workspace_only["workspace"] = document["workspace"].clone();
         let manifest = Toml::decode::<CargoManifest>(&workspace_only.to_string())?;
-        for directory in manifest
+        let members = manifest
             .workspace
             .context("missing workspace")?
-            .member_dirs(&self.layout.config)?
-        {
+            .member_dirs(&self.layout.config)?;
+        for directory in &members {
+            WorkspaceRole::at(&self.layout, directory)?;
             let path = directory.join("Cargo.toml");
             if path.try_exists()? {
                 let source = std::fs::read_to_string(&path)?;
@@ -62,31 +86,82 @@ impl ConfigWorkspace {
             }
         }
         root.replace(editor.finish());
-        let mut editor = CargoEditor::parse(system.source())?;
-        editor.package_name()?;
-        editor.dependency(name.package(), &Scaffold::depends_on(name.unit()))?;
-        system.replace(editor.finish());
-        let manifest = Toml::encode(&self.scaffold.unit_crate_manifest(name.unit()))?;
-        let main = self.scaffold.unit_main(&name)?;
+        let mut edits = vec![root];
+        let mut seen = std::collections::BTreeSet::new();
+        for consumer in consumers {
+            ensure!(
+                seen.insert(consumer),
+                "duplicate consumer {}",
+                consumer.display()
+            );
+            ensure!(
+                consumer
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_))),
+                "consumer must be a config member path"
+            );
+            let directory = self.layout.config.join(consumer);
+            ensure!(
+                members.contains(&directory),
+                "consumer {} is not a workspace member",
+                consumer.display()
+            );
+            let role = WorkspaceRole::at(&self.layout, &directory)?;
+            let prefix = match role {
+                WorkspaceRole::System => "..",
+                WorkspaceRole::Plugin(_) | WorkspaceRole::Library(_) => "../..",
+            };
+            let relative = destination.strip_prefix(&self.layout.config)?;
+            let mut edit = FileEdit::read(directory.join("Cargo.toml"))?;
+            ensure!(
+                edit.exists(),
+                "consumer {} has no Cargo.toml",
+                consumer.display()
+            );
+            let mut editor = CargoEditor::parse(edit.source())?;
+            editor.package_name()?;
+            editor.dependency(
+                name.package(),
+                &omega_host::workspace::cargo::Dependency::local(
+                    format!("{prefix}/{}", relative.display()),
+                    &[],
+                ),
+            )?;
+            edit.replace(editor.finish());
+            edits.push(edit);
+        }
+        let mut manifest = self.scaffold.unit_crate_manifest(name.unit());
+        if template.is_none() {
+            manifest.dependencies = Default::default();
+        }
+        let manifest = Toml::encode(&manifest)?;
+        let main = template
+            .map(|_| self.scaffold.unit_main(&name))
+            .transpose()?;
         Ok(PreparedPlugin {
             workspace: self,
             name,
             manifest,
-            library: template.library(),
+            library: template
+                .map(Template::library)
+                .unwrap_or("//! Shared types and components for this desktop.\n"),
+            destination,
             main,
-            edits: FileEdits::new(vec![root, system]),
+            edits: FileEdits::new(edits),
         })
     }
 }
 
 impl PreparedPlugin<'_> {
     pub(crate) fn apply(self) -> Result<PluginName> {
-        let destination = self.workspace.layout.unit_src_dir(self.name.unit());
+        let destination = self.destination;
         let stage =
             StageDir::in_directory(&destination, &self.workspace.layout.workspace_staging())?;
         stage.write("Cargo.toml", self.manifest.as_bytes())?;
         stage.write("src/lib.rs", self.library.as_bytes())?;
-        stage.write("src/main.rs", self.main.as_bytes())?;
+        if let Some(main) = self.main {
+            stage.write("src/main.rs", main.as_bytes())?;
+        }
         self.edits.apply()?;
         if let Err(error) = stage.publish_new() {
             return Err(self.edits.rollback(anyhow::anyhow!(

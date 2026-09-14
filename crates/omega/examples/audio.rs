@@ -1,15 +1,15 @@
 //! Output volume and mute controls. Run as a unit or place `indicator` and `panel`.
-use omega::audio::{Audio, Volume};
+use omega::platform::audio::{Audio, Volume};
 use omega::ui::{Button, Metric, Section, Slider, Text};
-use omega::{Command, Percent, Plugin, Ui, Widget};
+use omega::{Command, Percent, Plugin, Surface, Ui};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Indicator {
     audio: Audio,
 }
-impl Widget for Indicator {
+impl Surface for Indicator {
     fn render(&self) -> Ui {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").muted().into();
@@ -23,11 +23,11 @@ impl Widget for Indicator {
     }
 }
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Panel {
     audio: Audio,
 }
-impl Widget for Panel {
+impl Surface for Panel {
     fn render(&self) -> Ui {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
@@ -87,8 +87,8 @@ impl Command for Mute {
 
 pub fn plugin() -> Plugin {
     Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
-        .widget_as::<Indicator>("indicator")
-        .widget_as::<Panel>("panel")
+        .surface_as::<Indicator>("indicator")
+        .surface_as::<Panel>("panel")
         .command::<SetVolume>()
         .command::<Mute>()
 }

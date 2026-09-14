@@ -20,14 +20,17 @@ anstyle = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 miette = { version = "7.6", features = ["fancy-no-backtrace"] }
-omega-brokers.workspace = true
 omega-daemon = { path = "../omega-daemon", version = "0.2.3" }
 omega-document.workspace = true
-omega-host.workspace = true
+omega-host = { workspace = true, features = ["watch"] }
+omega-omarchy.workspace = true
+omega-platform.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
 omega-renderer.workspace = true
+png = "0.17"
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
 thiserror.workspace = true
 tokio = { workspace = true, features = [
   "rt-multi-thread",

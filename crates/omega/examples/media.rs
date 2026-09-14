@@ -1,8 +1,8 @@
 //! MPRIS playback controls. Selection survives plugin restarts while Omega runs.
-use omega::audio::{Media, MediaControl, Playback, Player, PlayerId};
+use omega::platform::audio::{Media, MediaControl, Playback, Player, PlayerId};
 use omega::record::{Own, Watch};
 use omega::ui::{Button, Column, Glyph, Icon, Row, Section, Text};
-use omega::{Command, Plugin, Ui, Widget};
+use omega::{Command, Plugin, Surface, Ui};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
@@ -48,12 +48,12 @@ impl Selection {
     }
 }
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Indicator {
     media: Media,
     selection: Watch<Selection>,
 }
-impl Widget for Indicator {
+impl Surface for Indicator {
     fn render(&self) -> Ui {
         if !self.media.has_reading() {
             return Text::new("Media unavailable").muted().into();
@@ -82,12 +82,12 @@ impl Widget for Indicator {
     }
 }
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Panel {
     media: Media,
     selection: Watch<Selection>,
 }
-impl Widget for Panel {
+impl Surface for Panel {
     fn render(&self) -> Ui {
         if !self.media.has_reading() {
             return Section::new("Media")
@@ -244,8 +244,8 @@ impl Command for Next {
 
 fn main() -> omega::Result<()> {
     Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
-        .widget_as::<Indicator>("indicator")
-        .widget_as::<Panel>("panel")
+        .surface_as::<Indicator>("indicator")
+        .surface_as::<Panel>("panel")
         .command::<SelectPlayer>()
         .command::<PlayPause>()
         .command::<Previous>()

@@ -1,12 +1,5 @@
-//! The generated prop readers, and whether the shell and the vocabulary
-//! still describe the same thing.
-//!
-//! `Props.js` is generated from `omega-proto`'s node table, so a shell cannot
-//! read a prop by a name nothing publishes. That closes one direction. These
-//! close the other two: a prop declared and drawn by nothing, and an accessor
-//! called that was never generated. All three used to be silent — a widget
-//! that lays out an empty string is indistinguishable from one whose unit had
-//! nothing to say.
+//! Generated readers, QML calls, and declared props must agree. Every prop must
+//! have a renderer consumer or an explicit entry in NOT_DRAWN.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -17,7 +10,7 @@ use omega_renderer::Props;
 
 /// The checkout this test is running inside.
 fn shell() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("shell/plugins/omega.view")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("shell/core")
 }
 
 fn generated_path() -> PathBuf {
@@ -27,7 +20,10 @@ fn generated_path() -> PathBuf {
 /// Every `.qml` in the tree, and the QML that is not a node too.
 fn qml_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let mut stack = vec![shell()];
+    let mut stack = vec![
+        shell(),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../omega-omarchy/shell"),
+    ];
 
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(&dir).expect("the shell tree is on disk") {
@@ -75,7 +71,7 @@ const HAND_WRITTEN: &[&str] = &["bind", "encode", "children", "prop"];
 /// Props declared in the vocabulary that no shell draws yet.
 ///
 /// A hole is a line here, with a reason, or the test fails — the same bargain
-/// `omega-brokers`' coverage test makes. An entry is not permission to leave
+/// `omega-platform`' coverage test makes. An entry is not permission to leave
 /// it: a unit calling `.tooltip(…)` today is publishing a string on every
 /// render that nothing will ever show.
 const NOT_DRAWN: &[&str] = &[];

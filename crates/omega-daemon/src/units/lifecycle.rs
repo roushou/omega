@@ -1,13 +1,7 @@
 //! Where a unit is in its life.
 //!
-//! The phases were always here — `UnitPhase` is in the schema, and the
-//! supervisor reported them from half a dozen places inside its loop. What
-//! was missing was the state: the phase lived only in the report, so the code
-//! that needed to know what was happening had to read its own log to find
-//! out, and nothing stopped two reports from disagreeing.
-//!
-//! Here the state is the state, transitions are the only way to change it,
-//! and what the `units` topic says is a projection of it.
+//! Transitions are the only way to change lifecycle state. The `units` topic
+//! projects that state so supervision and observers cannot report different phases.
 
 use omega_proto::omega::UnitPhase;
 

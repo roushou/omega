@@ -14,29 +14,21 @@ use omega_proto::{ModuleId, SurfaceId, UnitName};
 use crate::events::{EventStamp, PowerDetail, Transitions};
 use crate::state::StateStore;
 
-/// Which instance, of which surface, of which unit.
+/// A surface declaration and its optional configuration placement.
 ///
-/// Surface ids are chosen by unit authors, so they are only unique within a
-/// unit: two units may both call a surface "battery". The daemon qualifies
-/// every published view with the unit it authenticated, which is what keeps
-/// one unit from writing over another's slot in the bar.
-///
-/// The module is the third dimension: one surface can be instantiated more
-/// than once — two clocks with different formats — and each instance is its
-/// own view. No module is the surface's single instance, which is what a unit
-/// that never heard of modules publishes.
+/// This metadata locates desired configuration. Runtime ownership and view
+/// identity use `InstanceKey`, including its incarnation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub struct SurfaceRef {
     pub unit: UnitName,
     pub surface: SurfaceId,
-    /// Absent rather than empty: "the only instance" is a different thing
-    /// from "an instance called nothing".
+    /// None for transient presentations without a configured placement.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub module: Option<ModuleId>,
 }
 
 impl SurfaceRef {
-    /// A surface's single instance.
+    /// An unplaced surface declaration.
     pub fn new(unit: UnitName, surface: SurfaceId) -> Self {
         Self {
             unit,
@@ -71,6 +63,11 @@ impl std::fmt::Display for SurfaceRef {
 /// A published view: a surface's latest declarative tree.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ViewUpdate {
+    pub destroyed: bool,
+    pub instance: omega_proto::instance::InstanceKey,
+    pub presentation: omega_proto::omega::Presentation,
+    pub requested: i32,
+    pub observed: i32,
     #[serde(flatten)]
     pub surface: SurfaceRef,
     pub view: ViewTree,
@@ -120,7 +117,7 @@ struct HubInner {
 /// Current views and a global sequence that survives removal of any address.
 #[derive(Debug, Default)]
 struct ViewRegistry {
-    latest: BTreeMap<SurfaceRef, Arc<ViewUpdate>>,
+    latest: BTreeMap<omega_proto::instance::InstanceKey, Arc<ViewUpdate>>,
     revision: u64,
     bytes: usize,
 }
@@ -150,7 +147,10 @@ impl ViewUpdate {
                 .module
                 .as_ref()
                 .map_or(0, |module| module.as_str().len())
-            + 64
+            + self.presentation.encoded_len()
+            + self.instance.id.as_str().len()
+            + self.instance.incarnation.as_str().len()
+            + 96
     }
 }
 
@@ -271,14 +271,15 @@ impl Hub {
         }
         let mut registry = self.views();
 
-        if registry
-            .latest
-            .get(&update.surface)
-            .is_some_and(|prev| prev.view.root == update.view.root)
-        {
+        if registry.latest.get(&update.instance).is_some_and(|prev| {
+            prev.view.root == update.view.root
+                && prev.requested == update.requested
+                && prev.observed == update.observed
+                && prev.presentation == update.presentation
+        }) {
             return Ok(());
         }
-        let previous = registry.latest.get(&update.surface);
+        let previous = registry.latest.get(&update.instance);
         let bytes = registry.bytes - previous.map_or(0, |view| view.size()) + size;
         let count = registry.latest.len() + usize::from(previous.is_none());
         if bytes > Self::VIEW_BYTES || count > Self::VIEW_COUNT {
@@ -294,7 +295,7 @@ impl Hub {
         let update = Arc::new(update);
         registry
             .latest
-            .insert(update.surface.clone(), update.clone());
+            .insert(update.instance.clone(), update.clone());
         registry.bytes = bytes;
         self.inner.view_tx.send(update, size);
         Ok(())
@@ -316,9 +317,9 @@ impl Hub {
         let mut registry = self.views();
         let dropped: Vec<_> = registry
             .latest
-            .keys()
-            .filter(|surface| &surface.unit == unit)
-            .cloned()
+            .values()
+            .filter(|view| &view.surface.unit == unit)
+            .map(|view| view.instance.clone())
             .collect();
         for surface in dropped {
             self.remove_view(&mut registry, &surface);
@@ -329,9 +330,9 @@ impl Hub {
         let mut registry = self.views();
         let dropped: Vec<_> = registry
             .latest
-            .keys()
-            .filter(|surface| surface.module.as_ref() == Some(module))
-            .cloned()
+            .values()
+            .filter(|view| view.surface.module.as_ref() == Some(module))
+            .map(|view| view.instance.clone())
             .collect();
         for surface in dropped {
             self.remove_view(&mut registry, &surface);
@@ -339,10 +340,23 @@ impl Hub {
     }
 
     pub fn drop_surface(&self, surface: &SurfaceRef) {
-        self.remove_view(&mut self.views(), surface);
+        let mut views = self.views();
+        let removed: Vec<_> = views
+            .latest
+            .values()
+            .filter(|view| &view.surface == surface)
+            .map(|view| view.instance.clone())
+            .collect();
+        for key in removed {
+            self.remove_view(&mut views, &key);
+        }
     }
 
-    fn remove_view(&self, registry: &mut ViewRegistry, surface: &SurfaceRef) {
+    fn remove_view(
+        &self,
+        registry: &mut ViewRegistry,
+        surface: &omega_proto::instance::InstanceKey,
+    ) {
         let Some(previous) = registry.latest.remove(surface) else {
             return;
         };
@@ -352,7 +366,12 @@ impl Hub {
             .checked_add(1)
             .expect("view revision exhausted");
         let update = ViewUpdate {
-            surface: surface.clone(),
+            destroyed: true,
+            instance: previous.instance.clone(),
+            presentation: previous.presentation.clone(),
+            requested: omega_proto::omega::PresentationState::Closed as i32,
+            observed: omega_proto::omega::PresentationState::Closed as i32,
+            surface: previous.surface.clone(),
             view: ViewTree {
                 root: None,
                 revision: registry.revision,
@@ -360,6 +379,14 @@ impl Hub {
         };
         let size = update.size();
         self.inner.view_tx.send(Arc::new(update), size);
+    }
+
+    pub fn drop_instance(&self, instance: &omega_proto::instance::InstanceKey) {
+        self.remove_view(&mut self.views(), instance);
+    }
+
+    pub fn view(&self, instance: &omega_proto::instance::InstanceKey) -> Option<Arc<ViewUpdate>> {
+        self.views().latest.get(instance).cloned()
     }
 
     /// Snapshot + subscription, taken under one lock so a publish can never
@@ -403,18 +430,51 @@ mod tests {
     struct Fixture;
     impl Fixture {
         fn view(id: &str, size: usize) -> ViewUpdate {
-            ViewUpdate {
-                surface: SurfaceRef::new(
+            {
+                let surface = SurfaceRef::new(
                     UnitName::parse("example").unwrap(),
                     SurfaceId::parse(id).unwrap(),
-                ),
-                view: ViewTree {
-                    root: Some(omega_proto::omega::ViewNode {
-                        key: "x".repeat(size),
-                        ..Default::default()
-                    }),
-                    revision: 0,
-                },
+                );
+                ViewUpdate {
+                    instance: omega_proto::instance::InstanceKey {
+                        id: omega_proto::instance::InstanceId::parse(format!(
+                            "test-{}-{}-{}",
+                            surface.unit,
+                            surface.surface,
+                            surface
+                                .module
+                                .as_ref()
+                                .map(ToString::to_string)
+                                .unwrap_or_default()
+                        ))
+                        .unwrap(),
+                        incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                            .unwrap(),
+                    },
+                    presentation: omega_proto::omega::Presentation {
+                        kind: Some(omega_proto::omega::presentation::Kind::Window(
+                            omega_proto::omega::WindowPresentation {
+                                title: "Test".into(),
+                                app_id: "org.omega.example".into(),
+                                width: 480,
+                                height: 320,
+                                min_width: 1,
+                                min_height: 1,
+                            },
+                        )),
+                    },
+                    requested: 2,
+                    observed: 2,
+                    destroyed: false,
+                    surface,
+                    view: ViewTree {
+                        root: Some(omega_proto::omega::ViewNode {
+                            key: "x".repeat(size),
+                            ..Default::default()
+                        }),
+                        revision: 0,
+                    },
+                }
             }
         }
     }

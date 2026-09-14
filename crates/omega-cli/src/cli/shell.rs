@@ -10,7 +10,8 @@ use anyhow::Context;
 
 use crate::checkout::SourceTree;
 use crate::ui::{Paint, Step, Ui};
-use omega_renderer::{HostShell, Installed, Renderer};
+use omega_omarchy::HostShell;
+use omega_omarchy::{Installed, Renderer};
 
 /// Install and inspect the shell plugin that draws omega's views.
 #[derive(Debug, clap::Args)]
@@ -91,7 +92,7 @@ impl ShellCmd {
     fn adopt(ui: &mut Ui) -> anyhow::Result<()> {
         let layout = omega_host::Layout::resolve();
         let source = std::fs::read_to_string(&layout.shell_config)?;
-        let shell = omega_document::shell::Shell::from_omarchy(&source)
+        let shell = omega_omarchy::shell::Shell::from_omarchy(&source)
             .with_context(|| format!("cannot import {}", layout.shell_config.display()))?;
         let target = layout.shell_import();
         anyhow::ensure!(
@@ -100,24 +101,24 @@ impl ShellCmd {
             target.display()
         );
         omega_host::AtomicFile::at(&target).write(shell.rust_source()?.as_bytes())?;
-        omega_host::shell::ShellInstallation::new(&layout)
+        omega_omarchy::installation::ShellInstallation::new(&layout)
             .adopt(&serde_json::from_str(&source)?)?;
         ui.step(Step::Created, Paint::path(&target));
-        ui.next("add mod shell_import; and .shell(shell_import::shell()?)? to your document, replacing legacy .bar(...) declarations");
+        ui.next("add mod shell_import; and .with(shell_import::shell()?)? to your document, replacing legacy .bar(...) declarations");
         ui.detail("The desktop is unchanged. Review the import, then run omega build.");
         Ok(())
     }
 
     fn diff(ui: &mut Ui) -> anyhow::Result<()> {
         let layout = omega_host::Layout::resolve();
-        let installer = omega_host::shell::ShellInstallation::new(&layout);
+        let installer = omega_omarchy::installation::ShellInstallation::new(&layout);
         let ownership = installer.inspect()?;
         ui.step(Step::Checking, format!("shell ownership: {ownership:?}"));
         let generation = omega_host::Generations::new(&layout)
             .pin_current()?
             .context("nothing built")?;
         let document = omega_document::DocumentFile::of(generation.layout()).read()?;
-        let compiled = omega_document::shell::CompiledShell::of(&document)?
+        let compiled = omega_omarchy::shell::CompiledShell::of(&document)?
             .context("this generation declares no shell")?;
         let current = installer.read()?;
         if current.as_ref() == Some(compiled.config()) {
@@ -126,7 +127,7 @@ impl ShellCmd {
             ui.shell_diff(current.as_ref(), compiled.config());
             ui.detail("Changes shown from the current file to the built configuration.");
         }
-        use omega_host::shell::InstallationState;
+        use omega_omarchy::installation::InstallationState;
         match ownership {
             InstallationState::Unmanaged if current.is_some() => {
                 ui.detail(

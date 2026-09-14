@@ -26,7 +26,8 @@ enum Capability {
 enum SurfaceKind {
   SURFACE_KIND_UNSPECIFIED = 0;
   SURFACE_KIND_WIDGET = 1;
-  SURFACE_KIND_COMMAND = 2;
+  reserved 2;
+  reserved "SURFACE_KIND_COMMAND";
 }
 
 // What a unit asks for, and therefore what the daemon grants it.
@@ -47,6 +48,7 @@ message Manifest {
   string version = 2;
   repeated Capability capabilities = 3;
   repeated Surface surfaces = 4;
+  repeated CommandEndpoint commands = 7;
 
   // Topic addresses: a system topic by name, or `unit.<name>.<key>` for
   // another unit's keyspace. A string rather than an enum because the second
@@ -61,3 +63,5 @@ message Surface {
   string id = 1;
   SurfaceKind kind = 2;
 }
+
+message CommandEndpoint { string id = 1; }

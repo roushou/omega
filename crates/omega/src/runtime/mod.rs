@@ -11,11 +11,11 @@ use omega_proto::omega::{Frame, Invoke, PublishView, frame, invoke, result};
 use omega_proto::{Client, Handshake, Socket, Values};
 use tokio::net::UnixStream;
 
-use crate::context::Context;
+use crate::command::Args;
 use crate::error::Error;
 use crate::plugin::Plugin;
-use crate::registry::CalledCommand;
-use crate::surface::Args;
+use crate::plugin::registry::CalledCommand;
+use crate::runtime::context::Context;
 
 mod instance;
 #[cfg(test)]
@@ -24,6 +24,7 @@ mod tests;
 use instance::Instance;
 
 pub(crate) struct Runtime {
+    publications: std::collections::BTreeSet<u64>,
     client: Client,
     context: Context,
     effects: crate::effect::queue::Effects,
@@ -58,6 +59,7 @@ impl Runtime {
     fn welcomed(client: Client, welcome: omega_proto::omega::Welcome) -> Self {
         let (sender, effects) = crate::effect::queue::Effects::channel();
         Self {
+            publications: Default::default(),
             client,
             context: Context::new(&welcome.state.unwrap_or_default(), sender),
             effects,
@@ -67,14 +69,7 @@ impl Runtime {
 
     /// Serve every surface the plugin registered until the daemon closes.
     pub(crate) async fn serve(mut self, plugin: Plugin) -> Result<(), Error> {
-        // Until the document says otherwise, each widget surface has one
-        // instance. Building it now means the first render is of the snapshot
-        // the Welcome carried rather than of nothing.
-        let mut instances: Vec<Instance> = plugin
-            .widgets()
-            .iter()
-            .map(|entry| Instance::new(entry, String::new(), &self.context, &self.settings))
-            .collect();
+        let mut instances: Vec<Instance> = Vec::new();
 
         // A command is built once: it holds handles, not state, and there is
         // one of it however many times it is called.
@@ -101,6 +96,16 @@ impl Runtime {
         loop {
             let deadline = self.effects.deadline();
             tokio::select! {
+                completed = std::future::poll_fn(|cx| {
+                    for instance in &mut instances {
+                        if let std::task::Poll::Ready(answer) = instance.poll(cx) { return std::task::Poll::Ready(answer); }
+                    }
+                    std::task::Poll::Pending
+                }) => {
+                    completed?;
+                    self.publish_all(&mut instances).await?;
+                }
+
                 _ = async { tokio::time::sleep_until(deadline.expect("enabled deadline")).await }, if deadline.is_some() => {
                     self.effects.expire()?;
                 }
@@ -121,6 +126,7 @@ impl Runtime {
                     match frame.body {
                         Some(frame::Body::StatePatch(patch)) => {
                             self.context.apply(&patch);
+                            for instance in &mut instances { instance.invalidate(&patch); }
                             self.publish_all(&mut instances).await?;
                         }
 
@@ -130,7 +136,7 @@ impl Runtime {
                             op: Some(invoke::Op::RenderWidget(render)),
                         })) => {
                             let Some(entry) = plugin
-                                .widgets()
+                                .surfaces()
                                 .iter()
                                 .find(|entry| entry.surface == render.surface_id)
                             else {
@@ -143,7 +149,21 @@ impl Runtime {
                             // widget is placed must not reset the rest.
                             let settings =
                                 Values::from_map(render.config.clone()).over(&self.settings);
-                            let mut instance = Instance::new(entry, render.module_id.clone(), &self.context, &settings);
+                            let identity = match render.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose() {
+                                Ok(Some(identity)) => identity,
+                                _ => {
+                                    self.client.send(omega_proto::Refusal::invalid("RenderWidget requires a valid instance identity").frame(frame.stream_id)).await?;
+                                    continue;
+                                }
+                            };
+                            if instances.len() >= 256 && !instances.iter().any(|held| held.identity == identity) {
+                                self.client.send(omega_proto::Refusal::exhausted("instance capacity exhausted").frame(frame.stream_id)).await?;
+                                continue;
+                            }
+                            let mut instance = match Instance::new(entry, identity.clone(), &self.context, &settings) {
+                                Ok(instance) => instance,
+                                Err(error) => { self.client.send(error.refusal().frame(frame.stream_id)).await?; continue; }
+                            };
                             let view = instance.view(&self.context).unwrap_or_default();
                             let answer = Frame::reply(frame.stream_id, result::Outcome::View(view.clone()));
                             let rendered = matches!(&answer.body, Some(frame::Body::Result(answer)) if matches!(answer.outcome, Some(result::Outcome::View(_))));
@@ -152,8 +172,7 @@ impl Runtime {
                             instance.sent(view);
 
                             instances.retain(|held| {
-                                held.surface != render.surface_id
-                                    || held.module != render.module_id
+                                held.identity != identity
                             });
                             instances.push(instance);
                         }
@@ -175,12 +194,39 @@ impl Runtime {
                             });
                         }
 
+                        Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::SurfaceLifecycle(event)) })) => {
+                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose();
+                            let completion = match identity {
+                                Ok(Some(identity)) => match instances.iter_mut().find(|instance| instance.identity == identity) {
+                                    Some(instance) => instance.lifecycle(event.state),
+                                    None => Err(omega_proto::Refusal::precondition("unknown or expired instance").into()),
+                                },
+                                _ => Err(crate::Error::invalid("lifecycle requires an instance")),
+                            };
+                            self.answer(frame.stream_id, Self::completion(completion.map(|()| Default::default()))).await?;
+                            self.publish_all(&mut instances).await?;
+                        }
+                        Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::SurfaceEvent(event)) })) => {
+                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose();
+                            let completion = match identity {
+                                Ok(Some(identity)) => match instances.iter_mut().find(|instance| instance.identity == identity) {
+                                    Some(instance) => instance.event(&event),
+                                    None => Err(omega_proto::Refusal::precondition("unknown or expired instance").into()),
+                                },
+                                _ => Err(crate::Error::invalid("SurfaceEvent requires an instance")),
+                            };
+                            self.answer(frame.stream_id, Self::completion(completion.map(|()| Default::default()))).await?;
+                            self.publish_all(&mut instances).await?;
+                        }
                         Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::RemoveWidget(remove)) })) => {
-                            if remove.module_id.is_empty() {
-                                self.client.send(omega_proto::Refusal::invalid("cannot remove the anonymous instance").frame(frame.stream_id)).await?;
-                                continue;
-                            }
-                            instances.retain(|held| held.surface != remove.surface_id || held.module != remove.module_id);
+                            let identity = match remove.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose() {
+                                Ok(Some(identity)) => identity,
+                                _ => {
+                                    self.client.send(omega_proto::Refusal::invalid("RemoveWidget requires a valid instance identity").frame(frame.stream_id)).await?;
+                                    continue;
+                                }
+                            };
+                            instances.retain(|held| held.identity != identity);
                             self.answer(frame.stream_id, result::Outcome::Ok(Default::default())).await?;
                         }
                         Some(frame::Body::Invoke(_)) => {
@@ -195,7 +241,13 @@ impl Runtime {
                         }
 
                         Some(frame::Body::Result(answer)) => {
-                            if self.effects.answer(frame.stream_id, &answer)? {
+                            if self.effects.answer(frame.stream_id, &answer)? { continue; }
+                            if self.publications.remove(&frame.stream_id) {
+                                if let Some(result::Outcome::Error(error)) = &answer.outcome
+                                    && error.code != omega_proto::omega::ErrorCode::FailedPrecondition as i32 {
+                                    return Err(omega_proto::Refusal::new(omega_proto::omega::ErrorCode::try_from(error.code).unwrap_or_default(), error.message.clone()).into());
+                                }
+                                self.publish_all(&mut instances).await?;
                                 continue;
                             }
                             if let Some(result::Outcome::Error(error)) = answer.outcome {
@@ -211,6 +263,9 @@ impl Runtime {
 
     async fn publish_all(&mut self, instances: &mut [Instance]) -> Result<(), Error> {
         for instance in instances {
+            if self.publications.len() >= 256 {
+                break;
+            }
             let Some(view) = instance.changed(&self.context) else {
                 continue;
             };
@@ -220,11 +275,12 @@ impl Runtime {
                     stream,
                     invoke::Op::PublishView(PublishView {
                         surface_id: instance.surface.clone(),
-                        module_id: instance.module.clone(),
+                        instance: Some(instance.identity.wire()),
                         view: Some(view.clone()),
                     }),
                 )
                 .await?;
+            self.publications.insert(stream);
             instance.sent(view);
         }
         Ok(())
@@ -249,3 +305,6 @@ impl Runtime {
         }
     }
 }
+
+pub(crate) mod context;
+pub(crate) mod mirror;

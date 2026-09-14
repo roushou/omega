@@ -1,8 +1,8 @@
 import QtQuick
 import QtTest
-import "../plugins/omega.view/nodes" as Nodes
-import "../plugins/omega.view" as Renderer
-import "../plugins/omega.view/Props.js" as Props
+import "../core/nodes" as Nodes
+import "../core" as Renderer
+import "../core/Props.js" as Props
 
 TestCase {
     id: test
@@ -23,7 +23,7 @@ TestCase {
             {type:"field",props:{name:{stringValue:"ssid"},placeholder:{stringValue:"Network"}}},
             {type:"field",props:{name:{stringValue:"password"},secret:{boolValue:true}}}
         ]})
-        property var connection: testConnection
+        property var session: testConnection
         property bool pending: false
         property bool interactive: !pending
         property color ink: "white"
@@ -95,6 +95,8 @@ TestCase {
 
     QtObject {
         id: selectionHost
+        property Renderer.Theme theme: Renderer.Theme {}
+        property Renderer.Assets assets: Renderer.Assets {}
         property var model: ({})
         property bool interactive: true
         property color ink: "white"
@@ -105,7 +107,7 @@ TestCase {
         property string fontFamily: "sans-serif"
         property int fontSize: 14
         property real radius: 3
-        property var connection: testConnection
+        property var session: testConnection
         function space(value) { return value }
         function controlFill(focused, hot) { return "gray" }
         function invoke(bound, value) { test.submitted = value }

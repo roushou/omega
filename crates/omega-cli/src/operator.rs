@@ -37,6 +37,19 @@ impl Operator {
         Self { socket }
     }
 
+    pub async fn present(
+        &self,
+        request: omega_proto::omega::CreateInstance,
+    ) -> Result<omega_proto::omega::InstanceList, OperatorError> {
+        match self.invoke(invoke::Op::CreateInstance(request)).await? {
+            result::Outcome::Instances(instances) => Ok(instances),
+            _ => Err(OperatorError::Unexpected(
+                "CreateInstance",
+                "instance snapshot",
+            )),
+        }
+    }
+
     pub async fn deployment(&self) -> Result<omega_proto::omega::DeploymentStatus, OperatorError> {
         match self
             .invoke(invoke::Op::GetDeployment(

@@ -1,4 +1,4 @@
-use omega::audio::{Media, MediaControl, PlayerId};
+use omega::platform::audio::{Media, MediaControl, PlayerId};
 use omega::record::UnitState;
 use omega::testing::{Called, State};
 use omega::{Command, Input};

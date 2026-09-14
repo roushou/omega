@@ -3,18 +3,11 @@
 
 mod common;
 
-use std::time::Duration;
-
-use common::{Harness, expect_refusal, unit_name, widget_manifest};
-use omega_daemon::hub::SurfaceRef;
+use common::{Harness, expect_refusal, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::omega::{
     CallCommand, ErrorCode, Frame, Invoke, PublishView, ViewNode, ViewTree, frame, invoke,
 };
-
-fn surface(id: &str) -> omega_proto::SurfaceId {
-    omega_proto::SurfaceId::parse(id).unwrap()
-}
 
 fn view() -> ViewTree {
     ViewTree {
@@ -35,7 +28,10 @@ fn publish(surface: &str) -> Frame {
         body: Some(frame::Body::Invoke(Invoke {
             op: Some(invoke::Op::PublishView(PublishView {
                 surface_id: surface.into(),
-                module_id: String::new(),
+                instance: Some(omega_proto::omega::InstanceRef {
+                    id: "test-instance".into(),
+                    incarnation: "test-session".into(),
+                }),
                 view: Some(view()),
             })),
         })),
@@ -51,25 +47,16 @@ async fn harness(tag: &str) -> (Harness, String, omega_daemon::units::UnitToken)
 }
 
 #[tokio::test]
-async fn a_unit_may_publish_to_a_surface_it_declared() {
+async fn a_declared_surface_still_requires_a_daemon_created_instance() {
     let (harness, hash, token) = harness("publish-own").await;
-    let (_, mut views) = harness.hub.subscribe_views();
-
     let mut transport = harness.connect(&hash, token.as_str()).await;
-    transport.recv().await.unwrap().unwrap(); // Welcome
+    transport.recv().await.unwrap().unwrap();
     transport.send(publish("battery")).await.unwrap();
-
-    let update = tokio::time::timeout(Duration::from_secs(2), views.recv())
-        .await
-        .unwrap()
-        .unwrap();
-
-    // The surface is qualified by the unit the daemon authenticated, not by
-    // anything the frame said.
     assert_eq!(
-        update.surface,
-        SurfaceRef::new(unit_name("battery-widget"), surface("battery"))
+        expect_refusal(transport.recv().await.unwrap()).code,
+        ErrorCode::FailedPrecondition
     );
+    assert!(harness.hub.view_snapshot().is_empty());
 }
 
 #[tokio::test]

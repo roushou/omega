@@ -9,19 +9,20 @@ use omega_proto::omega::{
     Empty, Frame, Invoke, StatePatch, StateTopic, Value, invoke, result, state_topic,
 };
 use omega_proto::{Address, Refusal};
-use omega_proto::{ModuleId, SurfaceId, UnitName};
+use omega_proto::{SurfaceId, UnitName};
 
 use crate::action::Actions;
 use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
 
-use crate::hub::{Hub, SurfaceRef, ViewUpdate};
+use crate::hub::Hub;
 use crate::session::admission::{Grants, Peer, Role};
 use crate::session::subscriptions::Subscriptions;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
 
 mod adoption;
+pub(crate) mod attachment;
 mod policy;
 
 use adoption::Adoptions;
@@ -34,6 +35,7 @@ pub use policy::OpKind;
 pub enum Response {
     /// The op succeeded and carries nothing back.
     Ok,
+    Instances(omega_proto::omega::InstanceList),
     /// Topic values, for `GetState`.
     State(StatePatch),
     /// Whatever a unit answered with, for an op that asked it something.
@@ -44,6 +46,7 @@ pub enum Response {
 impl Response {
     pub fn frame(self, stream_id: u64) -> Frame {
         let outcome = match self {
+            Self::Instances(instances) => result::Outcome::Instances(instances),
             Self::Ok => result::Outcome::Ok(Empty {}),
             Self::State(patch) => result::Outcome::State(patch),
             Self::Value(value) => result::Outcome::Value(value),
@@ -59,6 +62,7 @@ impl Response {
 /// adopted are given back when it drops.
 #[derive(Debug)]
 pub struct Dispatcher {
+    attachment: Option<attachment::RendererAttachment>,
     hub: Hub,
     supervisor: Supervisor,
     units: UnitTable,
@@ -71,6 +75,7 @@ pub struct Dispatcher {
 impl Dispatcher {
     pub fn new(hub: Hub, supervisor: Supervisor, units: UnitTable, brokers: Brokerage) -> Self {
         Self {
+            attachment: None,
             hub,
             layout: None,
             deployment: Default::default(),
@@ -79,6 +84,11 @@ impl Dispatcher {
             units,
             brokers,
         }
+    }
+
+    pub(crate) fn with_attachment(mut self, attachment: attachment::RendererAttachment) -> Self {
+        self.attachment = Some(attachment);
+        self
     }
 
     pub fn with_deployment(mut self, deployment: crate::reconcile::deployment::Deployment) -> Self {
@@ -111,11 +121,22 @@ impl Dispatcher {
                 Refusal::unimplemented(format!("{} is not served by this daemon", kind.name()))
             })?;
 
-        if !policy.roles.contains(&peer.role()) {
+        let role = if self.attachment.as_ref().is_some_and(|attachment| {
+            attachment
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_some()
+        }) {
+            Role::Renderer
+        } else {
+            peer.role()
+        };
+        if !policy.roles.contains(&role) {
             return Err(Refusal::denied(format!(
                 "{} is not served to {}s",
                 kind.name(),
-                match peer.role() {
+                match role {
+                    Role::Renderer => "renderer",
                     Role::Unit => "unit",
                     Role::Operator => "operator",
                 }
@@ -130,6 +151,26 @@ impl Dispatcher {
         }
 
         self.serve(peer, subscriptions, op).await
+    }
+
+    fn authorize_instance(
+        &self,
+        instance: Option<&omega_proto::omega::InstanceRef>,
+    ) -> Result<attachment::InstancePermit, Refusal> {
+        let key = UnitTable::instance_key(instance)?;
+        let slot = self
+            .attachment
+            .as_ref()
+            .ok_or_else(|| Refusal::denied("renderer attachment required"))?;
+        let attachment = slot.lock().unwrap_or_else(|e| e.into_inner());
+        attachment
+            .as_ref()
+            .ok_or_else(|| Refusal::denied("renderer attachment required"))?
+            .authorize(&self.hub, &key)?;
+        Ok(attachment::InstancePermit::new(
+            attachment.as_ref().expect("authorized attachment"),
+            key,
+        ))
     }
 
     fn authorize(policy: &OpPolicy, grants: &Grants, op: &invoke::Op) -> Result<(), Refusal> {
@@ -171,40 +212,99 @@ impl Dispatcher {
         op: &invoke::Op,
     ) -> Result<Response, Refusal> {
         match op {
+            invoke::Op::CreateInstance(create) => {
+                Ok(Response::Instances(omega_proto::omega::InstanceList {
+                    instances: vec![self.units.create_instance(create).await?],
+                }))
+            }
+            invoke::Op::ChangePresentation(change) => {
+                if peer.role() == Role::Unit {
+                    let key = UnitTable::instance_key(change.instance.as_ref())?;
+                    if !peer
+                        .unit_name()
+                        .is_some_and(|unit| self.units.owns_instance(unit, &key))
+                    {
+                        return Err(Refusal::denied(
+                            "a plugin may only change its own instances",
+                        ));
+                    }
+                    if !matches!(
+                        omega_proto::omega::PresentationAction::try_from(change.action),
+                        Ok(omega_proto::omega::PresentationAction::Hide
+                            | omega_proto::omega::PresentationAction::Close)
+                    ) {
+                        return Err(Refusal::denied(
+                            "plugins may only hide or close their instances",
+                        ));
+                    }
+                }
+                let permit =
+                    if self.attachment.as_ref().is_some_and(|slot| {
+                        slot.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+                    }) {
+                        if change.action == omega_proto::omega::PresentationAction::Destroy as i32 {
+                            return Err(Refusal::denied("renderers cannot destroy instances"));
+                        }
+                        Some(self.authorize_instance(change.instance.as_ref())?)
+                    } else {
+                        None
+                    };
+                self.units
+                    .change_presentation(change, permit.as_ref())
+                    .await?;
+                Ok(Response::Ok)
+            }
+            invoke::Op::InspectInstances(inspect) => {
+                let unit = if inspect.unit.is_empty() {
+                    None
+                } else {
+                    Some(UnitName::parse(&inspect.unit).or_refuse()?)
+                };
+                Ok(Response::Instances(
+                    self.units.inspect_instances(unit.as_ref()),
+                ))
+            }
+            invoke::Op::AttachRenderer(request) => {
+                let slot = self.attachment.as_ref().ok_or_else(|| {
+                    Refusal::precondition("renderer attachment requires the observation socket")
+                })?;
+                let attachment = attachment::Attachment::parse(request)?;
+                if self.units.manifest(attachment.unit()).is_none() {
+                    return Err(Refusal::invalid("unknown renderer unit"));
+                }
+                let mut held = slot.lock().unwrap_or_else(|e| e.into_inner());
+                if held.is_some() {
+                    return Err(Refusal::precondition("renderer is already attached"));
+                }
+                let mut instances = Vec::new();
+                for view in self.hub.view_snapshot() {
+                    if attachment.accepts(&view) {
+                        attachment.validate(&view)?;
+                        let mut metadata = view.snapshot();
+                        metadata.view = None;
+                        instances.push(metadata);
+                    }
+                }
+                self.units.claim_renderer(&attachment);
+                *held = Some(attachment);
+                Ok(Response::Instances(omega_proto::omega::InstanceList {
+                    instances,
+                }))
+            }
+            invoke::Op::ReportPresentation(report) => {
+                let permit = self.authorize_instance(report.instance.as_ref())?;
+                self.units.report_presentation(report, &permit).await?;
+                Ok(Response::Ok)
+            }
+            invoke::Op::Interact(interact) => {
+                let key = self.authorize_instance(interact.instance.as_ref())?;
+                self.units.interact(&key, interact).await
+            }
             invoke::Op::PublishView(publish) => {
-                let view = publish
-                    .view
-                    .as_ref()
-                    .ok_or_else(|| Refusal::invalid("PublishView carries no view"))?;
-
-                // Authorization proved the peer is a unit that declared this
-                // surface, so the reference is built from the daemon's own
-                // identity for it — never from the frame.
                 let unit = peer
                     .unit_name()
                     .ok_or_else(|| Refusal::denied("only units publish views"))?;
-
-                let surface = SurfaceId::parse(publish.surface_id.clone()).or_refuse()?;
-
-                // The module is the unit's own sub-namespace within a
-                // surface it owns, so it needs no separate authorization —
-                // whatever it calls an instance, it is still its instance.
-                let module = if publish.module_id.is_empty() {
-                    None
-                } else {
-                    Some(ModuleId::parse(publish.module_id.clone()).or_refuse()?)
-                };
-
-                self.hub
-                    .publish_view(ViewUpdate {
-                        surface: SurfaceRef {
-                            unit: unit.clone(),
-                            surface,
-                            module,
-                        },
-                        view: view.clone(),
-                    })
-                    .or_refuse()?;
+                self.units.publish_instance(unit, publish)?;
                 Ok(Response::Ok)
             }
 
@@ -350,6 +450,24 @@ impl Dispatcher {
                 "{} is not served by this daemon",
                 OpKind::of(other).name()
             ))),
+        }
+    }
+}
+
+impl Drop for Dispatcher {
+    fn drop(&mut self) {
+        if let Some(slot) = &self.attachment {
+            let held = slot.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(attachment) = held.as_ref() {
+                let keys: Vec<_> = self
+                    .hub
+                    .view_snapshot()
+                    .iter()
+                    .filter(|view| attachment.accepts(view))
+                    .map(|view| view.instance.clone())
+                    .collect();
+                self.units.renderer_disconnected(&keys, &attachment.active);
+            }
         }
     }
 }

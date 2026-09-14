@@ -6,16 +6,16 @@
 //!
 //! ```
 //! use omega::testing::{Drawn, State};
-//! use omega::power::Battery;
+//! use omega::platform::power::Battery;
 //! use omega::ui::Text;
-//! use omega::{View, Widget};
+//! use omega::{View, Surface};
 //!
-//! #[derive(omega::Widget)]
+//! #[derive(omega::Surface)]
 //! struct Charge {
 //!     battery: Battery,
 //! }
 //!
-//! impl Widget for Charge {
+//! impl Surface for Charge {
 //!     fn render(&self) -> View {
 //!         Text::new(self.battery.charge()).into()
 //!     }
@@ -64,9 +64,21 @@ pub use state::State;
 /// [`SystemTopic`]: omega_proto::SystemTopic
 pub mod topic {
     pub use omega_proto::omega::{
-        AudioState, BacklightState, BatteryState, BluetoothDevice, BluetoothState, DiskState, Fan,
-        IdleState, InputState, MainsState, MediaState, MonitorsState, Mount, NetworkState,
-        PeripheralsState, PowerProfileState, Sensor, SystemState, ThermalsState, ThroughputState,
-        TimeState, UnitsState, VpnState, WifiState, WindowState, WorkspacesState,
+        Application, ApplicationsState, AudioState, BacklightState, BatteryState, BluetoothDevice,
+        BluetoothState, DiskState, Fan, IdleState, InputState, MainsState, MediaState,
+        MonitorsState, Mount, NetworkState, PeripheralsState, PowerProfileState, Sensor,
+        SystemState, ThermalsState, ThroughputState, TimeState, UnitsState, VpnState, WifiState,
+        WindowState, WorkspacesState,
+    };
+}
+
+mod surface;
+pub use surface::{CapturedEffect, SurfaceHarness};
+
+/// Inspect the operations captured by fixture effect queues and supply refusals.
+pub mod operation {
+    pub use omega_proto::Refusal;
+    pub use omega_proto::omega::{
+        PresentationAction, action::Kind as Action, invoke::Op as Operation,
     };
 }

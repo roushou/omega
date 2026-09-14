@@ -18,8 +18,12 @@ impl Fixture {
             }),
             action::Kind::DisconnectWifi(DisconnectWifi {}),
             action::Kind::LaunchApp(LaunchApp {
+                activation_token: String::new(),
                 desktop_id: "org.example.App.desktop".into(),
-                args: vec!["".into(), "a file".into()],
+                uris: vec![
+                    "file:///tmp/a%20file".into(),
+                    "https://example.invalid/".into(),
+                ],
             }),
             action::Kind::RunCommand(RunCommand {
                 command: "echo first\necho second".into(),
@@ -145,12 +149,14 @@ fn absent_changes_invalid_numbers_and_unknown_enums_are_refused() {
 fn required_strings_identifiers_selectors_and_destinations_are_checked() {
     let invalid = [
         action::Kind::LaunchApp(LaunchApp {
+            activation_token: String::new(),
             desktop_id: "../other".into(),
             ..Default::default()
         }),
         action::Kind::LaunchApp(LaunchApp {
+            activation_token: String::new(),
             desktop_id: "app".into(),
-            args: vec!["bad\0arg".into()],
+            uris: vec!["bad\0arg".into()],
         }),
         action::Kind::RunCommand(RunCommand {
             command: " \n".into(),

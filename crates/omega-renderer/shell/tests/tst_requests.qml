@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../plugins/omega.view"
+import "../core"
 
 TestCase {
     name: "CommandFeedback"

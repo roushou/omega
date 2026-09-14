@@ -3,7 +3,7 @@ use omega_host::{AtomicFile, Directory};
 use std::path::{Path, PathBuf};
 
 /// Original bytes make stale preparation and safe rollback observable.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct FileEdit {
     path: PathBuf,
     before: Option<String>,
@@ -35,6 +35,10 @@ impl FileEdit {
         ))
     }
 
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub(crate) fn exists(&self) -> bool {
         self.before.is_some()
     }
@@ -48,7 +52,7 @@ impl FileEdit {
         self.before.as_deref() != Some(&self.after)
     }
 
-    fn check(&self) -> Result<()> {
+    pub(super) fn check(&self) -> Result<()> {
         ensure!(
             Self::contents(&self.path)? == self.before,
             "{} changed during preparation; retry the command",
@@ -92,7 +96,7 @@ impl FileEdit {
 }
 
 /// The file edits belonging to one workspace operation, in publication order.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct FileEdits(Vec<FileEdit>);
 
 impl FileEdits {
@@ -108,6 +112,17 @@ impl FileEdits {
             if let Err(error) = edit.write() {
                 return Err(Self::recover(&self.0[..=index], error));
             }
+        }
+        Ok(())
+    }
+
+    pub(super) fn iter(&self) -> impl Iterator<Item = &FileEdit> {
+        self.0.iter()
+    }
+
+    pub(super) fn restore_all(&self) -> Result<()> {
+        for edit in self.0.iter().rev() {
+            edit.restore()?;
         }
         Ok(())
     }

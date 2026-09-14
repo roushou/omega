@@ -7,8 +7,8 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
-use omega_daemon::host::Units;
 use omega_host::Layout;
+use omega_host::workspace::Plugins;
 use omega_proto::UnitName;
 
 use crate::ui::{Paint, Step, Ui};
@@ -109,7 +109,7 @@ impl LogsCmd {
 
     /// Which units have said anything.
     fn list(layout: &Layout, ui: &mut Ui) -> anyhow::Result<()> {
-        let logged: Vec<String> = Units::discover(layout)
+        let logged: Vec<String> = Plugins::discover(layout)
             .map(|units| {
                 units
                     .iter()

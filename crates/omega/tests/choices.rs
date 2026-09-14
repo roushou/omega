@@ -1,5 +1,5 @@
 use omega::Command;
-use omega::power::{PowerProfile, SetProfile};
+use omega::platform::power::{PowerProfile, SetProfile};
 use omega::testing::{Called, Drawn, State};
 use omega::ui::{Button, Choice, Text};
 use omega_proto::{

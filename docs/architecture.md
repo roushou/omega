@@ -1,5 +1,9 @@
 # Architecture
 
+This document describes implemented behavior. The
+[desktop platform design](desktop-platform.md) and
+[implementation plan](desktop-platform-plan.md) record architectural decisions and completed milestone validation.
+
 ## Two planes
 
 The **configuration plane** is a Rust program that computes a state document
@@ -16,13 +20,15 @@ build-time concern on the developer's machine, never a boot-time requirement.
 | Crate                | Responsibility                                                             |
 | -------------------- | -------------------------------------------------------------------------- |
 | `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts          |
-| `omega-host`         | Layout, durable files, TOML documents and generation ownership             |
+| `omega-host`         | Layout, durable files, generations, workspace documents and discovery      |
 | `omega-document`     | Desired-state builders and shared validation                               |
 | `omega-derive`       | Field-based SDK derives                                                    |
 | `omega` (`omega-rs`) | Unit-author SDK; depends on proto and derive, not host or daemon           |
-| `omega-brokers`      | External subsystem connections, readings and actions                       |
+| `omega-platform`     | External subsystem connections, readings and actions                       |
 | `omega-daemon`       | Sessions, supervision, state, action routing and convergence               |
-| `omega-renderer`     | Embedded QML assets and their installation                                 |
+| `omega-renderer`     | Host-independent QML controls and generated readers                        |
+| `omega-omarchy`      | Omarchy authoring, compilation, validation, transport and installation     |
+| `omega-preview`      | Development case registration and isolated surface sessions                |
 | `omega-cli`          | Build and deployment orchestration, environment resolution and terminal UI |
 
 The SDK declares dependencies by fields: readings and composites read, records
@@ -34,7 +40,7 @@ The protocol's optional `json` feature is used by observation/document consumers
 a standalone unit does not compile the generated JSON implementations.
 
 Configuration entry points can return `omega_document::Result<()>`. Its error
-enum wraps document, shell, validation and I/O failures; config authors can also
+enum wraps document, extension, validation and I/O failures; config authors can also
 use their own error library. Generated workspaces require neither `anyhow` nor
 `miette` as a direct dependency. Build publication and daemon adoption use the
 same document validator. `omega check` evaluates and validates without
@@ -50,27 +56,53 @@ retain the ordinary error-chain display. Internal orchestration still uses
 `anyhow`; neither the SDK nor the document API depends on `miette`. Errors from
 the separate configuration process arrive as stderr text, not typed diagnostics.
 
+## Workspace and build ownership
+
+`omega-host::workspace` owns source roles, Cargo documents, member-pattern
+expansion, and `Plugins::discover`. Cargo schemas keep manifest, local config,
+dependency, package, and profile concepts in separate modules. CLI scaffolding,
+linking, checking, and builds use this same model. Runtime unit supervision does
+not own a second source-workspace model.
+
+Settled filesystem watching lives in `omega-host::fs` behind the optional `watch`
+feature, enabled by CLI and daemon. Document-only consumers do not enable native
+watching. The daemon’s `watch` module selects the generation paths to observe;
+the shared watcher owns event filtering and settlement.
+
+The CLI’s `build` module owns Cargo execution, manifest extraction, document
+evaluation, staged publication, and generation-specific activation waits. Its
+`Check` operation validates without publishing. Build/check command entry points
+parse options and supply an explicit layout and profile. Checkout diagnostics
+belong to checkout operations, not to the link command parser.
+
 ## The plugin API
 
-Public modules follow the domain an author works with. `audio` contains both
-`Audio` and `Volume`; `power` contains battery and mains readings, their `Power`
-interpretation, and profile control. `network` groups connectivity, Wi-Fi and
-traffic; `desktop` groups displays, brightness, workspaces and keyboard state.
-`bluetooth`, `time`, `system`, `session`, `notification` and `process` expose the
-remaining domains. These are export boundaries over shared topic and capability
-machinery, not additional runtime layers.
+`omega::platform` groups SDK handles by external service domain. `audio` owns
+output and media readings and controls; `power` owns battery, mains, profile,
+peripheral readings, and composite power status. `network`, `bluetooth`,
+`desktop`, `system`, `session`, `time`, `notification`, `process`, and
+`applications` own their corresponding service contracts. Each domain defines
+its handles beside their accessors and controls. Native implementations stay in
+`omega-platform`; the SDK depends on neither it nor its native libraries.
 
-The root contains surface contracts, derives, errors and shared values such as
-`Percent`. `ui` builds views, `config` describes construction settings, `record`
-holds plugin memory, and `testing` builds fixtures. `effect` defines the operation
-returned by a control, its receipt and failure semantics. Device controls belong
-to their domains. Reading/composite implementation modules and wiring traits are
-private; macro expansion accesses the required contracts through `internal`.
+The root exposes `Surface`, `StatefulSurface`, `Command`, `Reaction`, `Plugin`,
+`View`, derives, errors, and shared values such as `Percent`. `surface` owns UI
+entry points, typed references, local messages, tasks, and lifecycle contracts.
+`command` owns public endpoints, input decoding, and typed command references;
+`reaction` owns event-triggered behavior. `ui` owns component composition and
+interaction bindings. `plugin` owns registration and Omega supervision readings,
+separate from the machine resource readings in `platform::system`.
 
-Module placement does not grant capabilities. A domain may expose both read and
-control handles, but the `Reads` bound still prevents a widget holding a control.
-Public examples and doctests use domain paths; there are no parallel public
-reading/effect handle paths to keep in sync.
+`record` separates the shared record contract from its read-only and writing
+handles. `effect` owns generic completion, receipts, and queue admission; concrete
+controls belong to their service domains. Private `wiring` generates field
+construction and capability declarations without centrally defining domain types.
+Runtime context and the replicated mirror live under `runtime`; registration
+storage lives under `plugin`. Derives access a narrow `internal` export boundary.
+
+`Reads` excludes effects from render declarations regardless of module location.
+Topic-coverage tests require exactly one primitive handle per system topic;
+composites declare multiple dependencies without adding another primitive reading.
 
 ## The daemon
 
@@ -124,10 +156,9 @@ types are shared by the daemon, the CLI, and every user crate: `Keybind` in
 the daemon and `Keybind` in a config are the same type, with no translation
 layer where a lie can live.
 
-Protocol v4 requires `RemoveWidget`, explicitly targeted media actions, and
-Bluetooth device identities with optional battery readings.
-Rebuild older units and update the daemon together; an older daemon must never
-ignore a player target and act on another player. Action and adoption execution is bounded per control or
+The current protocol version and minimum accepted version are both 7, defined in
+`omega-proto/src/protocol.rs`. Rebuild plugins and update the daemon together
+when that compatibility boundary changes. Action and adoption execution is bounded per control or
 observation connection and runs concurrently with frame reception, so a unit can receive a command while its
 request is outstanding. Deadlines bound queue admission and response waits; a
 timeout does not prove an external action was not performed. Both encodings use
@@ -242,14 +273,11 @@ is the operation-level authorization contract.
 
 ## Units
 
-One unit type, many surfaces — not widget/plugin/app/script/service. A unit
-declares which surfaces it exposes, and a surface is either rendered or
-called:
-
-- a **widget** surface renders — pulled once per instance so the unit learns
-  its configuration, pushed thereafter;
-- a **command** surface is invoked, by `omega run` or by another unit holding
-  `CAPABILITY_SPAWN`.
+A unit declares UI surfaces and command endpoints separately in its manifest.
+A widget surface renders: the daemon creates each instance with construction
+settings and pulls its first tree; the unit pushes subsequent trees. A command
+endpoint is invoked by `omega run`, a retained UI binding, or another unit with
+`CAPABILITY_SPAWN`. Commands are not UI instances.
 
 Both directions of the protocol are used, with stream ids split by parity so
 each side answers only what it asked.
@@ -282,8 +310,105 @@ does not replace process argument encoding or shell quoting.
 A session registration is a lease. Replacing it cancels the previous session;
 its guard cannot disconnect the replacement. Adoption cleanup also checks the
 issued token. Views and installed instance specifications end with the lease.
-An instance is addressed by `(unit, surface, module)`; the empty module is the
-anonymous instance, not a wildcard. Placements coexist with it.
+Runtime identity is `(InstanceId, IncarnationId)`, allocated by the daemon.
+Surface IDs name declarations; placement IDs name desired configuration. Neither
+is an interaction capability. There are no automatically created unplaced widgets.
+`PresentationProvider` reconciles bar indicators, anchored popups, and configured
+standalone presentations through the same instance registry under `UnitTable`.
+
+### Independent presentations
+
+`Presentations::window` and `Presentations::overlay` in `omega-document` accept
+typed widget references. They compose with `Document::presentation`; settings
+layer over plugin settings at construction. `omega present <unit> <surface>` opens
+a transient singleton; `--new` creates an independent instance, and `--config`
+accepts an ordinary JSON object. Changing an existing singleton's construction
+settings or presentation is refused; configured changes destroy and recreate it.
+
+Create allocates identity and initializes the widget before exposing it. Present,
+hide, and close retain the instance; destroy removes its authority and tree before
+asking the unit to release it. Requested and observed visibility are separate.
+Native dismissal records closed intent, so reconciliation and renderer recovery
+keep it closed. A plugin restart expires all its identities; configured instances
+are reconstructed and transient instances are lost. An uncertain creation/removal
+terminates the affected plugin session rather than keeping untracked instances.
+
+One supervised Quickshell host per plugin renders its windows and overlays from
+embedded shared assets. Hosts restart with bounded backoff and reattach to live
+instances. Normal windows identify as `org.omega.<unit>`; initial size and focus
+remain subject to compositor policy. Overlays declare keyboard policy and an
+optional output; a missing named output keeps the overlay hidden. Closed instances
+keep their host warm until destroyed. Startup failures are logged to
+`~/.cache/omega/logs/<unit>.renderer.log`; accepted presentation intent does not
+promise a visible native window.
+
+The owner bootstraps a renderer on the observation socket with `AttachRenderer`.
+Its connection then has renderer authority only: one plugin's windows/overlays,
+or one embedded/popup placement. Features must include instance identity, scoped
+interactions, and each consumed presentation kind. Replacing the same attachment
+revokes its predecessor. State topics remain openly observable; private view trees
+require attachment. The attach answer contains bounded metadata, followed by
+individual scoped view updates. Lag repairs use an atomic snapshot/history boundary;
+destroyed or expired instances produce tombstones. Disconnect invalidates observed
+visibility without changing requested intent.
+
+Interactions carry identity, retained revision, node key, event name, and optional
+control value. The daemon resolves the binding and arguments from its retained tree;
+it rejects stale revisions, hidden instances, disabled/busy ancestry, duplicate
+keys, undeclared commands, and instances outside the attachment. Per-instance QML
+sessions isolate busy state, failures, and form completion even when windows share
+one transport. Pending interactions are never automatically retried after disconnect.
+
+Limits include 256 instances per plugin, 4096 globally, 128 KiB construction settings
+per instance and 8 MiB in aggregate, 64 observation connections, bounded request
+queues, and five-second observation writes. The hub also bounds retained views.
+The SDK caps pending view publications and retries current trees after acknowledgments.
+Protocol version 6 is required throughout. Renderer attachment also requires
+local-message and controlled-input features. Commands are separate manifest
+endpoints throughout; wire manifests cannot advertise them as UI surfaces.
+
+### Stateful surfaces
+
+The public read-only API is `Surface`, registered with `Plugin::surface`. Stateful
+behavior opts into `StatefulSurface`, registered with `Plugin::stateful`. Both
+use `derive(Surface)` to wire render-side readings and construction settings and
+produce typed `SurfaceRef`s. A stateful surface declares ordinary Rust `Model`
+and `Message` types, plus a separate `Effects: Wired` dependency set. Only behavior
+receives effects; rendering receives an immutable model and typed event builder.
+
+Each instance owns its model, current binding registry, tasks, and cached view.
+Local event IDs are process-unique and never reused across renders. The renderer
+submits node/event identity against a retained view; the daemon resolves either a
+public command or a local ID, and the plugin checks that ID against the current
+instance registry before decoding input. Captured values never cross the socket.
+A superseded binding is refused rather than interpreted against newer captures.
+There is one current registry, bounded to 4096 entries. A binding-generation change
+is a semantic view change even if visible labels are identical.
+
+Updates and lifecycle hooks are serialized on the plugin runtime. Declared topic
+changes invalidate affected instances; acknowledgments do not render again. Startup
+waits for required readings. `Optional<R>` retains subscriptions/capabilities but
+removes that field's readiness gate, exposing `is_pending()` alongside the handle's
+existing absence/accessor methods. Model initialization happens once before gating.
+
+Managed asynchronous and blocking work has instance ownership, a replaceable key,
+a task ID used as its generation, and bounded admission. Late completions must still
+own their key. Close aborts delivery and forgets pending messages/bindings before
+the closed hook. Hide retains work. A blocking worker cannot be forcibly unwound;
+its permit stays inside the worker until exit, even after close or replacement.
+External effects retain their independent receipt/accounting semantics. Dropping a
+local task cannot undo or replay an admitted action.
+
+Controlled text records committed edit and explicit reset revisions. Rust ignores
+edits from old resets; QML ignores values older than its current draft and defers
+composition. Edit traffic is coalesced while a request is pending without disabling
+the editor. Initial focus and field-to-list navigation are scoped to an instance;
+component key scopes also qualify navigation targets. Lists preserve selected
+identity across reorder and clear a controlled selection whose key disappeared.
+
+`SurfaceHarness` reuses production model/binding/task execution with isolated effect
+queues and explicit completion outcomes. The stateful search example uses fixture
+catalogue data and does not launch desktop applications.
 
 ## Reconciliation
 
@@ -398,9 +523,10 @@ when less than one maximum-sized payload remains.
 
 ```
 ~/.config/omega/          source only
-  Cargo.toml Cargo.lock   workspace; members are system/ and registered units/
+  Cargo.toml Cargo.lock   workspace; members are system/ and registered plugins/
   system/                 → document.json, one entry point, no side effects
-  units/                  independent unit packages
+  plugins/                independent runnable packages
+  libraries/              reusable Rust libraries, never supervised
   target/                 cargo's, at cargo's default path; gitignored
 
 ~/.local/state/omega/
@@ -428,7 +554,7 @@ Prepared operations validate names, membership, and dependency conflicts before
 publishing. Existing Cargo documents retain comments and unrelated options;
 initialization adds missing ignore entries without replacing the user's rules.
 
-New plugin directories are staged under `.cargo/staging`, outside `units/*`
+New plugin directories are staged under `.cargo/staging`, outside `plugins/*`
 membership globs, and published with a no-replace rename. File
 edits retain original bytes, reject stale preparation, and attempt rollback on
 failure without overwriting subsequent edits. This is not a crash-atomic
@@ -484,20 +610,22 @@ Cargo output without removing those logs.
 
 ## UI
 
-The SDK keeps readiness and the last sent tree with each configured widget
-instance. Every declared system topic must have been reported before its widget
-renders; an explicit absence is a report, and unwritten records use defaults.
-Other surfaces do not share this readiness gate. A daemon-requested instance
-awaiting its topics answers with an empty tree, retains its settings and pushes
-its view once ready. Pull responses and pushed views share the same cache, so an
-unchanged tree generates no further socket traffic. Reconfiguration and removal
-replace or discard that instance's cache. Each ready instance still renders on
-state patches; the cache avoids repeated serialization and publication, not render
-work. The daemon also retains its own deduplication boundary for all clients.
+Each surface instance tracks readiness, dependency/model invalidation, and its
+cached view. Required system topics must have reported before the first render;
+an explicit absence is a report, and unwritten records use defaults.
+`Optional<R>` keeps the subscription while removing its startup gate and exposes
+`is_pending()` separately from the reading’s availability.
+
+An instance awaiting required topics answers with an empty tree and pushes its
+view once ready. Dependency changes, local messages, and task/lifecycle updates
+invalidate the instance; unrelated state patches and publication acknowledgments
+do not rerender it. Identical trees are not republished. The daemon retains its
+own deduplication boundary for all clients. Closing clears bindings and cancels
+task delivery; destroying discards the instance and its cache.
 
 Positional key assignment retains its formatted string and borrows parent keys;
-explicit keys remain unchanged. Further render scheduling or serialization caches
-need a concrete workload demonstrating that their complexity is worthwhile.
+explicit keys remain unchanged. Incremental wire updates require a measured
+workload and a snapshot recovery contract.
 
 Observation connections retain only address/revision pairs for deletion repair
 after lag, and release initial snapshots after sending them. Views and state
@@ -689,9 +817,9 @@ plugin placement generates both its shell entry and its render-instance
 declaration; unit, surface, placement identity, panel, and settings cannot drift
 between independently authored layouts.
 
-`derive(Widget)` supplies a `WidgetRef<T>` whose identity is the defining crate
+`derive(Surface)` supplies a `SurfaceRef<T>` whose identity is the defining crate
 and the kebab-case type name; `#[omega(name = "...")]` pins the surface name.
-Registration (`.widget(Indicator)`) and placement
+Registration (`.surface(Indicator)`) and placement
 (`PluginWidget::new("audio", audio::Indicator).panel(audio::Panel)`) consume the
 same reference. Commands cannot be passed as widgets. Registration checks the
 owning unit, and panel attachment checks that both widgets belong to the same
@@ -699,7 +827,7 @@ unit. Manifest validation still proves that the selected widgets are registered.
 Explicit named APIs support imported and dynamic configuration.
 
 The host-specific shell declaration is carried opaquely in `StateDocument`;
-`omega-document` owns its interpretation and compilation. Plugin SDK consumers
+`omega-omarchy` owns its interpretation and compilation. Plugin SDK consumers
 do not acquire Omarchy configuration dependencies. Compilation is pure and
 validates the supported version-1 JSON format. Extension fields cannot overwrite
 typed fields. The daemon validates widget references against the generation's
@@ -741,7 +869,7 @@ indicator and panel with typed commands. Pairing remains in Bluetooth settings.
 
 ### Composable views
 
-`Widget::render` returns `View`, an owned subtree that containers also accept.
+`Surface::render` returns `View`, an owned subtree that containers also accept.
 `View::empty()` contributes no node or layout gap. `Ui` remains an alias for
 source compatibility. Key assignment and wire encoding happen at publication,
 so converting a helper to `View` does not finalize its position in a larger tree.
@@ -762,3 +890,78 @@ List and choice values remain independent of scoped node identities. When scopin
 changes those identities, the SDK carries the original value in `selection_key`.
 The renderer distinguishes an absent property from an explicitly empty value and
 falls back to node keys for views without that property.
+
+### Workspace and renderer boundaries
+
+Source members have validated roles: `system/`, direct children of `plugins/`, or
+of `libraries/`. Library crates build with the workspace but are never queried for
+unit manifests. Builds and source mutations share the workspace lock. Migration
+journals original manifest contents before editing; recovery refuses external edits
+and restores originals before retrying. Published generations keep their runtime
+`units/` paths and identities.
+
+`omega-document` owns core desired state and the `DocumentExtension` composition
+contract. `omega-omarchy` owns shell authoring, compilation, validation of its
+projected instances, transport adapter, and installation. Its validator removes
+the handled shell payload before invoking core validation, which rejects an
+unhandled payload. The protocol's existing shell payload remains until the
+presentation protocol phase.
+
+`omega-renderer` embeds only the shared QML core and depends on `omega-proto`.
+Both the Omarchy adapter and the isolated fixture harness use that core. Theme,
+assets, interaction session, and allocated dimensions enter at `ViewNode`;
+nested controls retain bindings to them. The fixture harness captures interactions
+locally. It does not attach to a live plugin or provide Rust fixture discovery.
+
+## Application catalogue and activation
+
+`omega-platform` owns Linux services; plugins compile no GIO dependency.
+Its applications worker owns one GLib main context and all native GObjects on a
+separate thread. GIO applies XDG precedence, visibility, localization, desktop
+field codes, terminal routing, and D-Bus activation. A bounded request channel
+carries owned values; application startup never waits for process exit.
+
+The `applications` topic is a complete catalogue capped at 4096 entries and
+512 KiB. Native invalidations refresh it. Search, ranking, selection, and query
+text remain local to each surface instance. The SDK exposes `Applications`,
+`ApplicationId`, and the `Launcher` effect under `omega::platform::applications`.
+Missing readings differ from a successfully empty catalogue. Activation performs
+a fresh lookup and requires Spawn; success means admission, not eventual startup.
+Unknown outcomes are not replayed. URI arguments remain literal. Optional tokens
+are passed to spawned environments; token-bearing D-Bus activation is currently
+refused explicitly, and the renderer does not acquire compositor tokens.
+
+`surface::Presentation` is an instance-scoped behavior dependency. A plugin may
+hide or close its own current instance, but may not open arbitrary presentations
+or control another plugin. Lifecycle requests run outside the connection reader
+so the same connection can acknowledge them. A per-instance gate orders lifecycle
+delivery; cancellation before acknowledgement ends that plugin session rather
+than retaining unacknowledged intent.
+
+The launcher example composes Field, List, Image, and Text with typed local
+bindings and managed tasks. Input navigation waits for the latest controlled edit
+to reach the rendered list before admitting activation. Hosts resolve theme icons;
+the shared renderer core receives the resolver. Overlays optionally dismiss on
+outside clicks and accept an explicit output. The default output is host-selected,
+not a promise to follow the active monitor.
+
+## Development previews
+
+`omega-preview` is a dev dependency, used from an explicit Rust library test.
+`Cases` owns named fresh factories for components or production `SurfaceHarness`
+instances. The same factories support initial-render checks, structural assertions,
+and behavioral tests. Preview registrations do not change a plugin manifest.
+
+The CLI builds the selected library test and connects it to a private, bounded
+preview transport defined in `preview.proto`. Both runner and renderer peers are
+checked against their spawned process IDs. These sockets are development channels,
+not daemon observation sockets; no production session, grants, or backends exist.
+Captured effects retain their bounded SDK receipts until explicitly resolved or
+reset. Case epochs separate model lifetimes and clear QML-local drafts/focus.
+
+The development host uses the shared ViewNode/Theme/Assets/control runtime. It
+keeps the last good tree visibly stale during failed rebuilds. Screenshot mode
+uses a fixed software environment, asset readiness, and motion suppression.
+Decoded-pixel comparison is gated by environment metadata; baseline updates are
+explicit. Native icon providers require fixed local fixture images in software
+captures. The [preview guide](previews.md) records usage and environmental limits.

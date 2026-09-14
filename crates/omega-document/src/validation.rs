@@ -53,9 +53,11 @@ impl DocumentValidation {
                     let manifest = built.get(&unit).ok_or_else(|| {
                         Self::error(format!("schedule {:?}: unknown unit {unit}", schedule.id))
                     })?;
-                    if !manifest.surfaces.iter().any(|surface| {
-                        surface.id == call.command && surface.kind == SurfaceKind::Command as i32
-                    }) {
+                    if !manifest
+                        .commands
+                        .iter()
+                        .any(|command| command.id == call.command)
+                    {
                         return Err(Self::error(format!(
                             "schedule {:?}: {unit} declares no command {:?}",
                             schedule.id, call.command
@@ -67,15 +69,14 @@ impl DocumentValidation {
                 return Err(Self::error("empty or duplicate schedule id"));
             }
         }
-        let compiled = crate::shell::CompiledShell::of(document)?;
-        let shell_bars: Vec<_> = compiled
-            .as_ref()
-            .map(|shell| shell.bar().clone())
-            .into_iter()
-            .collect();
+        if !document.shell_json.is_empty() {
+            return Err(Self::error(
+                "shell payload requires validation by its integration",
+            ));
+        }
         let mut bars = BTreeSet::new();
         let mut modules = BTreeSet::new();
-        for bar in document.bars.iter().chain(&shell_bars) {
+        for bar in &document.bars {
             if bar.id.is_empty() || !bars.insert(&bar.id) {
                 return Err(Self::error("empty or duplicate bar id"));
             }
@@ -95,6 +96,41 @@ impl DocumentValidation {
                 if !widget.panel.is_empty() && Self::surface(manifest, &widget.panel)? == surface {
                     return Err(Self::error(
                         "widget and panel must address different surfaces",
+                    ));
+                }
+            }
+        }
+        for entry in &document.presentations {
+            omega_proto::instance::PlacementId::parse(&entry.id).map_err(Self::cause)?;
+            if !modules.insert(&entry.id) {
+                return Err(Self::error(
+                    "presentation and bar placement ids must be unique",
+                ));
+            }
+            let unit = UnitName::parse(&entry.unit).map_err(Self::cause)?;
+            let manifest = built
+                .get(&unit)
+                .ok_or_else(|| Self::error(format!("unknown unit {unit}")))?;
+            Self::surface(manifest, &entry.surface)?;
+            let specification = omega_proto::instance::PresentationSpec::parse(
+                entry
+                    .presentation
+                    .clone()
+                    .ok_or_else(|| Self::error("presentation kind is required"))?,
+            )
+            .map_err(Self::cause)?;
+            match specification.wire().kind.as_ref().unwrap() {
+                omega_proto::omega::presentation::Kind::Window(window) => {
+                    if window.app_id != format!("org.omega.{unit}") {
+                        return Err(Self::error(
+                            "window application identity belongs to its plugin",
+                        ));
+                    }
+                }
+                omega_proto::omega::presentation::Kind::Overlay(_) => {}
+                _ => {
+                    return Err(Self::error(
+                        "independent presentations must be windows or overlays",
                     ));
                 }
             }
@@ -164,8 +200,6 @@ pub enum ValidationError {
     Invalid(String),
     #[error("invalid desired state: {0}")]
     Cause(#[source] Box<dyn std::error::Error + Send + Sync>),
-    #[error(transparent)]
-    Shell(#[from] crate::shell::ShellError),
     #[error("{unit} declares no widget {requested:?}")]
     MissingSurface {
         unit: String,

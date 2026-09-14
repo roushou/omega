@@ -1,6 +1,7 @@
 use super::Glyphs;
 use miette::{GraphicalReportHandler, GraphicalTheme, LabeledSpan, MietteDiagnostic, NamedSource};
-use omega_document::{ValidationError, shell::ShellError};
+use omega_document::ValidationError;
+use omega_omarchy::shell::ShellError;
 
 pub(super) struct CliDiagnostic;
 
@@ -13,7 +14,6 @@ impl CliDiagnostic {
                 Self::validation(validation)
             } else if let Some(document) = cause.downcast_ref::<omega_document::Error>() {
                 match document {
-                    omega_document::Error::Shell(shell) => Self::shell(shell),
                     omega_document::Error::Validation(validation) => Self::validation(validation),
                     _ => None,
                 }
@@ -66,11 +66,11 @@ impl CliDiagnostic {
 
     fn validation(error: &ValidationError) -> Option<miette::Report> {
         match error {
-            ValidationError::Shell(shell) => Self::shell(shell),
             ValidationError::MissingSurface { available, .. }
             | ValidationError::AmbiguousSurface { available, .. } => {
                 let help = if available.is_empty() {
-                    "This plugin declares no widgets. Choose a plugin with a Widget surface.".into()
+                    "This plugin declares no widgets. Choose a plugin with a Surface surface."
+                        .into()
                 } else {
                     format!(
                         "Choose a widget surface from: {}.",

@@ -1,15 +1,16 @@
 import QtQuick
 import QtTest
-import "../plugins/omega.view" as Renderer
+import "../../../omega-omarchy/shell" as Renderer
 
 TestCase {
     name: "ConnectionRecovery"
-    Component { id: factory; Renderer.Connection { unit: "audio"; surface: "panel" } }
+    Component { id: factory; Renderer.Connection { unit: "audio"; surface: "panel"; module: "slot" } }
     function init() { failOnWarning(/.*/) }
     function connection() {
         var link = createTemporaryObject(factory, this)
         verify(link !== null)
         tryCompare(link, "connected", true)
+        link.attached = true
         return link
     }
     function phase(link, phase, detail) {
@@ -20,7 +21,7 @@ TestCase {
         phase(link, "UNIT_PHASE_STARTING")
         compare(link.status, "Starting plugin…")
         phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{}}))
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{}}))
         compare(link.tree, null)
         compare(link.status, "")
         phase(link, "UNIT_PHASE_RESTARTING")
@@ -31,18 +32,19 @@ TestCase {
     function test_disconnect_clears_view_and_pending_work_then_recovers() {
         var link = connection()
         phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text",key:"volume"}}}))
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
         verify(link.press({command:"volume"}, 0.5, "slider"))
-        verify(link.requests.busy("slider"))
+        verify(link.busy("slider"))
         link.disconnected()
         compare(link.tree, null)
         compare(link.drawnBy, "")
-        verify(!link.requests.busy("slider"))
+        verify(!link.busy("slider"))
         verify(link.requests.error.indexOf("unknown") >= 0)
         compare(link.status, "Waiting for Omega…")
         link.connected = true
+        link.attached = true
         phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text",key:"volume"}}}))
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
         compare(link.status, "")
         verify(link.press({command:"volume"}, 0.4, "slider"))
         compare(link.requests.error, "")
@@ -62,21 +64,22 @@ TestCase {
         var link = connection()
         link.disconnected()
         verify(!link.press({command:"volume"}, 0.5, "slider"))
-        verify(!link.requests.busy("slider"))
+        verify(!link.busy("slider"))
         verify(link.requests.error.indexOf("not sent") >= 0)
     }
     function test_recreated_socket_subscribes_and_accepts_commands() {
         var link = connection()
         verify(link.socket.written.indexOf("units") >= 0)
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text"}}}))
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
         verify(link.press({command:"volume"}, 0.5, "slider"))
         link.reconnect()
         compare(link.socket, null)
         compare(link.tree, null)
-        verify(!link.requests.busy("slider"))
+        verify(!link.busy("slider"))
         tryCompare(link, "connected", true)
+        link.attached = true
         verify(link.socket.written.indexOf("units") >= 0)
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",view:{root:{type:"text"}}}))
+        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
         verify(link.press({command:"volume"}, 0.4, "slider"))
     }
 }

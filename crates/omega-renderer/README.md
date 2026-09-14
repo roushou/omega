@@ -1,28 +1,30 @@
 # Omega renderer
 
-The Quickshell renderer for Omega's declarative view trees, together with its
-installation and inspection APIs. The renderer runs inside Omarchy's shell and
-displays plugin widgets and panels using the shell's theme and layout.
+Host-independent QML controls for Omega view trees. `Core::FILES` embeds the shared
+nodes, theme, asset resolver, request tracking, and generated prop/icon readers.
+This crate depends only on the protocol. Omarchy authoring, transport, and renderer
+installation live in [omega-omarchy](../omega-omarchy).
 
-QML and generated property readers are embedded in this crate. The Omega CLI
-installs the assets carried by its binary:
+A `ViewNode` accepts a tree, theme, asset resolver, interaction session, and its
+allocated width/height. Nested nodes preserve these inputs through bindings.
+A default theme is supplied; the Omarchy adapter binds the same inputs to its
+existing theme. Image sources never fetch network resources implicitly.
+
+An isolated fixture window uses these same nodes:
 
 ```sh
-omega shell install
-omega shell status
+quickshell -p crates/omega-renderer/shell
 ```
 
-Installation prints the command for enabling the plugin in the shell. `omega init`
-performs the initial setup, including enabling it. Plugin authors describe their
-interfaces with [omega-rs](https://crates.io/crates/omega-rs); they do not need to
-write QML or depend on this crate directly.
+Choose normal, loading, long-label, or disabled states; resize the window and use
+the keyboard. Interactions are captured locally and never reach the daemon. This
+is the renderer development harness. For Rust component and surface cases, use
+`omega preview <package>`; see the [preview guide](../../docs/previews.md).
+The crate also embeds the standalone production host and isolated preview host.
 
-`Renderer`, `Installed`, and `HostShell` provide the host-side installation APIs.
-The renderer consumes the daemon's observation socket using the same protocol
-messages in JSON form.
-
-[API reference](https://docs.rs/omega-renderer) ·
-[Renderer contract and development](https://github.com/roushou/omega/blob/main/crates/omega-renderer/shell/README.md) ·
-[Project](https://github.com/roushou/omega)
+```sh
+crates/omega-renderer/shell/lint.sh
+crates/omega-renderer/shell/test.sh
+```
 
 Licensed under MIT.

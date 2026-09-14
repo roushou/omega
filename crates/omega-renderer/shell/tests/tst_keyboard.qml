@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../plugins/omega.view" as Renderer
+import "../core" as Renderer
 
 TestCase {
     id: test
@@ -28,7 +28,7 @@ TestCase {
     }
     Component {
         id: factory
-        Renderer.ViewNode { width: 400; connection: testConnection }
+        Renderer.ViewNode { width: 400; session: testConnection }
     }
     function init() {
         failOnWarning(/.*/)
@@ -162,9 +162,6 @@ TestCase {
             {type:"text",key:"home",props:{text:{stringValue:"Home"}}}
         ]})
         keyClick(Qt.Key_Tab)
-        keyClick(Qt.Key_Down)
-        keyClick(Qt.Key_Return)
-        compare(test.calls.length, 0)
         keyClick(Qt.Key_Down)
         keyClick(Qt.Key_Return)
         compare(test.calls[0].value, "home")

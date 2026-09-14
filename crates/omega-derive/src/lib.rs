@@ -11,7 +11,7 @@
 
 mod command;
 mod input;
-mod widget;
+mod surface;
 use command::CommandExpansion;
 use input::InputExpansion;
 
@@ -20,9 +20,9 @@ use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, Ident, Type, parse_macro_input};
 
 /// A widget: draws, and may hold only state.
-#[proc_macro_derive(Widget, attributes(omega))]
-pub fn widget(input: TokenStream) -> TokenStream {
-    widget::WidgetExpansion::expand(input)
+#[proc_macro_derive(Surface, attributes(omega))]
+pub fn surface(input: TokenStream) -> TokenStream {
+    surface::SurfaceExpansion::expand(input)
 }
 
 /// A command: does something on request, and may hold anything.
@@ -222,6 +222,11 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
         }
     });
 
+    let required = handles.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { topics.extend(<#ty as ::omega::internal::Wiring>::required_topics()); }
+    });
+
     let capabilities = handles.iter().map(|field| {
         let ty = &field.ty;
         quote! {
@@ -255,6 +260,8 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
                 #(#topics)*
                 topics
             }
+
+            fn required_topics() -> ::std::vec::Vec<::omega::internal::SystemTopic> { let mut topics = ::std::vec::Vec::new(); #(#required)* topics }
 
             fn capabilities() -> ::std::vec::Vec<::omega::internal::Capability> {
                 let mut capabilities = ::std::vec::Vec::new();
@@ -343,4 +350,10 @@ pub fn input(tokens: TokenStream) -> TokenStream {
 #[proc_macro_derive(Form, attributes(omega))]
 pub fn form(tokens: TokenStream) -> TokenStream {
     InputExpansion::expand(tokens, true)
+}
+
+/// Effect handles supplied exclusively to stateful surface behavior.
+#[proc_macro_derive(Effects, attributes(omega))]
+pub fn effects(input: TokenStream) -> TokenStream {
+    wire(input, Marker::Wiring)
 }

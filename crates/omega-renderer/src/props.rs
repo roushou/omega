@@ -176,7 +176,7 @@ function prop(node, name) {
 function bind(node, event) {
     if (!node || !node.events) return null
     var bound = node.events[event]
-    return bound && bound.command ? bound : null
+    return bound && (bound.command || (bound.local && bound.local !== "0")) ? bound : null
 }
 
 // A JS value as a protobuf JSON `Value`, for a control reporting what the
@@ -194,8 +194,10 @@ function encode(value) {
             var fields = Object.create(null)
             for (var key in value) {
                 if (!Object.prototype.hasOwnProperty.call(value, key)) continue
-                if (typeof value[key] !== "string") return null
-                fields[key] = { stringValue: value[key] }
+                var item = value[key]
+                fields[key] = typeof item === "number" && Number.isSafeInteger(item)
+                    ? { intValue: String(item) } : encode(item)
+                if (fields[key] === null) return null
             }
             return { map: { entries: fields } }
         }

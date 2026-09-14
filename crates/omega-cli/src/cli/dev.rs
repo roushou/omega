@@ -14,12 +14,12 @@
 
 use anyhow::{Context, bail};
 
-use omega_daemon::host::{Changes, Recursion};
+use omega_host::fs::{Changes, Recursion};
 use omega_host::{Layout, Profile};
 use omega_proto::UnitName;
 use omega_proto::{Handshake, Socket};
 
-use crate::cargo::Cargo;
+use crate::build::cargo::Cargo;
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
 
@@ -39,17 +39,18 @@ impl DevCmd {
         let name = UnitName::parse(&self.unit)?;
         let layout = Layout::resolve();
 
+        omega_host::workspace::WorkspaceRole::check_layout(&layout)?;
         let source = layout.unit_src_dir(&name);
         if !source.exists() {
             bail!(
                 "no unit {name} in {} — scaffold one with {}",
-                Paint::path(layout.units_dir()),
-                Paint::command(format!("omega init {name}"))
+                Paint::path(layout.plugins_dir()),
+                Paint::command(format!("omega new {name}"))
             );
         }
 
         let cargo = Cargo::new(&layout);
-        cargo.build_unit(Self::PROFILE, &name).await?;
+        Self::build(&layout, &cargo, &name).await?;
 
         let mut attached = Operator::new().attach().await.with_context(|| {
             format!(
@@ -58,9 +59,8 @@ impl DevCmd {
             )
         })?;
 
-        // The unit's own directory: cargo writes to the cache, so a rebuild
-        // cannot trip the watch that started it.
-        let mut changes = Changes::watch(&[source.as_path()], Recursion::Recursive)?;
+        // Shared library and workspace dependency edits also invalidate this plugin.
+        let mut changes = Changes::watch(&[layout.config.as_path()], Recursion::Recursive)?;
 
         let program = layout.compiled_binary(Self::PROFILE, &name);
         let socket = Socket::resolve();
@@ -112,10 +112,10 @@ impl DevCmd {
 
             ui.blank();
             ui.step(Step::Changed, format!("rebuilding {}", Paint::name(&name)));
-            if let Err(e) = cargo.build_unit(Self::PROFILE, &name).await {
+            if let Err(e) = Self::build(&layout, &cargo, &name).await {
                 // A build that fails leaves the loop running: the next save
                 // is the fix, and exiting would throw away the adoption.
-                ui.error(&e.into());
+                ui.error(&e);
                 if changes.next().await.is_none() {
                     break;
                 }
@@ -128,6 +128,13 @@ impl DevCmd {
             Step::Released,
             format!("{} — the built unit runs again", Paint::name(&name)),
         );
+        Ok(())
+    }
+
+    async fn build(layout: &Layout, cargo: &Cargo<'_>, name: &UnitName) -> anyhow::Result<()> {
+        let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
+        omega_host::workspace::WorkspaceRole::check_layout(layout)?;
+        cargo.build_unit(Self::PROFILE, name).await?;
         Ok(())
     }
 

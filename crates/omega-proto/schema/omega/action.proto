@@ -45,7 +45,10 @@ message Action {
 // Launch by desktop-entry id ("firefox.desktop"). Typed, no shell involved.
 message LaunchApp {
   string desktop_id = 1;
-  repeated string args = 2;
+  // Literal URIs, substituted according to the desktop entry field codes.
+  repeated string uris = 2;
+  // Optional compositor-issued context; never inherited from daemon startup.
+  string activation_token = 3;
 }
 
 // The raw shell escape hatch. Requires CAPABILITY_SPAWN.

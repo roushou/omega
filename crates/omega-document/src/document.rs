@@ -35,14 +35,23 @@ impl Document {
         self
     }
 
+    /// Construct an independent presentation once per plugin incarnation.
+    pub fn presentation(
+        mut self,
+        presentation: impl Into<omega_proto::omega::ConfiguredPresentation>,
+    ) -> Self {
+        self.inner.presentations.push(presentation.into());
+        self
+    }
+
     pub fn bar(mut self, bar: Bar) -> Self {
         self.inner.bars.push(bar);
         self
     }
 
-    /// Own Omarchy's shell configuration. Do not also declare legacy bars.
-    pub fn shell(mut self, shell: crate::shell::Shell) -> Result<Self, crate::shell::ShellError> {
-        self.inner.shell_json = shell.encode()?;
+    /// Compose a typed integration into this document.
+    pub fn with<E: crate::DocumentExtension>(mut self, extension: E) -> Result<Self, E::Error> {
+        extension.apply(&mut self.inner)?;
         Ok(self)
     }
 

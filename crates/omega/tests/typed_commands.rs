@@ -1,12 +1,12 @@
 use omega::config::{IntoValue, Values};
 use omega::testing::{Called, Drawn, State};
 use omega::ui::{Button, Form, Metric, Section, Slider};
-use omega::{Args, Command, Input, Percent, Plugin, Ui, Widget};
+use omega::{Args, Command, Input, Percent, Plugin, Surface, Ui};
 
 #[derive(omega::Command)]
 #[omega(name = "volume")]
 struct SetVolume {
-    volume: omega::audio::Volume,
+    volume: omega::platform::audio::Volume,
 }
 impl Command for SetVolume {
     type Input = Percent;
@@ -16,9 +16,9 @@ impl Command for SetVolume {
     }
 }
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Controls {}
-impl Widget for Controls {
+impl Surface for Controls {
     fn render(&self) -> Ui {
         Section::new("Audio")
             .child(Metric::new(Percent::whole(40)).label("Output volume"))
@@ -39,18 +39,18 @@ impl Widget for Controls {
 #[test]
 fn bindings_share_registration_identity_without_acquiring_command_capabilities() {
     let plugin = Plugin::named("audio", "1")
-        .widget_default::<Controls>()
+        .surface_default::<Controls>()
         .command::<SetVolume>();
     let manifest = plugin.manifest().unwrap();
     assert!(
         manifest
-            .surfaces
+            .commands
             .iter()
             .any(|surface| surface.id == "volume")
     );
     assert!(
         Plugin::named("controls", "1")
-            .widget_default::<Controls>()
+            .surface_default::<Controls>()
             .manifest()
             .unwrap()
             .capabilities

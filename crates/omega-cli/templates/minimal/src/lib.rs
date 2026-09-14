@@ -1,20 +1,20 @@
 //! A minimal widget. Run its tests with `cargo test`.
 use omega::ui::Text;
-use omega::{Plugin, View, Widget};
+use omega::{Plugin, Surface, View};
 
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
 
-#[derive(Debug, omega::Widget)]
+#[derive(Debug, omega::Surface)]
 pub struct Hello;
 
-impl Widget for Hello {
+impl Surface for Hello {
     fn render(&self) -> View {
         Text::new("Hello from Omega").into()
     }
 }
 
 pub fn plugin() -> Plugin {
-    omega::plugin!().widget(Hello)
+    omega::plugin!().surface(Hello)
 }
 
 #[cfg(test)]

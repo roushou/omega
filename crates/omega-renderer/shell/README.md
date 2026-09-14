@@ -2,7 +2,8 @@
 
 The `omega.view` plugin renders Omega widgets and panels inside Omarchy's
 Quickshell shell. Plugin authors build views with the Rust SDK; this directory
-contains the QML implementation and its interaction tests.
+contains the shared QML core, fixture harness, and interaction tests.
+The Omarchy adapter lives in `../../omega-omarchy/shell/`.
 
 ## Installation and development
 
@@ -31,39 +32,35 @@ symlink.
 
 ## Connection contract
 
-`Connection.qml` connects to `$XDG_RUNTIME_DIR/omega-shell.sock` by default; its
-`socketPath` property can select another address. The daemon's observation socket
-streams state topics, views, and request results as newline-delimited JSON.
-Consumers must distinguish these messages before interpreting their payloads.
+`core/RendererConnection.qml` connects to the observation socket and uses the
+same `Frame` requests as the binary protocol, encoded as newline-delimited JSON.
+The Omarchy adapter supplies a placement scope; `desktop/shell.qml` supplies a
+plugin scope for independent windows and overlays. The owner bootstraps with
+`AttachRenderer`, declaring supported features. The connection then has only its
+renderer scope, rather than general operator authority.
 
-A control sends the same `Frame` request used by the binary protocol:
+State topics can be observed without attachment; view trees cannot. Attachment
+returns instance metadata and then scoped view updates. Runtime identity is an
+instance ID plus incarnation, not a surface or bar module name. The daemon owns
+view revisions and expires identities when the plugin session ends. Replacing an
+attachment revokes its predecessor. Snapshot repair clears destroyed instances.
 
-```json
-{
-  "streamId": 1,
-  "invoke": {
-    "act": {
-      "action": {
-        "invokeUnit": { "unit": "lamp", "command": "toggle", "args": [] }
-      }
-    }
-  }
-}
-```
+Controls send `Interact` with identity, revision, node key, event name, and optional
+value. The daemon resolves the command and fixed arguments from its retained tree.
+`InstanceSession.qml` isolates pending state, errors, and form completion between
+instances sharing a transport. Disconnect clears views and reports unknown outcomes;
+commands are never retried automatically.
 
-Reading the observation stream does not require a unit handshake. Requests require
-the daemon's own user and pass through the operator policy. Each invocation gets
-an outcome or refusal on its request stream. The control socket separately serves
-spawned units and authenticated operators; there is no debug-client bypass.
-
-Views are addressed by `(unit, surface, module)`. The module selects an exact
-placement; an empty module identifies the surface's unplaced instance. The daemon
-authenticates the publishing unit and assigns view revisions. `Connection` routes
-results to pending requests and reconnects after prolonged silence as well as
-reported socket disconnection. It subscribes to unit lifecycle state to distinguish
-starting, restarting, stopped, and failed plugins from intentionally empty views.
-Disconnected views are cleared; pending commands report an unknown outcome and
-are never retried automatically.
+The daemon stages embedded core/desktop assets under its renderer cache and
+supervises one standalone host per plugin. `omega present <unit> <surface>` opens
+a singleton normal window; `--new`, `--overlay`, and `--config '{"label":"Example"}'`
+select independent instances, overlays, and construction settings. Normal window
+size/focus follow compositor policy. Overlays support explicit keyboard policy and
+output selection through typed document builders or `omega present --output`.
+`--dismiss-on-outside` opts into a full-output input area around centered overlay
+content. Output selection defaults to the host choice. Overlay Escape and native window
+dismissal record closed intent, which survives host restart and reconciliation. Plugin restart
+expires instances and reconstructs only configured placements.
 
 ## Rendering and interaction
 
@@ -83,9 +80,10 @@ and reordering. Allocated width constrains text wrapping; panels scroll when the
 content exceeds the available height. Stacks inside columns span their available
 width, and the wire `fill` property requests space along a stack's layout axis.
 
-Draft text, slider drags, selection, and pending requests live in the renderer.
-Fields retain drafts across unrelated updates; a changed explicit `value` lets
-the plugin replace them. Lists use row keys for activation. Forms submit named
+Draft text, slider drags, and pending requests live in the renderer. Selection
+may be renderer-local or controlled by the surface model. Fields retain drafts
+across unrelated updates; controlled text uses edit/reset revisions as described
+below. Lists activate with typed selection values, falling back to row keys. Forms submit named
 text fields as one map, retain labels and help while editing, and clear secret
 fields after successful submission. Refused submissions retain drafts for retry.
 Disabled or busy containers disable their descendants; pending commands prevent
@@ -97,8 +95,8 @@ limits. Enter submits a form, and Escape closes its panel. Focused controls have
 a visible indicator.
 
 Shared `emphasis` and `tone` properties express visual importance and feedback
-independently. They do not grant interactivity or change routing. Theme colors
-resolve through Omarchy's `Color` singleton in QML.
+independently. They do not grant interactivity or change routing. The shared default theme is host independent; the Omarchy adapter maps tokens
+to the host's `Color` singleton.
 
 ## Generated readers and checks
 
@@ -118,3 +116,48 @@ crates/omega-renderer/shell/test.sh
 Rust tests compare generated readers and embedded assets with the checked-in
 files. QML lint checks the renderer sources; the offscreen interaction suite
 checks view updates, input state, forms, and control behavior.
+
+## Shared renderer inputs
+
+`core/ViewNode.qml` takes `model`, `theme`, `assets`, `session`, and the allocated
+Item width/height. Theme and session bindings propagate to children; a component
+keeps its identity when its theme or siblings change. `Theme.qml` provides default
+tokens; `OmarchyTheme.qml` maps them to Omarchy's current `Color` and `Style`.
+`Assets.qml` accepts local files and image data URIs without fetching remote URLs.
+
+The isolated normal-window harness uses this same core:
+
+```sh
+quickshell -p crates/omega-renderer/shell
+```
+
+Its normal/loading/long-label/disabled scenarios capture interactions locally.
+It never opens the daemon socket. Rust-authored cases use `omega preview`; see
+[the preview guide](../../../docs/previews.md).
+
+## Stateful editing
+
+The renderer supports typed local messages and declared commands through the
+same instance-scoped interaction route. `Field::controlled(&TextValue)` and
+`on_change` use committed TextEdit values with edit/reset revisions. Typing stays
+local while pending edits coalesce; delayed values cannot overwrite a newer draft.
+Programmatic resets do not emit user edits, and composition defers both edits and
+incoming resets until the input method commits.
+
+`Field::autofocus()` requests initial focus. `Field::navigate("results")` delegates
+Up/Down and Enter to a keyed list without transferring text focus. Navigation is
+qualified by component and instance scope. `List::selected` / `on_select` support
+model-owned stable selection; disabled entries are skipped during navigation.
+
+Application icons use `Image::icon`: hosts inject local theme lookup into
+`Assets.iconResolver`; ordinary image paths remain local assets. No network
+lookup is attempted. Field-to-list navigation waits for edits and composition
+to settle into the rendered result revision before activating a row.
+
+## Development preview host
+
+`preview/` is the isolated host used by `omega preview`, with the same core
+controls and a private development transport. `Viewport.qml` recreates its root
+when a case epoch changes, so reset/rebuild cannot retain another model's drafts.
+The inspector resolves captured effects explicitly. Captures use fixed software
+rendering and local fixture assets; see [the guide](../../../docs/previews.md).

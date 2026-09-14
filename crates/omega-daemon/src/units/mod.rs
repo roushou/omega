@@ -7,7 +7,9 @@
 //! The `units` state topic is a projection of this table, published whenever
 //! it changes. Nothing else keeps a parallel record.
 
+mod instance;
 pub mod lifecycle;
+mod presentations;
 pub mod record;
 pub mod session;
 pub mod token;
@@ -17,11 +19,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tokio::sync::{mpsc, oneshot};
 
+use omega_proto::SystemTopic;
 use omega_proto::UnitName;
 use omega_proto::omega::{
     StatePatch, StateTopic, UnitStatus, UnitsState, Value, invoke, result, state_topic,
 };
-use omega_proto::{Refusal, SystemTopic};
 
 use crate::Shutdown;
 use crate::hub::Hub;
@@ -41,6 +43,12 @@ pub struct UnitTable {
 #[derive(Debug)]
 struct Inner {
     units: Mutex<BTreeMap<UnitName, UnitRecord>>,
+    renderers: Mutex<
+        BTreeMap<
+            crate::session::dispatch::attachment::Scope,
+            std::sync::Weak<std::sync::atomic::AtomicBool>,
+        >,
+    >,
     request_bytes: Arc<tokio::sync::Semaphore>,
     hub: Hub,
     /// Announces a unit becoming reachable. A unit is started before it can
@@ -59,6 +67,7 @@ impl UnitTable {
             Self {
                 inner: Arc::new(Inner {
                     units: Mutex::new(BTreeMap::new()),
+                    renderers: Default::default(),
                     request_bytes: Arc::new(tokio::sync::Semaphore::new(Self::REQUEST_BYTES)),
                     hub,
                     connected,
@@ -393,106 +402,6 @@ impl UnitTable {
             Ok(Err(_)) => Err(RequestError::Absent(unit.clone())),
             Err(_) => Err(RequestError::Timeout(unit.clone())),
         }
-    }
-
-    pub fn instances(&self) -> BTreeMap<crate::hub::SurfaceRef, HashMap<String, Value>> {
-        self.lock()
-            .values()
-            .flat_map(|record| record.instances.clone())
-            .collect()
-    }
-
-    pub async fn configure_instance(
-        &self,
-        address: &crate::hub::SurfaceRef,
-        config: HashMap<String, Value>,
-    ) -> Result<(), RequestError> {
-        let session = self
-            .lock()
-            .get(&address.unit)
-            .and_then(|record| record.session.clone())
-            .ok_or_else(|| RequestError::Absent(address.unit.clone()))?;
-        let op = invoke::Op::RenderWidget(omega_proto::omega::RenderWidget {
-            surface_id: address.surface.to_string(),
-            module_id: address
-                .module
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_default(),
-            config: config.clone(),
-        });
-        let outcome = Self::request_on(&session, &address.unit, op).await?;
-        let result::Outcome::View(view) = outcome else {
-            return Err(RequestError::Refused {
-                unit: address.unit.clone(),
-                source: Refusal::invalid("RenderWidget requires a view result"),
-            });
-        };
-        let mut records = self.lock();
-        let record = records
-            .get_mut(&address.unit)
-            .ok_or_else(|| RequestError::Absent(address.unit.clone()))?;
-        if !record
-            .session
-            .as_ref()
-            .is_some_and(|current| current.requests.same_channel(&session.requests))
-        {
-            return Err(RequestError::Absent(address.unit.clone()));
-        }
-        self.inner
-            .hub
-            .publish_view(crate::hub::ViewUpdate {
-                surface: address.clone(),
-                view,
-            })
-            .map_err(|error| RequestError::Refused {
-                unit: address.unit.clone(),
-                source: crate::Refusable::refusal(&error),
-            })?;
-        record.instances.insert(address.clone(), config);
-        Ok(())
-    }
-
-    pub async fn remove_instance(
-        &self,
-        address: &crate::hub::SurfaceRef,
-    ) -> Result<(), RequestError> {
-        let session = self
-            .lock()
-            .get(&address.unit)
-            .and_then(|record| record.session.clone());
-        if let Some(session) = session {
-            let outcome = Self::request_on(
-                &session,
-                &address.unit,
-                invoke::Op::RemoveWidget(omega_proto::omega::RemoveWidget {
-                    surface_id: address.surface.to_string(),
-                    module_id: address
-                        .module
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_default(),
-                }),
-            )
-            .await?;
-            if !matches!(outcome, result::Outcome::Ok(_)) {
-                return Err(RequestError::Refused {
-                    unit: address.unit.clone(),
-                    source: Refusal::invalid("RemoveWidget requires an ok result"),
-                });
-            }
-            let mut records = self.lock();
-            if let Some(record) = records.get_mut(&address.unit)
-                && record
-                    .session
-                    .as_ref()
-                    .is_some_and(|current| current.requests.same_channel(&session.requests))
-            {
-                record.instances.remove(address);
-                self.inner.hub.drop_surface(address);
-            }
-        }
-        Ok(())
     }
 
     // ---- lifecycle ----

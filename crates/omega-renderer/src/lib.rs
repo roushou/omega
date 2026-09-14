@@ -12,14 +12,15 @@
 //! speaks to. A stale copy stops being a mistake to be careful about and
 //! becomes a state that cannot be reached.
 
-mod host;
+mod core;
+mod desktop;
+pub use desktop::Desktop;
 mod icons;
-mod installed;
 mod props;
-mod renderer;
 
-pub use host::HostShell;
+pub use core::{Asset, Core};
 pub use icons::Icons;
-pub use installed::Installed;
 pub use props::Props;
-pub use renderer::{Asset, Renderer};
+
+mod preview;
+pub use preview::Preview;

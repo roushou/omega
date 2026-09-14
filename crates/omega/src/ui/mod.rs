@@ -1,4 +1,4 @@
-//! What a widget draws.
+//! Declarative views and composable UI primitives.
 //!
 //! A tree of nodes, built by the things it is made of:
 //!
@@ -23,13 +23,11 @@ mod layout;
 mod node;
 mod style;
 mod text;
-mod widget;
-pub use widget::{WidgetIdentity, WidgetRef};
 
 /// The icon set a shell draws: what [`Icon::new`] names.
 pub use omega_proto::Glyph;
 
-pub use bind::{Bind, CommandRef};
+pub use bind::Bind;
 pub use content::{Metric, Section};
 pub use control::{Button, Choice, ChoiceValue, Field, Form, FormInput, List, Slider, Toggle};
 pub use display::{Graph, Image, Progress};
@@ -37,7 +35,7 @@ pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};
 
-/// Compatibility name for [`View`]. New widgets and components return `View`.
+/// Compatibility name for [`View`]. New surfaces and components return `View`.
 pub type Ui = View;
 
 mod view;

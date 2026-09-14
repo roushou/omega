@@ -1,13 +1,12 @@
 //! Errors exposed to configuration authors.
-use crate::{DocumentError, ValidationError, shell::ShellError};
+use crate::{DocumentError, ValidationError};
 
 /// The result of constructing or emitting an Omega configuration.
 ///
 /// ```no_run
 /// use omega_document::{Document, Result};
-/// use omega_document::shell::Shell;
 /// fn main() -> Result<()> {
-///     Document::new().shell(Shell::new())?.emit()
+///     Document::new().emit()
 /// }
 /// ```
 pub type Result<T> = std::result::Result<T, Error>;
@@ -17,8 +16,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error(transparent)]
     Document(#[from] DocumentError),
-    #[error(transparent)]
-    Shell(#[from] ShellError),
+    #[error("{0}")]
+    Extension(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error(transparent)]
     Validation(#[from] ValidationError),
     #[error(transparent)]

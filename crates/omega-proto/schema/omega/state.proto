@@ -3,6 +3,7 @@ syntax = "proto3";
 package omega;
 
 import "omega/state/display.proto";
+import "omega/state/applications.proto";
 import "omega/state/media.proto";
 import "omega/state/network.proto";
 import "omega/state/power.proto";
@@ -62,6 +63,7 @@ message StateTopic {
     PowerProfileState power_profile = 30;
     ThroughputState throughput = 31;
     ThermalsState thermals = 32;
+    ApplicationsState applications = 33;
 
     Value generic = 1000;       // unit keyspace + forward-compatible topics
   }

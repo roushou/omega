@@ -11,9 +11,10 @@
 
 mod document;
 mod error;
+mod extension;
 mod file;
 mod keys;
-pub mod shell;
+pub use extension::DocumentExtension;
 mod validation;
 
 pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};
@@ -33,3 +34,6 @@ pub use omega_proto::Cadence;
 pub use omega_proto::omega::{
     Action, Bar, Edge, Keybind, Modifier, Module, Schedule, Setting, UnitRef, Value, value,
 };
+
+pub mod presentations;
+pub use presentations::Presentations;

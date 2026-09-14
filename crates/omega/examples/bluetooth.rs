@@ -1,13 +1,15 @@
 //! Known Bluetooth devices and their connection controls.
-use omega::bluetooth::{Bluetooth, BluetoothControl, BluetoothDevice, BluetoothStatus, DeviceId};
+use omega::platform::bluetooth::{
+    Bluetooth, BluetoothControl, BluetoothDevice, BluetoothStatus, DeviceId,
+};
 use omega::ui::{Button, Column, Glyph, Icon, Row, Section, Stack, Text};
-use omega::{Command, Plugin, Ui, Widget};
+use omega::{Command, Plugin, Surface, Ui};
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Indicator {
     bluetooth: Bluetooth,
 }
-impl Widget for Indicator {
+impl Surface for Indicator {
     fn render(&self) -> Ui {
         let tooltip = match self.bluetooth.status() {
             BluetoothStatus::Unavailable => "Bluetooth state unavailable",
@@ -41,7 +43,7 @@ impl Indicator {
     }
 }
 
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Panel {
     bluetooth: Bluetooth,
 }
@@ -83,7 +85,7 @@ impl Panel {
             .child(button.fill_width())
     }
 }
-impl Widget for Panel {
+impl Surface for Panel {
     fn render(&self) -> Ui {
         let panel = Section::new("Bluetooth");
         let panel = match self.bluetooth.status() {
@@ -134,8 +136,8 @@ impl Command for Disconnect {
 
 fn main() -> omega::Result<()> {
     Plugin::named(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
-        .widget_as::<Indicator>("indicator")
-        .widget_as::<Panel>("panel")
+        .surface_as::<Indicator>("indicator")
+        .surface_as::<Panel>("panel")
         .command::<Connect>()
         .command::<Disconnect>()
         .run()
@@ -311,7 +313,7 @@ mod tests {
         assert!(called.effects.is_empty());
         let manifest = manifest_of(
             &Plugin::named("bluetooth", "0.1.0")
-                .widget_as::<Panel>("bluetooth")
+                .surface_as::<Panel>("bluetooth")
                 .command::<Connect>()
                 .command::<Disconnect>(),
         );

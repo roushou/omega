@@ -11,10 +11,10 @@
 use std::fmt;
 
 use crate::omega::{
-    AudioState, BacklightState, BatteryState, BluetoothState, DiskState, IdleState, InputState,
-    MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState, PowerProfileState,
-    SystemState, ThermalsState, ThroughputState, TimeState, UnitsState, VpnState, WifiState,
-    WindowState, WorkspacesState, state_topic,
+    ApplicationsState, AudioState, BacklightState, BatteryState, BluetoothState, DiskState,
+    IdleState, InputState, MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState,
+    PowerProfileState, SystemState, ThermalsState, ThroughputState, TimeState, UnitsState,
+    VpnState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
 /// Declare the system topics: the enum, `ALL`, the wire name, and the value
@@ -67,6 +67,7 @@ macro_rules! topics {
 }
 
 topics! {
+    Applications => "applications": ApplicationsState,
     Battery => "battery": BatteryState,
     Network => "network": NetworkState,
     Audio => "audio": AudioState,

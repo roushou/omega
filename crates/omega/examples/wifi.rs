@@ -1,12 +1,12 @@
 //! Wi-Fi readings and connection controls. Forms submit once; passwords stay out
 //! of records. Requests acknowledge activation, and Wifi reports its outcome.
 
-use omega::network::{AccessPoint, Network, Wifi, WifiControl, WifiPhase};
+use omega::platform::network::{AccessPoint, Network, Wifi, WifiControl, WifiPhase};
 use omega::record::{Own, Watch};
 use omega::ui::{
     Button, Form, Glyph, Graph, Icon, List, Progress, Row, Section, Size, Stack, Text,
 };
-use omega::{Command, Percent, Ui, Widget};
+use omega::{Command, Percent, Surface, Ui};
 
 /// This unit's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -25,14 +25,14 @@ impl Default for Settings {
 }
 
 /// The bar slot: what is on, and how well.
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Indicator {
     network: Network,
     #[omega(config)]
     settings: Settings,
 }
 
-impl Widget for Indicator {
+impl Surface for Indicator {
     fn render(&self) -> Ui {
         if !self.network.has_reading() {
             return Ui::empty();
@@ -87,14 +87,14 @@ impl Signal {
 }
 
 /// The popout: the details, and the two things anyone does with them.
-#[derive(omega::Widget, Debug)]
+#[derive(omega::Surface, Debug)]
 pub struct Panel {
     network: Network,
     wifi: Wifi,
     signal: Watch<Signal>,
 }
 
-impl Widget for Panel {
+impl Surface for Panel {
     fn render(&self) -> Ui {
         let state = match self.wifi.phase() {
             WifiPhase::Connecting => "Connecting…".to_string(),
@@ -267,8 +267,8 @@ fn bars(_strength: Percent) -> Glyph {
 
 pub fn plugin() -> omega::Plugin {
     omega::Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
-        .widget_as::<Indicator>("indicator")
-        .widget_as::<Panel>("panel")
+        .surface_as::<Indicator>("indicator")
+        .surface_as::<Panel>("panel")
         .command::<Connect>()
         .command::<Join>()
         .command::<Sample>()

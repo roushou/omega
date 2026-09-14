@@ -1,0 +1,48 @@
+syntax = "proto3";
+package omega;
+import "omega/ui.proto";
+import "omega/value.proto";
+import "omega/instance.proto";
+
+// Development-only transport, on private preview sockets. Never accepted by the daemon.
+message PreviewRequest {
+  uint64 id = 1;
+  oneof command {
+    string select = 2;
+    PreviewInteraction interact = 3;
+    bool reset = 4;
+    PreviewResolution resolve = 5;
+    string captured = 6;
+  }
+}
+message PreviewInteraction {
+  uint64 revision = 1;
+  string node = 2;
+  string event = 3;
+  Value value = 4;
+}
+message PreviewResolution {
+  uint64 effect = 1;
+  bool success = 2;
+}
+message PreviewEffect {
+  uint64 id = 1;
+  string operation = 2; // Kind only: never arguments, command payloads, or secrets.
+}
+message PreviewSnapshot {
+  uint32 version = 1;
+  uint64 answered = 2;
+  repeated string cases = 3;
+  string selected = 4;
+  ViewTree view = 5;
+  repeated PreviewEffect effects = 6;
+  repeated string events = 7; // Event kinds only. Input values are deliberately omitted.
+  string error = 8;
+  bool stale = 9;
+  uint32 width = 10;
+  uint32 height = 11;
+  string theme = 12;
+  string capture_path = 13;
+  uint64 epoch = 14; // New model lifetime: discard renderer-local drafts and focus.
+  PresentationState presentation = 15;
+}

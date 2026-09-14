@@ -3,7 +3,7 @@
 use omega_proto::omega::{BatteryState, NetworkState, StatePatch, StateSnapshot, StateTopic};
 use omega_proto::{TopicValue, Values};
 
-use crate::context::Context;
+use crate::runtime::context::Context;
 
 /// The state a plugin reads, built for a test.
 ///

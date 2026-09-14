@@ -13,10 +13,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use omega_brokers::{Broker, BrokerError};
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::shutdown::Shutdown;
+use omega_platform::{Broker, BrokerError};
 use omega_proto::ActionKind;
 use omega_proto::omega::{Lock, StatePatch, action};
 

@@ -1,0 +1,20 @@
+[package]
+name = "omega-preview"
+version.workspace = true
+categories = ["development-tools::testing", "gui"]
+edition.workspace = true
+homepage.workspace = true
+keywords = ["desktop", "preview", "testing", "components", "omega"]
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+description = "Isolated component and surface previews for Omega"
+[lints]
+workspace = true
+[dependencies]
+omega = { path = "../omega", package = "omega-rs", version = "0.2.3" }
+omega-proto = { workspace = true, features = ["json"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "io-util", "time"] }

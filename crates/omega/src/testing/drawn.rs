@@ -3,7 +3,7 @@
 use omega_proto::Values;
 use omega_proto::omega::{ViewNode, value};
 
-use crate::surface::Widget;
+use crate::surface::Surface;
 use crate::testing::state::State;
 use crate::ui::View;
 
@@ -14,13 +14,17 @@ pub struct Drawn {
 }
 
 impl Drawn {
+    pub(super) fn binding(&self, key: &str, event: &str) -> Option<&omega_proto::omega::Bind> {
+        self.node(key)?.events.get(event)
+    }
+
     /// Build a widget against some state and render it once.
-    pub fn of<W: Widget>(state: &State) -> Self {
+    pub fn of<W: Surface>(state: &State) -> Self {
         Self::configured::<W>(state, &Values::new())
     }
 
     /// The same, for one instance the document configured.
-    pub fn configured<W: Widget>(state: &State, settings: &Values) -> Self {
+    pub fn configured<W: Surface>(state: &State, settings: &Values) -> Self {
         let (context, _effects) = state.context();
         Self::of_view(W::build(&context, settings).render())
     }
@@ -111,6 +115,11 @@ impl Drawn {
             .into_iter()
             .map(|node| node.key.as_str())
             .collect()
+    }
+
+    /// The declarative tree consumed by the production renderer.
+    pub fn tree(&self) -> &omega_proto::omega::ViewTree {
+        &self.tree
     }
 
     pub fn is_empty(&self) -> bool {

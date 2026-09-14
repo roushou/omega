@@ -203,7 +203,10 @@ async fn a_request_the_policy_does_not_serve_an_operator_is_refused() {
     let refusal = observer
         .refusal(invoke::Op::PublishView(omega_proto::omega::PublishView {
             surface_id: "battery".into(),
-            module_id: String::new(),
+            instance: Some(omega_proto::omega::InstanceRef {
+                id: "test-instance".into(),
+                incarnation: "test-session".into(),
+            }),
             view: Some(Default::default()),
         }))
         .await;

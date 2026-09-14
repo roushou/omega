@@ -12,9 +12,9 @@
 
 use anyhow::Context;
 
-use omega_brokers::Brokers;
 use omega_daemon::Daemon;
 use omega_host::Layout;
+use omega_platform::Brokers;
 use omega_proto::Socket;
 
 use crate::service::{Installed, Service, ServiceManager};
@@ -69,7 +69,7 @@ impl DaemonCmd {
     async fn serve() -> anyhow::Result<()> {
         let layout = Layout::resolve();
         let daemon = Daemon::from_layout(&layout)?;
-        // Which brokers a daemon runs is `omega-brokers`' to say, not the
+        // Which brokers a daemon runs is `omega-platform`' to say, not the
         // CLI's: this is wiring, and that is the map.
         for broker in Brokers::all() {
             daemon.add_broker(broker);

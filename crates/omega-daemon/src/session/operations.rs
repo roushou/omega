@@ -29,7 +29,14 @@ impl Operations {
     pub(crate) fn deferred(invoke: &Invoke) -> bool {
         matches!(
             invoke.op,
-            Some(invoke::Op::Act(_) | invoke::Op::AdoptUnit(_))
+            Some(
+                invoke::Op::Act(_)
+                    | invoke::Op::AdoptUnit(_)
+                    | invoke::Op::CreateInstance(_)
+                    | invoke::Op::Interact(_)
+                    | invoke::Op::ChangePresentation(_)
+                    | invoke::Op::ReportPresentation(_)
+            )
         )
     }
 

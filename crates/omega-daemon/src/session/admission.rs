@@ -25,6 +25,7 @@ use crate::refusal::Refusable;
 /// What kind of peer an op is served to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
+    Renderer,
     /// A unit the supervisor spawned.
     Unit,
     /// The user who owns the daemon.

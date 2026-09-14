@@ -10,6 +10,8 @@ use anstyle::{AnsiColor, Effects, Style};
 /// column of the same terminal. Two vocabularies would read as two programs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
+    /// Accepted intent, before a host has necessarily made it visible.
+    Requested,
     /// A file or directory the CLI wrote.
     Created,
     /// Work starting, which cargo's own output follows.
@@ -59,6 +61,7 @@ pub enum Step {
 impl Step {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Requested => "Requested",
             Self::Created => "Created",
             Self::Building => "Building",
             Self::Declared => "Declared",
@@ -101,7 +104,8 @@ impl Step {
             | Self::Adopted
             | Self::Released
             | Self::Done => Some(AnsiColor::Green),
-            Self::Building
+            Self::Requested
+            | Self::Building
             | Self::Declared
             | Self::Evaluated
             | Self::Checking

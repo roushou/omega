@@ -410,3 +410,84 @@ async fn client_and_daemon_keep_receiving_during_repeated_large_writes() {
     serving.await.unwrap().unwrap();
     drop(client);
 }
+
+#[tokio::test]
+async fn self_dismissal_receives_its_lifecycle_acknowledgement_on_the_same_connection() {
+    use omega_proto::omega::{
+        ChangePresentation, CreateInstance, Presentation, PresentationAction, WindowPresentation,
+        presentation,
+    };
+    let (harness, mut transport) =
+        connected("self-dismiss", widget_manifest("reader", "panel")).await;
+    let units = harness.units.clone();
+    let creating = tokio::spawn(async move {
+        units
+            .create_instance(&CreateInstance {
+                unit: "reader".into(),
+                surface: "panel".into(),
+                presentation: Some(Presentation {
+                    kind: Some(presentation::Kind::Window(WindowPresentation {
+                        title: "Fixture".into(),
+                        app_id: "org.omega.reader".into(),
+                        width: 400,
+                        height: 300,
+                        min_width: 1,
+                        min_height: 1,
+                    })),
+                }),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+    });
+    loop {
+        let frame = transport.recv().await.unwrap().unwrap();
+        if let Some(frame::Body::Invoke(Invoke {
+            op: Some(invoke::Op::RenderWidget(_)),
+        })) = frame.body
+        {
+            transport
+                .send(Frame::reply(
+                    frame.stream_id,
+                    result::Outcome::View(Default::default()),
+                ))
+                .await
+                .unwrap();
+            break;
+        }
+    }
+    let instance = creating.await.unwrap();
+    transport
+        .send(op(
+            3,
+            invoke::Op::ChangePresentation(ChangePresentation {
+                instance: instance.instance,
+                action: PresentationAction::Close as i32,
+            }),
+        ))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let frame = transport.recv().await.unwrap().unwrap();
+            if let Some(frame::Body::Invoke(Invoke {
+                op: Some(invoke::Op::SurfaceLifecycle(_)),
+            })) = frame.body
+            {
+                transport
+                    .send(Frame::reply(
+                        frame.stream_id,
+                        result::Outcome::Ok(Default::default()),
+                    ))
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+        let frame = next_result(&mut transport).await;
+        assert_eq!(frame.as_ref().unwrap().stream_id, 3);
+        expect_ok(frame);
+    })
+    .await
+    .expect("self-dismissal blocked its own receive loop");
+}

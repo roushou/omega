@@ -12,3 +12,8 @@ pub use temp::TempPath;
 
 mod lock;
 pub use lock::FileLock;
+
+#[cfg(feature = "watch")]
+mod watch;
+#[cfg(feature = "watch")]
+pub use watch::{Changes, Recursion, WatchError};

@@ -118,14 +118,8 @@ impl Actions {
 
         let commands: Vec<&str> = entry
             .manifest
-            .surfaces
+            .commands
             .iter()
-            .filter(|surface| {
-                matches!(
-                    surface.declared(),
-                    Ok(omega_proto::omega::SurfaceKind::Command)
-                )
-            })
             .map(|surface| surface.id.as_str())
             .collect();
 

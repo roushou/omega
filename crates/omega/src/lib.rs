@@ -7,16 +7,16 @@
 //! the code: `omega build` compiles a plugin and asks it what it declares.
 //!
 //! ```no_run
-//! use omega::power::Battery;
+//! use omega::platform::power::Battery;
 //! use omega::ui::Text;
-//! use omega::{View, Widget};
+//! use omega::{View, Surface};
 //!
-//! #[derive(omega::Widget)]
+//! #[derive(omega::Surface)]
 //! struct Charge {
 //!     battery: Battery,
 //! }
 //!
-//! impl Widget for Charge {
+//! impl Surface for Charge {
 //!     fn render(&self) -> View {
 //!         if self.battery.is_charging() {
 //!             Text::new(format!("{} charging", self.battery.charge()))
@@ -28,59 +28,47 @@
 //! }
 //!
 //! fn main() -> omega::Result<()> {
-//!     omega::plugin!().widget(Charge).run()
+//!     omega::plugin!().surface(Charge).run()
 //! }
 //! ```
 //!
-//! Find state and control handles by domain: [`audio`], [`power`], [`network`],
-//! [`bluetooth`], [`desktop`], [`time`], [`system`], and [`session`].
-//! [`notification`] and [`process`] provide notifications and process execution.
+//! Find state and control handles by domain: [`platform::audio`], [`platform::power`], [`platform::network`],
+//! [`platform::bluetooth`], [`platform::desktop`], [`platform::time`], [`platform::system`], and [`platform::session`].
+//! [`platform::notification`] and [`platform::process`] provide notifications and process execution.
 //! Build views with [`ui`], supply settings with [`config`], and share plugin
 //! memory through [`record`]. Shared units such as [`Percent`] live at the root.
 //!
-//! Three kinds of surface, and which one you are writing decides what you may
-//! hold. A [`Widget`] renders, so it may hold state and nothing else — an
-//! effect there would fire on every change the machine reports. A [`Command`]
-//! is asked to do something, and a [`Reaction`] runs when something happened;
-//! both may hold effects, because both run when there is a reason to.
+//! A [`Surface`] renders from readings; a [`StatefulSurface`] adds a local model
+//! and serialized messages with separate behavior effects. [`Command`] endpoints
+//! are explicitly callable, and [`Reaction`] runs when an event occurs.
+//! Render declarations accept only reading handles. Stateful behavior receives
+//! effects separately, keeping them out of ordinary render-side wiring.
 
 #[cfg(test)]
 extern crate self as omega;
 
-mod composite;
-mod context;
+pub mod command;
 mod error;
-mod input;
-mod mirror;
-mod plugin;
-mod reading;
-mod registry;
+pub mod platform;
+pub mod plugin;
+pub mod reaction;
 mod runtime;
-mod surface;
+pub mod surface;
 mod units;
 mod wiring;
 
-pub mod audio;
-pub mod bluetooth;
-pub mod desktop;
 pub mod effect;
-pub mod network;
-pub mod notification;
-pub mod power;
-pub mod process;
 pub mod record;
-pub mod session;
-pub mod system;
 pub mod testing;
-pub mod time;
 pub mod ui;
 
+pub use command::{Args, Command, Input};
 pub use error::{Error, Result};
-pub use input::Input;
 pub use plugin::Plugin;
-pub use surface::{Args, Command, Reaction, Widget};
+pub use reaction::Reaction;
+pub use surface::{StatefulSurface, Surface};
 
-/// What `Widget::render` hands back. Part of the surface's contract, so it
+/// What `Surface::render` hands back. Part of the surface's contract, so it
 /// lives beside the trait rather than with the nodes it is built from.
 pub use ui::{Ui, View};
 
@@ -92,7 +80,7 @@ pub use omega_proto::omega::{Event, EventKind};
 /// compared against one.
 pub use units::{Bytes, Percent, Rate, Remaining, Temperature, Uptime};
 
-pub use omega_derive::{Command, Config, Form, Input, Reaction, UnitState, Widget};
+pub use omega_derive::{Command, Config, Effects, Form, Input, Reaction, Surface, UnitState};
 
 /// Settings: the values a document hands an instance, and what
 /// `#[derive(Config)]` implements to read them.
@@ -101,16 +89,18 @@ pub mod config {
 }
 
 /// Internals the derives expand into. Not a stable surface: write
-/// `#[derive(Widget)]`, not this.
+/// `#[derive(Surface)]`, not this.
 #[doc(hidden)]
 pub mod internal {
     pub use crate::Command;
-    pub use crate::context::Context;
-    pub use crate::input::Input;
+    pub use crate::command::CommandName;
+    pub use crate::command::CommandRef;
+    pub use crate::command::Input;
     pub use crate::record::UnitState;
-    pub use crate::surface::Wired;
-    pub use crate::ui::bind::CommandName;
-    pub use crate::ui::{Bind, CommandRef, Field, FormInput, WidgetIdentity, WidgetRef};
+    pub use crate::runtime::context::Context;
+    pub use crate::surface::{SurfaceIdentity, SurfaceRef};
+    pub use crate::ui::{Bind, Field, FormInput};
+    pub use crate::wiring::Wired;
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use crate::{Args, Error};
     pub use omega_proto::omega::Capability;

@@ -1,10 +1,11 @@
 # Omega
 
-_A typed, declarative way to extend Omarchy in Rust._
+_A typed, declarative foundation for your desktop in Rust._
 
-Omega lets you write [Omarchy](https://omarchy.org)’s widgets, controls, and automations in Rust.
-Omarchy provides the desktop and shell; Omega connects your plugins to system state,
-runs them as separate processes, and renders their declarative interfaces through that shell.
+Omega lets you write desktop interfaces, controls, and automations in Rust.
+Plugins can appear in [Omarchy](https://omarchy.org)’s bar or in independent
+windows and overlays. Omega connects them to system state, runs them as separate
+processes, and renders their declarative interfaces through a shared QML renderer.
 
 Your configuration is an ordinary Cargo workspace.
 Plugins are Rust crates, settings and command bindings are typed,
@@ -25,8 +26,9 @@ Omega generates the shell configuration and matching plugin instances from it.
 ### Requirements
 
 - Linux with a systemd user manager
-- Omarchy
+- Quickshell for rendering; Omarchy for the integrated bar and shell configuration
 - Rust 1.88+
+- GLib/GIO development headers when building the CLI (`libglib2.0-dev` on Debian/Ubuntu)
 
 Install the [Omega CLI from crates.io](https://crates.io/crates/omega-cli):
 
@@ -52,20 +54,32 @@ With an `audio` plugin added, your configuration looks like this:
 │   └── src/
 │       ├── main.rs            # Shell layout, plugin settings, and automations
 │       └── shell_import.rs    # Rust layout generated when adopting the shell
-└── units/
+└── plugins/
     └── audio/
         ├── Cargo.toml         # Plugin dependencies
         └── src/
-            ├── lib.rs         # Widgets, commands, settings, and plugin registration
+            ├── lib.rs         # Surfaces, commands, settings, and plugin registration
             └── main.rs        # Runs the plugin as a separate process
 ```
 
-`system/` describes your desktop; each crate under `units/` implements a plugin.
+`system/` describes your desktop; each crate under `plugins/` implements a plugin.
 Both inherit the Rust edition declared in the root `Cargo.toml`.
 Plugins expose a library so the system declaration can refer to their settings
 and surfaces through Rust types. `omega new` adds plugin crates to the workspace;
 `shell_import.rs` is created only when importing an existing shell configuration.
 You can keep the whole workspace in Git and use ordinary Cargo tools to work on it.
+
+Shared crates live under `libraries/` and are never supervised. Create one and
+connect its consumers explicitly:
+
+```sh
+omega new desktop-ui --lib --into plugins/audio --into system
+```
+
+For a configuration using the old source layout, inspect with `omega migrate --check`, then run `omega migrate` to rename `units/` to `plugins/` and update Cargo
+paths. An interrupted migration can be retried. Omarchy shell imports now use
+`omega_omarchy::shell`; add `omega-omarchy` to the system dependencies and compose
+it with `Document::with(shell)`.
 
 You can inspect the service and its plugins from the terminal:
 
@@ -120,17 +134,17 @@ it. Omega derives the required subscriptions and permissions from those types.
 Views are declarative, and controls bind directly to typed commands:
 
 ```rust
-use omega::audio::{Audio, Volume};
+use omega::platform::audio::{Audio, Volume};
 use omega::ui::{Section, Slider, Text};
-use omega::{Command, Percent, Ui, Widget};
+use omega::{Command, Percent, Surface, View};
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 struct Panel {
     audio: Audio,
 }
 
-impl Widget for Panel {
-    fn render(&self) -> Ui {
+impl Surface for Panel {
+    fn render(&self) -> View {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
         }
@@ -158,15 +172,15 @@ impl Command for SetVolume {
 
 fn main() -> omega::Result<()> {
     omega::plugin!()
-        .widget(Panel)
+        .surface(Panel)
         .command::<SetVolume>()
         .run()
 }
 ```
 
-Omega redraws the widget when its audio state changes. Moving the slider invokes
-`SetVolume` with a `Percent`. Widgets can read state; actions belong in commands
-or reactions, a distinction enforced at compile time.
+Omega redraws the surface when its audio state changes. Moving the slider invokes
+`SetVolume` with a `Percent`. Render declarations can read state; effects belong
+in commands, reactions, or a stateful surface’s separate behavior dependencies.
 
 `omega new` creates a plugin crate and prints the declaration for placing its
 widget in your Rust shell layout. Build once to apply your changes,
@@ -199,10 +213,19 @@ The [audio](crates/omega/examples/audio.rs), [Wi-Fi](crates/omega/examples/wifi.
 and [focus timer](crates/omega/examples/focus.rs) examples show fuller plugins,
 including panels, forms, and plugin-owned state.
 
+## Preview components and surfaces
+
+Register development cases in a plugin or library with the `omega-preview` dev
+dependency, then run `omega preview <package>`. Inspect loading/empty/error cases,
+interact with isolated surfaces, and rebuild on edits. `--capture` and `--baseline`
+provide explicit visual comparisons. See [the preview guide](docs/previews.md).
+
 ## Documentation
 
 See the [architecture](docs/architecture.md) for how Omega fits together,
-[open design questions](docs/design.md) for work ahead, and
+[desktop platform design](docs/desktop-platform.md) and
+[completed implementation plan](docs/desktop-platform-plan.md) for architectural
+decisions and validation, [open design questions](docs/design.md) for remaining limitations, and
 [contributing guidelines](AGENTS.md) for working on Omega itself. Maintainers can
 follow the [release process](docs/releasing.md). `omega --help`
 lists the available commands.

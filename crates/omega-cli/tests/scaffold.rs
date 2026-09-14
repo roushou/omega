@@ -3,8 +3,8 @@
 
 use omega_cli::checkout::SourceTree;
 use omega_cli::scaffold::{PluginName, Published, Scaffold, Template};
-use omega_daemon::host::cargo::{CargoManifest, Edition};
 use omega_host::Toml;
+use omega_host::workspace::cargo::{CargoManifest, Edition};
 use omega_proto::UnitName;
 
 fn unit() -> UnitName {
@@ -110,7 +110,7 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
     // machine should be and never names the protocol.
     assert_eq!(
         system.dependencies.names().collect::<Vec<_>>(),
-        vec!["omega-document"]
+        vec!["omega-document", "omega-omarchy"]
     );
 
     let main = scaffold.system_main();
@@ -145,7 +145,7 @@ fn the_config_plane_reaches_a_plugin_by_path() {
     assert!(
         dependency
             .path()
-            .is_some_and(|path| path.ends_with("units/battery-widget")),
+            .is_some_and(|path| path.ends_with("plugins/battery-widget")),
         "{dependency:?}"
     );
     assert!(
@@ -170,8 +170,8 @@ fn the_bundled_plugin_declares_by_holding() {
     let main = Template::Minimal.library();
 
     // The shortest useful plugin: hold what you need, draw what you know.
-    assert!(main.contains("omega::Widget"), "{main}");
-    assert!(main.contains("impl Widget for"), "{main}");
+    assert!(main.contains("omega::Surface"), "{main}");
+    assert!(main.contains("impl Surface for"), "{main}");
     assert!(main.contains("omega::plugin!()"), "{main}");
 
     // Nothing declared twice, and nothing the author has to run themselves:
@@ -191,7 +191,7 @@ fn the_program_is_the_library_and_a_call() {
     // A plugin is a library so the config plane can depend on it. What is
     // left in the program is the call that runs what the library declared.
     assert!(main.contains("battery_widget::plugin().run()"), "{main}");
-    assert!(!main.contains("Widget"), "{main}");
+    assert!(!main.contains("Surface"), "{main}");
 }
 
 #[test]
@@ -266,7 +266,7 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
     let tree = SourceTree::detect()
         .unwrap()
         .expect("the tests run from a checkout");
-    let patched = tree.patch().unwrap();
+    let patched = tree.patch(false).unwrap();
 
     // Building against a checkout is cargo's `[patch]`, in a file the
     // scaffold tells git to ignore — so the committed manifest stays the
@@ -342,7 +342,7 @@ fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
     // Fully qualified: a hint that needs a second hint about an import is a
     // hint that failed.
     assert!(
-        hint.contains("omega_document::shell::PluginWidget::new"),
+        hint.contains("omega_omarchy::shell::PluginWidget::new"),
         "{hint}"
     );
 }

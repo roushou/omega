@@ -1,6 +1,7 @@
 use super::*;
-use crate::surface::{Widget, Wired};
+use crate::Surface;
 use crate::ui::{Text, View};
+use crate::wiring::Wired;
 use omega_proto::omega::Result as OpResult;
 use omega_proto::omega::{
     BatteryState, Capability, NetworkState, RemoveWidget, RenderWidget, StatePatch, StateSnapshot,
@@ -35,7 +36,7 @@ impl<const KIND: u8> Wired for Probe<KIND> {
         }
     }
 }
-impl<const KIND: u8> Widget for Probe<KIND> {
+impl<const KIND: u8> Surface for Probe<KIND> {
     fn render(&self) -> View {
         assert!(
             self.context.holds(&Self::topics()),
@@ -60,6 +61,12 @@ struct Peer {
     task: tokio::task::JoinHandle<Result<(), Error>>,
 }
 impl Peer {
+    fn identity(surface: &str, name: &str) -> omega_proto::omega::InstanceRef {
+        omega_proto::omega::InstanceRef {
+            id: format!("test-{surface}-{name}"),
+            incarnation: "test-session".into(),
+        }
+    }
     async fn start(plugin: Plugin, topics: Vec<StateTopic>) -> Self {
         let manifest = plugin.manifest().unwrap();
         let (daemon, unit) = UnixStream::pair().unwrap();
@@ -150,7 +157,15 @@ impl Peer {
             panic!("expected a published view")
         };
         assert_eq!(
-            (view.surface_id.as_str(), view.module_id.as_str()),
+            (
+                view.surface_id.as_str(),
+                view.instance
+                    .as_ref()
+                    .unwrap()
+                    .id
+                    .strip_prefix(&format!("test-{surface}-"))
+                    .unwrap()
+            ),
             (surface, module)
         );
         view.view.unwrap()
@@ -159,7 +174,7 @@ impl Peer {
         let outcome = self
             .invoke(invoke::Op::RenderWidget(RenderWidget {
                 surface_id: surface.into(),
-                module_id: module.into(),
+                instance: Some(Peer::identity(surface, module)),
                 config: Values::new().with("label", label).into_map(),
             }))
             .await;
@@ -182,14 +197,16 @@ impl Drop for Peer {
 #[tokio::test]
 async fn surfaces_wait_only_for_their_own_topics_and_records_have_defaults() {
     let plugin = Plugin::named("test", "0.1.0")
-        .widget_as::<Probe<0>>("battery")
-        .widget_as::<Probe<1>>("network")
-        .widget_as::<Probe<2>>("both")
-        .widget_as::<Probe<3>>("constant");
+        .surface_as::<Probe<0>>("battery")
+        .surface_as::<Probe<1>>("network")
+        .surface_as::<Probe<2>>("both")
+        .surface_as::<Probe<3>>("constant");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
-    assert_eq!(Peer::text(&peer.published("battery", "").await), "0.5");
+    assert_eq!(Peer::text(&peer.render("battery", "", "").await), "0.5");
+    assert!(peer.render("network", "", "").await.root.is_none());
+    assert!(peer.render("both", "", "").await.root.is_none());
     assert_eq!(
-        Peer::text(&peer.published("constant", "").await),
+        Peer::text(&peer.render("constant", "", "").await),
         "constant"
     );
     peer.quiet().await;
@@ -201,7 +218,7 @@ async fn surfaces_wait_only_for_their_own_topics_and_records_have_defaults() {
 
 #[tokio::test]
 async fn requested_instances_wait_without_blocking_and_keep_their_settings() {
-    let plugin = Plugin::named("test", "0.1.0").widget_as::<Probe<0>>("battery");
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![]).await;
     assert!(
         peer.render("battery", "bar-1", "placed:")
@@ -211,7 +228,6 @@ async fn requested_instances_wait_without_blocking_and_keep_their_settings() {
     );
     peer.quiet().await;
     peer.patch(vec![Peer::battery(1, Some(0.5))]).await;
-    assert_eq!(Peer::text(&peer.published("battery", "").await), "0.5");
     assert_eq!(
         Peer::text(&peer.published("battery", "bar-1").await),
         "placed:0.5"
@@ -221,9 +237,9 @@ async fn requested_instances_wait_without_blocking_and_keep_their_settings() {
 
 #[tokio::test]
 async fn deduplication_includes_pull_responses_and_retractions() {
-    let plugin = Plugin::named("test", "0.1.0").widget_as::<Probe<0>>("battery");
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
-    peer.published("battery", "").await;
+    peer.render("battery", "", "").await;
     peer.render("battery", "bar-1", "").await;
     peer.patch(vec![Peer::battery(2, Some(0.5))]).await;
     peer.quiet().await;
@@ -240,9 +256,9 @@ async fn deduplication_includes_pull_responses_and_retractions() {
 
 #[tokio::test]
 async fn reconfiguration_and_removal_replace_publication_history() {
-    let plugin = Plugin::named("test", "0.1.0").widget_as::<Probe<0>>("battery");
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
-    peer.published("battery", "").await;
+    peer.render("battery", "", "").await;
     peer.render("battery", "bar-1", "old:").await;
     assert_eq!(
         Peer::text(&peer.render("battery", "bar-1", "new:").await),
@@ -257,7 +273,7 @@ async fn reconfiguration_and_removal_replace_publication_history() {
     assert!(matches!(
         peer.invoke(invoke::Op::RemoveWidget(RemoveWidget {
             surface_id: "battery".into(),
-            module_id: "bar-1".into(),
+            instance: Some(Peer::identity("battery", "bar-1")),
         }))
         .await,
         result::Outcome::Ok(_)
@@ -279,9 +295,9 @@ async fn reconfiguration_and_removal_replace_publication_history() {
 
 #[tokio::test]
 async fn explicit_absence_is_ready_and_empty_first_views_are_published() {
-    let plugin = Plugin::named("test", "0.1.0").widget_as::<Probe<0>>("battery");
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, None)]).await;
-    assert!(peer.published("battery", "").await.root.is_none());
+    assert!(peer.render("battery", "", "").await.root.is_none());
     peer.patch(vec![Peer::battery(2, None)]).await;
     peer.quiet().await;
 }
@@ -302,7 +318,7 @@ impl Wired for Forward {
         }
     }
 }
-impl crate::ui::bind::CommandName for Forward {
+impl crate::command::CommandName for Forward {
     const NAME: &'static str = "forward";
 }
 impl crate::Command for Forward {
@@ -348,9 +364,9 @@ impl Peer {
 async fn effect_completions_are_correlated_without_blocking_state_or_other_requests() {
     let plugin = Plugin::named("test", "0.1.0")
         .command::<Forward>()
-        .widget_as::<Probe<0>>("battery");
+        .surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
-    peer.published("battery", "").await;
+    peer.render("battery", "", "").await;
     let (first, effect1) = peer.command_start().await;
     let (second, effect2) = peer.command_start().await;
     peer.patch(vec![Peer::battery(2, Some(0.7))]).await;
@@ -425,13 +441,13 @@ async fn completion_saturation_refuses_new_commands_before_they_submit_effects()
 
 #[tokio::test]
 async fn oversized_pull_results_are_refused_without_installing_or_caching_the_instance() {
-    let plugin = Plugin::named("test", "0.1.0").widget_as::<Probe<0>>("battery");
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
-    peer.published("battery", "").await;
+    peer.render("battery", "", "").await;
     let answer = peer
         .invoke(invoke::Op::RenderWidget(RenderWidget {
             surface_id: "battery".into(),
-            module_id: "too-large".into(),
+            instance: Some(Peer::identity("battery", "too-large")),
             config: Values::new().with("label", "oversized").into_map(),
         }))
         .await;
@@ -450,7 +466,7 @@ async fn oversized_pull_results_are_refused_without_installing_or_caching_the_in
 #[derive(crate::Command)]
 #[omega(name = "forward")]
 struct Sequence {
-    notify: crate::notification::Notify,
+    notify: crate::platform::notification::Notify,
 }
 impl crate::Command for Sequence {
     type Input = Args;
@@ -509,7 +525,7 @@ async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
 #[derive(crate::Command)]
 #[omega(name = "forward")]
 struct Delayed {
-    notify: crate::notification::Notify,
+    notify: crate::platform::notification::Notify,
 }
 impl crate::Command for Delayed {
     type Input = Args;

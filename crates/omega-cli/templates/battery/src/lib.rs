@@ -13,9 +13,9 @@
 //! `cargo test`: a widget is a function from state to a view, and the tests
 //! at the bottom of this file call it without a daemon anywhere.
 
-use omega::power::Battery;
+use omega::platform::power::Battery;
 use omega::ui::{Row, Text};
-use omega::{Plugin, View, Widget};
+use omega::{Plugin, Surface, View};
 
 /// This plugin's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -33,14 +33,14 @@ impl Default for Settings {
     }
 }
 
-#[derive(omega::Widget)]
+#[derive(omega::Surface)]
 pub struct BatteryWidget {
     battery: Battery,
     #[omega(config)]
     settings: Settings,
 }
 
-impl Widget for BatteryWidget {
+impl Surface for BatteryWidget {
     fn render(&self) -> View {
         // A desktop has no battery, and a broker that is down has no reading
         // either. Both are nothing to draw — not a charge of zero, which this
@@ -73,7 +73,7 @@ impl Widget for BatteryWidget {
 
 /// Everything this plugin offers. `main` runs it; a test can inspect it.
 pub fn plugin() -> Plugin {
-    omega::plugin!().widget(BatteryWidget)
+    omega::plugin!().surface(BatteryWidget)
 }
 
 #[cfg(test)]

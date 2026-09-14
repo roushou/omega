@@ -106,7 +106,7 @@ fn excluded_plugins_are_refused_before_writing() {
     f.init();
     let root = f
         .root_source()
-        .replace("[workspace]\n", "[workspace]\nexclude = [\"units/*\"]\n");
+        .replace("[workspace]\n", "[workspace]\nexclude = [\"plugins/*\"]\n");
     f.write(f.layout.workspace_manifest(), &root);
     let error = f
         .open()
@@ -114,7 +114,7 @@ fn excluded_plugins_are_refused_before_writing() {
         .unwrap_err();
     assert!(error.to_string().contains("excluded"));
     assert_eq!(f.root_source(), root);
-    assert!(!f.layout.config.join("units/hello").exists());
+    assert!(!f.layout.config.join("plugins/hello").exists());
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn existing_membership_globs_cover_a_plugin_before_its_directory_exists() {
     f.init();
     let root = f.root_source().replace(
         "members = [\"system\"]",
-        "members = [\"system\", \"units/*\"]",
+        "members = [\"system\", \"plugins/*\"]",
     );
     f.write(f.layout.workspace_manifest(), &root);
     f.open()
@@ -189,7 +189,7 @@ fn stale_preparation_does_not_overwrite_an_editors_changes() {
     f.write(f.layout.workspace_manifest(), &updated);
     assert!(prepared.apply().is_err());
     assert_eq!(f.root_source(), updated);
-    assert!(!f.layout.config.join("units/hello").exists());
+    assert!(!f.layout.config.join("plugins/hello").exists());
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn destination_created_after_preparation_is_preserved_and_manifests_rolled_back(
     let prepared = workspace
         .prepare_plugin(PluginName::parse("hello").unwrap(), Template::Minimal)
         .unwrap();
-    let marker = f.layout.config.join("units/hello/mine");
+    let marker = f.layout.config.join("plugins/hello/mine");
     f.write(marker.clone(), "my file");
     assert!(prepared.apply().is_err());
     assert_eq!(f.root_source(), before);
@@ -299,11 +299,11 @@ fn retry_completes_manifest_references_left_before_plugin_publication() {
     f.init();
     let root = f.root_source().replace(
         "members = [\"system\"]",
-        "members = [\"system\", \"units/hello\"]",
+        "members = [\"system\", \"plugins/hello\"]",
     );
     f.write(f.layout.workspace_manifest(), &root);
     let system = std::fs::read_to_string(f.layout.system_manifest()).unwrap()
-        + "hello = { path = \"../units/hello\" }\n";
+        + "hello = { path = \"../plugins/hello\" }\n";
     f.write(f.layout.system_manifest(), &system);
     f.open()
         .prepare_plugin(PluginName::parse("hello").unwrap(), Template::Minimal)
@@ -315,7 +315,7 @@ fn retry_completes_manifest_references_left_before_plugin_publication() {
         std::fs::read_to_string(f.layout.system_manifest()).unwrap(),
         system
     );
-    assert!(f.layout.config.join("units/hello/src/lib.rs").is_file());
+    assert!(f.layout.config.join("plugins/hello/src/lib.rs").is_file());
 }
 
 #[test]
@@ -338,4 +338,163 @@ fn rollback_reports_external_changes_and_restores_other_files() {
         std::fs::read_to_string(f.layout.gitignore()).unwrap(),
         "# editor changed this\n"
     );
+}
+
+#[test]
+fn shared_libraries_have_no_program_and_only_explicit_consumers() {
+    let f = Fixture::new();
+    f.init();
+    f.open()
+        .prepare_plugin(PluginName::parse("power").unwrap(), Template::Minimal)
+        .unwrap()
+        .apply()
+        .unwrap();
+    f.open()
+        .prepare_library(
+            PluginName::parse("desktop-ui").unwrap(),
+            &["plugins/power".into(), "system".into()],
+        )
+        .unwrap()
+        .apply()
+        .unwrap();
+    assert!(
+        f.layout
+            .config
+            .join("libraries/desktop-ui/src/lib.rs")
+            .is_file()
+    );
+    assert!(
+        !f.layout
+            .config
+            .join("libraries/desktop-ui/src/main.rs")
+            .exists()
+    );
+    let names = omega_host::workspace::Plugins::discover(&f.layout).unwrap();
+    assert_eq!(names.len(), 1);
+    assert_eq!(names.iter().next().unwrap().as_str(), "power");
+    let system = std::fs::read_to_string(f.layout.system_manifest()).unwrap();
+    assert!(system.contains("../libraries/desktop-ui"));
+    let power = std::fs::read_to_string(f.layout.config.join("plugins/power/Cargo.toml")).unwrap();
+    assert!(power.contains("../../libraries/desktop-ui"));
+}
+
+impl Fixture {
+    fn legacy(&self) {
+        self.init();
+        self.open()
+            .prepare_plugin(PluginName::parse("power").unwrap(), Template::Minimal)
+            .unwrap()
+            .apply()
+            .unwrap();
+        std::fs::rename(self.layout.plugins_dir(), self.layout.legacy_plugins_dir()).unwrap();
+        for path in [
+            self.layout.workspace_manifest(),
+            self.layout.system_manifest(),
+        ] {
+            let source = std::fs::read_to_string(&path)
+                .unwrap()
+                .replace("plugins/", "units/");
+            self.write(path, &source);
+        }
+    }
+}
+
+#[test]
+fn migration_preserves_sources_comments_overrides_and_runtime_state() {
+    let f = Fixture::new();
+    f.legacy();
+    let root = f.root_source()
+        + "\n# Keep my build options\n[workspace.metadata.custom]\nmessage = \"units/power\"\n";
+    f.write(f.layout.workspace_manifest(), &root);
+    f.write(
+        f.layout.cargo_config(),
+        "[patch.crates-io]\nomega-rs = { path = \"/checkout/crates/omega\" } # local\n",
+    );
+    let name = PluginName::parse("power").unwrap();
+    f.write(f.layout.state_unit_program(name.unit()), "last good binary");
+    let workspace = f.open();
+    let migration = workspace.prepare_migration().unwrap().unwrap();
+    assert_eq!(f.root_source(), root);
+    migration.apply(&workspace).unwrap();
+    assert!(f.root_source().contains("plugins/power"));
+    assert!(f.root_source().contains("message = \"units/power\""));
+    assert!(!f.layout.legacy_plugins_dir().exists());
+    assert!(f.layout.unit_lib_src(name.unit()).is_file());
+    assert_eq!(
+        std::fs::read_to_string(f.layout.state_unit_program(name.unit())).unwrap(),
+        "last good binary"
+    );
+    assert!(
+        std::fs::read_to_string(f.layout.cargo_config())
+            .unwrap()
+            .contains("# local")
+    );
+    assert!(!f.layout.migration_journal().exists());
+    assert!(workspace.prepare_migration().unwrap().is_none());
+}
+
+#[test]
+fn migration_refuses_collisions_and_stale_preparations_without_writes() {
+    let f = Fixture::new();
+    f.legacy();
+    let before = f.root_source();
+    std::fs::create_dir(f.layout.plugins_dir()).unwrap();
+    assert!(f.open().prepare_migration().is_err());
+    assert_eq!(before, f.root_source());
+    std::fs::remove_dir(f.layout.plugins_dir()).unwrap();
+    let workspace = f.open();
+    let migration = workspace.prepare_migration().unwrap().unwrap();
+    f.write(
+        f.layout.workspace_manifest(),
+        &(before.clone() + "\n# edited\n"),
+    );
+    assert!(migration.apply(&workspace).is_err());
+    assert!(f.layout.legacy_plugins_dir().is_dir());
+    assert!(!f.layout.plugins_dir().exists());
+}
+
+#[test]
+fn interrupted_migrations_restore_original_files_before_retrying() {
+    for renamed in [false, true] {
+        let f = Fixture::new();
+        f.legacy();
+        let before = f.root_source();
+        let after = before.replace("units/", "plugins/");
+        let journal = serde_json::json!({"edits": [{
+            "path": f.layout.workspace_manifest(), "before": before, "after": after
+        }]});
+        f.write(f.layout.migration_journal(), &journal.to_string());
+        f.write(f.layout.workspace_manifest(), &after);
+        if renamed {
+            std::fs::rename(f.layout.legacy_plugins_dir(), f.layout.plugins_dir()).unwrap();
+        }
+        assert!(omega_host::workspace::Plugins::discover(&f.layout).is_err());
+        let workspace = f.open();
+        assert!(workspace.recover_migration().unwrap());
+        assert_eq!(f.root_source(), before);
+        assert!(f.layout.legacy_plugins_dir().exists());
+        workspace
+            .prepare_migration()
+            .unwrap()
+            .unwrap()
+            .apply(&workspace)
+            .unwrap();
+        assert!(omega_host::workspace::Plugins::discover(&f.layout).is_ok());
+    }
+}
+
+#[test]
+fn recovery_preserves_external_edits_and_the_journal() {
+    let f = Fixture::new();
+    f.legacy();
+    let before = f.root_source();
+    let journal = serde_json::json!({"edits": [{
+        "path": f.layout.workspace_manifest(), "before": before,
+        "after": before.replace("units/", "plugins/")
+    }]});
+    f.write(f.layout.migration_journal(), &journal.to_string());
+    f.write(f.layout.workspace_manifest(), "# external edit\n");
+    assert!(f.open().recover_migration().is_err());
+    assert_eq!(f.root_source(), "# external edit\n");
+    assert!(f.layout.migration_journal().exists());
 }

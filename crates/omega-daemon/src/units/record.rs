@@ -42,7 +42,7 @@ pub struct UnitRecord {
     /// Present while the unit holds a session.
     pub(crate) session: Option<SessionLink>,
     pub(crate) instances:
-        std::collections::BTreeMap<crate::hub::SurfaceRef, HashMap<String, Value>>,
+        std::collections::BTreeMap<omega_proto::instance::InstanceId, super::instance::Instance>,
     /// The settings the document gave it, as the running process was told
     /// them. Construction rather than state: a plugin's fields are built out
     /// of these, so changing them means running the unit again.

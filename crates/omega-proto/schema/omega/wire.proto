@@ -7,6 +7,7 @@ import "omega/event.proto";
 import "omega/state.proto";
 import "omega/state/units.proto";
 import "omega/ui.proto";
+import "omega/instance.proto";
 import "omega/unit.proto";
 import "omega/value.proto";
 
@@ -90,6 +91,14 @@ message Invoke {
     AdoptUnit adopt_unit = 9;
     ApplyShell apply_shell = 13;
     GetDeployment get_deployment = 14;
+    CreateInstance create_instance = 15;
+    ChangePresentation change_presentation = 16;
+    InspectInstances inspect_instances = 17;
+    AttachRenderer attach_renderer = 18;
+    ReportPresentation report_presentation = 19;
+    Interact interact = 20;
+    SurfaceEvent surface_event = 21;
+    SurfaceLifecycle surface_lifecycle = 22;
 
     // ---- daemon -> unit: surface invocations ----
     CallCommand call_command = 10;
@@ -143,7 +152,8 @@ message EmitEvent {
 message PublishView {
   string surface_id = 1;
   ViewTree view = 2;
-  string module_id = 3;
+  reserved 3;
+  InstanceRef instance = 4;
 }
 
 // Cycle a unit's process. Not a change of intent: the document still says
@@ -179,7 +189,8 @@ message CallCommand {
 // that module through PublishView.
 message RenderWidget {
   string surface_id = 1;
-  string module_id = 2;
+  reserved 2;
+  InstanceRef instance = 4;
   map<string, Value> config = 3;
 }
 
@@ -194,6 +205,7 @@ message Result {
     CommandOutput output = 5;       // CallCommand (streaming)
     Empty ok = 6;
     DeploymentStatus deployment = 8;
+    InstanceList instances = 9;
   }
   bool done = 7;
 }
@@ -248,7 +260,8 @@ message Pong {
 // End a placed instance. The anonymous instance is independent.
 message RemoveWidget {
   string surface_id = 1;
-  string module_id = 2;
+  reserved 2;
+  InstanceRef instance = 4;
 }
 
 // Explicitly apply the published generation; overwrite acknowledges external edits.

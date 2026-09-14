@@ -14,6 +14,14 @@ use crate::session::admission::Role;
 /// schema fails to compile here until its kind is named.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpKind {
+    CreateInstance,
+    ChangePresentation,
+    InspectInstances,
+    AttachRenderer,
+    ReportPresentation,
+    Interact,
+    SurfaceEvent,
+    SurfaceLifecycle,
     GetState,
     SetState,
     Subscribe,
@@ -33,6 +41,14 @@ pub enum OpKind {
 impl OpKind {
     pub fn of(op: &invoke::Op) -> Self {
         match op {
+            invoke::Op::CreateInstance(_) => Self::CreateInstance,
+            invoke::Op::ChangePresentation(_) => Self::ChangePresentation,
+            invoke::Op::InspectInstances(_) => Self::InspectInstances,
+            invoke::Op::AttachRenderer(_) => Self::AttachRenderer,
+            invoke::Op::ReportPresentation(_) => Self::ReportPresentation,
+            invoke::Op::Interact(_) => Self::Interact,
+            invoke::Op::SurfaceEvent(_) => Self::SurfaceEvent,
+            invoke::Op::SurfaceLifecycle(_) => Self::SurfaceLifecycle,
             invoke::Op::GetState(_) => Self::GetState,
             invoke::Op::SetState(_) => Self::SetState,
             invoke::Op::Subscribe(_) => Self::Subscribe,
@@ -52,6 +68,14 @@ impl OpKind {
 
     pub fn name(self) -> &'static str {
         match self {
+            Self::CreateInstance => "CreateInstance",
+            Self::ChangePresentation => "ChangePresentation",
+            Self::InspectInstances => "InspectInstances",
+            Self::AttachRenderer => "AttachRenderer",
+            Self::ReportPresentation => "ReportPresentation",
+            Self::Interact => "Interact",
+            Self::SurfaceEvent => "SurfaceEvent",
+            Self::SurfaceLifecycle => "SurfaceLifecycle",
             Self::GetState => "GetState",
             Self::SetState => "SetState",
             Self::Subscribe => "Subscribe",
@@ -76,7 +100,15 @@ impl OpKind {
             invoke::Op::PublishView(publish) => Some(&publish.surface_id),
             invoke::Op::RenderWidget(render) => Some(&render.surface_id),
             invoke::Op::RemoveWidget(remove) => Some(&remove.surface_id),
-            invoke::Op::GetState(_)
+            invoke::Op::CreateInstance(_)
+            | invoke::Op::ChangePresentation(_)
+            | invoke::Op::InspectInstances(_)
+            | invoke::Op::AttachRenderer(_)
+            | invoke::Op::ReportPresentation(_)
+            | invoke::Op::SurfaceLifecycle(_)
+            | invoke::Op::SurfaceEvent(_)
+            | invoke::Op::Interact(_)
+            | invoke::Op::GetState(_)
             | invoke::Op::SetState(_)
             | invoke::Op::Subscribe(_)
             | invoke::Op::Unsubscribe(_)
@@ -108,6 +140,42 @@ pub(super) struct OpPolicy {
 /// anything absent is refused.
 pub(super) const POLICY: &[OpPolicy] = &[
     OpPolicy {
+        kind: OpKind::CreateInstance,
+        roles: &[Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::ChangePresentation,
+        roles: &[Role::Operator, Role::Renderer, Role::Unit],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::InspectInstances,
+        roles: &[Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::AttachRenderer,
+        roles: &[Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::ReportPresentation,
+        roles: &[Role::Renderer],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::Interact,
+        roles: &[Role::Renderer],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
         kind: OpKind::GetDeployment,
         roles: &[Role::Operator],
         capabilities: &[],
@@ -138,13 +206,13 @@ pub(super) const POLICY: &[OpPolicy] = &[
         // already read. Narrowing is the observer's whole interest in it —
         // the shell draws views and is sent every topic besides.
         kind: OpKind::Subscribe,
-        roles: &[Role::Unit, Role::Operator],
+        roles: &[Role::Unit, Role::Operator, Role::Renderer],
         capabilities: &[Capability::StateRead],
         surface: None,
     },
     OpPolicy {
         kind: OpKind::Unsubscribe,
-        roles: &[Role::Unit, Role::Operator],
+        roles: &[Role::Unit, Role::Operator, Role::Renderer],
         capabilities: &[Capability::StateRead],
         surface: None,
     },

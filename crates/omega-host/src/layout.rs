@@ -108,6 +108,23 @@ impl Layout {
         self
     }
 
+    /// Ephemeral preview sessions never publish a production generation.
+    pub fn preview_session(&self) -> PathBuf {
+        crate::TempPath::sibling(&std::env::temp_dir().join("omega-preview"), "session")
+    }
+    pub fn preview_file(root: &Path, relative: impl AsRef<Path>) -> PathBuf {
+        root.join(relative)
+    }
+    pub fn preview_process_maps(pid: u32) -> PathBuf {
+        PathBuf::from(format!("/proc/{pid}/maps"))
+    }
+    pub fn preview_metadata(image: &Path) -> PathBuf {
+        image.with_extension("json")
+    }
+    pub fn preview_difference(image: &Path) -> PathBuf {
+        image.with_extension("diff.png")
+    }
+
     pub fn compiled_shell(&self) -> PathBuf {
         self.state.join("shell.json")
     }
@@ -145,7 +162,7 @@ impl Layout {
         self.config.join(".cargo/omega.lock")
     }
 
-    /// Staged plugin sources must stay outside `units/*` membership globs.
+    /// Staged plugin sources must stay outside `plugins/*` membership globs.
     pub fn workspace_staging(&self) -> PathBuf {
         self.config.join(".cargo/staging")
     }
@@ -155,9 +172,9 @@ impl Layout {
         self.config.join(".gitignore")
     }
 
-    /// `~/.config/omega/units`.
-    pub fn units_dir(&self) -> PathBuf {
-        self.config.join("units")
+    /// `~/.config/omega/plugins`.
+    pub fn plugins_dir(&self) -> PathBuf {
+        self.config.join("plugins")
     }
 
     /// `~/.config/omega/system` — the configuration plane's crate.
@@ -180,17 +197,17 @@ impl Layout {
         self.profile_dir(profile).join(Self::SYSTEM_CRATE)
     }
 
-    /// `~/.config/omega/units/<name>`.
+    /// `~/.config/omega/plugins/<name>`.
     pub fn unit_src_dir(&self, name: &UnitName) -> PathBuf {
-        self.units_dir().join(name.as_str())
+        self.plugins_dir().join(name.as_str())
     }
 
-    /// `~/.config/omega/units/<name>/Cargo.toml`.
+    /// `~/.config/omega/plugins/<name>/Cargo.toml`.
     pub fn unit_crate_manifest(&self, name: &UnitName) -> PathBuf {
         self.unit_src_dir(name).join("Cargo.toml")
     }
 
-    /// `~/.config/omega/units/<name>/src/lib.rs` — the plugin itself.
+    /// `~/.config/omega/plugins/<name>/src/lib.rs` — the plugin itself.
     ///
     /// A plugin is a library as well as a program, so the config plane can
     /// depend on it and be checked against the settings it declares.
@@ -198,9 +215,25 @@ impl Layout {
         self.unit_src_dir(name).join("src").join("lib.rs")
     }
 
-    /// `~/.config/omega/units/<name>/src/main.rs` — the program that runs it.
+    /// `~/.config/omega/plugins/<name>/src/main.rs` — the program that runs it.
     pub fn unit_main_src(&self, name: &UnitName) -> PathBuf {
         self.unit_src_dir(name).join("src").join("main.rs")
+    }
+
+    pub fn legacy_plugins_dir(&self) -> PathBuf {
+        self.config.join("units")
+    }
+
+    pub fn libraries_dir(&self) -> PathBuf {
+        self.config.join("libraries")
+    }
+
+    pub fn library_src_dir(&self, name: &crate::package::PackageName) -> PathBuf {
+        self.libraries_dir().join(name.package())
+    }
+
+    pub fn migration_journal(&self) -> PathBuf {
+        self.config.join(".cargo/workspace-migration.json")
     }
 
     // ---- build output ----
@@ -224,6 +257,15 @@ impl Layout {
     /// `~/.cache/omega/logs` — unit output.
     ///
     /// Logs outlive both build activation and generation reclamation.
+    pub fn renderer_dir(&self) -> PathBuf {
+        self.cache.join("renderer")
+    }
+
+    pub fn renderer_log(&self, name: &UnitName) -> PathBuf {
+        self.logs_dir()
+            .join(format!("{}.renderer.log", name.as_str()))
+    }
+
     pub fn logs_dir(&self) -> PathBuf {
         self.cache.join("logs")
     }

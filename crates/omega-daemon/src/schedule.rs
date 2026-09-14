@@ -307,7 +307,7 @@ mod tests {
     struct BlockedAction(Arc<tokio::sync::Notify>);
 
     #[async_trait::async_trait]
-    impl omega_brokers::Broker for BlockedAction {
+    impl omega_platform::Broker for BlockedAction {
         fn name(&self) -> &'static str {
             "blocked-action"
         }
@@ -320,7 +320,7 @@ mod tests {
         async fn act(
             &mut self,
             _: &omega_proto::omega::action::Kind,
-        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+        ) -> Result<Option<omega_proto::omega::StatePatch>, omega_platform::BrokerError> {
             self.0.notify_one();
             std::future::pending().await
         }

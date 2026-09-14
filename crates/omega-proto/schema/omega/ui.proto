@@ -45,4 +45,5 @@ message ViewNode {
 message Bind {
   string command = 1;
   repeated Value args = 2;
+  uint64 local = 3; // mutually exclusive with command; opaque plugin-owned binding
 }

@@ -35,3 +35,7 @@ omega-proto = { workspace = true, features = ["json"] }
 rustix = { version = "1", features = ["time"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+
+[[example]]
+name = "launcher"
+test = true

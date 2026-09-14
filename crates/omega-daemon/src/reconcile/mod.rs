@@ -5,19 +5,19 @@
 //! change can be shown before it happens, and applying nothing is the normal
 //! outcome of a machine that already matches its document.
 
-pub mod bars;
 mod build;
 pub mod converger;
 pub mod deployment;
 pub mod environment;
+pub mod presentations;
 pub mod schedules;
 pub mod shell;
 pub mod units;
 
-pub use bars::BarProvider;
 pub use build::ValidatedBuild;
 pub use converger::{Context, Converger, Work};
 pub use environment::EnvironmentProvider;
+pub use presentations::PresentationProvider;
 pub use schedules::ScheduleProvider;
 pub use units::UnitProvider;
 

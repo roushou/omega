@@ -1,12 +1,10 @@
 //! The `omega` command line: scaffolding, building, and running the daemon.
 
-pub mod cargo;
+mod build;
 pub mod cli;
-pub mod describe;
 pub mod operator;
 pub mod scaffold;
 pub mod service;
-pub mod system;
 pub mod ui;
 
 pub mod checkout;

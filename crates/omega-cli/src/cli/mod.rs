@@ -6,7 +6,10 @@ mod dev;
 mod init;
 pub(crate) mod link;
 mod logs;
+mod migrate;
 mod new;
+mod present;
+mod preview;
 mod restart;
 mod rollback;
 mod run;
@@ -85,9 +88,12 @@ pub enum Command {
     Link(link::LinkCmd),
     Logs(logs::LogsCmd),
     New(new::NewCmd),
+    Migrate(migrate::MigrateCmd),
     Restart(restart::RestartCmd),
     Rollback(rollback::RollbackCmd),
     Run(run::RunCmd),
+    Present(present::PresentCmd),
+    Preview(preview::PreviewCmd),
     Shell(shell::ShellCmd),
     Status(status::StatusCmd),
 }
@@ -104,9 +110,12 @@ impl Command {
             Self::Link(cmd) => cmd.run(ui).await,
             Self::Logs(cmd) => cmd.run(ui).await,
             Self::New(cmd) => cmd.run(ui),
+            Self::Migrate(cmd) => cmd.run(ui),
             Self::Restart(cmd) => cmd.run(ui).await,
             Self::Rollback(cmd) => cmd.run(ui),
             Self::Run(cmd) => cmd.run(ui).await,
+            Self::Present(cmd) => cmd.run(ui).await,
+            Self::Preview(cmd) => cmd.run(ui).await,
             Self::Shell(cmd) => cmd.run(ui).await,
             Self::Status(cmd) => cmd.run(ui).await,
         }

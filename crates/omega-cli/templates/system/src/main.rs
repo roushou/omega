@@ -1,5 +1,5 @@
 //! Rust is the source of truth for the shell layout and plugin instances.
-use omega_document::shell::{Bar, Native, Shell};
+use omega_omarchy::shell::{Bar, Native, Shell};
 use omega_document::{Document, Host};
 
 fn main() -> omega_document::Result<()> {
@@ -13,7 +13,7 @@ impl System {
     fn document() -> omega_document::Result<Document> {
         Ok(Document::new()
             .env("OMEGA_HOST", Host::name())
-            .shell(
+            .with(
                 Shell::new().bar(
                     Bar::top()
                         .left([Native::menu().into(), Native::workspaces().into()])

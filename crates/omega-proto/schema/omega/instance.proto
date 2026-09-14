@@ -1,0 +1,137 @@
+syntax = "proto3";
+package omega;
+
+import "omega/ui.proto";
+import "omega/value.proto";
+
+// Runtime identity is independent of a surface declaration or placement.
+message InstanceRef {
+  string id = 1;
+  string incarnation = 2;
+}
+
+message Presentation {
+  oneof kind {
+    EmbeddedPresentation embedded = 1;
+    PopupPresentation popup = 2;
+    WindowPresentation window = 3;
+    OverlayPresentation overlay = 4;
+  }
+}
+
+message EmbeddedPresentation { string placement = 1; }
+message PopupPresentation { InstanceRef anchor = 1; }
+message WindowPresentation {
+  string title = 1;
+  string app_id = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 min_width = 5;
+  uint32 min_height = 6;
+}
+message OverlayPresentation {
+  string output = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  KeyboardPolicy keyboard = 4;
+  bool dismiss_on_outside = 5;
+}
+
+enum KeyboardPolicy {
+  KEYBOARD_POLICY_UNSPECIFIED = 0;
+  KEYBOARD_POLICY_NONE = 1;
+  KEYBOARD_POLICY_ON_DEMAND = 2;
+  KEYBOARD_POLICY_EXCLUSIVE = 3;
+}
+
+enum PresentationAction {
+  PRESENTATION_ACTION_UNSPECIFIED = 0;
+  PRESENTATION_ACTION_PRESENT = 1;
+  PRESENTATION_ACTION_HIDE = 2;
+  PRESENTATION_ACTION_CLOSE = 3;
+  PRESENTATION_ACTION_DESTROY = 4;
+}
+
+enum PresentationState {
+  PRESENTATION_STATE_UNSPECIFIED = 0;
+  PRESENTATION_STATE_HIDDEN = 1;
+  PRESENTATION_STATE_VISIBLE = 2;
+  PRESENTATION_STATE_CLOSED = 3;
+}
+
+enum RendererFeature {
+  RENDERER_FEATURE_UNSPECIFIED = 0;
+  RENDERER_FEATURE_INSTANCES = 1;
+  RENDERER_FEATURE_SCOPED_INTERACTIONS = 2;
+  RENDERER_FEATURE_EMBEDDED = 3;
+  RENDERER_FEATURE_POPUPS = 4;
+  RENDERER_FEATURE_WINDOWS = 5;
+  RENDERER_FEATURE_OVERLAYS = 6;
+  RENDERER_FEATURE_LOCAL_MESSAGES = 7;
+  RENDERER_FEATURE_CONTROLLED_INPUTS = 8;
+}
+
+message InstanceSnapshot {
+  InstanceRef instance = 1;
+  string unit = 2;
+  string surface = 3;
+  Presentation presentation = 4;
+  PresentationState requested = 5;
+  PresentationState observed = 6;
+  ViewTree view = 7;
+  bool destroyed = 8;
+}
+
+message CreateInstance {
+  string unit = 1;
+  string surface = 2;
+  map<string, Value> config = 3;
+  Presentation presentation = 4;
+  // Empty allocates an independent instance; otherwise scoped to unit/surface.
+  string singleton = 5;
+}
+message ChangePresentation {
+  InstanceRef instance = 1;
+  PresentationAction action = 2;
+}
+message ReportPresentation {
+  InstanceRef instance = 1;
+  PresentationState observed = 2;
+}
+message InspectInstances { string unit = 1; }
+message InstanceList { repeated InstanceSnapshot instances = 1; }
+
+// Only the owner may bootstrap. Success restricts this connection to its scope.
+message AttachRenderer {
+  oneof scope {
+    string unit = 1;
+    PlacementAttachment placement = 2;
+  }
+  repeated RendererFeature features = 3;
+}
+message PlacementAttachment {
+  string unit = 1;
+  string surface = 2;
+  string placement = 3;
+}
+
+// The daemon resolves the event from the retained tree, never from a claimed command.
+message Interact {
+  InstanceRef instance = 1;
+  uint64 revision = 2;
+  string node = 3;
+  string event = 4;
+  Value value = 5;
+}
+
+// Daemon-resolved local event, delivered only to the owning plugin.
+message SurfaceEvent {
+  InstanceRef instance = 1;
+  uint64 binding = 2;
+  Value value = 3;
+}
+
+message SurfaceLifecycle {
+  InstanceRef instance = 1;
+  PresentationState state = 2;
+}

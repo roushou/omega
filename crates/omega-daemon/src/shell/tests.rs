@@ -110,7 +110,7 @@ async fn an_unterminated_oversized_request_closes_only_its_connection() {
 
 struct SlowBroker(Arc<tokio::sync::Notify>);
 #[async_trait::async_trait]
-impl omega_brokers::Broker for SlowBroker {
+impl omega_platform::Broker for SlowBroker {
     fn name(&self) -> &'static str {
         "slow"
     }
@@ -123,7 +123,7 @@ impl omega_brokers::Broker for SlowBroker {
     async fn act(
         &mut self,
         _: &omega_proto::omega::action::Kind,
-    ) -> Result<Option<omega_proto::omega::StatePatch>, omega_brokers::BrokerError> {
+    ) -> Result<Option<omega_proto::omega::StatePatch>, omega_platform::BrokerError> {
         self.0.notify_one();
         std::future::pending().await
     }
@@ -209,22 +209,70 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
     let reply: Frame = serde_json::from_str(&line).unwrap();
     assert_eq!(reply.stream_id, 3);
     assert!(Refusal::of(&reply).is_none());
-    hub.publish_view(ViewUpdate {
-        surface: crate::hub::SurfaceRef::new(
+    hub.publish_view({
+        let surface = crate::hub::SurfaceRef::new(
             omega_proto::UnitName::parse("example").unwrap(),
             omega_proto::SurfaceId::parse("view").unwrap(),
-        ),
-        view: omega_proto::omega::ViewTree::default(),
+        );
+        ViewUpdate {
+            instance: omega_proto::instance::InstanceKey {
+                id: omega_proto::instance::InstanceId::parse(format!(
+                    "test-{}-{}-{}",
+                    surface.unit,
+                    surface.surface,
+                    surface
+                        .module
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                ))
+                .unwrap(),
+                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+            },
+            presentation: omega_proto::omega::Presentation {
+                kind: Some(omega_proto::omega::presentation::Kind::Window(
+                    omega_proto::omega::WindowPresentation {
+                        title: "Test".into(),
+                        app_id: "org.omega.example".into(),
+                        width: 480,
+                        height: 320,
+                        min_width: 1,
+                        min_height: 1,
+                    },
+                )),
+            },
+            requested: 2,
+            observed: 2,
+            destroyed: false,
+            surface,
+            view: omega_proto::omega::ViewTree::default(),
+        }
     })
     .unwrap();
+    client
+        .get_mut()
+        .write_all(
+            (Observation::line(&Frame {
+                stream_id: 5,
+                body: Some(frame::Body::Invoke(Invoke {
+                    op: Some(invoke::Op::GetDeployment(Default::default())),
+                })),
+            })
+            .unwrap()
+                + "\n")
+                .as_bytes(),
+        )
+        .await
+        .unwrap();
     line.clear();
     tokio::time::timeout(Duration::from_secs(2), client.read_line(&mut line))
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&line).unwrap()["surface"],
-        "view"
+        serde_json::from_str::<Frame>(&line).unwrap().stream_id,
+        5,
+        "unattached operators must not receive private views"
     );
     task.abort();
     assert!(task.await.unwrap_err().is_cancelled());
@@ -281,15 +329,48 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         let hub = Hub::new();
         let unit = UnitName::parse("retired").unwrap();
         let surface = SurfaceRef::new(unit.clone(), SurfaceId::parse("panel").unwrap());
-        hub.publish_view(ViewUpdate {
-            surface: surface.clone(),
-            view: ViewTree {
-                root: Some(ViewNode {
-                    key: "x".repeat(600_000),
-                    ..Default::default()
-                }),
-                revision: 0,
-            },
+        hub.publish_view({
+            let surface = surface.clone();
+            ViewUpdate {
+                instance: omega_proto::instance::InstanceKey {
+                    id: omega_proto::instance::InstanceId::parse(format!(
+                        "test-{}-{}-{}",
+                        surface.unit,
+                        surface.surface,
+                        surface
+                            .module
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default()
+                    ))
+                    .unwrap(),
+                    incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                        .unwrap(),
+                },
+                presentation: omega_proto::omega::Presentation {
+                    kind: Some(omega_proto::omega::presentation::Kind::Window(
+                        omega_proto::omega::WindowPresentation {
+                            title: "Test".into(),
+                            app_id: "org.omega.example".into(),
+                            width: 480,
+                            height: 320,
+                            min_width: 1,
+                            min_height: 1,
+                        },
+                    )),
+                },
+                requested: 2,
+                observed: 2,
+                destroyed: false,
+                surface,
+                view: ViewTree {
+                    root: Some(ViewNode {
+                        key: "x".repeat(600_000),
+                        ..Default::default()
+                    }),
+                    revision: 0,
+                },
+            }
         })
         .unwrap();
         let (snapshot, views) = hub.subscribe_views();
@@ -304,6 +385,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
             Err(Refusal::denied("test")),
             None,
         );
+        RendererFixture::attach(&connection, "retired");
         let (written, line) = tokio::join!(connection.write_views(snapshot.clone()), async {
             let mut line = String::new();
             client.read_line(&mut line).await.unwrap();
@@ -315,7 +397,14 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
             serde_json::to_value(snapshot[0].as_ref()).unwrap()
         );
         let revision = snapshot[0].view.revision;
-        assert_eq!(connection.sent_views.get(&surface), Some(&revision));
+        assert_eq!(
+            connection
+                .sent_views
+                .values()
+                .next()
+                .map(|view| view.view.revision),
+            Some(revision)
+        );
         drop(snapshot);
 
         hub.forget_unit(&unit);
@@ -324,15 +413,48 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
             SurfaceId::parse("panel").unwrap(),
         );
         for index in 0..70 {
-            hub.publish_view(ViewUpdate {
-                surface: remaining.clone(),
-                view: ViewTree {
-                    root: Some(ViewNode {
-                        key: index.to_string(),
-                        ..Default::default()
-                    }),
-                    revision: 0,
-                },
+            hub.publish_view({
+                let surface = remaining.clone();
+                ViewUpdate {
+                    instance: omega_proto::instance::InstanceKey {
+                        id: omega_proto::instance::InstanceId::parse(format!(
+                            "test-{}-{}-{}",
+                            surface.unit,
+                            surface.surface,
+                            surface
+                                .module
+                                .as_ref()
+                                .map(ToString::to_string)
+                                .unwrap_or_default()
+                        ))
+                        .unwrap(),
+                        incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                            .unwrap(),
+                    },
+                    presentation: omega_proto::omega::Presentation {
+                        kind: Some(omega_proto::omega::presentation::Kind::Window(
+                            omega_proto::omega::WindowPresentation {
+                                title: "Test".into(),
+                                app_id: "org.omega.example".into(),
+                                width: 480,
+                                height: 320,
+                                min_width: 1,
+                                min_height: 1,
+                            },
+                        )),
+                    },
+                    requested: 2,
+                    observed: 2,
+                    destroyed: false,
+                    surface,
+                    view: ViewTree {
+                        root: Some(ViewNode {
+                            key: index.to_string(),
+                            ..Default::default()
+                        }),
+                        revision: 0,
+                    },
+                }
             })
             .unwrap();
         }
@@ -342,7 +464,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         ));
         let (written, lines) = tokio::join!(connection.resync_views(), async {
             let mut lines = Vec::new();
-            for _ in 0..2 {
+            for _ in 0..1 {
                 let mut line = String::new();
                 client.read_line(&mut line).await.unwrap();
                 lines.push(serde_json::from_str::<serde_json::Value>(&line).unwrap());
@@ -353,10 +475,13 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         assert_eq!(lines[0]["unit"], "retired");
         assert!(lines[0]["view"]["root"].is_null());
         assert_eq!(lines[0]["view"]["revision"], (revision + 1).to_string());
-        assert_eq!(lines[1]["unit"], "current");
-        assert_eq!(lines[1]["view"]["root"]["key"], "69");
-        assert!(!connection.sent_views.contains_key(&surface));
-        assert_eq!(connection.sent_views.len(), 1);
+        assert!(
+            !connection
+                .sent_views
+                .values()
+                .any(|view| view.surface == surface)
+        );
+        assert_eq!(connection.sent_views.len(), 0);
     })
     .await
     .unwrap();
@@ -366,19 +491,21 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
 async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
     tokio::time::timeout(Duration::from_secs(3), async {
         let hub = Hub::new();
-        let update = ViewUpdate {
-            surface: crate::hub::SurfaceRef::new(
+        let update = { let surface = crate::hub::SurfaceRef::new(
                 omega_proto::UnitName::parse("example").unwrap(),
                 omega_proto::SurfaceId::parse("panel").unwrap(),
-            ),
-            view: omega_proto::omega::ViewTree {
+            );
+  ViewUpdate { instance: omega_proto::instance::InstanceKey {
+    id: omega_proto::instance::InstanceId::parse(format!("test-{}-{}-{}", surface.unit, surface.surface, surface.module.as_ref().map(ToString::to_string).unwrap_or_default())).unwrap(),
+    incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+  }, presentation: omega_proto::omega::Presentation { kind: Some(omega_proto::omega::presentation::Kind::Window(omega_proto::omega::WindowPresentation { title: "Test".into(), app_id: "org.omega.example".into(), width: 480, height: 320, min_width: 1, min_height: 1 })) },
+  requested: 2, observed: 2, destroyed: false, surface, view: omega_proto::omega::ViewTree {
                 root: Some(omega_proto::omega::ViewNode {
                     key: "x".repeat(600_000),
                     ..Default::default()
                 }),
                 revision: 1,
-            },
-        };
+            } } };
         let updates = [Arc::new(update)];
         let (slow_server, _non_reader) = UnixStream::pair().unwrap();
         let (fast_server, fast_client) = UnixStream::pair().unwrap();
@@ -388,6 +515,8 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
                 hub.clone(), Err(Refusal::denied("test")), None)
         });
         let [slow, fast] = &mut connections;
+        RendererFixture::attach(slow, "example");
+        RendererFixture::attach(fast, "example");
         tokio::select! {
             biased;
             result = slow.write_views(updates.clone()) => panic!("non-reader unexpectedly completed: {result:?}"),
@@ -402,8 +531,25 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
             } => {}
         }
         assert!(slow.sent_views.is_empty());
-        assert_eq!(fast.sent_views.get(&updates[0].surface), Some(&1));
+        assert_eq!(fast.sent_views.get(&updates[0].instance).map(|view| view.view.revision), Some(1));
     }).await.unwrap();
 }
 
 mod pressure;
+
+struct RendererFixture;
+impl RendererFixture {
+    fn attach<S>(connection: &ShellConnection<S>, unit: &str) {
+        *connection.attachment.lock().unwrap() = Some(
+            crate::session::dispatch::attachment::Attachment::parse(
+                &omega_proto::omega::AttachRenderer {
+                    scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
+                        unit.into(),
+                    )),
+                    features: vec![1, 2, 3, 4, 5, 6, 7, 8],
+                },
+            )
+            .unwrap(),
+        );
+    }
+}

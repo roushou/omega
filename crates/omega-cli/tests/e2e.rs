@@ -178,7 +178,7 @@ fn a_scaffolded_config_builds_and_runs() {
     let workspace_path = machine.root.join("config/Cargo.toml");
     let wildcard_workspace = std::fs::read_to_string(&workspace_path)
         .unwrap()
-        .replace("units/battery-widget", "units/*");
+        .replace("plugins/battery-widget", "plugins/*");
     std::fs::write(&workspace_path, &wildcard_workspace).unwrap();
     let placed = machine.omega(&["new", "extra-widget"]).output().unwrap();
     assert_eq!(
@@ -193,7 +193,29 @@ fn a_scaffolded_config_builds_and_runs() {
     assert!(guidance.contains("makes it visible"), "{guidance}");
 
     std::fs::write(machine.root.join("config/system/src/main.rs"),
-        "mod shell_import;\nfn main() -> omega_document::Result<()> { omega_document::Document::new().shell(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
+        "mod shell_import;\nfn main() -> omega_document::Result<()> { omega_document::Document::new().with(shell_import::shell()?)?.emit()?; Ok(()) }\n").unwrap();
+    machine.run(&[
+        "new",
+        "desktop-ui",
+        "--lib",
+        "--into",
+        "plugins/extra-widget",
+        "--into",
+        "system",
+    ]);
+    std::fs::write(
+        machine.root.join("config/libraries/desktop-ui/src/lib.rs"),
+        "pub struct Desktop; impl Desktop { pub const NAME: &str = \"my desktop\"; }\n",
+    )
+    .unwrap();
+    let extra = machine.root.join("config/plugins/extra-widget/src/lib.rs");
+    let source =
+        std::fs::read_to_string(&extra).unwrap() + "\nconst _: &str = desktop_ui::Desktop::NAME;\n";
+    std::fs::write(extra, source).unwrap();
+    let system = machine.root.join("config/system/src/main.rs");
+    let source = std::fs::read_to_string(&system).unwrap()
+        + "\nconst _: &str = desktop_ui::Desktop::NAME;\n";
+    std::fs::write(system, source).unwrap();
     machine.run(&["check"]);
     machine.run(&["build", "--debug"]);
 
@@ -223,6 +245,10 @@ fn a_scaffolded_config_builds_and_runs() {
 
     // The unit the config declares is running, and the daemon says so.
     let status = machine.run(&["status"]);
+    assert!(
+        !status.contains("desktop-ui"),
+        "libraries must never be supervised"
+    );
     assert!(
         status.contains("battery-widget"),
         "status did not report the unit:\n{status}"
@@ -414,9 +440,9 @@ fn both_templates_build_with_their_printed_placements() {
         machine.root.join("config/system/src/main.rs"),
         format!(
             "fn main() -> omega_document::Result<()> {{
-                omega_document::Document::new().shell(
-                    omega_document::shell::Shell::new().bar(
-                        omega_document::shell::Bar::top().right([{}])
+                omega_document::Document::new().with(
+                    omega_omarchy::shell::Shell::new().bar(
+                        omega_omarchy::shell::Bar::top().right([{}])
                     )
                 )?.emit()
             }}",
@@ -434,7 +460,7 @@ fn both_templates_build_with_their_printed_placements() {
         .output()
         .unwrap();
     assert!(!rejected.status.success());
-    assert!(!machine.root.join("config/units/invalid-widget").exists());
+    assert!(!machine.root.join("config/plugins/invalid-widget").exists());
 }
 
 #[test]
@@ -479,17 +505,17 @@ fn shell_only_configs_build_and_check_never_publishes() {
     machine.run(&["new", "hello"]);
     for (body, expected) in [
         (
-            r#"omega_document::Document::new().shell(
-            omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
-                omega_document::shell::PluginWidget::named("hello", "hello").surface_named("missing").into()
+            r#"omega_document::Document::new().with(
+            omega_omarchy::shell::Shell::new().bar(omega_omarchy::shell::Bar::top().right([
+                omega_omarchy::shell::PluginWidget::named("hello", "hello").surface_named("missing").into()
             ])))?.emit()"#,
             "declares no widget",
         ),
         (
-            r#"omega_document::Document::new().shell(
-            omega_document::shell::Shell::new().bar(omega_document::shell::Bar::top().right([
-                omega_document::shell::PluginWidget::named("same", "hello").into(),
-                omega_document::shell::PluginWidget::named("same", "hello").into()
+            r#"omega_document::Document::new().with(
+            omega_omarchy::shell::Shell::new().bar(omega_omarchy::shell::Bar::top().right([
+                omega_omarchy::shell::PluginWidget::named("same", "hello").into(),
+                omega_omarchy::shell::PluginWidget::named("same", "hello").into()
             ])))?.emit()"#,
             "duplicate placement",
         ),

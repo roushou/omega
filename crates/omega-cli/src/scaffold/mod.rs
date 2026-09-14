@@ -5,11 +5,11 @@
 //! it — every entry inherited with `workspace = true` — so the two can never
 //! drift apart.
 
-use omega_daemon::host::cargo::{
+use omega_host::Layout;
+use omega_host::workspace::cargo::{
     CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Edition, Package,
     Profile, ReleaseProfile, Workspace, WorkspacePackage,
 };
-use omega_host::Layout;
 use omega_proto::UnitName;
 
 mod name;
@@ -99,8 +99,14 @@ impl Scaffold {
     /// both made every unit declare the authoring API it never calls, and the
     /// config plane declare an async runtime for a program that computes a
     /// value and exits.
-    pub(crate) const SYSTEM_DEPENDENCIES: &'static [DependencySpec] =
-        &[DependencySpec::omega("omega-document")];
+    pub(crate) const SYSTEM_DEPENDENCIES: &'static [DependencySpec] = &[
+        DependencySpec::omega("omega-document"),
+        DependencySpec::omega("omega-omarchy"),
+    ];
+
+    /// Optional development tools; enabled only by an explicit workspace dependency.
+    pub(crate) const PREVIEW_DEPENDENCIES: &'static [DependencySpec] =
+        &[DependencySpec::omega("omega-preview")];
 
     pub fn new() -> Self {
         Self::from_source(Published::matching_this_cli())
@@ -166,7 +172,7 @@ impl Scaffold {
         }
     }
 
-    /// `units/<name>/Cargo.toml`, inheriting the workspace's dependencies.
+    /// `plugins/<name>/Cargo.toml`, inheriting the workspace's dependencies.
     pub fn unit_crate_manifest(&self, name: &UnitName) -> CargoManifest {
         CargoManifest {
             package: Some(Package::new(name.as_str(), "0.1.0", Edition::inherited())),
@@ -179,7 +185,7 @@ impl Scaffold {
         }
     }
 
-    /// `units/<name>/src/main.rs`: the program, which is the library and a
+    /// `plugins/<name>/src/main.rs`: the program, which is the library and a
     /// call.
     pub fn unit_main(&self, name: &PluginName) -> Result<String, ScaffoldError> {
         Self::stamp(UNIT_MAIN, name)
@@ -214,7 +220,7 @@ impl Scaffold {
     /// edit `omega new` makes to a file the author owns, because a path
     /// between two crates in one workspace is bookkeeping and not a decision.
     pub fn depends_on(unit: &UnitName) -> Dependency {
-        Dependency::local(format!("../units/{unit}"), &[])
+        Dependency::local(format!("../plugins/{unit}"), &[])
     }
 
     /// The line `omega new` prints, to paste into the config plane. Fully
@@ -228,7 +234,7 @@ impl Scaffold {
             Template::Minimal => "Hello",
             Template::Battery => "BatteryWidget",
         };
-        format!("omega_document::shell::PluginWidget::new(\"{unit}\", {krate}::{widget}).into()")
+        format!("omega_omarchy::shell::PluginWidget::new(\"{unit}\", {krate}::{widget}).into()")
     }
 
     /// `system/src/main.rs`: a document with an empty bar.

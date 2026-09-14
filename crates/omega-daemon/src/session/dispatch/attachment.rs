@@ -1,0 +1,187 @@
+use crate::hub::ViewUpdate;
+use crate::refusal::RefusableResult;
+use omega_proto::instance::{InstanceKey, PlacementId, PresentationSpec};
+use omega_proto::omega::{AttachRenderer, RendererFeature, attach_renderer};
+use omega_proto::{Refusal, SurfaceId, UnitName};
+
+#[derive(Debug, Clone)]
+pub(crate) struct Attachment {
+    pub(crate) scope: Scope,
+    pub(crate) active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    features: Vec<RendererFeature>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Scope {
+    Unit(UnitName),
+    Placement {
+        unit: UnitName,
+        surface: SurfaceId,
+        placement: PlacementId,
+    },
+}
+
+impl Attachment {
+    pub(crate) fn parse(request: &AttachRenderer) -> Result<Self, Refusal> {
+        if request.features.len() > 16 {
+            return Err(Refusal::invalid("too many renderer features"));
+        }
+        let features: Vec<_> = request
+            .features
+            .iter()
+            .map(|feature| {
+                RendererFeature::try_from(*feature)
+                    .map_err(|_| Refusal::unimplemented("unknown renderer feature"))
+            })
+            .collect::<Result<_, _>>()?;
+        for required in [
+            RendererFeature::Instances,
+            RendererFeature::ScopedInteractions,
+            RendererFeature::LocalMessages,
+            RendererFeature::ControlledInputs,
+        ] {
+            if !features.contains(&required) {
+                return Err(Refusal::precondition(format!(
+                    "renderer requires {}",
+                    required.as_str_name()
+                )));
+            }
+        }
+        let scope = match request
+            .scope
+            .as_ref()
+            .ok_or_else(|| Refusal::invalid("renderer scope is required"))?
+        {
+            attach_renderer::Scope::Unit(unit) => Scope::Unit(UnitName::parse(unit).or_refuse()?),
+            attach_renderer::Scope::Placement(placement) => Scope::Placement {
+                unit: UnitName::parse(&placement.unit).or_refuse()?,
+                surface: SurfaceId::parse(&placement.surface).or_refuse()?,
+                placement: PlacementId::parse(&placement.placement).or_refuse()?,
+            },
+        };
+        Ok(Self {
+            scope,
+            features,
+            active: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        })
+    }
+    pub(crate) fn unit(&self) -> &UnitName {
+        match &self.scope {
+            Scope::Unit(unit) | Scope::Placement { unit, .. } => unit,
+        }
+    }
+    pub(crate) fn accepts(&self, view: &ViewUpdate) -> bool {
+        if !self.active.load(std::sync::atomic::Ordering::Acquire) {
+            return false;
+        }
+        match &self.scope {
+            Scope::Unit(unit) => {
+                &view.surface.unit == unit
+                    && matches!(
+                        view.presentation.kind,
+                        Some(
+                            omega_proto::omega::presentation::Kind::Window(_)
+                                | omega_proto::omega::presentation::Kind::Overlay(_)
+                        )
+                    )
+            }
+            Scope::Placement {
+                unit,
+                surface,
+                placement,
+            } => {
+                &view.surface.unit == unit
+                    && matches!(
+                        view.presentation.kind,
+                        Some(
+                            omega_proto::omega::presentation::Kind::Embedded(_)
+                                | omega_proto::omega::presentation::Kind::Popup(_)
+                        )
+                    )
+                    && &view.surface.surface == surface
+                    && view
+                        .surface
+                        .module
+                        .as_ref()
+                        .is_some_and(|module| module.as_str() == placement.as_str())
+            }
+        }
+    }
+    pub(crate) fn validate(&self, view: &ViewUpdate) -> Result<(), Refusal> {
+        let presentation = PresentationSpec::parse(view.presentation.clone()).or_refuse()?;
+        if !self.features.contains(&presentation.feature()) {
+            return Err(Refusal::unimplemented(
+                "renderer does not support this presentation",
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) fn metadata(
+        &self,
+        snapshot: &omega_proto::omega::InstanceSnapshot,
+    ) -> Result<ViewUpdate, Refusal> {
+        let module = match &self.scope {
+            Scope::Unit(_) => None,
+            Scope::Placement { placement, .. } => {
+                Some(omega_proto::ModuleId::parse(placement.as_str()).or_refuse()?)
+            }
+        };
+        Ok(ViewUpdate {
+            instance: crate::units::UnitTable::instance_key(snapshot.instance.as_ref())?,
+            surface: crate::hub::SurfaceRef {
+                unit: UnitName::parse(&snapshot.unit).or_refuse()?,
+                surface: SurfaceId::parse(&snapshot.surface).or_refuse()?,
+                module,
+            },
+            presentation: snapshot
+                .presentation
+                .clone()
+                .ok_or_else(|| Refusal::invalid("snapshot requires presentation"))?,
+            requested: snapshot.requested,
+            observed: snapshot.observed,
+            destroyed: snapshot.destroyed,
+            view: omega_proto::omega::ViewTree {
+                root: None,
+                revision: snapshot.view.as_ref().map_or(0, |view| view.revision),
+            },
+        })
+    }
+    pub(crate) fn authorize(
+        &self,
+        hub: &crate::hub::Hub,
+        key: &InstanceKey,
+    ) -> Result<(), Refusal> {
+        let view = hub
+            .view(key)
+            .ok_or_else(|| Refusal::precondition("unknown or expired instance"))?;
+        if !self.accepts(&view) {
+            return Err(Refusal::denied(
+                "instance is outside this renderer attachment",
+            ));
+        }
+        self.validate(&view)
+    }
+}
+
+pub(crate) type RendererAttachment = std::sync::Arc<std::sync::Mutex<Option<Attachment>>>;
+
+pub(crate) struct InstancePermit {
+    pub(crate) key: InstanceKey,
+    active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+impl InstancePermit {
+    pub(crate) fn new(attachment: &Attachment, key: InstanceKey) -> Self {
+        Self {
+            key,
+            active: attachment.active.clone(),
+        }
+    }
+    pub(crate) fn validate(&self) -> Result<(), Refusal> {
+        if self.active.load(std::sync::atomic::Ordering::Acquire) {
+            Ok(())
+        } else {
+            Err(Refusal::precondition(
+                "renderer attachment has been replaced",
+            ))
+        }
+    }
+}

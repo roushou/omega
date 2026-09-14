@@ -57,7 +57,7 @@ impl Harness {
     }
 
     /// Register a broker, so an action it claims can reach it.
-    pub fn with_broker(self, broker: Box<dyn omega_brokers::Broker>) -> Self {
+    pub fn with_broker(self, broker: Box<dyn omega_platform::Broker>) -> Self {
         self.brokers.add(broker);
         self
     }
@@ -141,7 +141,7 @@ pub fn policy_manifest(name: &str) -> Manifest {
 pub fn command_manifest(name: &str, command: &str) -> Manifest {
     Manifest::new(&unit_name(name), "0.1.0")
         .granting([Capability::StateRead])
-        .exposing([Surface::new(&surface_id(command), SurfaceKind::Command)])
+        .serving([omega_proto::omega::CommandEndpoint { id: command.into() }])
         .reading(["battery"])
 }
 

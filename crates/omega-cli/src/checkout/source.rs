@@ -1,5 +1,5 @@
 use crate::scaffold::Scaffold;
-use omega_daemon::host::cargo::{CargoManifest, Dependencies, Dependency};
+use omega_host::workspace::cargo::{CargoManifest, Dependencies, Dependency};
 use omega_host::{Toml, TomlError};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -111,9 +111,11 @@ impl SourceTree {
     }
 
     /// The patch that points a config's dependencies at this checkout.
-    pub fn patch(&self) -> Result<Dependencies, LinkError> {
+    pub fn patch(&self, preview: bool) -> Result<Dependencies, LinkError> {
         let mut patched = Dependencies::new();
-        for spec in Scaffold::omega_crates() {
+        for spec in Scaffold::omega_crates()
+            .chain(Scaffold::PREVIEW_DEPENDENCIES.iter().filter(|_| preview))
+        {
             let path = self.crate_path(spec.name)?;
             patched.insert(spec.package(), Dependency::local(path, &[]));
         }
