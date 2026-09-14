@@ -16,7 +16,20 @@ omega shell status
 Installation prints an enable command; configured placements are declared in the
 Rust shell layout. `omega init` imports an existing shell during initial setup. Reinstall after rebuilding the CLI to use
 updated embedded assets. Installation stages and replaces the renderer directory,
-removing obsolete files from earlier installations.
+removing obsolete files from earlier installations. It restarts the Omarchy shell
+to clear cached QML and verifies returning attachments against the installed build.
+`--no-restart` installs files only. Linked sources and renderers without a reported
+fingerprint are explicitly unverified. No active attachments means running code
+cannot be verified; matching files alone never establish activation.
+
+`omega shell status` compares both installed files and running attachments.
+`omega status` checks live renderer builds; `omega status --json` includes their
+scopes and reported fingerprints under `renderers`, and required live bar/popup
+placements under `rendererPlacements`. Missing attachments remain visible in status. Standalone hosts use the
+bundle embedded in the daemon and update when that daemon restarts.
+
+Run the [desktop smoke test](../../../docs/renderer-smoke.md) after changes to
+panel hosting, attachment, or installation.
 
 For QML development, link a checkout and restart the shell after edits:
 
@@ -35,7 +48,10 @@ symlink.
 same `Frame` requests as the binary protocol, encoded as newline-delimited JSON.
 The Omarchy adapter supplies a placement scope; `desktop/shell.qml` supplies a
 plugin scope for independent windows and overlays. The owner bootstraps with
-`AttachRenderer`, declaring supported features. The connection then has only its
+`AttachRenderer`, declaring supported features and a build fingerprint. The digest
+covers the version, names, and contents of all bundle assets. Installation embeds
+it as a literal in `RendererConnection.qml`; the running connection does not read
+a fingerprint file. This is compatibility telemetry, not code attestation. The connection then has only its
 renderer scope, rather than general operator authority.
 
 State topics can be observed without attachment; view trees cannot. Attachment

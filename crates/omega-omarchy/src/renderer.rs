@@ -81,16 +81,21 @@ impl Renderer {
         declared(self.file("manifest.json")?, "version")
     }
 
-    /// Atomically replace the installed asset directory.
-    /// Directory replacement also removes files no longer included in the renderer.
+    /// Identity of every asset in this renderer, including shared controls.
+    pub fn build(&self) -> omega_renderer::Build {
+        omega_renderer::Build::of(Self::VERSION, self.assets())
+    }
+
+    /// Atomically replace the installed asset directory and remove obsolete assets.
     pub fn install(&self, plugins: &Path) -> anyhow::Result<PathBuf> {
         let dir = self.dir_in(plugins);
         omega_host::Directory::create_all(plugins)
             .with_context(|| format!("could not create {}", plugins.display()))?;
 
         let stage = StageDir::new(&dir)?;
+        let build = self.build();
         for asset in self.assets() {
-            stage.write(asset.name, asset.contents.as_bytes())?;
+            stage.write(asset.name, build.contents(asset).as_bytes())?;
         }
         stage
             .commit()
@@ -160,11 +165,12 @@ impl Renderer {
             return Installed::Missing;
         }
 
+        let build = self.build();
         let differs = self.assets().any(|asset| {
             std::fs::read_to_string(dir.join(asset.name))
                 .ok()
                 .as_deref()
-                != Some(asset.contents)
+                != Some(build.contents(asset).as_ref())
         });
 
         // Extra files, including nested files, make an installation differ.

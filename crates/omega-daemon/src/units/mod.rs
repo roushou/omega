@@ -37,12 +37,8 @@ pub struct UnitTable {
 #[derive(Debug)]
 struct Inner {
     units: Mutex<BTreeMap<UnitName, UnitRecord>>,
-    renderers: Mutex<
-        BTreeMap<
-            crate::session::dispatch::attachment::Scope,
-            std::sync::Weak<std::sync::atomic::AtomicBool>,
-        >,
-    >,
+    renderers:
+        Mutex<BTreeMap<crate::session::dispatch::attachment::Scope, presentations::RendererLease>>,
     request_bytes: Arc<tokio::sync::Semaphore>,
     hub: Hub,
     /// Notify waiters when a unit becomes reachable.

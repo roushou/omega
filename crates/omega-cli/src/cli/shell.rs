@@ -28,7 +28,7 @@ enum Action {
         #[arg(long)]
         overwrite: bool,
     },
-    /// What is installed, and whether it matches this omega.
+    /// Compare installed files and running renderer builds with this omega.
     Status,
     /// Take it away again.
     Uninstall,
@@ -37,9 +37,12 @@ enum Action {
 #[derive(Debug, clap::Args)]
 struct Install {
     /// Symlink renderer files from a checkout. Defaults to `$OMEGA_SOURCE`
-    /// or this binary's source tree. Rescan the shell after editing linked files.
+    /// or this binary's source tree. Restart the shell after editing linked files.
     #[arg(long, num_args = 0..=1, default_missing_value = "", value_name = "PATH")]
     link: Option<String>,
+    /// Install files without restarting the shell or verifying activation.
+    #[arg(long)]
+    no_restart: bool,
 }
 
 impl ShellCmd {
@@ -69,12 +72,44 @@ impl ShellCmd {
 
         match action {
             Action::Install(install) => {
+                let before = if install.no_restart {
+                    Ok(super::renderer::Snapshot {
+                        active: Vec::new(),
+                        placements: Vec::new(),
+                    })
+                } else {
+                    super::renderer::RendererStatus::read().await
+                };
+                let no_restart = install.no_restart;
+                let linked = install.link.is_some();
                 Self::install(install, shell, ui)?;
+                if no_restart {
+                    ui.warn("renderer files installed; running QML activation was not verified");
+                    ui.next(shell.reload_command());
+                } else {
+                    Self::restart(shell, ui).await?;
+                    match before {
+                        Ok(before) if !linked => super::renderer::RendererStatus::verify_activation(&before, ui).await?,
+                        Ok(_) => ui.warn("linked renderer restarted; source build identity is unverified"),
+                        Err(error) => ui.warn(format!("shell restarted; running renderer unverified because daemon status was unavailable: {error}")),
+                    }
+                }
                 // Renderer installation does not change widget placements.
                 ui.next(&shell.enable_command(Renderer::VIEW.id));
                 Ok(())
             }
-            Action::Status => Self::status(shell, ui),
+            Action::Status => {
+                Self::status(shell, ui)?;
+                match super::renderer::RendererStatus::read().await {
+                    Ok(attachments) => super::renderer::RendererStatus::show(
+                        &attachments.active,
+                        &attachments.placements,
+                        ui,
+                    ),
+                    Err(error) => ui.warn(format!("running renderer unverified: {error}")),
+                }
+                Ok(())
+            }
             Action::Uninstall => Self::uninstall(shell, ui),
             Action::Adopt | Action::Diff | Action::Apply { .. } => unreachable!("handled above"),
         }
@@ -143,7 +178,15 @@ impl ShellCmd {
             return Ok(());
         };
 
-        Self::install(Install { link: None }, shell, ui)?;
+        Self::install(
+            Install {
+                link: None,
+                no_restart: true,
+            },
+            shell,
+            ui,
+        )?;
+        Self::rescan(shell, ui);
 
         ui.next("declare widget placements in your Rust shell layout, then run omega build");
         Ok(())
@@ -187,7 +230,29 @@ impl ShellCmd {
             }
         }
 
-        Self::rescan(shell, ui);
+        Ok(())
+    }
+
+    async fn restart(shell: HostShell, ui: &mut Ui) -> anyhow::Result<()> {
+        use std::time::Duration;
+        let output = tokio::time::timeout(
+            Duration::from_secs(45),
+            tokio::process::Command::from(shell.restart_command())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .context("renderer installed, but shell restart timed out")?
+        .context("renderer installed, but the shell restart command could not run")?;
+        anyhow::ensure!(
+            output.status.success(),
+            "renderer installed, but shell restart failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        ui.step(
+            Step::Restarted,
+            "Omarchy shell; QML component cache cleared",
+        );
         Ok(())
     }
 
@@ -238,7 +303,7 @@ impl ShellCmd {
         if wanted {
             ui.next("omega shell install");
         } else {
-            ui.step(Step::Checked, "the shell draws what this omega speaks");
+            ui.step(Step::Checked, "installed renderer files match this CLI");
         }
         Ok(())
     }

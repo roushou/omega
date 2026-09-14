@@ -29,3 +29,6 @@ impl InstanceKey {
         }
     }
 }
+
+mod fingerprint;
+pub use fingerprint::{RendererFingerprint, RendererFingerprintError};

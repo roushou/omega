@@ -51,6 +51,7 @@ impl StatusCmd {
                 .as_ref()
                 .map(|generation| generation.id().as_str()),
         );
+        super::renderer::RendererStatus::show(&status.renderers, &status.renderer_placements, ui);
         let units = status.units;
 
         if units.is_empty() {
@@ -88,7 +89,7 @@ impl StatusCmd {
                     Installed::Current => ui.step(
                         Step::Checked,
                         format!(
-                            "{} {} matches this CLI",
+                            "{} {} installed files match this CLI",
                             renderer.id,
                             omega_omarchy::Renderer::VERSION
                         ),

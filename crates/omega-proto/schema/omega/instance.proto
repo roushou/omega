@@ -108,6 +108,8 @@ message AttachRenderer {
     PlacementAttachment placement = 2;
   }
   repeated RendererFeature features = 3;
+  // Empty for legacy or directly linked sources. Reported by loaded QML.
+  string build_fingerprint = 4;
 }
 message PlacementAttachment {
   string unit = 1;

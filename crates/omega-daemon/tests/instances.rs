@@ -130,6 +130,7 @@ impl Fixture {
     }
     fn attachment(features: Vec<i32>) -> invoke::Op {
         invoke::Op::AttachRenderer(omega::AttachRenderer {
+            build_fingerprint: String::new(),
             scope: Some(omega::attach_renderer::Scope::Unit("example".into())),
             features,
         })
@@ -355,6 +356,7 @@ async fn attachment_negotiates_features_and_never_grants_an_unknown_scope() {
     Fixture::refusal(
         owner
             .ask(invoke::Op::AttachRenderer(omega::AttachRenderer {
+                build_fingerprint: String::new(),
                 scope: Some(omega::attach_renderer::Scope::Unit("unknown".into())),
                 features: vec![1, 2, 5, 7, 8],
             }))
@@ -584,4 +586,123 @@ async fn a_plugin_can_dismiss_only_its_own_current_instance() {
             .await
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn deployment_reports_only_live_renderer_builds_and_replacement_revokes_the_old_one() {
+    let fixture = Fixture::new("renderer-builds");
+    let mut operator = fixture.observer().await;
+    let invoke::Op::AttachRenderer(mut request) = Fixture::attachment(vec![1, 2, 5, 6, 7, 8])
+    else {
+        unreachable!()
+    };
+    request.build_fingerprint = "a".repeat(64);
+    let mut first = fixture.observer().await;
+    assert!(matches!(
+        first.ask(invoke::Op::AttachRenderer(request.clone())).await,
+        result::Outcome::Instances(_)
+    ));
+    let result::Outcome::Deployment(status) = operator
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("deployment")
+    };
+    assert_eq!(status.renderers, vec![request.clone()]);
+
+    request.build_fingerprint = "b".repeat(64);
+    let mut second = fixture.observer().await;
+    assert!(matches!(
+        second
+            .ask(invoke::Op::AttachRenderer(request.clone()))
+            .await,
+        result::Outcome::Instances(_)
+    ));
+    drop(first);
+    let result::Outcome::Deployment(status) = operator
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("deployment")
+    };
+    assert_eq!(status.renderers, vec![request]);
+    drop(second);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let result::Outcome::Deployment(status) = operator
+                .ask(invoke::Op::GetDeployment(Default::default()))
+                .await
+            else {
+                panic!("deployment")
+            };
+            if status.renderers.is_empty() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn invalid_renderer_fingerprints_are_refused_but_legacy_attachments_remain_supported() {
+    let fixture = Fixture::new("renderer-invalid-build");
+    let invoke::Op::AttachRenderer(mut request) = Fixture::attachment(vec![1, 2, 5, 6, 7, 8])
+    else {
+        unreachable!()
+    };
+    request.build_fingerprint = "not-a-build".into();
+    let mut renderer = fixture.observer().await;
+    Fixture::refusal(
+        renderer
+            .ask(invoke::Op::AttachRenderer(request.clone()))
+            .await,
+        omega::ErrorCode::InvalidArgument,
+    );
+    request.build_fingerprint.clear();
+    assert!(matches!(
+        renderer.ask(invoke::Op::AttachRenderer(request)).await,
+        result::Outcome::Instances(_)
+    ));
+}
+
+#[tokio::test]
+async fn required_placements_are_reported_even_without_a_renderer() {
+    let fixture = Fixture::new("renderer-required-placements");
+    let address = omega_daemon::hub::SurfaceRef::module(
+        common::unit_name("example"),
+        omega_proto::SurfaceId::parse("panel").unwrap(),
+        omega_proto::ModuleId::parse("slot").unwrap(),
+    );
+    fixture
+        .units
+        .configure_instance(&address, Default::default())
+        .await
+        .unwrap();
+    let mut operator = fixture.observer().await;
+    operator.create("window", "standalone").await;
+    let result::Outcome::Deployment(status) = operator
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("deployment")
+    };
+    assert!(status.renderers.is_empty());
+    assert_eq!(
+        status.renderer_placements,
+        vec![omega::PlacementAttachment {
+            unit: "example".into(),
+            surface: "panel".into(),
+            placement: "slot".into(),
+        }]
+    );
+    fixture.units.remove_instance(&address).await.unwrap();
+    let result::Outcome::Deployment(status) = operator
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("deployment")
+    };
+    assert!(status.renderer_placements.is_empty());
 }

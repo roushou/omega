@@ -16,6 +16,14 @@ TestCase {
     function phase(link, phase, detail) {
         link.onLine(JSON.stringify({topic:"units",units:{units:[{unit:"audio",phase:phase,detail:detail || ""}]}}))
     }
+    function test_attachment_reports_the_loaded_build_identity() {
+        var link = connection()
+        var frames = link.socket.written.trim().split("\n").map(line => JSON.parse(line))
+        var attachment = frames.find(frame => frame.invoke && frame.invoke.attachRenderer).invoke.attachRenderer
+        compare(attachment.buildFingerprint, link.buildFingerprint)
+        // Direct source fixtures are explicitly unverified; installations embed a digest.
+        compare(link.buildFingerprint, "")
+    }
     function test_lifecycle_status_does_not_mistake_empty_content_for_failure() {
         var link = connection()
         phase(link, "UNIT_PHASE_STARTING")

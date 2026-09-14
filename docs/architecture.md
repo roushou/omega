@@ -645,7 +645,14 @@ Omarchy placements and standalone Quickshell hosts. Hosts supply theme and asset
 
 The CLI embeds renderer assets. `omega shell install` installs the assets carried
 by that binary; replacing the binary alone does not refresh installed or loaded
-QML. Node props come from the protocol's `NodeKind` table. Generated `Props.js`
+QML. Installation restarts Omarchy to clear its component cache, then checks live
+renderer attachments. Each attachment reports a SHA-256 fingerprint embedded in
+its QML connection, covering the complete host and core asset bundle. The daemon
+exposes active attachment scopes, fingerprints, and required live placements
+through deployment status;
+replaced and disconnected attachment leases no longer appear. Empty fingerprints
+identify legacy or directly linked sources and are unverified. `--no-restart`
+installs files without claiming activation. Node props come from the protocol's `NodeKind` table. Generated `Props.js`
 readers, SDK emission tests and the shell's explicit undrawn-prop list keep the
 vocabulary aligned. See the [renderer contract](../crates/omega-renderer/shell/README.md)
 for interaction, host integration and node implementation.

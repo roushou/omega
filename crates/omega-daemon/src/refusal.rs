@@ -26,6 +26,12 @@ impl Refusable for omega_document::ValidationError {
     }
 }
 
+impl Refusable for omega_proto::instance::RendererFingerprintError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
 impl Refusable for omega_proto::instance::PresentationError {
     fn refusal(&self) -> Refusal {
         Refusal::invalid(self.to_string())

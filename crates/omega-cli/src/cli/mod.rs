@@ -10,6 +10,7 @@ mod migrate;
 mod new;
 mod present;
 mod preview;
+mod renderer;
 mod restart;
 mod rollback;
 mod run;

@@ -149,7 +149,10 @@ which compiles a scaffolded config through the real binaries.
 ## Renderer
 
 - Embed renderer sources in omega-renderer. `omega shell install` writes the
-  installing binary's sources; reinstall after updating the binary.
+  installing binary's sources; reinstall after updating the binary. Installation
+  restarts Omarchy and verifies live attachment fingerprints. Installed files alone
+  do not prove which QML the running shell uses. Linked and legacy renderers are
+  unverified; never infer their build identity from files on disk.
 - `ViewNode.qml` puts one item on screen per node and recurses. An unknown
   node kind draws nothing, so a tree from a newer plugin degrades to the parts
   this shell understands.

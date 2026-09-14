@@ -247,3 +247,18 @@ fn the_shell_carries_the_icon_set_the_table_declares() {
         );
     }
 }
+
+#[test]
+fn installed_connection_embeds_the_full_bundle_identity_and_linked_sources_do_not() {
+    let plugins = tempfile::tempdir().unwrap();
+    let renderer = Renderer::VIEW;
+    let directory = renderer.install(plugins.path()).unwrap();
+    let connection =
+        std::fs::read_to_string(directory.join("core/RendererConnection.qml")).unwrap();
+    assert!(connection.contains(renderer.build().fingerprint()));
+    assert_eq!(renderer.installed(plugins.path()), Installed::Current);
+    renderer.link(plugins.path(), &checkout()).unwrap();
+    let connection =
+        std::fs::read_to_string(directory.join("core/RendererConnection.qml")).unwrap();
+    assert!(connection.contains("readonly property string buildFingerprint: \"\""));
+}

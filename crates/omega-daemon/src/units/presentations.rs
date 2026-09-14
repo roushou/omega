@@ -8,6 +8,12 @@ use omega_proto::omega::{
 use omega_proto::{Refusal, SurfaceId, UnitName};
 use std::collections::{BTreeMap, HashMap};
 
+#[derive(Debug)]
+pub(super) struct RendererLease {
+    active: std::sync::Weak<std::sync::atomic::AtomicBool>,
+    description: omega::AttachRenderer,
+}
+
 impl UnitTable {
     pub fn instances(&self) -> BTreeMap<SurfaceRef, HashMap<String, Value>> {
         self.lock()
@@ -677,6 +683,51 @@ impl UnitTable {
 }
 
 impl UnitTable {
+    pub(crate) fn renderer_placements(&self) -> Vec<omega::PlacementAttachment> {
+        self.lock()
+            .values()
+            .flat_map(|record| record.instances.values())
+            .filter(|instance| {
+                instance.ready
+                    && matches!(
+                        instance.presentation.wire().kind,
+                        Some(presentation::Kind::Embedded(_) | presentation::Kind::Popup(_))
+                    )
+            })
+            .map(|instance| {
+                let placement = instance
+                    .placement
+                    .as_ref()
+                    .expect("placed presentation has an address");
+                omega::PlacementAttachment {
+                    unit: placement.unit.to_string(),
+                    surface: placement.surface.to_string(),
+                    placement: placement
+                        .module
+                        .as_ref()
+                        .expect("placed presentation has a module")
+                        .to_string(),
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn renderer_statuses(&self) -> Vec<omega::AttachRenderer> {
+        self.inner
+            .renderers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .filter(|lease| {
+                lease
+                    .active
+                    .upgrade()
+                    .is_some_and(|active| active.load(std::sync::atomic::Ordering::Acquire))
+            })
+            .map(|lease| lease.description.clone())
+            .collect()
+    }
+
     pub(crate) fn claim_renderer(
         &self,
         attachment: &crate::session::dispatch::attachment::Attachment,
@@ -687,11 +738,14 @@ impl UnitTable {
             .renderers
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        slots.retain(|_, lease| lease.strong_count() != 0);
+        slots.retain(|_, lease| lease.active.strong_count() != 0);
         if let Some(previous) = slots.insert(
             attachment.scope.clone(),
-            std::sync::Arc::downgrade(&attachment.active),
-        ) && let Some(previous) = previous.upgrade()
+            RendererLease {
+                active: std::sync::Arc::downgrade(&attachment.active),
+                description: attachment.description(),
+            },
+        ) && let Some(previous) = previous.active.upgrade()
         {
             previous.store(false, std::sync::atomic::Ordering::Release);
         }
@@ -703,7 +757,7 @@ impl UnitTable {
         active: &std::sync::atomic::AtomicBool,
     ) {
         let mut records = self.lock();
-        if !active.load(std::sync::atomic::Ordering::Acquire) {
+        if !active.swap(false, std::sync::atomic::Ordering::AcqRel) {
             return;
         }
         for key in keys {

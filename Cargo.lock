@@ -1052,6 +1052,7 @@ name = "omega-renderer"
 version = "0.2.3"
 dependencies = [
  "omega-proto",
+ "sha2",
 ]
 
 [[package]]

@@ -361,6 +361,7 @@ impl ViewFixture {
         let request = omega_proto::Observation::request(
             1,
             omega_proto::omega::invoke::Op::AttachRenderer(omega_proto::omega::AttachRenderer {
+                build_fingerprint: String::new(),
                 scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
                     "battery-widget".into(),
                 )),

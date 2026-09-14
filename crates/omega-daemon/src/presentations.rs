@@ -92,11 +92,12 @@ impl Hosts {
     }
     fn install(layout: &Layout) -> std::io::Result<()> {
         let stage = StageDir::new(&layout.renderer_dir())?;
+        let build = omega_renderer::Desktop::build();
         for asset in omega_renderer::Core::FILES
             .iter()
             .chain(omega_renderer::Desktop::FILES)
         {
-            stage.write(asset.name, asset.contents.as_bytes())?;
+            stage.write(asset.name, build.contents(asset).as_bytes())?;
         }
         stage.commit()
     }

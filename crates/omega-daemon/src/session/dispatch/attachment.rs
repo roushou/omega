@@ -9,6 +9,7 @@ pub(crate) struct Attachment {
     pub(crate) scope: Scope,
     pub(crate) active: std::sync::Arc<std::sync::atomic::AtomicBool>,
     features: Vec<RendererFeature>,
+    fingerprint: Option<omega_proto::instance::RendererFingerprint>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Scope {
@@ -58,11 +59,43 @@ impl Attachment {
                 placement: PlacementId::parse(&placement.placement).or_refuse()?,
             },
         };
+        let fingerprint = if request.build_fingerprint.is_empty() {
+            None
+        } else {
+            Some(
+                omega_proto::instance::RendererFingerprint::parse(&request.build_fingerprint)
+                    .or_refuse()?,
+            )
+        };
         Ok(Self {
+            fingerprint,
             scope,
             features,
             active: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
         })
+    }
+    pub(crate) fn description(&self) -> AttachRenderer {
+        use omega_proto::omega::PlacementAttachment;
+        AttachRenderer {
+            scope: Some(match &self.scope {
+                Scope::Unit(unit) => attach_renderer::Scope::Unit(unit.to_string()),
+                Scope::Placement {
+                    unit,
+                    surface,
+                    placement,
+                } => attach_renderer::Scope::Placement(PlacementAttachment {
+                    unit: unit.to_string(),
+                    surface: surface.to_string(),
+                    placement: placement.to_string(),
+                }),
+            }),
+            features: self.features.iter().map(|f| *f as i32).collect(),
+            build_fingerprint: self
+                .fingerprint
+                .as_ref()
+                .map(|f| f.as_str().to_owned())
+                .unwrap_or_default(),
+        }
     }
     pub(crate) fn unit(&self) -> &UnitName {
         match &self.scope {

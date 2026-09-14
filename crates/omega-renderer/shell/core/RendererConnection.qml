@@ -7,6 +7,8 @@ import "Props.js" as Props
 Item {
     id: link
 
+    // Replaced with the complete bundle fingerprint during installation.
+    readonly property string buildFingerprint: ""
     property string unit: ""
     property string surface: ""
     property string module: ""
@@ -130,6 +132,7 @@ Item {
             request.placement = { unit: link.unit, surface: link.surface, placement: link.module }
             request.features.push("RENDERER_FEATURE_EMBEDDED", "RENDERER_FEATURE_POPUPS")
         }
+        request.buildFingerprint = link.buildFingerprint
         link.send({ streamId: link.attachmentStream, invoke: { attachRenderer: request } })
     }
 

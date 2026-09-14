@@ -49,6 +49,17 @@ impl HostShell {
         }
     }
 
+    /// Restart the host process to discard cached QML components.
+    pub fn restart_command(self) -> std::process::Command {
+        match self {
+            Self::Omarchy => {
+                let mut command = std::process::Command::new("omarchy");
+                command.args(["restart", "shell"]);
+                command
+            }
+        }
+    }
+
     /// Enable the widget in the host layout when explicitly requested.
     pub fn enable(self, id: &str) -> std::io::Result<Output> {
         match self {

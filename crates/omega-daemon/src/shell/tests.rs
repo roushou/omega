@@ -543,6 +543,7 @@ impl RendererFixture {
         *connection.attachment.lock().unwrap() = Some(
             crate::session::dispatch::attachment::Attachment::parse(
                 &omega_proto::omega::AttachRenderer {
+                    build_fingerprint: String::new(),
                     scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
                         unit.into(),
                     )),
