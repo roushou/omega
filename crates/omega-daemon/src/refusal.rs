@@ -1,9 +1,4 @@
-//! Turning the daemon's own errors into answers a peer can act on.
-//!
-//! `ErrorCode` is a closed taxonomy — a peer branches on the code and reads
-//! the message only for humans — so which code an error becomes is a
-//! decision worth making once per error type, in one place where the choices
-//! can be compared, rather than at each call site by whoever was writing it.
+//! Map domain errors to protocol refusal codes once per error type.
 
 use omega_document::DocumentError;
 use omega_host::TomlError;

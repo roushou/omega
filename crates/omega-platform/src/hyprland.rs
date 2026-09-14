@@ -1,13 +1,5 @@
-//! The displays, from Hyprland.
-//!
-//! Hyprland speaks over two Unix sockets, not D-Bus: `.socket.sock` answers
-//! one request per connection, and `.socket2.sock` streams events for as long
-//! as it is held. So a reading is a fresh request and a wake-up is a line on
-//! the long-lived stream.
-//!
-//! Purely signal-driven, with no poll under it. Monitors are plugged in and
-//! unplugged, and the compositor says so; nothing about a display changes
-//! quietly the way a signal strength does.
+//! Hyprland state and actions over its command and event sockets.
+//! Queries use separate connections; a persistent event stream triggers refreshes.
 
 use std::path::PathBuf;
 
@@ -25,11 +17,7 @@ use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, opaque_debug};
 
-/// One monitor, as `hyprctl -j monitors` describes it.
-///
-/// Only the fields the ontology carries. Hyprland reports two dozen more —
-/// make, model, transform, VRR — and naming them here would be this broker
-/// holding an opinion about a schema it does not own.
+/// Monitor fields used by the protocol projection.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Monitor {
@@ -61,17 +49,13 @@ impl Monitor {
             x: self.x,
             y: self.y,
             scale: self.scale,
-            // Hyprland has no notion of a primary monitor; the focused one is
-            // the nearest true thing, and it is what a bar means by it.
+            // Hyprland has no primary output flag; project its focused output as primary.
             primary: self.focused,
         }
     }
 }
 
-/// What `hyprctl -j monitors` answers, turned into the ontology.
-///
-/// Pure, and separate from asking: the answer is JSON, which a test can hold
-/// without a compositor in the room.
+/// Decode monitor query JSON into protocol state.
 #[derive(Debug)]
 pub struct Monitors;
 
@@ -128,8 +112,7 @@ pub struct Session;
 impl Session {
     pub fn workspaces(json: &str, active: &str) -> Result<WorkspacesState, BrokerError> {
         let mut found: Vec<Workspace> = Self::parse(json)?;
-        // Hyprland answers in whatever order it holds them. A bar shows them
-        // in order, and sorting here is what stops every widget doing it.
+        // Sort workspaces by ID for stable output.
         found.sort_by_key(|workspace| workspace.id);
 
         Ok(WorkspacesState {
@@ -146,11 +129,7 @@ impl Session {
         })
     }
 
-    /// The focused window, or none.
-    ///
-    /// Hyprland answers `{}` on an empty workspace. That is nothing focused,
-    /// not a window with no name — and a bar drawing an empty title would
-    /// look like a bug rather than an empty desktop.
+    /// Decode the focused window; an empty object means no focused window.
     pub fn window(json: &str) -> Result<WindowState, BrokerError> {
         let focused: Focused = Self::parse(json)?;
         Ok(WindowState {
@@ -168,8 +147,7 @@ impl Session {
         })
     }
 
-    /// The name out of `j/activeworkspace`, which is the whole of what is
-    /// wanted from it: which of the workspaces below to mark.
+    /// Extract the active workspace name.
     pub fn active_name(json: &str) -> String {
         Self::parse::<Workspace>(json)
             .map(|workspace| workspace.name)
@@ -196,26 +174,20 @@ pub struct Keyboard {
     pub layout: String,
     #[serde(default)]
     pub active_keymap: String,
-    /// Whether the compositor considers this the one somebody types on.
+    /// Whether Hyprland marks this keyboard as main.
     #[serde(default)]
     pub main: bool,
 }
 
 impl Session {
-    /// How the machine is being typed at.
-    ///
-    /// A laptop reports half a dozen keyboards — a power button, a video bus,
-    /// a lid switch — and exactly one of them is the one under somebody's
-    /// hands. Hyprland says which; reading the first would report the layout
-    /// of a power button.
+    /// Select the compositor's main keyboard and its active layout.
     pub fn input(json: &str) -> Result<InputState, BrokerError> {
         let devices: Devices = Self::parse(json)?;
         let main = devices
             .keyboards
             .iter()
             .find(|keyboard| keyboard.main)
-            // No main keyboard is a session with none attached, which is a
-            // reading rather than a reason to fail.
+            // Report absence when no main keyboard exists.
             .cloned()
             .unwrap_or_default();
 
@@ -227,21 +199,13 @@ impl Session {
     }
 }
 
-/// One action, as a Hyprland dispatcher.
-///
-/// Pure, and the whole of what this broker decides. Omega's words and
-/// Hyprland's are not the same words — `Shutdown` was `PowerOff` for logind
-/// and here `CloseWindow` on the focused window is `killactive` — so the
-/// mapping is a function over an action rather than a walk through a socket,
-/// and a test can read every line of it.
+/// Map a protocol action to a Hyprland dispatcher command.
 #[derive(Debug)]
 pub struct Dispatch;
 
 impl Dispatch {
-    /// The dispatcher for an action, or `None` where Hyprland has no way to
-    /// do what was asked. `None` is refused rather than sent: a dispatch
-    /// Hyprland does not understand is answered "ok" by the socket, so
-    /// guessing would report a window closed that is still open.
+    /// Return the mapped dispatcher or None for unsupported selectors/actions.
+    /// Do not guess dispatch strings: unknown dispatchers can receive an ok response.
     pub fn of(action: &action::Kind) -> Option<String> {
         action.validate().ok()?;
         match action {
@@ -276,9 +240,7 @@ impl Dispatch {
                 "togglefloating {}",
                 Self::window(toggle.window.as_ref())?
             )),
-            // Hyprland fullscreens the focused window and takes no selector.
-            // Asking for another window is refused rather than silently done
-            // to whichever one happens to be focused.
+            // Fullscreen supports only the focused window; reject explicit other targets.
             action::Kind::ToggleFullscreen(toggle) => {
                 Self::is_focused(toggle.window.as_ref()).then(|| "fullscreen 1".to_string())
             }
@@ -306,8 +268,7 @@ impl Dispatch {
         }
     }
 
-    /// A window, as Hyprland selects one. An unset selector means the focused
-    /// window, which is what every one of these dispatchers defaults to.
+    /// Convert a window selector; absence selects the focused window.
     fn window(selector: Option<&WindowSelector>) -> Option<String> {
         match selector.and_then(|selector| selector.target.as_ref()) {
             None | Some(window_selector::Target::Focused(_)) => Some("activewindow".to_string()),
@@ -325,11 +286,7 @@ impl Dispatch {
         )
     }
 
-    /// A name that could be pasted into a dispatch line.
-    ///
-    /// Empty is nothing to select by, and a newline would end the line and
-    /// make the rest of it a second dispatch — so both are refused rather
-    /// than sent.
+    /// Reject empty identifiers and line breaks in dispatcher arguments.
     fn named(name: &str) -> Option<&str> {
         if name.is_empty() || name.contains(['\0', '\n', '\r', ';', ',']) {
             None
@@ -346,12 +303,7 @@ struct Link {
 }
 
 impl Link {
-    /// Which topics an event can have changed.
-    ///
-    /// Hyprland streams everything down one socket, so a broker that re-read
-    /// all three on every line would run three requests per keystroke. The
-    /// answer is per event: a window title changing cannot have moved a
-    /// monitor.
+    /// Map compositor events to the topics that need refreshing.
     fn affected(event: &str) -> &'static [SystemTopic] {
         const DISPLAY: &[SystemTopic] = &[SystemTopic::Monitors];
         const WORKSPACES: &[SystemTopic] = &[SystemTopic::Workspaces];
@@ -413,9 +365,7 @@ impl Link {
                     state_topic::Value::Monitors(Monitors::parse(&self.ask("j/monitors").await?)?)
                 }
                 SystemTopic::Workspaces => {
-                    // Which one is active is a second question, and asking it
-                    // separately is how the answer stays one word rather than
-                    // a whole workspace to compare against.
+                    // Read active workspace identity separately.
                     let active = Session::active_name(&self.ask("j/activeworkspace").await?);
                     state_topic::Value::Workspaces(Session::workspaces(
                         &self.ask("j/workspaces").await?,
@@ -462,11 +412,7 @@ impl Link {
         Ok(answer)
     }
 
-    /// Send a dispatch, and believe the answer.
-    ///
-    /// Hyprland answers `ok` or a sentence about what went wrong. Treating
-    /// anything else as a failure is what stops a refused dispatch reading as
-    /// a window that closed.
+    /// Require the compositor's `ok` response; other replies are dispatch failures.
     async fn dispatch(&self, command: &str) -> Result<(), BrokerError> {
         let mut socket = UnixStream::connect(self.dir.join(".socket.sock"))
             .await
@@ -528,15 +474,8 @@ opaque_debug!(Link);
 #[derive(Debug)]
 pub struct Hyprland {
     link: Option<Link>,
-    /// Which topics the event that last woke this broker can have changed.
-    ///
-    /// Carried from `wake` to `read` because they are separate calls and the
-    /// answer belongs to the first: Hyprland streams every window focus down
-    /// one socket, and re-reading all four topics on each would be four
-    /// requests per keystroke.
-    ///
-    /// Everything, before any event has been seen — a fresh connection has
-    /// said nothing about what changed, so all of it has.
+    /// Retain topic invalidations between wake and read.
+    /// A new connection requires all supported topics to be read.
     affected: &'static [SystemTopic],
 }
 
@@ -550,8 +489,7 @@ impl Default for Hyprland {
 }
 
 impl Hyprland {
-    /// Every topic this broker reports, which is what a fresh connection
-    /// answers with.
+    /// Read every supported topic after connecting.
     const EVERYTHING: &'static [SystemTopic] = &[
         SystemTopic::Monitors,
         SystemTopic::Workspaces,

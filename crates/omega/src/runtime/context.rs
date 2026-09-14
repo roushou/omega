@@ -1,13 +1,5 @@
-//! What a plugin's fields are built from.
-//!
-//! A plugin declares what it needs by *holding* it: a `Battery` field is a
-//! handle onto the replicated battery topic, a `Notify` field is permission
-//! to raise a notification. Both are built from the same [`Context`] — the
-//! live state the runtime keeps current, and the queue effects leave on their
-//! way to the daemon.
-//!
-//! Authors never see this type. It exists so the derive has something to
-//! build fields out of.
+//! Runtime context used by derives to construct dependency handles.
+//! Provides replicated state, configuration, and effect admission.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -17,7 +9,7 @@ use omega_proto::{FromValue, SystemTopic, TopicValue, Values};
 
 use crate::runtime::mirror::Mirror;
 
-/// The runtime, as a field sees it.
+/// Shared state and effect admission for dependency handles.
 #[derive(Clone, Debug)]
 pub struct Context {
     instance: Option<omega_proto::instance::InstanceKey>,

@@ -27,13 +27,12 @@ impl<'a> Cargo<'a> {
         Self { layout }
     }
 
-    /// The whole workspace: every unit, and the config plane with them.
+    /// The complete config workspace, including plugins and system.
     pub(crate) async fn build(&self, profile: Profile) -> Result<(), CargoError> {
         self.run(profile, &[]).await
     }
 
-    /// One unit. The inner loop compiles what changed, not what did not:
-    /// `omega dev` waits for this between every save.
+    /// Compile one plugin for the development loop.
     pub(crate) async fn build_unit(
         &self,
         profile: Profile,
@@ -62,10 +61,7 @@ impl<'a> Cargo<'a> {
     async fn run(&self, profile: Profile, extra: &[&str]) -> Result<(), CargoError> {
         let mut command = tokio::process::Command::new("cargo");
         command
-            // Run *in* the config, not merely on it. Cargo discovers
-            // `.cargo/config.toml` by walking up from the current directory
-            // rather than from the manifest, and that file is where a config
-            // says which omega it builds against.
+            // Cargo resolves local overrides from the working directory, not `--manifest-path`.
             .current_dir(&self.layout.config)
             .arg("build")
             .arg("--manifest-path")
@@ -78,8 +74,7 @@ impl<'a> Cargo<'a> {
             command.arg("--workspace");
         }
 
-        // Debug is cargo's default profile and is asked for by asking for
-        // nothing, so the flag is an option rather than a string.
+        // Debug is Cargo's default and requires no profile flag.
         if let Some(flag) = profile.flag() {
             command.arg(flag);
         }

@@ -1,10 +1,5 @@
-//! Screen brightness from sysfs, with logind for writes requiring permission.
-//!
-//! The kernel exposes a raw scale per device — 0..`max_brightness`, which is
-//! 255 on one panel and 96000 on the next — and the ontology speaks percent.
-//! Converting between them is this broker's whole job, and it is why reading
-//! and writing belong together: a writer that rounded differently from the
-//! reader would set 40% and report 39%.
+//! Read sysfs display backlights and write through logind.
+//! Convert raw device values to percentages using the same rounding for reads and writes.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -36,9 +31,7 @@ impl Sysfs {
             .unwrap_or_else(|_| PathBuf::from(Self::ROOT))
     }
 
-    /// The first device, if the machine has one. A laptop has `intel_backlight`
-    /// or `amdgpu_bl0`; a desktop with an external monitor has none, because
-    /// DDC/CI is not a sysfs backlight.
+    /// Select the first sysfs backlight device, if present. External DDC/CI monitors are unsupported.
     fn discover(root: &std::path::Path) -> Option<Self> {
         let dir = std::fs::read_dir(root)
             .ok()?
@@ -65,13 +58,8 @@ impl Sysfs {
         }
     }
 
-    /// The setpoint — `brightness`, not `actual_brightness`.
-    ///
-    /// `actual_brightness` is the hardware's own answer, and it lags a write
-    /// while the panel fades. Reporting it means a step that was just applied
-    /// reads back as the old value, and the next relative step is then
-    /// computed from a number the user has already moved away from. The
-    /// setpoint is what was asked for, which is what arithmetic needs.
+    /// Read the brightness setpoint. Hardware `actual_brightness` may lag writes
+    /// and must not be used as the base for successive relative adjustments.
     fn raw(&self) -> Option<u32> {
         self.u32("brightness")
     }
@@ -147,9 +135,7 @@ impl Default for Backlight {
 }
 
 impl Backlight {
-    /// How often sysfs is re-read. Brightness changes when someone presses a
-    /// key, and this broker publishes its own writes immediately, so the poll
-    /// is only there to notice a change somebody else made.
+    /// Poll for external changes; broker writes publish their new values immediately.
     pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(1);
 
     pub fn new() -> Self {
@@ -173,7 +159,7 @@ impl Backlight {
         }
     }
 
-    /// Rounded to nearest, so 50% of a scale of 3 is 2 rather than 1.
+    /// Round to nearest raw device step.
     fn to_percent(raw: u32, max: u32) -> u32 {
         ((u64::from(raw) * 100 + u64::from(max) / 2) / u64::from(max)) as u32
     }
@@ -191,11 +177,7 @@ impl Backlight {
         self.sysfs.as_ref()
     }
 
-    /// One reading as a patch, with no cadence in the way.
-    ///
-    /// The topic is always published, with no value on a machine that has no
-    /// backlight — saying nothing would be indistinguishable from not having
-    /// been asked yet, and a unit that declared the topic would wait forever.
+    /// Publish a backlight reading or explicit absence when no device exists.
     pub fn patch(&mut self) -> StatePatch {
         StatePatch {
             topics: vec![StateTopic {
@@ -209,11 +191,7 @@ impl Backlight {
         }
     }
 
-    /// Where a change lands, as a percentage.
-    ///
-    /// Pure, and separate from writing it, because the arithmetic is the part
-    /// that can be wrong: a delta is applied to what the screen shows now,
-    /// and both ends of the range are reachable.
+    /// Compute and clamp an absolute or relative percentage change.
     fn target(&self, change: &set_backlight::Change, current: u32) -> u32 {
         match change {
             set_backlight::Change::AbsolutePercent(percent) => (*percent).min(100),

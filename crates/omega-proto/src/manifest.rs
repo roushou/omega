@@ -1,9 +1,5 @@
-//! What a unit asks for, and the hash it proves itself with.
-//!
-//! The manifest is a schema message like everything else that crosses the
-//! socket. The hash is sha256 over [`Manifest::canonical`]: every repeated
-//! field sorted and deduplicated, then encoded in tag order, so any protobuf
-//! implementation reaches the same bytes.
+//! Manifest validation and canonical SHA-256 hashing.
+//! Repeated fields are sorted and deduplicated before protobuf encoding.
 
 use prost::Message as _;
 
@@ -12,18 +8,13 @@ use crate::ident::{IdentError, SurfaceId, UnitName};
 use crate::omega::{Capability, EventKind, Manifest, Surface, SurfaceKind};
 
 impl Manifest {
-    /// The flag that makes a compiled plugin print its manifest and exit.
-    ///
-    /// A plugin's manifest is not a file anyone writes — it is what the
-    /// plugin's own fields add up to, and this is how the build asks. The
-    /// config plane is asked the same way what the machine should be.
+    /// Flag requesting canonical manifest bytes from a compiled plugin.
     pub const DESCRIBE: &'static str = "--omega-manifest";
 
     /// What a built unit's manifest is called beside its binary.
     pub const FILE_NAME: &'static str = "unit.pb";
 
-    /// A manifest with nothing declared, which is what a plugin holding no
-    /// fields adds up to.
+    /// Construct an empty manifest.
     pub fn new(name: &UnitName, version: impl Into<String>) -> Self {
         Self {
             name: name.to_string(),
@@ -64,7 +55,7 @@ impl Manifest {
         self
     }
 
-    /// The same manifest, renamed — how a template becomes a unit's manifest.
+    /// Return the manifest with a different unit name.
     pub fn with_name(mut self, name: &UnitName) -> Self {
         self.name = name.to_string();
         self
@@ -75,12 +66,7 @@ impl Manifest {
         UnitName::parse(self.name.clone()).map_err(ManifestError::from)
     }
 
-    /// Deterministic bytes: sorted, deduplicated, encoded in tag order.
-    ///
-    /// Sorting is what makes the hash a property of what a unit declares
-    /// rather than of the order its fields happened to be visited in. A
-    /// plugin that lists two capabilities the other way round is the same
-    /// plugin, and must present the same hash.
+    /// Encode deterministic manifest bytes after sorting and deduplicating repeated fields.
     pub fn canonical(&self) -> Vec<u8> {
         let mut canonical = self.clone();
 
@@ -113,12 +99,7 @@ impl Manifest {
         Self::decode(bytes).map_err(ManifestError::Malformed)
     }
 
-    /// Capabilities as the wire enum values the daemon grants.
-    ///
-    /// Fails loud on a value this build does not know: a capability that
-    /// cannot be named is a grant that cannot be reasoned about, and
-    /// dropping it silently is how a unit ends up running with less than it
-    /// declared and failing somewhere else entirely.
+    /// Decode capabilities, rejecting unknown enum values.
     pub fn granted(&self) -> Result<Vec<Capability>, ManifestError> {
         self.capabilities
             .iter()
@@ -136,9 +117,7 @@ impl Manifest {
         self.surfaces.iter().map(Surface::declared).collect()
     }
 
-    /// The state topics this unit declares it reads, as validated addresses.
-    /// A typo is a build error, not a subscription that silently matches
-    /// nothing.
+    /// Parse declared topic addresses, rejecting invalid names.
     pub fn addresses(&self) -> Result<Vec<Address>, ManifestError> {
         self.state_topics
             .iter()
@@ -157,10 +136,8 @@ impl Manifest {
             .collect()
     }
 
-    /// Identity, grants, and every string that addresses something on the
-    /// wire — checked in one place: the CLI checks it at build time and the
-    /// daemon checks it again at load time, and neither owns a private copy
-    /// of the rule.
+    /// Validate manifest identity, grants, topics, and surface declarations.
+    /// Shared by build-time and daemon load-time validation.
     pub fn validate(&self, unit: &UnitName) -> Result<(), ManifestError> {
         let declared = self.unit()?;
         if &declared != unit {
@@ -191,12 +168,7 @@ impl Surface {
         }
     }
 
-    /// The declared kind, as the canonical wire enum.
-    ///
-    /// Errors on a kind this build does not know *and* on the unspecified
-    /// zero, which is what an unset field decodes to — prost's own `kind()`
-    /// maps both to `Unspecified`, and a surface whose kind cannot be named
-    /// must fail the manifest rather than be quietly dropped.
+    /// Decode the declared surface kind; reject unknown and unspecified values.
     pub fn declared(&self) -> Result<SurfaceKind, ManifestError> {
         match SurfaceKind::try_from(self.kind) {
             Ok(SurfaceKind::Unspecified) | Err(_) => {
@@ -212,9 +184,7 @@ impl Surface {
     }
 }
 
-/// A manifest that decoded but does not describe a unit the daemon can trust.
-/// Fail loud: an unknown capability or surface kind must be a build error,
-/// never a silently dropped grant.
+/// Invalid manifest identity, capability, topic, or surface declaration.
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("not a manifest: {0}")]

@@ -239,9 +239,7 @@ async fn the_observation_socket_streams_state_as_it_changes() {
         assert_eq!(parse(&line)["topic"], "battery");
         assert_eq!(parse(&line)["revision"], revision.to_string());
 
-        // The reader's half of the same contract: what this daemon writes,
-        // `Observation::topic` reads back as a typed topic. `omega status`
-        // depends on it and does not link the daemon to find out.
+        // Decode daemon output with the shared observation reader used by CLI clients.
         let topic = Observation::topic(&line).expect("a state line parses as a topic");
         assert_eq!(topic.topic, "battery");
         assert!(matches!(
@@ -324,17 +322,13 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
     let (_snapshot, mut observed) = hub.subscribe_views();
     drop(guard);
 
-    // Its process ended, so it is showing nothing. Keeping the last tree
-    // would tell the reconciler this unit still knows about the instance the
-    // document gave it — knowledge that lived in the process — and the unit
-    // that comes back would never be told again.
+    // Disconnect must clear published views and instance ownership.
     assert!(
         hub.view_snapshot().is_empty(),
         "a view outlived the unit that published it"
     );
 
-    // And observers are told, so a shell can stop drawing rather than freeze
-    // on a number nobody is taking.
+    // Disconnection must clear observer views.
     let cleared = tokio::time::timeout(Duration::from_secs(2), observed.recv())
         .await
         .expect("observers are told")

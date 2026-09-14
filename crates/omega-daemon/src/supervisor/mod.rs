@@ -30,8 +30,7 @@ pub struct UnitSpec {
     pub name: UnitName,
     pub program: PathBuf,
     generation: Option<omega_host::Generation>,
-    /// Where the unit's own output goes. Absent means it inherits the
-    /// daemon's, which is what a test wants and a desktop does not.
+    /// Captured output path. If absent, inherit the daemon's output streams.
     pub log: Option<UnitLog>,
 }
 
@@ -71,9 +70,7 @@ struct SupervisorInner {
     socket: Socket,
     /// The daemon is stopping: every unit goes with it.
     shutdown: Shutdown,
-    /// Everything known about the units — manifests, tokens, lifecycles, and
-    /// the handles that stop and cycle them. The supervisor keeps no private
-    /// copy of any of it.
+    /// Shared unit registry; the supervisor keeps no separate copy.
     units: UnitTable,
     handover: Arc<tokio::sync::Mutex<()>>,
 }
@@ -112,9 +109,7 @@ impl Supervisor {
         self.inner.units.identify(pid, token)
     }
 
-    /// Adopt the manifests of a fresh build. Sessions already open keep the
-    /// grants they were admitted with; the next handshake is checked against
-    /// what is on disk now.
+    /// Replace manifests for future admissions. Existing sessions retain their grants.
     pub fn adopt(&self, manifests: Arc<ManifestStore>) {
         self.inner.units.adopt(&manifests);
     }
@@ -156,11 +151,8 @@ impl Supervisor {
         self.inner.units.held()
     }
 
-    /// Hand a unit over to a process this daemon will not spawn.
-    ///
-    /// The supervised instance is stopped first and waited for: the point of
-    /// adopting a unit is to *be* it, and two processes answering to one name
-    /// would race for its session and its surfaces.
+    /// Stop and await the supervised process before granting development adoption.
+    /// Only one process may own a unit identity at a time.
     pub async fn handover(&self) -> tokio::sync::OwnedMutexGuard<()> {
         self.inner.handover.clone().lock_owned().await
     }
@@ -194,9 +186,7 @@ impl Supervisor {
         };
         control.stop.trigger();
 
-        // The unit gets the same grace as it would at shutdown, plus the
-        // time the supervisor takes to notice. Supervision ending is the
-        // signal, not a phase reported after the fact.
+        // Wait for supervision to end, allowing shutdown grace plus observation delay.
         let deadline =
             tokio::time::Instant::now() + UnitProcess::GRACE + Duration::from_millis(500);
         while tokio::time::Instant::now() < deadline {
@@ -234,8 +224,7 @@ impl UnitProcess {
         }
     }
 
-    /// Whether this unit should stop — because it was stopped, or because
-    /// the whole daemon is.
+    /// Whether unit-specific or daemon-wide shutdown was requested.
     fn stopping(&self) -> bool {
         self.control.stop.is_triggered() || self.supervisor.shutdown.is_triggered()
     }
@@ -277,10 +266,7 @@ impl UnitProcess {
                     }
                 }
                 Err(e) => {
-                    // Named, both times. "No such file or directory" reaches
-                    // `omega status` as a phase with no subject, and which
-                    // path was missing is the whole diagnosis: a build that
-                    // never staged the binary looks exactly like this.
+                    // Include the binary path in spawn errors reported by status.
                     tracing::error!(
                         unit = %self.spec.name,
                         program = %self.spec.program.display(),
@@ -351,10 +337,7 @@ impl UnitProcess {
             _ = Self::either(&stop, &shutdown) => {
                 self.terminate(child).await;
             }
-            // An operator asked for this instance to go. The unit is
-            // still wanted, so the loop respawns it — and an asked-for
-            // restart is not a crash, so it does not count against the
-            // backoff.
+            // Requested restarts bypass crash backoff.
             _ = self.cycles.changed() => {
                 tracing::info!(unit = %self.spec.name, "cycling on request");
                 self.terminate(child).await;
@@ -390,9 +373,7 @@ impl UnitProcess {
         }
     }
 
-    /// Ask the unit to exit, then insist. A unit holding a socket deserves
-    /// the chance to close it; one that ignores the request does not hold up
-    /// the shutdown.
+    /// Send SIGTERM, wait for the grace period, then kill if needed.
     async fn terminate(&self, child: &mut Child) {
         let Some(pid) = child.id() else {
             return;

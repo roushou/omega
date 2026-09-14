@@ -1,13 +1,6 @@
-//! Host filesystem, build generations, and source workspace contracts.
-//!
-//! None of this crosses a socket, which is why it is not in `omega-proto`.
-//! A unit talks to the daemon and never reads the config workspace, stages a
-//! directory, or parses a TOML document — so a plugin that draws a battery
-//! compiles none of it.
-//!
-//! Three things, and they only ever appear together: [`Layout`] says where a
-//! file belongs, [`TomlFile`] says what shape it has, and [`AtomicFile`]
-//! says a reader never sees half of one.
+//! Filesystem paths, atomic writes, build generations, and source workspace metadata.
+//! [`Layout`] resolves paths, [`TomlFile`] accesses typed documents, and
+//! [`AtomicFile`] publishes file contents atomically.
 
 pub mod fs;
 pub mod generation;

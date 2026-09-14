@@ -99,10 +99,7 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
     let mut transport = harness.connect(&hash, token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
-    // `CallCommand` is the daemon asking a unit to run one of its own
-    // commands — it travels the other way down this socket and has no policy
-    // row for a unit to reach. A unit sending one is asking to invoke its
-    // neighbours, and the answer is an answer rather than silence.
+    // CallCommand is daemon-to-unit only; peer requests must be refused.
     transport
         .send(Frame {
             stream_id: 1,

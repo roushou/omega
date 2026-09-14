@@ -1,10 +1,5 @@
-//! What each op costs, in one table.
-//!
-//! Every op the wire defines is listed here with what it demands, so an op
-//! with no row is refused as unimplemented and a handler can never become
-//! reachable without a policy. Its own file because it is the contract:
-//! reading what a peer may do should not mean scrolling past the code that
-//! does it.
+//! Operation authorization requirements.
+//! Every served operation must have a policy row; unlisted operations are refused.
 
 use omega_proto::omega::{Capability, SurfaceKind, invoke};
 
@@ -200,11 +195,7 @@ pub(super) const POLICY: &[OpPolicy] = &[
         surface: None,
     },
     OpPolicy {
-        // Served to both, and it widens nothing either way: a subscription
-        // selects within a ceiling it cannot raise. A unit's ceiling is its
-        // manifest; an observer's is what the daemon holds, which it may
-        // already read. Narrowing is the observer's whole interest in it —
-        // the shell draws views and is sent every topic besides.
+        // Subscriptions can only narrow the peer's authorized topic set.
         kind: OpKind::Subscribe,
         roles: &[Role::Unit, Role::Operator, Role::Renderer],
         capabilities: &[Capability::StateRead],
@@ -223,11 +214,8 @@ pub(super) const POLICY: &[OpPolicy] = &[
         surface: None,
     },
     OpPolicy {
-        // An action's own capability is declared per action kind, because
-        // "may act" is not one permission — see `crate::action`.
-        //
-        // Served to both: a unit acts within its grants, and the owner of the
-        // daemon acts because it is the owner.
+        // Action-specific capabilities are checked by the action dispatcher.
+        // Operators act as the daemon owner; plugins remain within their grants.
         kind: OpKind::Act,
         roles: &[Role::Unit, Role::Operator],
         capabilities: &[],
@@ -248,10 +236,7 @@ pub(super) const POLICY: &[OpPolicy] = &[
         surface: None,
     },
     OpPolicy {
-        // Taking a unit's place hands out a token, so it is the operator's
-        // alone — and grants them nothing new: they already own the state dir
-        // the built binary is copied from, and the manifest still decides
-        // what the adopted process may do.
+        // Only the operator may adopt a unit; adoption retains its manifest grants.
         kind: OpKind::AdoptUnit,
         roles: &[Role::Operator],
         capabilities: &[],

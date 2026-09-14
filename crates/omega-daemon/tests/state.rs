@@ -57,8 +57,7 @@ fn an_unchanged_value_is_not_an_update() {
     let first = store.apply(battery(0.5)).unwrap();
     assert_eq!(first.topics[0].revision, 1);
 
-    // A source polling every two seconds republishes the same reading; that
-    // is not news, and waking every unit for it would be pure churn.
+    // Identical readings must not create revisions or wake subscribers.
     assert!(store.apply(battery(0.5)).unwrap().topics.is_empty());
 
     let changed = store.apply(battery(0.6)).unwrap();

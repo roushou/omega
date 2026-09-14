@@ -2,10 +2,9 @@
 use crate::wiring::Wired;
 use omega_proto::omega::Event;
 
-/// Something that happens.
-///
-/// A reaction runs when the daemon reports a transition — the AC was
-/// unplugged, the battery went low — rather than on every state change. Reactions may hold effects.
+/// Handle a state-transition event, such as external power disconnecting.
+/// Reactions may hold effect handles. They run on matching events, not on
+/// every reading update.
 pub trait Reaction: Wired {
     fn fire(&self, event: &Event);
 }

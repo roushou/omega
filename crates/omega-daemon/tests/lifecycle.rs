@@ -1,4 +1,4 @@
-//! A unit's life, as a state machine rather than a series of reports.
+//! Unit lifecycle transition tests.
 
 use omega_daemon::hub::Hub;
 use omega_daemon::units::{Lifecycle, Transition, UnitTable};
@@ -30,9 +30,7 @@ fn a_spawned_unit_is_starting_until_it_checks_in() {
 
     units.transition(&name, Transition::Spawned);
 
-    // A process exists, but the daemon has not vouched for it: it has not
-    // presented a manifest hash yet, and saying "running" would claim more
-    // than the daemon knows.
+    // A spawned process remains starting until admission.
     assert_eq!(phase(&units, &name), UnitPhase::Starting as i32);
 
     // The handshake is what makes it running.

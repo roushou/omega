@@ -1,8 +1,5 @@
-//! The plugin runtime loop.
-//!
-//! Connect, prove who we are, mirror the state the daemon replicates, build
-//! one value per instance, render when something moves, answer what is asked,
-//! and post whatever effects were queued. A plugin author writes none of it.
+//! Plugin session loop: authentication, state replication, rendering,
+//! command dispatch, and effect forwarding.
 
 use std::collections::HashMap;
 
@@ -28,9 +25,7 @@ pub(crate) struct Runtime {
     client: Client,
     context: Context,
     effects: crate::effect::queue::Effects,
-    /// What the document configured this unit with, as the daemon handed it
-    /// over at the handshake. Every surface is built out of it, and a widget
-    /// instance's own settings are laid over it.
+    /// Unit settings received at handshake. Instance settings override matching keys.
     settings: Values,
 }
 
@@ -71,8 +66,7 @@ impl Runtime {
     pub(crate) async fn serve(mut self, plugin: Plugin) -> Result<(), Error> {
         let mut instances: Vec<Instance> = Vec::new();
 
-        // A command is built once: it holds handles, not state, and there is
-        // one of it however many times it is called.
+        // Command instances are shared across concurrent invocations.
         let commands: HashMap<String, std::sync::Arc<dyn CalledCommand>> = plugin
             .commands()
             .iter()
@@ -113,7 +107,6 @@ impl Runtime {
                     let (stream, completion) = answer.map_err(|error| Error::Runtime(std::io::Error::other(error)))?;
                     self.answer(stream, Self::completion(completion)).await?;
                 }
-                // Something a field queued on its way out.
                 Some(request) = self.effects.recv() => {
                     let stream = self.client.allocate();
                     if let Some(op) = self.effects.begin(stream, request)? {
@@ -130,8 +123,6 @@ impl Runtime {
                             self.publish_all(&mut instances).await?;
                         }
 
-                        // The daemon handing a widget an instance of itself,
-                        // with the settings the document gave it.
                         Some(frame::Body::Invoke(Invoke {
                             op: Some(invoke::Op::RenderWidget(render)),
                         })) => {
@@ -144,9 +135,7 @@ impl Runtime {
                                 continue;
                             };
 
-                            // What this placement said, over what the unit
-                            // was configured with: naming one key where a
-                            // widget is placed must not reset the rest.
+                            // Placement settings override only the keys they supply.
                             let settings =
                                 Values::from_map(render.config.clone()).over(&self.settings);
                             let identity = match render.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose() {

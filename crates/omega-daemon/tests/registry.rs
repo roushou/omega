@@ -37,9 +37,7 @@ fn a_revoked_token_is_never_honoured_again() {
     units.bind(&unit("battery-widget"), 100);
     units.revoke(&unit("battery-widget"));
 
-    // This is the pid-reuse case: the unit died, the kernel handed 100 to
-    // someone else, and the token is the reason they cannot inherit its
-    // grants.
+    // A reused pid must not inherit a prior process token.
     assert_eq!(units.identify(100, token.as_str()), None);
 }
 

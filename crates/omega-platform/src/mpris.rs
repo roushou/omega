@@ -1,13 +1,5 @@
-//! What is playing, from MPRIS.
-//!
-//! Every player that exposes `org.mpris.MediaPlayer2` on the session bus, at
-//! once: a browser tab and a music app is the normal case, not the awkward
-//! one. Which of them a media key reaches is decided here rather than by
-//! every widget that draws them.
-//!
-//! Woken by signals and polled underneath. Players emit `PropertiesChanged`
-//! when what they are playing changes, but a player *starting* is a name
-//! appearing on the bus — so a slow tick is the floor that notices one.
+//! Discover MPRIS players and publish metadata and playback state.
+//! Property signals and fallback polling refresh players and detect new bus names.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -115,11 +107,7 @@ impl Player {
 pub struct Players;
 
 impl Players {
-    /// The ontology's view: playing first, then by name.
-    ///
-    /// Sorted because the bus answers in whatever order it holds names, and a
-    /// bar drawing "now playing" would otherwise swap between two paused
-    /// players every refresh.
+    /// Sort playing players first, then by name for stable selection.
     pub fn state(players: &[Player]) -> MediaState {
         let mut sorted: Vec<&Player> = players.iter().collect();
         sorted.sort_by(|a, b| a.priority(b));
@@ -207,8 +195,7 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
-        // One rule for every player, rather than a subscription per player
-        // that would have to be torn down and rebuilt as they come and go.
+        // Use one bus match rule covering all MPRIS players.
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .interface("org.freedesktop.DBus.Properties")

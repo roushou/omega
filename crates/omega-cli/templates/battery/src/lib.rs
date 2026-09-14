@@ -1,17 +1,6 @@
-//! A battery widget.
-//!
-//! A plugin declares what it needs by holding it: the `Battery` field below
-//! is a view onto the machine's battery and the permission to read it, and
-//! that is the whole declaration — there is no manifest to keep in step,
-//! because `omega build` asks this program what it needs.
-//!
-//! This is a library as well as a program. `system/` can depend on it, so the
-//! settings it is configured with are checked by the compiler rather than
-//! matched by name at runtime.
-//!
-//! Run it against the daemon with `omega dev <name>`, and test it with
-//! `cargo test`: a widget is a function from state to a view, and the tests
-//! at the bottom of this file call it without a daemon anywhere.
+//! Configurable battery indicator.
+//! Use `omega dev <name>` for live development and `cargo test` for fixture tests.
+//! The system crate can depend on this library to configure its settings and placement.
 
 use omega::platform::power::Battery;
 use omega::ui::{Row, Text};
@@ -42,9 +31,7 @@ pub struct BatteryWidget {
 
 impl Surface for BatteryWidget {
     fn render(&self) -> View {
-        // A desktop has no battery, and a broker that is down has no reading
-        // either. Both are nothing to draw — not a charge of zero, which this
-        // widget would then colour as urgent.
+        // Missing battery readings must not display as zero charge.
         if !self.battery.has_reading() {
             return View::empty();
         }

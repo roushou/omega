@@ -1,11 +1,7 @@
 import QtQuick
 import "../Props.js" as Props
 
-// Children in rows of a fixed width.
-//
-// A `Grid` rather than a stack of rows because the columns have to line up:
-// a label beside a figure, four times over, wants one width for the labels
-// and not four.
+// Grid layout with shared column alignment.
 Grid {
     id: grid
     required property var host
@@ -18,9 +14,7 @@ Grid {
         delegate: cell
     }
 
-    // Loaded by url, like a stack's children: declaring `modelData` on a
-    // `ViewNode` would make it a property that type requires, which is not
-    // what a repeater injecting one means.
+    // Load by URL so modelData remains a delegate property.
     Component {
         id: cell
         Loader {

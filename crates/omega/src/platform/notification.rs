@@ -1,4 +1,4 @@
-//! Telling the person something.
+//! Desktop notifications.
 
 use std::time::Duration;
 
@@ -16,18 +16,18 @@ pub struct Notify {
 does!(Notify, Notify);
 
 impl Notify {
-    /// The shortest form: a line of text.
+    /// Send a notification containing only a summary.
     pub fn send(&self, summary: impl Into<String>) -> crate::effect::Effect {
         self.show(Notification::new(summary))
     }
 
-    /// A notification built up first, for one that needs more than a line.
+    /// Send a notification with additional fields.
     pub fn show(&self, notification: Notification) -> crate::effect::Effect {
         self.act(action::Kind::Notify(notification.into_action()))
     }
 }
 
-/// What to say, and how.
+/// Notification content and display options.
 #[derive(Debug, Clone, Default)]
 pub struct Notification {
     summary: String,
@@ -49,22 +49,15 @@ impl Notification {
         self
     }
 
-    /// A **freedesktop icon name**, resolved by the notification daemon
-    /// against the desktop's icon theme — `battery-caution`, `network-wired`.
-    ///
-    /// Not one of this shell's [`Glyph`] names, which look the same and are a
-    /// different set: `battery-quarter` is a glyph here and no icon theme
-    /// carries it, so passing one draws nothing at all. A string rather than
-    /// an enum because the set belongs to whichever icon theme is installed,
-    /// and Omega does not own it.
-    ///
-    /// [`Glyph`]: crate::ui::Glyph
+    /// Set a freedesktop icon name, such as `battery-caution` or `network-wired`.
+    /// The notification service resolves it using the desktop icon theme.
+    /// Omega [`Glyph`](crate::ui::Glyph) names are not icon-theme names.
     pub fn icon(mut self, icon: impl Into<String>) -> Self {
         self.icon = icon.into();
         self
     }
 
-    /// How long it stays up. Left unset, the notification daemon decides.
+    /// Request a display duration. If unset, the notification service chooses it.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self

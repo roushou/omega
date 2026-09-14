@@ -2,7 +2,7 @@
 
 The [architecture](architecture.md) describes the implemented contracts. The
 [desktop platform design](desktop-platform.md) and its
-[completed implementation plan](desktop-platform-plan.md) record its decisions
+[completed implementation plan](archive/desktop-platform-plan.md) record its decisions
 and validation. This file tracks remaining limitations and future work.
 
 ## Persistence and recovery

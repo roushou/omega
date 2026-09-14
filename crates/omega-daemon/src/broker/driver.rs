@@ -1,21 +1,7 @@
-//! Running one broker.
-//!
-//! The rules about holding a connection, written once rather than once per
-//! subsystem: open lazily and again after it goes; take the first reading at
-//! once; count a broker reporting only *after* a reading succeeds, so a
-//! cancelled wait asks again rather than waiting on a change whose state it
-//! already missed; drop the connection when what was being waited on closes.
-//!
-//! A failure is not fatal. A subsystem that goes away comes back — the user
-//! restarted PipeWire, the adapter was plugged in again — so the broker is
-//! asked again after a backoff rather than abandoned. The backoff resets on
-//! the first reading that works, so an outage an hour ago does not slow down
-//! the reading taken now.
-//!
-//! One thing stops a driver, and it is [`Shutdown`]. Everything else it waits
-//! on has to be able to mean "nothing, ever" without saying so by resolving:
-//! [`Broker::wake`] does it with `pending`, and [`Inbox`] is what makes the
-//! other arm of the same select obey the same rule.
+//! Drive one broker connection, reads, actions, and retries.
+//! Read immediately after connection; mark reporting only after a successful read.
+//! On failure, close and reconnect after backoff. Reset backoff after success.
+//! Only shutdown terminates the driver; inactive wait sources remain pending.
 
 use std::fmt;
 use std::ops::ControlFlow;
@@ -32,26 +18,12 @@ use crate::hub::Hub;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Backoff;
 
-/// The actions arriving for one broker.
-///
-/// It exists so that "no action will ever arrive" is not an answer. A
-/// `Receiver` whose senders are gone says it by resolving to `None` on every
-/// poll, and in a `select!` an arm that is always ready is not silence — it
-/// starves the arms beside it. [`Broker::wake`] already holds this rule on
-/// the other arm of the same select, where nothing to wait for is `pending`
-/// rather than a value; this holds it here.
+/// Broker action inbox. A closed channel remains pending so it cannot
+/// starve the other branches of the driver's select loop.
 struct Inbox(mpsc::Receiver<Request>);
 
 impl Inbox {
-    /// The next action to serve.
-    ///
-    /// Never resolves once the last sender is gone. A closed channel means
-    /// the brokerage routes nothing here — a broker that claimed no kinds, or
-    /// one outliving the brokerage — and neither is a reason to read or to
-    /// stop.
-    ///
-    /// Cancel-safe: `recv` is, and a closed channel stays closed, so a
-    /// dropped future leaves nothing behind.
+    /// Receive an action, remaining pending after channel closure. Cancellation-safe.
     async fn next(&mut self) -> Request {
         match self.0.recv().await {
             Some(request) => request,
@@ -60,11 +32,7 @@ impl Inbox {
     }
 }
 
-/// What the driver has with its broker.
-///
-/// The three states the connection rules describe. They were two booleans,
-/// `open` and `primed`, whose fourth combination — reporting with nothing
-/// open — meant nothing and was reachable.
+/// Broker connection and initial-reading state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Contact {
     /// Nothing open. Connect before anything else.
@@ -77,29 +45,18 @@ enum Contact {
 }
 
 impl Contact {
-    /// Wait until a reading is due.
-    ///
-    /// Cancel-safe, because [`Broker::wake`] is required to be: the driver
-    /// selects this against shutdown and the inbox, so the future is dropped
-    /// and remade around anything else that happens.
+    /// Wait for a reading trigger. Must preserve the cancellation safety of [`Broker::wake`].
     async fn due(self, broker: &mut dyn Broker) -> Result<(), BrokerError> {
         match self {
             Self::Primed => broker.wake().await,
             Self::Opened => Ok(()),
-            // Unreachable: `Driver::step` connects before it selects. Pending
-            // rather than a panic, because the only wrong answer here is a
-            // ready one — the same rule `Inbox` exists to hold.
+            // A disconnected broker must not make this select branch immediately ready.
             Self::Closed => std::future::pending().await,
         }
     }
 }
 
-/// What one turn of the driver does.
-///
-/// Closed, so no branch of the select can mean two things. It was
-/// `Option<Request>`, where `None` meant both "the broker woke, take a
-/// reading" and "no action can ever arrive" — and the second was reached on
-/// every poll by every broker that claims no actions.
+/// Driver events selected from reading, action, and shutdown sources.
 #[derive(Debug)]
 enum Turn {
     /// The daemon is stopping.
@@ -154,10 +111,7 @@ impl Driver {
         tracing::debug!(broker = self.broker.name(), "broker stopped");
     }
 
-    /// One transition. `Break` when the daemon is stopping.
-    ///
-    /// Every state change the driver makes is one of these, so a state it can
-    /// reach is one this reads.
+    /// Apply one driver transition. Return Break on shutdown.
     async fn step(&mut self) -> ControlFlow<()> {
         if self.contact == Contact::Closed {
             return self.open().await;
@@ -174,9 +128,7 @@ impl Driver {
     /// Wait for whichever comes first: the daemon stopping, an action to
     /// serve, or a reading falling due.
     async fn turn(&mut self) -> Turn {
-        // Destructured so the wait can borrow the broker while the inbox is
-        // borrowed beside it. Whichever arm loses is dropped, which is why
-        // both of them have to be cancel-safe.
+        // Both waits must be cancellation-safe: select drops the losing future.
         let Self {
             broker,
             inbox,
@@ -218,9 +170,7 @@ impl Driver {
         {
             Ok(patch) => {
                 self.backoff.reset();
-                // Only once a reading has worked: a read that failed or was
-                // cancelled leaves the broker asking again rather than
-                // waiting on a change it has already missed the state of.
+                // Do not wait for another change until the initial read succeeds.
                 self.contact = Contact::Primed;
                 if let Err(error) = self.hub.publish_state(patch) {
                     return self.pause(BrokerError::unreadable(error)).await;
@@ -289,15 +239,7 @@ impl Driver {
         }
     }
 
-    /// Wait out a failure, with the connection closed behind it.
-    ///
-    /// Every failure lands here, so "a broker that failed reopens before it
-    /// reads again" is one assignment rather than a pair of flags that three
-    /// call sites each have to remember to clear.
-    ///
-    /// The broker's name is attached here rather than carried in the error:
-    /// the driver knows which broker it is driving, and an error that named
-    /// itself would name whichever broker it was copied from.
+    /// Close the failed connection, clear readiness, and schedule retry backoff.
     async fn pause(&mut self, error: BrokerError) -> ControlFlow<()> {
         self.broker.disconnect();
         self.contact = Contact::Closed;
@@ -353,9 +295,7 @@ mod tests {
 
     use super::{Broker, Contact, Inbox, Request};
 
-    /// Long enough that a wait which resolves is a defect, not a slow test.
-    /// Under `start_paused` no wall clock passes: an idle runtime advances
-    /// straight to the deadline.
+    /// Paused-time tests advance directly to this deadline when the runtime is idle.
     const NEVER: Duration = Duration::from_secs(3600);
 
     /// A broker that takes every default: it holds nothing, reports nothing,
@@ -639,10 +579,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn a_closed_inbox_never_answers() {
-        // The whole reason the type exists. A bare `Receiver` answers `None`
-        // here on every poll, and the driver's select — which reaches the
-        // broker's own wait only if this arm does not — reads in a tight
-        // loop instead. Five of the twelve brokers claim no actions.
+        // A closed inbox must remain pending to avoid a busy loop.
         let (requests, inbox) = mpsc::channel(1);
         drop(requests);
         let mut inbox = Inbox(inbox);
@@ -673,8 +610,7 @@ mod tests {
     async fn only_a_reporting_broker_waits_before_reading() {
         let mut broker = Silent;
 
-        // Freshly opened: read at once rather than leave a widget blank
-        // until the subsystem happens to change.
+        // Read immediately after opening a connection.
         assert!(Contact::Opened.due(&mut broker).await.is_ok());
 
         // Reporting: the broker says when, and this one never does.
@@ -684,8 +620,7 @@ mod tests {
                 .is_err()
         );
 
-        // Closed is unreachable from `step`, and still says nothing rather
-        // than something wrong.
+        // Disconnected waits remain pending.
         assert!(
             timeout(NEVER, Contact::Closed.due(&mut broker))
                 .await

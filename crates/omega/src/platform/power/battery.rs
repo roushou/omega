@@ -1,13 +1,13 @@
-//! The battery.
+//! System battery state.
 
 crate::wiring::reading! {
-    /// The machine's battery.
+    /// System battery state.
     Battery: omega_proto::omega::BatteryState
 }
 
 use crate::units::{Percent, Remaining};
 
-/// The machine's battery, as a widget sees it.
+/// Read system battery charge and charging state.
 ///
 /// ```no_run
 /// # use omega::platform::power::Battery;
@@ -25,7 +25,7 @@ use crate::units::{Percent, Remaining};
 /// }
 /// ```
 impl Battery {
-    /// How full it is. Prints itself as `80%`.
+    /// Battery charge as a percentage.
     pub fn charge(&self) -> Percent {
         self.read()
             .map(|battery| Percent::of(battery.level))
@@ -36,7 +36,7 @@ impl Battery {
         self.read().is_some_and(|battery| battery.charging)
     }
 
-    /// How long until it is empty, or `None` while charging or unknown.
+    /// Estimated time until empty, or `None` while charging or when unknown.
     pub fn until_empty(&self) -> Option<Remaining> {
         let battery = self.read()?;
         if battery.charging {
@@ -46,7 +46,7 @@ impl Battery {
         }
     }
 
-    /// How long until it is full, or `None` while discharging or unknown.
+    /// Estimated time until full, or `None` while discharging or when unknown.
     pub fn until_full(&self) -> Option<Remaining> {
         let battery = self.read()?;
         if battery.charging {
@@ -56,7 +56,7 @@ impl Battery {
         }
     }
 
-    /// Whichever of the two applies right now — what a bar actually shows.
+    /// Estimated time until full while charging, or until empty otherwise.
     pub fn remaining(&self) -> Option<Remaining> {
         self.until_empty().or_else(|| self.until_full())
     }

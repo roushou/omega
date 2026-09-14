@@ -8,37 +8,10 @@ use tokio::time::{Interval, MissedTickBehavior};
 use omega_proto::omega::{StatePatch, action};
 use omega_proto::{ActionKind, SystemTopic};
 
-/// A subsystem, in both directions.
-///
-/// One broker owns the only connection to one subsystem: it projects that
-/// connection as topics and serves the actions that write to it.
-///
-/// # Connect, wake, read
-///
-/// A broker says how to do those three; the driver owns when, and holds the
-/// rules for all of them:
-///
-///  - open lazily, and again after the connection goes;
-///  - take the first reading at once rather than waiting for a change;
-///  - count a broker primed only *after* a reading succeeds, so a cancelled
-///    wait asks again instead of waiting on a change it has already missed;
-///  - drop the connection when whatever was being waited on closes.
-///
-/// The defaults are the taxonomy. Override nothing but [`act`] and this is a
-/// broker that only serves — `logind`, `desktop`. Override [`wake`] and
-/// [`read`] and it is polled — `procfs`, `backlight`. Override [`connect`]
-/// too and it holds something.
-///
-/// [`act`]: Self::act
-/// [`wake`]: Self::wake
-/// [`read`]: Self::read
-/// [`connect`]: Self::connect
-///
-/// [`topics`] and [`actions`] are static and declared whether or not the
-/// broker is connected: the daemon has to know what nothing covers.
-///
-/// [`topics`]: Self::topics
-/// [`actions`]: Self::actions
+/// Subsystem connection, reading, and action interface.
+/// Declare supported topics and actions independently of connection state.
+/// The daemon driver owns retries, shutdown, and initial reads; implementations
+/// own connection resources and subsystem conversion.
 #[async_trait]
 pub trait Broker: Send + 'static {
     /// For logs and `omega status`. Names the subsystem, not the topic —
@@ -55,14 +28,8 @@ pub trait Broker: Send + 'static {
         &[]
     }
 
-    /// Open whatever this broker holds.
-    ///
-    /// Called before the first reading, and again after [`wake`] or [`read`]
-    /// reports the connection gone. A broker with nothing to hold — the
-    /// clock, `/proc` — takes the default and does nothing.
-    ///
-    /// [`wake`]: Self::wake
-    /// [`read`]: Self::read
+    /// Open the subsystem connection before reads and after connection failures.
+    /// The default is a no-op for connectionless brokers.
     async fn connect(&mut self) -> Result<(), BrokerError> {
         Ok(())
     }
@@ -72,55 +39,27 @@ pub trait Broker: Send + 'static {
     /// must not block; reconnect always starts from a disconnected state.
     fn disconnect(&mut self) {}
 
-    /// Wait until there may be something new.
-    ///
-    /// A signal stream, an interval, or both. The default never returns,
-    /// which is right for a broker that only serves actions: the driver
-    /// selects on this and simply never wakes on that branch.
-    ///
-    /// **Must be cancel-safe.** The driver selects on it alongside shutdown
-    /// and incoming actions, so the future is dropped and remade around
-    /// anything else that happens. A `wake` that buffers a partial read
-    /// across awaits loses it.
-    ///
-    /// An `Err` means the thing being waited on is gone: the driver reopens
-    /// before the next reading.
+    /// Wait for a signal or polling interval. The default remains pending.
+    /// Must be cancellation-safe: retain partial input in the broker, not the future.
+    /// An error closes the connection and schedules reconnection.
     async fn wake(&mut self) -> Result<(), BrokerError> {
         std::future::pending().await
     }
 
-    /// Take a reading.
-    ///
-    /// The driver calls this once after connecting — a broker's first
-    /// reading is taken at once rather than waited for, or a bar is blank
-    /// until something moves — and once after every [`wake`].
-    ///
-    /// [`wake`]: Self::wake
+    /// Read after connection and after each successful wake.
     async fn read(&mut self) -> Result<StatePatch, BrokerError> {
         Ok(StatePatch::default())
     }
 
-    /// Serve one action, and report what it changed.
-    ///
-    /// A broker that just set the brightness knows the new value; making the
-    /// caller wait for the next poll to see it is a slider that lags its own
-    /// drag. Returning `None` means nothing observable changed.
-    ///
-    /// Only kinds this broker declared in [`actions`] reach it, so the
-    /// default is unreachable rather than a silent no-op.
-    ///
-    /// [`actions`]: Self::actions
+    /// Execute a declared action and return any resulting state patch.
+    /// Return `None` when no observable state changed.
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
         Err(BrokerError::Unserved(ActionKind::of(action)))
     }
 }
 
-/// A poll interval, built on first use.
-///
-/// A timer needs a runtime and a broker is constructed before there is one,
-/// so the interval cannot be made in `new`. Shared because every polled
-/// broker wants the same three lines, and one that set a different missed-tick
-/// behaviour by accident would drift under load instead of skipping.
+/// Lazy Tokio polling interval with missed ticks skipped.
+/// Construction must not require an active runtime.
 #[derive(Debug)]
 pub(crate) struct Cadence {
     every: Duration,
@@ -130,11 +69,7 @@ pub(crate) struct Cadence {
 }
 
 impl Cadence {
-    /// Every period, starting now.
-    ///
-    /// For a broker the clock drives: the first turn is immediate, so it
-    /// reports once before its interval has elapsed rather than leaving a
-    /// widget blank for it.
+    /// Create a polling interval with an immediate first tick.
     pub(crate) fn every(every: Duration) -> Self {
         Self {
             every,
@@ -143,12 +78,7 @@ impl Cadence {
         }
     }
 
-    /// Every period, starting one period from now.
-    ///
-    /// For a cadence that is a floor under signals rather than the thing
-    /// driving the broker. The reading has already been taken by the time
-    /// this is first awaited, so a turn that came at once would make the
-    /// broker report twice in a row and read as a hot loop.
+    /// Create a fallback interval whose first tick occurs after one period.
     pub(crate) fn after(every: Duration) -> Self {
         Self {
             every,
@@ -189,13 +119,8 @@ pub enum BrokerError {
     TooLarge,
     #[error("{0}")]
     Io(#[from] std::io::Error),
-    /// The subsystem is reachable but said something this broker cannot read,
-    /// or stopped saying anything.
-    ///
-    /// Which subsystem is not carried here. The driver knows which broker it
-    /// is driving and attaches the name when it logs; a broker that named
-    /// itself would name whichever broker it was copied from, and nothing
-    /// would catch it because the field is only ever printed.
+    /// Subsystem connection, parsing, or operation failure.
+    /// The driver adds broker identity when reporting errors.
     #[error("{0}")]
     Unreadable(String),
     /// Routed here by mistake: the kind is not one this broker declared.
@@ -204,7 +129,7 @@ pub enum BrokerError {
 }
 
 impl BrokerError {
-    /// Whatever a subsystem's own client said went wrong.
+    /// Underlying subsystem client error.
     pub fn unreadable(error: impl std::fmt::Display) -> Self {
         Self::Unreadable(error.to_string())
     }
@@ -216,12 +141,7 @@ impl BrokerError {
     }
 }
 
-/// Give a type a `Debug` that says only its name.
-///
-/// Every broker holds a connection whose parts do not implement `Debug` — a
-/// zbus `Proxy`, a message stream, a child process — and every broker needs
-/// `Debug` because the daemon holds it in a struct that derives it. Eight
-/// copies of the same four lines, and none of them had anything to say.
+/// Implement name-only Debug for brokers with non-Debug connection fields.
 macro_rules! opaque_debug {
     ($type:ident) => {
         impl std::fmt::Debug for $type {

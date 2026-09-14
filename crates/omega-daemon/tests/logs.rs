@@ -69,8 +69,7 @@ async fn a_units_output_survives_the_restart_that_follows_it() {
 
     supervisor.spawn(UnitSpec::new(UnitName::parse("noisy").unwrap(), &script).logged(log.clone()));
 
-    // The message is on disk after the process is gone, which is the whole
-    // point: `omega status` says it exited, the log says why.
+    // Unit logs must remain readable after process exit.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     let mut contents = String::new();
     while tokio::time::Instant::now() < deadline {
@@ -93,7 +92,7 @@ fn a_log_that_outgrows_its_cap_starts_over() {
     // A crash-looping unit writes the same thing forever.
     std::fs::write(log.path(), "x".repeat(UnitLog::MAX_BYTES as usize + 1)).unwrap();
 
-    // Opening for the next run starts it over rather than filling the disk.
+    // Truncate oversized logs at process restart.
     drop(log.open().unwrap());
     assert_eq!(std::fs::metadata(log.path()).unwrap().len(), 0);
 }

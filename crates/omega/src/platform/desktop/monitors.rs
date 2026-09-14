@@ -34,7 +34,7 @@ impl Monitor {
         }
     }
 
-    /// `eDP-1`.
+    /// Compositor output identifier, such as `eDP-1`.
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -51,13 +51,12 @@ impl Monitor {
         self.height
     }
 
-    /// Refresh rate in hertz. The wire carries millihertz, because 59.951 Hz
-    /// is a real mode and rounding it to 60 loses which mode it is.
+    /// Refresh rate in hertz.
     pub fn refresh_hz(&self) -> f64 {
         f64::from(self.refresh_mhz) / 1000.0
     }
 
-    /// Where its top-left corner sits in the compositor's layout.
+    /// Top-left position in compositor layout coordinates.
     pub fn position(&self) -> (i32, i32) {
         (self.x, self.y)
     }

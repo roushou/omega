@@ -1,12 +1,4 @@
-//! Keepalive.
-//!
-//! A peer that stops reading — deadlocked, stopped, or gone in a way TCP-less
-//! Unix sockets do not report — would otherwise hold its session and its slot
-//! forever. The daemon pings on an interval and closes the connection when
-//! nothing has come back for too long.
-//!
-//! The clock is tokio's, not the system's, so a test can move it: forty-five
-//! seconds of silence is an assertion rather than a wait.
+//! Session keepalives and silence deadlines using Tokio monotonic time.
 
 use std::time::Duration;
 

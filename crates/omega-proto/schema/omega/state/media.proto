@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package omega;
 
-// What the machine is playing, and how loudly.
+// Audio output and media playback state.
 
 message AudioState {
   double volume = 1;            // 0.0 .. 1.0
@@ -10,11 +10,7 @@ message AudioState {
   string default_sink = 3;
 }
 
-// What is playing, and where.
-//
-// Several players at once is normal — a browser tab and a music app — so this
-// is the list rather than one answer, and `active` says which a media key
-// would reach.
+// MPRIS player catalogue and active-player selection.
 message MediaState {
   repeated PlayerInfo players = 1;
 }
@@ -28,7 +24,7 @@ message PlayerInfo {
   string album = 6;
   uint64 length_us = 7;         // microseconds, as MPRIS counts them
 
-  // The one a media key reaches: whichever is playing, or the first there is.
+  // Whether this player is the automatic control target.
   bool active = 8;
   bool can_control = 9;
   bool can_play = 10;
@@ -36,10 +32,7 @@ message PlayerInfo {
   bool can_go_next = 12;
   bool can_go_previous = 13;
 
-  // Position is deliberately absent. MPRIS does not report it changing — by
-  // its own spec — so it would have to be polled, and a field that moved every
-  // tick would be a new revision every tick. Last-value-wins only helps when
-  // the value is actually the same.
+  // Playback position is not published; this topic carries metadata and playback status.
 }
 
 enum Playback {

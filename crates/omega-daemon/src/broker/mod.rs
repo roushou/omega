@@ -1,13 +1,5 @@
-//! Running brokers, and routing actions to them.
-//!
-//! A broker reports changes and serves actions. This is the half that decides
-//! which broker serves what and hands each one to a driver; when to ask,
-//! and what to do with a failure, is the driver's.
-//!
-//! A broker owns its connection, so nothing else may touch it: an action is a
-//! message to the task that holds it, not a lock taken around it. That is
-//! what keeps a broker blocked on a thirty-second signal from blocking the
-//! volume key.
+//! Route subsystem actions to broker-owned driver tasks.
+//! Connections are accessed only by their driver; requests enter through bounded queues.
 
 mod driver;
 
@@ -36,10 +28,7 @@ struct Request {
     _bytes: OwnedSemaphorePermit,
 }
 
-/// The brokers a daemon is running.
-///
-/// A cloneable handle, like [`Hub`] and the unit table: the dispatcher needs
-/// to reach it per connection, and what it holds is shared by construction.
+/// Shared broker handles and action routing for daemon sessions.
 #[derive(Debug, Clone)]
 pub struct Brokerage {
     inner: Arc<Inner>,
@@ -57,9 +46,7 @@ struct Inner {
 }
 
 impl Brokerage {
-    /// How many actions may be queued for one broker before admission fails.
-    /// Small on purpose: a broker that cannot keep up should make the caller
-    /// feel it rather than build a backlog of stale brightness steps.
+    /// Maximum queued actions per broker before admission is refused.
     const QUEUE: usize = 8;
     const BYTE_LIMIT: usize = 8 * 1024 * 1024;
     const ACTION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -76,21 +63,14 @@ impl Brokerage {
         }
     }
 
-    /// Start a broker: its topics are published into the hub, and the kinds
-    /// it declared are routed to it.
-    ///
-    /// A broker that claims no kinds is routed nothing, so no sender outlives
-    /// this call and its inbox is closed before it takes its first reading.
-    /// That is a broker with nothing to serve, not a broker with nothing to
-    /// do, and holding those apart is the driver's inbox's whole job.
+    /// Start a driver and register its declared action routes.
+    /// Brokers with no actions receive a closed inbox that remains pending.
     pub fn add(&self, broker: Box<dyn Broker>) {
         let (requests, inbox) = mpsc::channel(Self::QUEUE);
         {
             let mut routes = self.inner.routes.lock().unwrap_or_else(|e| e.into_inner());
             for kind in broker.actions() {
-                // Two brokers claiming one kind would make the route depend
-                // on registration order, which is not a thing to debug at
-                // three in the morning. `omega-platform` has a test.
+                // Each action kind must have exactly one broker; coverage tests enforce uniqueness.
                 debug_assert!(
                     !routes.contains_key(kind),
                     "{} is claimed by more than one broker",
@@ -117,11 +97,7 @@ impl Brokerage {
             }));
     }
 
-    /// Ask whichever broker serves this kind to perform it.
-    ///
-    /// `None` means no broker claims it, which is not the same as a broker
-    /// refusing: the daemon answers the two differently, so a capability is
-    /// never granted for something nothing can do.
+    /// Dispatch to the broker for this action kind. `None` means no broker claims it.
     pub async fn act(&self, action: &action::Kind) -> Option<Result<(), BrokerError>> {
         let route = self
             .inner
@@ -158,10 +134,7 @@ impl Brokerage {
         })
     }
 
-    /// Wait for every broker to notice the shutdown and stop.
-    ///
-    /// They are asked by the same `Shutdown` everything else selects on, so
-    /// the driver drops an outstanding operation before releasing its broker.
+    /// Wait for broker drivers to observe shutdown and drop pending operations.
     pub async fn stop(&self) {
         let handles: Vec<_> =
             std::mem::take(&mut *self.inner.running.lock().unwrap_or_else(|e| e.into_inner()));

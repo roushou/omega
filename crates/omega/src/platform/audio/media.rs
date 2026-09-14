@@ -1,4 +1,4 @@
-//! What is playing.
+//! Media player metadata and playback control.
 
 use crate::units::Remaining;
 
@@ -10,7 +10,7 @@ use omega_proto::{
 };
 
 crate::wiring::reading! {
-    /// What is playing, and where.
+    /// Current media players and playback state.
     Media: omega_proto::omega::MediaState
 }
 
@@ -38,8 +38,7 @@ impl Player {
     fn of(player: omega_proto::omega::PlayerInfo) -> Self {
         Self {
             playback: Playback::try_from(player.playback).unwrap_or(Playback::Unspecified),
-            // Microseconds on the wire, because that is how MPRIS counts.
-            // Nowhere above this should have to know that.
+            // Convert MPRIS microseconds to the SDK duration type.
             length: match player.length_us {
                 0 => None,
                 us => Some(Remaining::of(std::time::Duration::from_micros(us))),
@@ -63,7 +62,7 @@ impl Player {
         &self.id
     }
 
-    /// What the player calls itself: `Chromium`.
+    /// Player display name, such as `Chromium`.
     pub fn identity(&self) -> &str {
         &self.identity
     }
@@ -72,7 +71,7 @@ impl Player {
         &self.title
     }
 
-    /// Every artist, joined.
+    /// Artist names joined with a comma and space.
     pub fn artist(&self) -> &str {
         &self.artist
     }
@@ -110,12 +109,12 @@ impl Player {
         self.can_control && self.can_go_previous
     }
 
-    /// How long the track runs. Prints itself as `3m`.
+    /// Track duration, or `None` if the player does not report it.
     pub fn length(&self) -> Option<Remaining> {
         self.length
     }
 
-    /// Whether this is the one the machine considers current.
+    /// Whether the daemon has selected this player as active.
     pub fn is_active(&self) -> bool {
         self.active
     }
@@ -128,8 +127,7 @@ impl Media {
             .unwrap_or_default()
     }
 
-    /// The one a bar slot should show: whichever is marked active, else
-    /// whichever is playing.
+    /// Return the active player, falling back to the first playing player.
     pub fn active(&self) -> Option<Player> {
         let players = self.players();
         players

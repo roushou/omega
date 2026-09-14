@@ -3,11 +3,7 @@ use std::path::{Path, PathBuf};
 use omega_host::{AtomicFile, Layout};
 use omega_proto::omega::StateDocument;
 
-/// The state document on disk.
-///
-/// Canonical protobuf JSON, not TOML: the document is generated, machine-read,
-/// and committed for the bootstrap path, so its text form should be the one
-/// the schema already defines rather than a second mapping to keep honest.
+/// Desired-state document storage using canonical protobuf JSON.
 #[derive(Debug, Clone)]
 pub struct DocumentFile {
     path: PathBuf,
@@ -46,9 +42,8 @@ impl DocumentFile {
         })
     }
 
-    /// The document, or an empty one when the config declares none. A config
-    /// without a `system/` crate is a valid config: every built unit runs and
-    /// nothing else is claimed.
+    /// Read the document, or return an empty document if none exists.
+    /// An empty document leaves built plugins enabled with default settings.
     pub fn read_or_default(&self) -> Result<StateDocument, DocumentError> {
         match self.read() {
             Err(e) if e.is_not_found() => Ok(StateDocument::default()),

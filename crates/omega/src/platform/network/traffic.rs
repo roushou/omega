@@ -1,13 +1,13 @@
-//! How much is moving over the network.
+//! Network interface traffic counters and rates.
 
 crate::wiring::reading! {
-    /// How much is moving over each interface.
+    /// Traffic counters and rates for each network interface.
     Throughput: omega_proto::omega::ThroughputState
 }
 
 use crate::units::{Bytes, Rate};
 
-/// One interface, and what is going over it right now.
+/// Traffic counters and transfer rates for one network interface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Link {
     interface: String,
@@ -28,22 +28,22 @@ impl Link {
         }
     }
 
-    /// `wlan0`, `lo`. Its identity, so a list keys rows by it.
+    /// Interface name, such as `wlan0` or `lo`. Suitable for item keys.
     pub fn interface(&self) -> &str {
         &self.interface
     }
 
-    /// Coming in. Prints itself as `1.2 MiB/s`.
+    /// Incoming transfer rate in bytes per second.
     pub fn down(&self) -> Rate {
         self.rx
     }
 
-    /// Going out.
+    /// Outgoing transfer rate in bytes per second.
     pub fn up(&self) -> Rate {
         self.tx
     }
 
-    /// Since boot, for a widget that wants a total rather than a rate.
+    /// Total bytes received since the interface counters were initialized.
     pub fn received(&self) -> Bytes {
         self.rx_total
     }
@@ -52,8 +52,7 @@ impl Link {
         self.tx_total
     }
 
-    /// The loopback, which is the machine talking to itself and is almost
-    /// never what a bar means by "the network".
+    /// Whether this is the loopback interface.
     pub fn is_loopback(&self) -> bool {
         self.interface == "lo"
     }
@@ -74,8 +73,7 @@ impl Throughput {
             .find(|link| link.interface == interface)
     }
 
-    /// Everything that is not the loopback, added up — what a bar slot draws
-    /// when it just wants to say how busy the network is.
+    /// Return aggregate incoming and outgoing rates, excluding loopback.
     pub fn total(&self) -> (Rate, Rate) {
         self.links().iter().filter(|link| !link.is_loopback()).fold(
             (Rate::ZERO, Rate::ZERO),

@@ -1,12 +1,5 @@
-//! What the machine is doing with itself, from `/proc`.
-//!
-//! Four files, no dependency, and every one of them a fixed text format the
-//! kernel has not changed in twenty years — so the whole translation is
-//! testable against a captured string, and there is no connection to hold.
-//!
-//! Polled, because `/proc` has nothing to signal with. The interval is the
-//! resolution: a system monitor that updated twice a second would be a system
-//! monitor measuring itself.
+//! Parse CPU, memory, uptime, and network counters from `/proc`.
+//! Periodic sampling provides utilization and transfer-rate intervals.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -22,10 +15,7 @@ mod disks;
 use disks::DiskSampler;
 pub use disks::{Mounted, Mounts};
 
-/// One line of `/proc/stat`: how many jiffies a CPU spent in each state.
-///
-/// Meaningless alone. Utilisation is the *change* between two samples, which
-/// is why a first reading reports nothing and the broker keeps the last one.
+/// CPU time counters. Utilization requires a preceding sample.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Jiffies {
     pub total: u64,
@@ -33,10 +23,7 @@ pub struct Jiffies {
 }
 
 impl Jiffies {
-    /// What fraction of the time between two samples was not idle.
-    ///
-    /// Whole percent: that is the resolution anything draws it at, and a
-    /// value carrying decimals would be a new revision on every reading.
+    /// Compute non-idle utilization between samples, rounded to whole percent.
     pub fn between(before: Self, after: Self) -> u32 {
         if after.total < before.total || after.idle < before.idle {
             return 0;
@@ -52,10 +39,7 @@ impl Jiffies {
     }
 }
 
-/// One interface's byte counters, as `/proc/net/dev` reports them.
-///
-/// Meaningless alone, like [`Jiffies`]: a rate is the change between two
-/// samples over the time between them.
+/// Interface byte counters used to derive rates between samples.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Counters {
     pub rx: u64,
@@ -63,11 +47,7 @@ pub struct Counters {
 }
 
 impl Counters {
-    /// Bytes per second between two samples.
-    ///
-    /// Saturating, and zero when the counters went backwards — an interface
-    /// that went away and came back starts from nought, and a widget should
-    /// draw a gap rather than a spike of several gigabytes.
+    /// Compute bytes per second; counter resets produce zero instead of underflow.
     pub fn between(before: Self, after: Self, seconds: u64) -> (u64, u64) {
         if seconds == 0 || after.rx < before.rx || after.tx < before.tx {
             return (0, 0);
@@ -226,9 +206,7 @@ impl Memory {
 pub struct Load;
 
 impl Load {
-    /// The three averages. Absent or unparseable reads as zero rather than
-    /// failing the whole reading — a load average is not worth losing the
-    /// memory figures over.
+    /// Parse load averages; missing or invalid values default to zero.
     pub fn parse(loadavg: &str) -> (f64, f64, f64) {
         let mut fields = loadavg
             .split_whitespace()
@@ -240,8 +218,7 @@ impl Load {
         )
     }
 
-    /// Whole seconds. `/proc/uptime` carries hundredths, and a bar showing
-    /// "up 3 days" does not.
+    /// Truncate uptime to whole seconds.
     pub fn uptime(uptime: &str) -> u64 {
         uptime
             .split_whitespace()
@@ -271,9 +248,7 @@ impl Default for Procfs {
 }
 
 impl Procfs {
-    /// How often the machine is measured. The interval *is* the resolution of
-    /// the CPU figure, and a monitor updating twice a second would mostly be
-    /// measuring itself.
+    /// Sampling interval for resource utilization and network rates.
     pub const INTERVAL: Duration = Duration::from_secs(2);
 
     /// Point the broker at another tree — a fixture, or a container whose
@@ -292,11 +267,7 @@ impl Procfs {
         }
     }
 
-    /// What is moving over each interface, per second.
-    ///
-    /// Zero on the first pass: there is nothing to subtract from yet, and a
-    /// rate invented from a single counter would be everything since boot
-    /// divided by two seconds.
+    /// Compute per-interface rates. The first sample reports zero.
     pub fn throughput(&mut self) -> ThroughputState {
         let now = Interfaces::parse(&self.file("net/dev"));
         let seconds = Self::INTERVAL.as_secs();

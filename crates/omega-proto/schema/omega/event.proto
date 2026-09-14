@@ -2,17 +2,13 @@ syntax = "proto3";
 
 package omega;
 
-// The shapes an event carries: a display, a window. Both belong to state —
-// an event says one changed, and says it in the same words.
+// Shared display and window payloads used by state topics and events.
 import "omega/state/display.proto";
 import "omega/state/session.proto";
 import "omega/value.proto";
 
-// Events are the imperative inputs of the runtime plane. EventKind is the
-// closed taxonomy; the oneof carries the typed detail. Policy units subscribe
-// by EventKind in their manifest — never self-declared at runtime.
-//
-// Keep EventKind values in sync with the detail oneof cases below.
+// State-transition and custom events delivered to declared subscribers.
+// EventKind identifies the payload in the detail oneof.
 
 message Event {
   uint64 id = 1;
@@ -71,7 +67,7 @@ message WindowEvent {
 }
 
 message PowerEvent {
-  // kind carries lid/ac/battery/suspend; no extra context in v1.
+  // Power-transition identity is carried by kind; no additional payload.
 }
 
 message NotificationEvent {

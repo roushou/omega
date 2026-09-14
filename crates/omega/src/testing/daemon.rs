@@ -1,4 +1,4 @@
-//! A daemon that is really a test.
+//! Protocol-level plugin test harness.
 
 use std::collections::HashMap;
 
@@ -14,15 +14,9 @@ use crate::plugin::Plugin;
 use crate::testing::drawn::Drawn;
 use crate::testing::state::State;
 
-/// A daemon that is really a test.
-///
-/// It speaks the daemon's half of the protocol over a socket pair and does
-/// nothing it is not asked to: it refuses nothing, grants everything, and
-/// publishes exactly the state it is handed. The point is to let a plugin's
-/// own loop run so a test can watch what comes out of it.
-///
-/// Protocol violations panic: a plugin that answers the wrong frame has
-/// failed the test.
+/// Run a plugin against an in-process daemon over a socket pair.
+/// The harness grants declared capabilities and publishes supplied fixtures.
+/// Protocol violations panic and fail the test.
 #[derive(Debug)]
 pub struct TestDaemon {
     transport: Transport<UnixStream>,
@@ -56,11 +50,8 @@ impl TestDaemon {
         self.welcome_configured(state, &Values::new()).await
     }
 
-    /// The same, for a unit the document configured.
-    ///
-    /// These are the unit's settings, which every surface is built from — the
-    /// only way a command or a reaction is configured at all, since neither
-    /// is ever placed anywhere to be configured there.
+    /// Complete the handshake with explicit unit settings.
+    /// Surface placement settings can be supplied separately during rendering.
     pub async fn welcome_configured(&mut self, state: &State, settings: &Values) -> Hello {
         let hello = match self.next().await.body {
             Some(frame::Body::Hello(hello)) => hello,
@@ -88,7 +79,7 @@ impl TestDaemon {
         hello
     }
 
-    /// Move the state. A widget re-renders on its own.
+    /// Publish state and trigger dependent surface updates.
     pub async fn publish(&mut self, state: &State) {
         let mut patch = state.patch();
         for topic in &mut patch.topics {
@@ -102,8 +93,7 @@ impl TestDaemon {
         .await;
     }
 
-    /// Hand a widget an instance of its surface, as a document would, and
-    /// take the view it answers with.
+    /// Request a surface instance and return its initial view.
     pub async fn render(
         &mut self,
         surface: &str,
@@ -130,8 +120,7 @@ impl TestDaemon {
         }
     }
 
-    /// Call a command, and hand back what it answered — including the message
-    /// it refused with, which is worth asserting on.
+    /// Invoke a command and return its outcome, including any refusal.
     pub async fn call(
         &mut self,
         command: &str,

@@ -1,12 +1,4 @@
-//! `omega init`: make this machine run omega.
-//!
-//! Everything a machine needs and nothing about any particular plugin: the
-//! workspace a config lives in, the service that keeps the daemon running,
-//! and the renderer that draws what plugins publish. Scaffolding a plugin is
-//! `omega new`.
-//!
-//! Each step is the same code the standalone command runs, reported on its
-//! own line, so what this did stays visible and individually re-runnable.
+//! Initialize the config workspace, daemon service, and renderer.
 
 use crate::checkout::{CheckoutLink, SourceTree};
 use crate::ui::{Paint, Step, Ui};

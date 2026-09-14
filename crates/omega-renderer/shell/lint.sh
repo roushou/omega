@@ -1,31 +1,8 @@
 #!/usr/bin/env sh
-# Lint the QML this crate ships.
-#
-# The renderer is the one part of Omega no compiler sees. `cargo test` pins the
-# props the QML reads and the file list it carries; nothing reads the QML
-# itself. Five bugs reached the tree that way — a binding loop, two properties
-# shadowing ones `Item` already has, a leftover signal, and a `var` shadowing
-# the model it was reading, which broke a list's whole reconcile.
-#
-# **What we fail on is a list, not what we ignore.** qmllint's flags differ
-# across Qt minors — the first version of this script passed `--max-warnings`
-# and two category switches that the runner's Qt had never heard of, so the
-# job failed on the job rather than on the QML. Naming the categories that
-# matter works on any version: one that does not emit a category simply never
-# matches, and one that emits a category we have not listed is noise we were
-# going to ignore anyway.
-#
-# Three categories are deliberately absent, and every one of them fires on
-# something legal:
-#
-#   import, unresolved-type, inheritance-cycle
-#       Omarchy's `qs.Ui` and `qs.Commons` are mapped by Quickshell itself,
-#       not by an import path qmllint can be given. Everything reached through
-#       them reads as missing, including our own base types.
-#   unqualified, missing-property
-#       A delegate loaded by url reaching a file-scope id, and a property read
-#       through `Loader.item`, which is a QObject until it loads. Both are the
-#       shape this renderer is built on.
+# Lint shipped QML using diagnostic categories supported across Qt versions.
+# Host-provided qs imports and dynamic Loader properties cannot be resolved here.
+# Import resolution, unqualified access, deprecation, and unused-import warnings
+# are excluded from the fatal categories below.
 set -eu
 
 lint=${QMLLINT:-$(command -v qmllint || echo /usr/lib/qt6/bin/qmllint)}
@@ -34,17 +11,11 @@ if [ ! -x "$lint" ]; then
     exit 127
 fi
 
-# The problems worth a red build: anything that is a mistake rather than a
-# thing this shell's dynamic loading makes unprovable.
-# Mistakes, not opinions. `deprecated` and `unused-imports` are left out
-# deliberately: what a given Qt calls deprecated moves between minors, and a
-# red build that depends on which Ubuntu the runner is on teaches people to
-# ignore the build.
+# Treat structural and type errors as failures.
 fatal='\[(syntax|var-used-before-declaration|required|incompatible-type|duplicate-property-binding|duplicated-name|duplicate-import|duplicate-enum-entries|duplicate-inline-component)\]'
 
 found=$(find "$(dirname "$0")/core" "$(dirname "$0")/fixtures" "$(dirname "$0")/desktop" "$(dirname "$0")/preview" "$(dirname "$0")/shell.qml" "$(dirname "$0")/../../omega-omarchy/shell" -name '*.qml' | sort)
-# qmllint's own exit code is not the signal: it varies by version, and it
-# counts warnings we have chosen not to care about.
+# Filter diagnostics explicitly; qmllint exit codes include non-fatal categories.
 report=$(printf '%s\n' "$found" | xargs "$lint" 2>&1 || true)
 
 if printf '%s\n' "$report" | grep -qE "$fatal"; then

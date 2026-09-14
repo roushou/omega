@@ -1,22 +1,12 @@
-//! How often the daemon does something on its own.
-//!
-//! One grammar, read by both ends: the config plane writes a cadence into a
-//! document and the daemon reads it back out, through this parser.
-//!
-//! The grammar is closed and small: `every <n><s|m|h|d>`. Cron is not in it,
-//! and [`Cadence::parse`] refuses `"0 9 * * *"` by name rather than accepting
-//! a schedule that would never fire.
+//! Schedule cadence parsing and formatting.
+//! Supported grammar: `every <n><s|m|h|d>`. Cron expressions are rejected.
 
 use std::fmt;
 use std::time::Duration;
 
 use crate::omega::{Action, Event, Schedule, event};
 
-/// How often a schedule fires.
-///
-/// A duration, not a wall-clock time: "every ten minutes" is answerable
-/// without a timezone, and "at nine" is not. A schedule that must land on a
-/// particular hour builds on the `time` topic instead.
+/// A recurring elapsed-time interval. Calendar and cron scheduling are unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Cadence(Duration);
 
@@ -24,18 +14,10 @@ impl Cadence {
     /// The word every cadence starts with.
     const EVERY: &'static str = "every";
 
-    /// The shortest period a schedule may declare.
-    ///
-    /// A floor rather than a guess: below a second the interval is shorter
-    /// than the work it triggers, and a mistyped `every 0s` would spin the
-    /// daemon against a unit until somebody noticed.
+    /// Minimum schedule period: one second.
     pub const FLOOR: Duration = Duration::from_secs(1);
 
-    /// The units a period may be written in, longest first — which is also
-    /// the order [`Display`] tries them in, so a period is written in the
-    /// largest unit that divides it exactly.
-    ///
-    /// [`Display`]: fmt::Display
+    /// Supported time units, ordered largest first for exact formatting.
     const UNITS: &'static [(char, u64)] = &[('d', 86_400), ('h', 3_600), ('m', 60), ('s', 1)];
 
     /// The cadence of a period, rounded to whole seconds.
@@ -50,27 +32,35 @@ impl Cadence {
         self.0
     }
 
-    /// Named periods, for a config to declare a cadence without writing one
-    /// out as a string and without handling an error it cannot hit.
+    /// Construct a cadence in seconds.
     ///
-    /// Each panics on a count of nought. That is a mistake in a config rather
-    /// than a cadence, and the config plane is a program that runs at build
-    /// time with no side effects — so it fails the build, with a message,
-    /// and never reaches a machine. The parser still refuses `every 0s`,
-    /// because a document can also arrive from somewhere that was not
-    /// compiled.
+    /// # Panics
+    /// Panics if the count is zero.
+    /// Use [`Cadence::parse`] for fallible string input.
     pub fn seconds(count: u32) -> Self {
         Self::counted(count, 1)
     }
 
+    /// Construct a cadence in minutes.
+    ///
+    /// # Panics
+    /// Panics if the count is zero.
     pub fn minutes(count: u32) -> Self {
         Self::counted(count, 60)
     }
 
+    /// Construct a cadence in hours.
+    ///
+    /// # Panics
+    /// Panics if the count is zero.
     pub fn hours(count: u32) -> Self {
         Self::counted(count, 3_600)
     }
 
+    /// Construct a cadence in days.
+    ///
+    /// # Panics
+    /// Panics if the count is zero.
     pub fn days(count: u32) -> Self {
         Self::counted(count, 86_400)
     }
@@ -80,7 +70,7 @@ impl Cadence {
         Self(Duration::from_secs(u64::from(count) * seconds))
     }
 
-    /// Read a cadence as a document writes it.
+    /// Parse `every <n><s|m|h|d>`, rejecting zero, overflow, and unsupported syntax.
     pub fn parse(cadence: &str) -> Result<Self, CadenceError> {
         let cadence = cadence.trim();
 
@@ -105,9 +95,7 @@ impl Cadence {
             .parse()
             .map_err(|_| CadenceError::NoPeriod(cadence.to_string()))?;
 
-        // A count large enough to overflow is not a cadence anybody meant,
-        // and saturating it into "every 584 billion years" would hide the
-        // typo behind a schedule that never fires.
+        // Reject duration overflow at parsing.
         let period = count
             .checked_mul(*seconds)
             .map(Duration::from_secs)
@@ -118,8 +106,7 @@ impl Cadence {
 }
 
 impl fmt::Display for Cadence {
-    /// In the largest unit that divides the period exactly, so a document
-    /// says `every 10m` rather than `every 600s`.
+    /// Format with the largest unit that divides the period exactly.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let seconds = self.0.as_secs();
         let (unit, size) = Self::UNITS
@@ -156,11 +143,7 @@ impl Schedule {
         }
     }
 
-    /// A schedule that only announces itself.
-    ///
-    /// What a unit reacts to when the thing to be done is more than one
-    /// action names — the document still owns how often, which is the part
-    /// that belongs to whoever runs the machine rather than to the plugin.
+    /// Construct a schedule that emits events without executing an action.
     pub fn announcing(id: impl Into<String>, cadence: Cadence) -> Self {
         Self {
             id: id.into(),
@@ -176,12 +159,7 @@ impl Schedule {
 }
 
 impl Event {
-    /// The schedule that fired, if this event is one firing.
-    ///
-    /// An accessor rather than a match on the oneof at every call site: a
-    /// reaction registered for `EVENT_SCHEDULE_FIRED` hears *every* schedule,
-    /// so telling them apart by id is the first thing it does, and it should
-    /// not have to reach into the wire types to do it.
+    /// Return the schedule payload if this is a schedule-fired event.
     pub fn schedule(&self) -> Option<&str> {
         match self.detail.as_ref()? {
             event::Detail::Schedule(fired) => Some(fired.schedule_id.as_str()),
@@ -204,9 +182,6 @@ mod tests {
 
     #[test]
     fn a_period_is_written_in_the_largest_unit_that_divides_it() {
-        // What the config plane writes when it is handed a Duration: 600
-        // seconds is ten minutes, and a document saying so is one a person
-        // can check against what they meant.
         let ten_minutes = Cadence::of(Duration::from_secs(600)).unwrap();
         assert_eq!(ten_minutes.to_string(), "every 10m");
 
@@ -217,8 +192,7 @@ mod tests {
 
     #[test]
     fn cron_is_refused_by_name() {
-        // The failure this whole grammar exists to prevent: a schedule that
-        // parses as something and fires as nothing.
+        // Reject unsupported schedule grammar.
         let err = Cadence::parse("0 9 * * *").unwrap_err();
         assert!(err.to_string().contains("cron is not read"), "{err}");
     }
@@ -241,8 +215,7 @@ mod tests {
 
     #[test]
     fn a_unit_this_grammar_does_not_know_is_refused() {
-        // Weeks and years are not in the table. Reading `every 2w` as two
-        // seconds would be the worst of both.
+        // Reject unsupported duration units.
         assert!(matches!(
             Cadence::parse("every 2w"),
             Err(CadenceError::UnknownUnit { unit: 'w', .. })

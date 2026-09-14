@@ -1,7 +1,4 @@
-//! Reading `/proc`.
-//!
-//! Fixed text formats, so the whole translation is testable against captured
-//! strings — including the part that needs two readings to mean anything.
+//! procfs parsing and counter-delta tests using captured input.
 
 use omega_platform::procfs::{Counters, Cpu, Interfaces, Jiffies, Load, Memory, Mounts};
 use omega_proto::omega::Mount;
@@ -40,8 +37,7 @@ fn waiting_on_a_disk_is_not_doing_work() {
 
 #[test]
 fn utilisation_is_the_change_between_two_readings() {
-    // Jiffies are counters. A single reading says how busy the machine has
-    // been since boot, which is not what anybody means by CPU usage.
+    // CPU utilization requires the delta between two counter samples.
     let before = Jiffies {
         total: 1000,
         idle: 800,
@@ -74,9 +70,7 @@ fn counters_going_backwards_are_not_a_negative_percentage() {
 
 #[test]
 fn kibibytes_become_bytes() {
-    // Every value in `/proc/meminfo` is in kibibytes whatever its suffix
-    // says, and reporting the raw number would be off by a factor of a
-    // thousand.
+    // Convert meminfo values from kibibytes to bytes.
     let memory = Memory::parse(MEMINFO).unwrap();
 
     assert_eq!(memory.total, 11_995_036 * 1024);
@@ -96,8 +90,7 @@ fn the_load_averages_are_the_first_three_numbers() {
     let (one, five, fifteen) = Load::parse("1.84 1.95 1.91 1/950 1666027");
     assert_eq!((one, five, fifteen), (1.84, 1.95, 1.91));
 
-    // A kernel that does not carry the file reads as no load rather than
-    // losing the memory figures alongside it.
+    // Missing load averages must not discard other resource readings.
     assert_eq!(Load::parse(""), (0.0, 0.0, 0.0));
 }
 
@@ -120,8 +113,7 @@ cgroup2 /sys/fs/cgroup cgroup2 rw 0 0";
 
 #[test]
 fn the_kernels_own_furniture_is_not_a_disk() {
-    // A machine has forty-odd mounts and four of them are disks. Listing
-    // `cgroup2` and eleven `tmpfs` buries the one anybody cares about.
+    // Exclude virtual filesystems from disk usage.
     let mounted = Mounts::parse(MOUNTS);
     let paths: Vec<&str> = mounted.iter().map(|m| m.path.as_str()).collect();
 
@@ -172,9 +164,7 @@ fn it_reads_the_machine_it_is_running_on() {
 
 #[test]
 fn one_filesystem_at_three_paths_is_one_disk() {
-    // A btrfs root is often also `/home` and `/var/log`. They share the
-    // space, so reporting each is reporting the same disk three times with
-    // the same numbers.
+    // Deduplicate shared filesystem mounts before reporting usage.
     let measured = vec![
         Mount {
             path: "/var/log".into(),
@@ -202,15 +192,13 @@ fn one_filesystem_at_three_paths_is_one_disk() {
     let kept = Mounts::by_device(measured);
     let paths: Vec<&str> = kept.iter().map(|m| m.path.as_str()).collect();
 
-    // The shortest path is the one a person means, and the result is ordered
-    // by where things are mounted rather than by device name.
+    // Deduplicate at the shortest mount point, then sort by path.
     assert_eq!(paths, vec!["/", "/boot"]);
 }
 
 #[test]
 fn a_rate_is_the_change_between_two_samples() {
-    // The first sample has nothing to subtract from, so it reports nothing
-    // rather than everything since boot divided by the interval.
+    // Initial counters cannot establish a transfer rate.
     let before = Counters { rx: 1_000, tx: 500 };
     let after = Counters {
         rx: 3_000,
@@ -223,8 +211,7 @@ fn a_rate_is_the_change_between_two_samples() {
 
 #[test]
 fn counters_that_went_backwards_are_a_gap_not_a_spike() {
-    // An interface that went away and came back starts from nought. Drawing
-    // the difference would be a graph reporting several gigabytes a second.
+    // Counter resets must not produce underflow spikes.
     let before = Counters {
         rx: 9_000_000,
         tx: 9_000_000,

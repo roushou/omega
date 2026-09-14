@@ -1,10 +1,6 @@
-//! What omega carries for the shell to draw with, and how it gets there.
-//!
-//! The files travel *inside* the binary. A renderer and the daemon are one
-//! protocol in two halves and have to be the same version, so the copy a
-//! binary installs is by construction the one its daemon speaks to — a
-//! stale copy stops being a mistake to be careful about and becomes a state
-//! that cannot be reached.
+//! Embedded Omarchy renderer assets and installation.
+//! Installation writes the files carried by this binary; status compares installed
+//! versions and contents with those embedded files.
 
 use std::path::{Path, PathBuf};
 
@@ -28,11 +24,8 @@ pub struct Renderer {
     pub files: &'static [Asset],
 }
 
-/// Declare a renderer from files read out of the tree at compile time, so the
-/// list and the contents cannot disagree. The path is used twice: relative to
-/// this file for the compiler, relative to a checkout for `--link`. It must
-/// stay inside this crate — cargo packages a crate's own directory and
-/// nothing above it.
+/// Embed assets using crate-local paths so packaged builds retain every file.
+/// Checkout-relative paths also support linked installations.
 macro_rules! renderer {
     ($id:literal, $dir:literal, [$($name:literal),* $(,)?]) => {
         Renderer {
@@ -48,8 +41,7 @@ macro_rules! renderer {
 }
 
 impl Renderer {
-    /// The version every renderer carries, which is omega's own: what they
-    /// read is what this binary writes.
+    /// Version required by the embedded renderer manifest.
     pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     /// Draws the view tree a unit publishes, as a widget in the bar.
@@ -68,10 +60,7 @@ impl Renderer {
         self.files.iter().chain(Core::FILES)
     }
 
-    /// Every renderer omega ships.
-    ///
-    /// One today. A surface other than the bar — an OSD, a full-screen
-    /// overlay — would be a second, installed by the same command.
+    /// All Omarchy renderer plugins installed by this integration.
     pub const ALL: &'static [Renderer] = &[Self::VIEW];
 
     /// Where this renderer belongs under a shell's plugin directory.
@@ -86,22 +75,13 @@ impl Renderer {
             .map(|asset| asset.contents)
     }
 
-    /// The version the carried manifest announces to the shell.
-    ///
-    /// Pinned to [`Renderer::VERSION`] by a test rather than patched at
-    /// install time: the file that ships is the file that is written, so the
-    /// copy in the repository is the copy a `--link` install serves, and
-    /// there is no third version of the truth.
+    /// Read the embedded manifest version, verified against [`Renderer::VERSION`] by tests.
     pub fn declared_version(&self) -> Option<String> {
         declared(self.file("manifest.json")?, "version")
     }
 
-    /// Write the files this binary carries, replacing whatever was there.
-    ///
-    /// Through a staging directory for two reasons: the shell watches this
-    /// tree and reloads on any change, so it must never see it half-written;
-    /// and the swap is what removes a file an older renderer shipped, which a
-    /// copy on top of a copy would leave behind to be loaded forever.
+    /// Atomically replace the installed asset directory.
+    /// Directory replacement also removes files no longer included in the renderer.
     pub fn install(&self, plugins: &Path) -> anyhow::Result<PathBuf> {
         let dir = self.dir_in(plugins);
         omega_host::Directory::create_all(plugins)
@@ -117,13 +97,8 @@ impl Renderer {
         Ok(dir)
     }
 
-    /// Point the shell at a checkout instead of copying it, for editing the
-    /// QML without reinstalling. The deviation, not the default: the shell
-    /// then draws whatever is in that tree.
-    ///
-    /// A linked plugin is found by the scan but not *watched* — inotify does
-    /// not descend through a symlink — so edits need
-    /// the host integration’s reload command.
+    /// Link a source checkout for renderer development.
+    /// File watchers do not traverse the link; apply edits with the host reload command.
     pub fn link(&self, plugins: &Path, checkout: &Path) -> anyhow::Result<PathBuf> {
         let source = checkout.join(self.source);
         if !source.join("manifest.json").is_file()
@@ -145,19 +120,14 @@ impl Renderer {
         Ok(dir)
     }
 
-    /// Remove an installed renderer, and nothing else.
-    ///
-    /// A directory under the shell's plugins that is not this renderer is
-    /// somebody else's plugin — possibly one they wrote — so it is left alone
-    /// and said so, rather than deleted because the name matched.
+    /// Remove this renderer's installation. Refuse directories identifying another plugin.
     pub fn uninstall(&self, plugins: &Path) -> anyhow::Result<Option<PathBuf>> {
         let dir = self.dir_in(plugins);
         if !dir.is_symlink() && !dir.exists() {
             return Ok(None);
         }
 
-        // Only a copy that is not this renderer's is somebody else's; a
-        // stale one is still ours, and is exactly what wants removing.
+        // Stale installations retain this renderer's identity and can be removed.
         let unrecognised =
             matches!(self.installed(plugins), Installed::Stale { .. }) && !self.is_ours(&dir);
         if unrecognised {
@@ -196,8 +166,7 @@ impl Renderer {
                 != Some(asset.contents)
         });
 
-        // A file an older renderer shipped, or one somebody added, is a
-        // difference too: the shell loads the directory, not our list.
+        // Extra files, including nested files, make an installation differ.
         if differs || self.has_strays(&dir) {
             Installed::Stale {
                 version: self.installed_version(&dir),
@@ -207,14 +176,13 @@ impl Renderer {
         }
     }
 
-    /// The version an installed copy announces, for saying what is there.
+    /// Read the installed manifest's declared version.
     fn installed_version(&self, dir: &Path) -> Option<String> {
         let manifest = std::fs::read_to_string(dir.join("manifest.json")).ok()?;
         declared(&manifest, "version")
     }
 
-    /// Whether an installed copy is this renderer at all, rather than another
-    /// plugin that happens to sit under the same name.
+    /// Verify the installed directory identifies this renderer.
     fn is_ours(&self, dir: &Path) -> bool {
         let declared_id = std::fs::read_to_string(dir.join("manifest.json"))
             .ok()
@@ -222,11 +190,7 @@ impl Renderer {
         declared_id.as_deref() == Some(self.id)
     }
 
-    /// Anything under the directory that this renderer does not carry.
-    ///
-    /// A walk, not a listing: the tree has a `nodes/` directory in it, and a
-    /// check that stopped at the top would read every install as stale — and
-    /// would miss a stray file left inside it by an older version.
+    /// Find files absent from the embedded asset list, recursively.
     fn has_strays(&self, dir: &Path) -> bool {
         let Some(found) = Self::walk(dir) else {
             return true;
@@ -273,11 +237,7 @@ impl Renderer {
     }
 }
 
-/// One top-level string field of a plugin manifest.
-///
-/// Enough of the manifest to say which plugin it is and which version — the
-/// shell owns the rest of the schema, and parsing more of it here would be
-/// omega holding an opinion about a file it only writes.
+/// Read one top-level string field from a plugin manifest.
 fn declared(manifest: &str, field: &str) -> Option<String> {
     let parsed: serde_json::Value = serde_json::from_str(manifest).ok()?;
     Some(parsed.get(field)?.as_str()?.to_owned())

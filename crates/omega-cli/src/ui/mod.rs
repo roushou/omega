@@ -1,14 +1,6 @@
-//! How the CLI speaks.
-//!
-//! Every line the `omega` binary writes goes through [`Ui`], for two reasons.
-//!
-//! Data and decoration are different streams. Progress, hints and errors go
-//! to stderr the way cargo's do; a command's actual answer goes to stdout, so
-//! `omega run battery level | jq` gets the value and not a progress report.
-//!
-//! And a program that prints from twenty call sites has twenty formats. The
-//! rail width, the colours, the glyphs and the shortening of paths are
-//! decided once, here, which is what makes them consistent everywhere.
+//! CLI output formatting.
+//! Progress and diagnostics go to stderr; command results go to stdout.
+//! All output uses this module's shared alignment, styling, and path formatting.
 
 mod deployment;
 mod diagnostic;
@@ -27,12 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use anstyle::{Effects, Style};
 
-/// The width of the left rail.
-///
-/// Cargo's, exactly: `omega build` runs cargo with inherited streams, so its
-/// `Compiling` and our `Built` scroll past in the same column of the same
-/// terminal. A rail one column off would read as two programs sharing a
-/// window.
+/// Match Cargo's twelve-column progress rail.
 const RAIL: usize = 12;
 
 /// The CLI's output surface.
@@ -49,9 +36,7 @@ impl std::fmt::Debug for Ui {
 }
 
 impl Ui {
-    /// The real streams. Colour is decided by `anstream`, which reads
-    /// `NO_COLOR`, `CLICOLOR_FORCE` and whether anyone is actually looking —
-    /// so styling is written unconditionally here and stripped downstream.
+    /// Use `anstream` for terminal detection and color-environment handling.
     pub fn stdio() -> Self {
         Self {
             out: Box::new(anstream::AutoStream::auto(std::io::stdout())),
@@ -60,8 +45,7 @@ impl Ui {
         }
     }
 
-    /// A `Ui` that keeps what it was told, with the styling stripped. The
-    /// output is the product, so it is worth asserting on.
+    /// Capture unstyled stdout and stderr for assertions.
     pub fn recording() -> (Self, Transcript) {
         let transcript = Transcript::default();
         let ui = Self {
@@ -89,12 +73,8 @@ impl Ui {
         self.report(format_args!("{style}{label:>RAIL$}{style:#} {message}"));
     }
 
-    /// A line that continues the step above it, indented to where that
-    /// step's subject began.
-    ///
-    /// For what genuinely continues a sentence — an error's causes. A list of
-    /// separate things is not a continuation: give each one a verb, or the
-    /// rail is twelve columns of nothing.
+    /// Continue the preceding diagnostic at the subject indentation.
+    /// Use separate steps for independent items.
     pub fn detail(&mut self, message: impl Display) {
         self.report(format_args!("{:RAIL$} {message}", ""));
     }
@@ -110,12 +90,7 @@ impl Ui {
         self.report(format_args!("{style}{mark:>RAIL$}{style:#} {message}"));
     }
 
-    /// Pad `text` so a column of them lines up: a step's subject and the
-    /// note beside it.
-    ///
-    /// The caller does the padding rather than a list type doing it, because
-    /// what is being aligned is the *message*, and the message is the
-    /// caller's.
+    /// Pad a message column to the requested width.
     pub fn column(text: &str, width: usize) -> String {
         let padding = " ".repeat(width.saturating_sub(text.chars().count()));
         format!("{text}{padding}")
@@ -139,9 +114,7 @@ impl Ui {
         self.step(Step::Warning, message);
     }
 
-    /// A failure and everything under it. An error's causes are the half of
-    /// it that says what to do, so printing only the top line throws that
-    /// away.
+    /// Render an error and its cause chain.
     pub fn error(&mut self, error: &anyhow::Error) {
         if let Some(rendered) = diagnostic::CliDiagnostic::render(error, self.glyphs) {
             let mut lines = rendered.lines();
@@ -184,8 +157,7 @@ impl Ui {
         }
     }
 
-    /// Writing to a closed pipe is not this program's problem: `omega status
-    /// | head -1` is a thing people do, and it must not produce an error.
+    /// Treat a closed output pipe as successful termination.
     fn report(&mut self, message: std::fmt::Arguments<'_>) {
         let _ = writeln!(self.err, "{message}");
         let _ = self.err.flush();
@@ -205,7 +177,7 @@ impl Transcript {
         self.out.contents()
     }
 
-    /// Everything the reader was told about how it went.
+    /// Captured progress and diagnostics.
     pub fn err(&self) -> String {
         self.err.contents()
     }

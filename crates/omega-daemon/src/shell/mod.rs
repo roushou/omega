@@ -46,8 +46,7 @@ pub struct ShellServer {
     hub: Hub,
     listener: omega_proto::BoundSocket,
     socket: Socket,
-    /// Absent for a server that only streams — a test watching views, and
-    /// nothing a person runs.
+    /// Optional dispatcher for servers that only stream observations.
     gateway: Option<Gateway>,
 }
 
@@ -137,11 +136,7 @@ impl ShellServer {
     }
 }
 
-/// Who is on the other end, if they are anyone the daemon serves.
-///
-/// The same question the control socket asks, answered the same way: the uid
-/// is the whole claim, because on a Unix socket there is nothing stronger to
-/// ask for.
+/// Observation peer identity from Unix credentials.
 impl ShellServer {
     fn admit(stream: &UnixStream) -> Result<Peer, Refusal> {
         let credentials = stream.peer_cred().ok();
@@ -159,8 +154,7 @@ struct ShellConnection<S> {
     views: crate::hub::history::Receiver<Arc<ViewUpdate>>,
     state: crate::hub::history::Receiver<omega_proto::omega::StatePatch>,
     hub: Hub,
-    /// Who this is, or why they are nobody. Reading does not depend on it;
-    /// asking does.
+    /// Peer authorization result. Reading is open; operations require authorization.
     peer: Result<Arc<Peer>, Refusal>,
     gateway: Option<Gateway>,
     attachment: crate::session::dispatch::attachment::RendererAttachment,
@@ -168,11 +162,7 @@ struct ShellConnection<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
-    /// How often a connection says it is still there when nothing else has.
-    ///
-    /// Comfortably inside the silence an observer treats as a dead daemon —
-    /// the shell reconnects after fifteen seconds of nothing — so a quiet
-    /// machine never looks like a stopped one.
+    /// Heartbeat interval must remain below the renderer's silence timeout.
     const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
 
     fn new(
@@ -197,17 +187,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
         }
     }
 
-    /// The current picture first, so an observer that connects late is not
-    /// waiting on the next change to learn anything; then live updates, and
-    /// answers to anything asked along the way.
+    /// Send the initial snapshot, then updates and correlated request results.
     async fn stream(
         mut self,
         views: Vec<Arc<ViewUpdate>>,
         state: omega_proto::omega::StateSnapshot,
     ) -> Result<(), ShellError> {
-        // Everything, until the observer says otherwise: reading this socket
-        // needs no handshake, so a peer that asks for nothing is a peer that
-        // wants what the daemon holds.
+        // State observers initially subscribe to all state topics.
         let mut subscriptions = Subscriptions::watcher();
 
         self.write_views(views).await?;
@@ -231,8 +217,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
         let mut operations = Operations::new();
         let mut beat = tokio::time::interval(Self::HEARTBEAT);
         beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // The first tick is immediate and would beat before anything was
-        // said; the connection has just written everything it holds.
+        // Skip the initial tick because the snapshot has just been sent.
         beat.tick().await;
 
         loop {
@@ -301,9 +286,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
         }
     }
 
-    /// Serve one request, or say why not. Every request is answered on the
-    /// stream that carried it, exactly as on the control socket: an outcome
-    /// or a refusal, never silence.
+    /// Reply on the request stream with an outcome or refusal.
     async fn answer(
         &self,
         dispatcher: Option<&Dispatcher>,
@@ -320,8 +303,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
             return Refusal::unimplemented("this daemon serves no requests here").frame(stream_id);
         };
 
-        // Reading is open; asking is the owner's. A peer that was turned away
-        // at accept is told so here rather than at a silent drop.
+        // Return an explicit refusal for unauthorized operations.
         let peer = match &self.peer {
             Ok(peer) => peer,
             Err(refusal) => return refusal.clone().frame(stream_id),
@@ -419,11 +401,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
         .map_err(|_| ShellError::SnapshotTimeout)?
     }
 
-    /// The topics this observer asked for, one line each.
-    ///
-    /// Filtered by the same [`Subscriptions`] a unit's session filters by. It
-    /// was not filtered at all: the shell draws views and was sent every topic
-    /// the daemon held, and so was every other reader of this socket.
+    /// Encode selected topics using the same subscription filter as control sessions.
     async fn write_topics(
         &mut self,
         subscriptions: &Subscriptions,

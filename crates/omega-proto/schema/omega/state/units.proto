@@ -2,10 +2,9 @@ syntax = "proto3";
 
 package omega;
 
-// The runtime plane's view of itself.
+// Plugin lifecycle observations.
 
-// The supervisor's view of the units it runs. Daemon-owned: a unit publishes
-// views and its own keyspace, never its own health.
+// Daemon-owned unit status. Plugins cannot publish their own lifecycle state.
 message UnitsState {
   repeated UnitStatus units = 1;
 }

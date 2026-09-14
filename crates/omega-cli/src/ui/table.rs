@@ -1,10 +1,4 @@
-//! Aligned columns, padded by what a reader sees rather than by what is in
-//! the string.
-//!
-//! A styled cell is longer than it looks — the escape sequences are real
-//! characters that `{:<width$}` counts and no terminal draws. Padding is
-//! measured on the text and applied around the style, which is the whole
-//! reason this is a type instead of a format string.
+//! Align terminal columns using visible text width, excluding ANSI escape sequences.
 
 use std::fmt::Display;
 
@@ -46,9 +40,7 @@ impl Cell {
     fn render(&self, width: usize, align: Align) -> String {
         let padding = " ".repeat(width.saturating_sub(self.width()));
 
-        // Nothing to dress. Wrapping an empty string in a style leaves escape
-        // sequences on the line that draw nothing and that trimming trailing
-        // whitespace cannot see, so the row ends in a gap nobody put there.
+        // Do not emit ANSI styling for empty cells.
         if self.text.is_empty() {
             return padding;
         }

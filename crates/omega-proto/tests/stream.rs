@@ -32,7 +32,6 @@ fn each_end_recognises_its_own_answers() {
     assert!(PeerStreams::is_ours(asked_by_peer));
     assert!(!PeerStreams::is_ours(asked_by_daemon));
 
-    // Stream 0 is fire-and-forget: nobody allocated it, so nobody is waiting
-    // on an answer to it.
+    // Stream zero is reserved and excluded from request-ID allocation.
     assert!(!DaemonStreams::is_ours(0));
 }

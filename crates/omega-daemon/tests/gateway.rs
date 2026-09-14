@@ -39,9 +39,7 @@ impl Shell {
         ]));
         let supervisor = Supervisor::new(socket.clone(), units.clone(), Shutdown::new());
 
-        // No brokers: this exercises the gateway, and an action a broker
-        // would serve is refused as unimplemented, which is what a daemon
-        // with none does too.
+        // No brokers are installed; brokered requests return UNIMPLEMENTED.
         let server = ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
             .serving(
@@ -73,8 +71,7 @@ struct Observer {
 }
 
 impl Observer {
-    /// Ask for something, and take the answer — skipping the views and topics
-    /// that arrive alongside it, which is what sharing one stream costs.
+    /// Wait for the matching response while consuming unrelated observations.
     async fn ask(&mut self, op: invoke::Op) -> result::Outcome {
         let request = Observation::request(1, op);
         let line = format!("{}\n", Observation::line(&request).unwrap());
@@ -179,15 +176,12 @@ async fn pressing_a_button_reaches_the_plugin_that_drew_it() {
     let shell = Shell::serving("gateway-invoke");
     let mut observer = shell.connect().await;
 
-    // The plugin declares the command but is not running, so the press is
-    // refused for the reason it actually failed — a precondition, not a bad
-    // request, which is the difference between "try again" and "stop".
+    // A registered command whose plugin is stopped fails with a precondition refusal.
     let refusal = observer.refusal(press("lamp", "toggle")).await;
     assert_eq!(refusal.code, ErrorCode::Unavailable, "{refusal}");
     assert!(refusal.message.contains("lamp"), "{refusal}");
 
-    // A button wired to a command nobody declared is answered too, rather
-    // than the press vanishing into a daemon that had nowhere to send it.
+    // Undeclared command targets must return a refusal.
     let refusal = observer.refusal(press("lamp", "explode")).await;
     assert_eq!(refusal.code, ErrorCode::InvalidArgument, "{refusal}");
     assert!(refusal.message.contains("explode"), "{refusal}");
@@ -255,8 +249,7 @@ async fn a_server_that_only_streams_says_so() {
         lines: BufReader::new(socket.connect_stream().await.unwrap()).lines(),
     };
 
-    // A server nobody wired a supervisor into refuses out loud rather than
-    // accepting a request it has no way to serve.
+    // Missing supervision must produce a refusal.
     let refusal = observer
         .refusal(invoke::Op::RestartUnit(RestartUnit {
             unit: "sleeper".into(),

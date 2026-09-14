@@ -27,8 +27,7 @@ pub struct CargoManifest {
     pub dependencies: Dependencies,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<Profile>,
-    /// Everything omega does not model. Kept so writing a manifest back does
-    /// not delete the parts of it we never understood.
+    /// Unmodeled fields preserved when rewriting the manifest.
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }
@@ -65,7 +64,7 @@ pub struct Workspace {
     pub exclude: Vec<String>,
     #[serde(default, skip_serializing_if = "Dependencies::is_empty")]
     pub dependencies: Dependencies,
-    /// `workspace.lints` and anything else we do not model, kept verbatim.
+    /// Unmodeled workspace fields preserved when rewriting the manifest.
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }

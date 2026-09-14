@@ -1,12 +1,5 @@
-//! Events: what actually happened.
-//!
-//! The daemon owns event identity the way it owns state revisions — a
-//! producer says what happened, the daemon says when and in what order.
-//!
-//! Most events are *transitions of state*, not a second thing a source has to
-//! remember to announce. Deriving them from the state plane means "the AC was
-//! unplugged" cannot disagree with `battery.charging`: they are the same
-//! fact, reported twice.
+//! Assign event identity and derive state-transition events.
+//! Derive transitions from published state updates so event payloads and readings agree.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};

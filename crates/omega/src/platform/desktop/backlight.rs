@@ -1,4 +1,4 @@
-//! The screen's brightness.
+//! Display backlight state and brightness control.
 
 use crate::units::Percent;
 
@@ -9,15 +9,13 @@ use crate::runtime::context::Context;
 use crate::wiring::does;
 
 crate::wiring::reading! {
-    /// The screen's brightness.
+    /// Display backlight brightness.
     Backlight: omega_proto::omega::BacklightState
 }
 
-/// The screen's backlight, as a widget sees it.
-///
-/// A machine with no backlight — a desktop, or a monitor driven over DDC/CI
-/// rather than sysfs — has no reading, which is what
-/// [`has_reading`](Backlight::has_reading) answers.
+/// Read sysfs display backlight brightness.
+/// `has_reading()` is false when no supported backlight exists. External DDC/CI
+/// monitor control is not supported.
 ///
 /// ```no_run
 /// # use omega::platform::desktop::Backlight;
@@ -35,12 +33,10 @@ crate::wiring::reading! {
 /// }
 /// ```
 impl Backlight {
-    /// How bright it is. Prints itself as `60%`.
+    /// Current brightness as a percentage.
     pub fn level(&self) -> Percent {
         self.read()
-            // The wire is a u32 because protobuf has no smaller integer; a
-            // percentage above a hundred is a broker with a bug, not a
-            // brighter screen.
+            // Clamp the protocol percentage to the supported 0–100 range.
             .map(|backlight| Percent::whole(backlight.percent.min(100) as u8))
             .unwrap_or(Percent::ZERO)
     }
@@ -55,16 +51,15 @@ pub struct Brightness {
 does!(Brightness, Backlight);
 
 impl Brightness {
-    /// Set it outright.
+    /// Set the display brightness.
     pub fn set(&self, level: Percent) -> crate::effect::Effect {
         self.change(set_backlight::Change::AbsolutePercent(u32::from(
             level.whole_percent(),
         )))
     }
 
-    /// Move it by whole percentage points: `5` is five percent brighter,
-    /// `-5` dimmer. Clamped at both ends by the broker, so stepping down from
-    /// 2% lands on 0 rather than wrapping.
+    /// Adjust brightness by whole percentage points. Positive values increase
+    /// brightness; negative values decrease it. The result is clamped to 0–100%.
     pub fn step(&self, delta: i32) -> crate::effect::Effect {
         self.change(set_backlight::Change::DeltaPercent(delta))
     }

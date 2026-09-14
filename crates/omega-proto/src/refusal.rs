@@ -1,7 +1,4 @@
-//! The daemon's "no", as a frame.
-//!
-//! Refusals are part of the protocol, not a dropped connection: a unit learns
-//! why it was turned away and can report it, rather than seeing an EOF.
+//! Structured protocol refusals. Preserve the request stream ID and error code.
 
 use crate::omega::{Error, ErrorCode, Frame, Result as OpResult, frame, result};
 

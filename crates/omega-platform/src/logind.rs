@@ -1,14 +1,5 @@
-//! The session, from logind.
-//!
-//! It reports whether anybody is using the machine, and serves the five
-//! actions that end a session one way or another. What counts as idle is the
-//! session manager's policy, which is exactly why it is read from logind
-//! rather than decided here.
-//!
-//! Every call is non-interactive. logind will ask polkit to prompt when a
-//! caller allows it, and a broker that allowed it would block on a dialog
-//! with the action channel held open behind it — so a session that may not
-//! reboot is told so instead of hanging.
+//! Read logind session state and execute session/power actions.
+//! Calls disable interactive authorization; denied operations return errors.
 
 use std::time::Duration;
 
@@ -87,10 +78,7 @@ impl Link {
         })
     }
 
-    /// Whether anybody is using the machine.
-    ///
-    /// Every field independently: a locked session is not necessarily idle,
-    /// and an idle one is not necessarily locked.
+    /// Read idle and locked state independently.
     async fn idle(&self) -> IdleState {
         IdleState {
             idle: dbus::property(&self.session, "IdleHint")
@@ -149,11 +137,7 @@ impl Logind {
         }
     }
 
-    /// The logind method an action asks for.
-    ///
-    /// Omega's names and logind's are not the same words for the same things
-    /// — `Sleep` is `Suspend`, `Shutdown` is `PowerOff` — and this is the one
-    /// place that has to know it.
+    /// Map protocol actions to logind methods.
     fn method(action: &action::Kind) -> Option<&'static str> {
         match action {
             action::Kind::Sleep(_) => Some("Suspend"),
@@ -220,9 +204,7 @@ impl Broker for Logind {
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
-        // What it does not serve is refused before the connection is touched.
-        // Otherwise an action routed here by mistake reports the bus being
-        // down, which is a true statement about the wrong thing.
+        // Reject unsupported actions before attempting a bus connection.
         let method = match action {
             action::Kind::Lock(_) => None,
             other => match Self::method(other) {

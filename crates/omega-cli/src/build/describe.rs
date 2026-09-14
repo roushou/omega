@@ -1,14 +1,5 @@
-//! Asking a compiled plugin what it declares.
-//!
-//! A plugin's manifest is not a file anybody writes. It is what the plugin's
-//! own fields add up to — a `Battery` field is a topic and the permission to
-//! read it — and the only thing that can add them up is the plugin. So the
-//! build compiles it and asks, exactly as it asks the config plane what the
-//! machine should be.
-//!
-//! The manifest and the binary therefore cannot disagree: the one on disk is
-//! the one this binary answered with, and a swapped binary answers with a
-//! different hash and is refused at the handshake.
+//! Extract canonical manifest bytes from compiled plugins.
+//! The staged manifest must match the bytes hashed during the plugin handshake.
 
 use anyhow::{Context, bail};
 

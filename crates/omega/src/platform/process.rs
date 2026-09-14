@@ -1,16 +1,12 @@
-//! The escape hatch.
+//! Shell command and process execution.
 
 use omega_proto::omega::{LaunchApp, RunCommand, action};
 
 use crate::runtime::context::Context;
 use crate::wiring::does;
 
-/// Permission to start something.
-///
-/// The costliest field a plugin can hold: everything else names what it
-/// changes, and this names nothing. Prefer a typed effect where one exists —
-/// [`Session`] locks the screen, [`Volume`] changes the volume — and reach
-/// for this when the machine has no word for what you want.
+/// Run shell commands or launch programs.
+/// Prefer domain controls such as [`Session`] and [`Volume`] when available.
 ///
 /// [`Session`]: crate::platform::session::Session
 /// [`Volume`]: crate::platform::audio::Volume
@@ -22,7 +18,7 @@ pub struct Shell {
 does!(Shell, Spawn);
 
 impl Shell {
-    /// Run a command line.
+    /// Execute a command line through the shell.
     pub fn run(&self, command: impl Into<String>) -> crate::effect::Effect {
         self.act(action::Kind::RunCommand(RunCommand {
             command: command.into(),
@@ -58,10 +54,7 @@ impl Shell {
         format!("'{}'", word.replace('\'', "'\\''"))
     }
 
-    /// Launch a desktop entry by id — `"firefox.desktop"`. Typed, and no
-    /// shell involved, so prefer it over [`run`].
-    ///
-    /// [`run`]: Self::run
+    /// Launch a desktop entry by ID, such as `firefox.desktop`, without shell parsing.
     pub fn launch(&self, desktop_id: impl Into<String>) -> crate::effect::Effect {
         self.act(action::Kind::LaunchApp(LaunchApp {
             activation_token: String::new(),

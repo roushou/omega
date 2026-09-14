@@ -54,9 +54,7 @@ fn keys_may_contain_dots() {
 
 #[test]
 fn every_topic_is_addressed_once() {
-    // The table generates the enum, so `ALL` cannot miss a topic. Two rows
-    // sharing an address is the one collision it cannot catch, and a
-    // duplicate would make one of them unreachable through `parse`.
+    // Topic addresses must be unique for reverse lookup.
     let names: HashSet<&str> = SystemTopic::ALL.iter().map(|t| t.as_str()).collect();
     assert_eq!(names.len(), SystemTopic::ALL.len());
 }

@@ -10,8 +10,7 @@ pub struct BuildCmd {
     #[arg(long)]
     pub watch: bool,
 
-    /// Compile without optimisations. Several times faster to produce, and
-    /// what `omega dev` uses; the daemon runs whichever it is given.
+    /// Compile using the debug profile without optimizations.
     #[arg(long)]
     pub debug: bool,
 

@@ -1,7 +1,7 @@
-//! The tunnels the machine is running through.
+//! Active VPN and tunnel connections.
 
 crate::wiring::reading! {
-    /// The tunnels it is running through.
+    /// Active VPN and tunnel connections.
     Vpn: omega_proto::omega::VpnState
 }
 
@@ -22,18 +22,17 @@ impl Tunnel {
         }
     }
 
-    /// The connection's name, as the person who made it typed it.
+    /// Connection display name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// `wg0`, `tun0`.
+    /// Tunnel interface name, such as `wg0` or `tun0`.
     pub fn interface(&self) -> &str {
         &self.interface
     }
 
-    /// `wireguard`, `openvpn`, and whatever else NetworkManager grows. A
-    /// string rather than an enum because the set is somebody else's.
+    /// NetworkManager connection type, such as `wireguard` or `openvpn`.
     pub fn kind(&self) -> &str {
         &self.kind
     }
@@ -46,7 +45,7 @@ impl Vpn {
             .unwrap_or_default()
     }
 
-    /// Whether anything is up. The question a bar indicator asks.
+    /// Whether at least one tunnel is connected.
     pub fn is_connected(&self) -> bool {
         self.read().is_some_and(|state| !state.tunnels.is_empty())
     }

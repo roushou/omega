@@ -21,11 +21,7 @@ pub(crate) struct PreparedLink<'a> {
 }
 
 impl<'a> CheckoutLink<'a> {
-    /// Why a build might have failed to resolve omega at all.
-    ///
-    /// A config that is not linked and asks for crates nobody has published
-    /// fails in cargo's words, which name a package and say nothing about
-    /// omega. This is the sentence that was missing.
+    /// Report whether missing local overrides could explain dependency-resolution failure.
     pub(crate) fn unlinked(layout: &Layout) -> Option<String> {
         let linked = layout
             .file::<CargoConfig>(())

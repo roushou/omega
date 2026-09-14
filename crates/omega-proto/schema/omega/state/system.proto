@@ -2,21 +2,15 @@ syntax = "proto3";
 
 package omega;
 
-// What the machine is doing with itself.
+// CPU, memory, storage, and thermal state.
 
 message SystemState {
-  // Whole percent, across every core. Whole because that is the resolution
-  // anything draws it at, and because a value carrying four decimal places
-  // would be a new revision on every reading — last-value-wins only helps
-  // when the value is actually the same.
+  // Aggregate CPU utilization in whole percent.
   uint32 cpu_percent = 1;
   repeated uint32 core_percent = 2;
 
   uint64 memory_total_bytes = 3;
-  // The kernel's own estimate of what a new process could have. Reported
-  // rather than a "used" figure, because used is derived and every tool
-  // derives it differently — the SDK subtracts, and the arithmetic is in one
-  // place.
+  // Memory available to new processes, as reported by the kernel.
   uint64 memory_available_bytes = 4;
 
   uint64 swap_total_bytes = 5;
@@ -29,13 +23,7 @@ message SystemState {
   uint64 uptime_seconds = 10;
 }
 
-// Where the machine keeps things, and how much room is left.
-// How hot the machine is, and what is being done about it.
-//
-// From hwmon, which is a lot of sensors of varying usefulness: a laptop
-// reports the CPU die, the GPU edge, the SSD, the wireless card and half a
-// dozen ACPI zones that all read the same number. The broker reports what it
-// can read and leaves the choosing to whatever draws it.
+// Temperature and fan readings from readable hwmon sensors.
 message ThermalsState {
   repeated Sensor sensors = 1;
   repeated Fan fans = 2;
@@ -43,13 +31,9 @@ message ThermalsState {
 
 message Sensor {
   string chip = 1;              // "k10temp", "thinkpad", "amdgpu"
-  // The sensor's own label where it has one — "CPU", "edge", "Composite" —
-  // else its name in the chip, like "temp3". Chip and label together are the
-  // identity; neither is unique alone.
+  // Sensor label or chip-local fallback name. Chip and label form its identity.
   string label = 2;
-  // Thousandths of a degree, as hwmon reports it. Signed: an outdoor sensor
-  // can be below freezing, and a reading that wrapped would be worse than one
-  // that is negative.
+  // Temperature in signed millidegrees Celsius.
   int32 millicelsius = 3;
 }
 
@@ -69,8 +53,6 @@ message Mount {
   string device = 2;            // "/dev/nvme0n1p2"
   string filesystem = 3;        // "ext4"
   uint64 total_bytes = 4;
-  // What a normal user could still write. Reserved blocks are the root
-  // account's, and counting them as free is how a disk reads as having room
-  // right up until nothing can be saved.
+  // Bytes available to unprivileged users, excluding root-reserved blocks.
   uint64 available_bytes = 5;
 }

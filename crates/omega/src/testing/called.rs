@@ -1,4 +1,4 @@
-//! What a command did.
+//! Command results and captured effects for tests.
 
 use omega_proto::Values;
 use omega_proto::omega::{Value, invoke};
@@ -7,12 +7,11 @@ use crate::Input;
 use crate::testing::state::State;
 use crate::{Args, Command};
 
-/// What a command did: what it answered, and what it asked the machine to do.
+/// The result and ordered effects of a test command invocation.
 #[derive(Debug)]
 pub struct Called<T = ()> {
     pub answer: Result<T, crate::Error>,
-    /// The effects it queued, in order. A command that was supposed to lock
-    /// the screen and did not is a command that failed.
+    /// Effects submitted by the command, in submission order.
     pub effects: Vec<invoke::Op>,
 }
 
@@ -47,10 +46,7 @@ impl Called {
         Self::configured::<C>(state, &Values::new(), args).await
     }
 
-    /// The same, for a unit the document configured.
-    ///
-    /// A command is never placed anywhere, so its unit's settings are the
-    /// only settings it can have.
+    /// Invoke with explicit unit settings. Commands do not have placement settings.
     pub async fn configured<C: Command>(
         state: &State,
         settings: &Values,
@@ -80,7 +76,7 @@ impl Called {
 }
 
 impl<T> Called<T> {
-    /// Whether it asked for exactly this action.
+    /// Whether the command submitted this exact action.
     pub fn did(&self, action: &omega_proto::omega::action::Kind) -> bool {
         self.effects.iter().any(|op| match op {
             invoke::Op::Act(act) => {

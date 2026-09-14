@@ -1,13 +1,8 @@
 import QtQuick
 import "../Props.js" as Props
 
-// One of a few, chosen.
-//
-// Joined, so it reads as one control with several settings rather than
-// several controls. Which one is on comes from the unit; pressing another
-// reports its key and the unit decides what that means — an optimistic flip
-// here would be a control claiming an authority it does not have, because
-// unlike a toggle there is no obvious next state.
+// Mutually exclusive options. Selection is supplied by the model;
+// activation submits the option's domain key.
 Row {
     id: group
     required property var host
@@ -67,9 +62,7 @@ Row {
                 ColorAnimation { duration: host.theme.motion ? 120 : 0; easing.type: Easing.OutCubic }
             }
 
-            // By url, like a stack's children and a grid's cells: from
-            // `nodes/` the name `ViewNode` resolves to nothing, and naming
-            // it as a type left every option blank.
+            // Load ViewNode by relative URL from the nodes directory.
             Loader {
                 id: label
                 anchors.centerIn: parent

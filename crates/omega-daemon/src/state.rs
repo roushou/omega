@@ -42,13 +42,8 @@ impl StateStore {
         Self::default()
     }
 
-    /// Apply a patch, rebasing each *changed* topic onto its next revision.
-    /// Returns the re-versioned patch of what actually changed, which may be
-    /// empty.
-    ///
-    /// A source that polls on an interval republishes the same value over and
-    /// over; treating those as updates would bump revisions and wake every
-    /// unit for nothing. Last-value-wins means the value, not the poll.
+    /// Apply only changed topic values and assign their next revisions.
+    /// Return the resulting patch; unchanged values produce no revision or wakeup.
     pub fn apply(&mut self, patch: StatePatch) -> Result<StatePatch, StateError> {
         if patch.encoded_len() > Self::BYTE_LIMIT {
             return Err(StateError::TooLarge);
@@ -106,10 +101,7 @@ impl StateStore {
         Ok(StatePatch { topics })
     }
 
-    /// Each named topic the store holds, including one published with no
-    /// value — that is the daemon saying there is nothing to report, and
-    /// dropping it here would read as never having been asked. Empty
-    /// `topics` means every topic.
+    /// Select stored topics, preserving explicit absence. Empty topics selects all.
     pub fn read(&self, topics: &[String]) -> StatePatch {
         let selected = if topics.is_empty() {
             self.topics.values().cloned().collect()

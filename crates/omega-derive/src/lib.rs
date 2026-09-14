@@ -1,13 +1,4 @@
-//! Where a plugin's manifest comes from.
-//!
-//! A plugin declares what it needs by holding it. These derives read the
-//! fields and produce the two things the runtime wants from a type: what it
-//! costs — the topics it reads and the capabilities those and its effects
-//! require — and how to build one out of a live connection.
-//!
-//! Nothing here invents a declaration. Every topic and capability comes from
-//! a field's own type, which is why the manifest cannot drift from the code:
-//! it is a projection of it.
+//! Derive dependency declarations, typed identities, and construction from plugin fields.
 
 mod command;
 mod input;
@@ -37,15 +28,8 @@ pub fn reaction(input: TokenStream) -> TokenStream {
     wire(input, Marker::Wiring)
 }
 
-/// Settings a document configures an instance with.
-///
-/// Requires `Default`: it is what a setting the document left out falls back
-/// to, and having it on the type means the fallback is stated once, next to
-/// the field, rather than at every place that reads it.
-///
-/// Generates both directions. The config plane writes these fields and the
-/// plugin reads them, and a boundary where each side spells the names itself
-/// is a boundary where they can disagree.
+/// Derive bidirectional settings serialization.
+/// Requires `Default`; missing fields use the type's declared defaults.
 #[proc_macro_derive(Config, attributes(omega))]
 pub fn config(input: TokenStream) -> TokenStream {
     fields_impl(input)
@@ -89,7 +73,7 @@ fn fields_impl(input: TokenStream) -> TokenStream {
     quote! {
         impl ::omega::internal::Fields for #name {
             fn read(values: &::omega::internal::Values) -> Self {
-                // What the writer left out is what this type says it is.
+                // Missing fields use their declared type's default.
                 let defaults = <Self as ::core::default::Default>::default();
                 Self { #(#reads,)* }
             }
@@ -101,10 +85,7 @@ fn fields_impl(input: TokenStream) -> TokenStream {
             }
         }
 
-        // A struct that is a map is also a value, so one can be a field of
-        // another or an element of a list. Without this a type could be
-        // written to a keyspace only at the top level, and `Vec<Self>` would
-        // not compile — which is most of what a unit has to publish.
+        // Support nested maps and lists by implementing value conversion.
         impl ::omega::internal::IntoValue for #name {
             fn into_value(self) -> ::omega::internal::Value {
                 ::omega::internal::IntoValue::into_value(
@@ -124,11 +105,7 @@ fn fields_impl(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// State a plugin owns, addressed by where it is defined.
-///
-/// The unit is the crate this type is written in and the key is the type's
-/// own name, so `Watch<lamp::Power>` resolves to `unit.lamp.power` with no
-/// string anywhere for a rename to leave behind.
+/// Derive record ownership from the defining package and key from the type name.
 #[proc_macro_derive(UnitState, attributes(omega))]
 pub fn unit_state(input: TokenStream) -> TokenStream {
     let fields = fields_impl(input.clone());
@@ -148,8 +125,7 @@ pub fn unit_state(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-/// `LowPower` is `low-power`: a topic key reads as an address, not as a Rust
-/// type.
+/// Convert type names to kebab-case record keys.
 fn kebab(name: &str) -> String {
     let mut kebab = String::with_capacity(name.len() + 4);
     for (index, character) in name.char_indices() {
@@ -170,7 +146,7 @@ fn kebab(name: &str) -> String {
 enum Marker {
     /// Anything a plugin can hold.
     Wiring,
-    /// Only what it can read — a widget renders, and rendering may not act.
+    /// Read-only dependencies for render declarations.
     Reads,
 }
 
@@ -186,7 +162,7 @@ impl Marker {
 struct Field {
     ident: Ident,
     ty: Type,
-    /// The settings the document gave this instance, rather than a handle.
+    /// Settings supplied to the instance at construction.
     is_config: bool,
 }
 
@@ -202,10 +178,7 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
     let handles: Vec<&Field> = fields.iter().filter(|field| !field.is_config).collect();
     let bound = marker.path();
 
-    // The assertion that carries the error message. A field the plugin may
-    // not hold fails here, naming the type and saying where it belongs,
-    // rather than deeper in generated code that mentions none of the
-    // author's own names.
+    // Emit dependency-bound errors at the author's field type.
     let assertions = handles.iter().enumerate().map(|(index, field)| {
         let assert = format_ident!("_omega_assert_{index}");
         let ty = &field.ty;
@@ -312,7 +285,7 @@ fn named_fields(input: &DeriveInput) -> syn::Result<Vec<syn::Field>> {
 
     match &data.fields {
         Fields::Named(named) => Ok(named.named.iter().cloned().collect()),
-        // A unit struct declares nothing, which is a fine thing to be.
+        // Unit structs have no dependency fields.
         Fields::Unit => Ok(Vec::new()),
         Fields::Unnamed(unnamed) => Err(syn::Error::new_spanned(
             unnamed,
@@ -321,7 +294,7 @@ fn named_fields(input: &DeriveInput) -> syn::Result<Vec<syn::Field>> {
     }
 }
 
-/// Whether this field is the instance's settings rather than a handle.
+/// Whether the field holds instance settings.
 fn is_config(field: &syn::Field) -> syn::Result<bool> {
     let mut config = false;
     for attribute in &field.attrs {

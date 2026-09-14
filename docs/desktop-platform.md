@@ -1,8 +1,7 @@
 # Desktop platform decisions
 
-The desktop platform program is implemented. This document records its lasting
-composition and ownership decisions. [Architecture](architecture.md) describes
-current runtime contracts, the [completed plan](desktop-platform-plan.md) records
+Maintainer design reference for composition and ownership boundaries. [Architecture](architecture.md) describes
+current runtime contracts, the [completed plan](archive/desktop-platform-plan.md) records
 milestone validation, and [open questions](design.md) tracks remaining work.
 
 ## Purpose
@@ -138,7 +137,7 @@ contracts. Pixel comparisons require matching raster environments and fixed
 assets; they do not prove compositor focus, IME behavior, or popup positioning.
 See the [preview guide](previews.md) for registration and capture usage.
 
-## Scope beyond this program
+## Out of scope
 
 A full file explorer, durable application sessions, a component marketplace,
 arbitrary user QML nodes, and incremental wire rendering are separate projects.

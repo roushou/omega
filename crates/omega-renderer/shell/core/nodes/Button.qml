@@ -2,13 +2,7 @@ import QtQuick
 import "../Props.js" as Props
 import "../Icons.js" as Icons
 
-// Something to press.
-//
-// The binding names one of the drawing unit's own commands, so a press reaches
-// that unit and no other. Drawn as a filled slot at the theme's state alphas,
-// like a `Group`'s segments: the idle fill is 4% and needs the border to be
-// found at all, and without one a button is a word that happens to be
-// clickable.
+// Button with command or local-message activation and pending feedback.
 Rectangle {
     id: slot
     required property var host
@@ -69,8 +63,7 @@ Rectangle {
         hoverEnabled: true
         enabled: slot.pressable
         cursorShape: Qt.PointingHandCursor
-        // A press carries nothing of its own: the binding is the whole
-        // message.
+        // Button activation supplies only its retained binding.
         onClicked: {
             slot.forceActiveFocus()
             slot.host.invoke("press", undefined)

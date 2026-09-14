@@ -1,14 +1,5 @@
-//! The battery, from UPower.
-//!
-//! UPower's `DisplayDevice` is the composite answer — one battery on a laptop,
-//! the sum of several where there are several, and a device that reports
-//! itself absent on a machine with none. Reading it rather than enumerating
-//! and picking is what keeps "the machine's battery" from being this broker's
-//! opinion.
-//!
-//! Signal-driven: UPower marks every property `emits-change`, so a reading is
-//! taken when one changes rather than on a timer. A battery that moves once a
-//! minute costs one wake a minute instead of thirty.
+//! Read UPower's aggregate DisplayDevice battery and peripheral devices.
+//! Property signals trigger updates; missing devices publish explicit absence.
 
 use std::collections::HashMap;
 
@@ -27,11 +18,7 @@ use omega_proto::omega::{
 use crate::broker::{Broker, BrokerError, opaque_debug};
 use crate::dbus;
 
-/// What UPower reports, as it reports it.
-///
-/// A plain struct rather than a handful of `get_property` calls at the point
-/// of use: turning UPower's numbers into the ontology is the part that can be
-/// wrong, and it is worth testing without a bus in the room.
+/// UPower property snapshot for protocol conversion.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Reading {
     pub is_present: bool,
@@ -54,11 +41,7 @@ impl Reading {
     /// charging: a widget that said otherwise would never stop saying it.
     const CHARGING: u32 = 1;
 
-    /// The ontology's view, or `None` on a machine with no battery.
-    ///
-    /// `None` is not an error. A desktop has no battery, and the broker
-    /// publishes the topic with no value so a unit can draw its no-reading
-    /// branch instead of waiting for a value that never comes.
+    /// Convert a battery snapshot, returning `None` if no system battery exists.
     pub fn state(&self) -> Option<BatteryState> {
         if !self.is_present || self.kind != Self::BATTERY {
             return None;
@@ -68,9 +51,7 @@ impl Reading {
         Some(BatteryState {
             level: (self.percentage / 100.0).clamp(0.0, 1.0),
             charging,
-            // UPower reports the one that does not apply as zero, and so does
-            // the ontology — but only the applicable one is passed through, so
-            // a discharging battery cannot report a time to full.
+            // Only publish the time estimate matching the current charging state.
             seconds_to_empty: if charging {
                 0
             } else {
@@ -102,10 +83,7 @@ impl Reading {
     }
 }
 
-/// One device that is not the machine itself.
-///
-/// UPower reports the laptop's own battery and everything plugged into it
-/// through the same interface. What separates them is `Type`.
+/// UPower device properties for peripheral battery reporting.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Attached {
     pub path: String,
@@ -116,15 +94,10 @@ pub struct Attached {
 }
 
 impl Attached {
-    /// `UpDeviceKind`. Below `Mouse` are the machine's own supplies — the
-    /// battery, the mains, a UPS — which the `battery` and `power` topics
-    /// already answer for.
+    /// UPower device kinds below Mouse represent system power supplies.
     const MOUSE: u32 = 5;
 
-    /// Whether this is something plugged in rather than the machine itself.
-    ///
-    /// A device with no reading is dropped too: a keyboard that reports no
-    /// battery is a keyboard, not a keyboard at zero percent.
+    /// Whether this is a supported peripheral with a battery reading.
     pub fn is_peripheral(&self) -> bool {
         self.kind >= Self::MOUSE && self.percentage > 0.0
     }
@@ -141,8 +114,7 @@ impl Attached {
         }
     }
 
-    /// The kinds a bar draws differently. UPower knows thirty; the rest are
-    /// `Other`, which still has a model and a percentage to show.
+    /// Map recognized peripheral kinds, falling back to Other.
     fn peripheral_kind(&self) -> PeripheralKind {
         match self.kind {
             5 => PeripheralKind::Mouse,
@@ -156,13 +128,12 @@ impl Attached {
     }
 }
 
-/// What is plugged in, turned into the ontology.
+/// Convert UPower peripherals into protocol readings.
 #[derive(Debug)]
 pub struct Peripherals;
 
 impl Peripherals {
-    /// Emptiest first would be arbitrary; a bar wants the one about to die at
-    /// the top, and a stable order under it so the list does not shuffle.
+    /// Sort peripherals by ascending charge, then model name.
     pub fn state(attached: &[Attached]) -> PeripheralsState {
         let mut mine: Vec<Peripheral> = attached
             .iter()
@@ -198,9 +169,7 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
-        // Named to be sure the service is there: a proxy is built lazily, so
-        // without this a machine with no UPower would look connected and then
-        // fail on every read.
+        // Check service availability because proxy construction does not establish a connection.
         Proxy::new(&connection, Self::SERVICE, Self::DEVICE, Self::INTERFACE)
             .await
             .map_err(BrokerError::unreadable)?;
@@ -240,11 +209,7 @@ impl Link {
         Ok(Reading::from_properties(&properties))
     }
 
-    /// Everything UPower knows about, other than the composite device.
-    ///
-    /// A second walk rather than a second broker: it is one connection and
-    /// one subsystem, and two brokers reading it would be two answers to one
-    /// question.
+    /// Enumerate UPower devices excluding the aggregate DisplayDevice.
     async fn attached(&self) -> Vec<Attached> {
         let paths: Vec<zbus::zvariant::OwnedObjectPath> = self
             .manager
@@ -276,10 +241,7 @@ impl Link {
         found
     }
 
-    /// Whether the machine is on mains.
-    ///
-    /// The manager's answer, not the battery's: a desktop has no battery and
-    /// is still on mains, and asking the device would report nothing.
+    /// Read external power from UPower's manager independently of battery presence.
     async fn on_ac(&self) -> bool {
         !self
             .manager
@@ -301,8 +263,7 @@ impl UPower {
         Self::default()
     }
 
-    /// Both topics in one patch. One power supply subsystem, one broker:
-    /// two of them reading it would be two answers to one question.
+    /// Publish battery and mains topics from the same UPower reading.
     fn patch(
         state: Option<BatteryState>,
         on_ac: bool,

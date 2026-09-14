@@ -7,10 +7,9 @@ use crate::{
 use omega_proto::omega::Capability;
 use std::marker::PhantomData;
 
-/// A plugin's own state: read it, and change it.
-///
-/// Changing state is doing something, so this belongs to a command or a
-/// reaction or stateful behavior. A surface that shows the same state holds a [`Watch`](super::Watch).
+/// Read and update a plugin-owned record.
+/// Use in commands, reactions, or stateful behavior. Render declarations use
+/// [`Watch`](super::Watch) for read-only access.
 #[derive(Debug)]
 pub struct Own<T: UnitState> {
     context: Context,
@@ -20,9 +19,7 @@ pub struct Own<T: UnitState> {
 impl<T: UnitState> Wiring for Own<T> {
     const CAPABILITIES: &'static [Capability] = &[Capability::StateRead, Capability::StateWrite];
 
-    /// Its own keyspace needs no permission — a plugin owns it — but naming
-    /// it is what lets `omega check` say what the plugin publishes, and what
-    /// lets another plugin discover there is something to read.
+    /// Declare the published keyspace for manifest validation and discovery.
     fn keyspaces() -> Vec<String> {
         vec![T::address()]
     }

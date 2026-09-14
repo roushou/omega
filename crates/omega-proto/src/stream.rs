@@ -1,10 +1,4 @@
-//! Stream ids, split between the two ends of a connection.
-//!
-//! Both peers start requests on the same connection, and a `Result` is
-//! answered by whoever allocated the stream it arrives on — so the two ends
-//! must never pick the same id. They are split by parity: the daemon's
-//! requests are even, a unit's or an operator's are odd. Nothing enforces
-//! this on the wire, so it is enforced here, where both sides get it from.
+//! Stream-ID allocation: daemon requests use even IDs; peer requests use odd IDs.
 
 /// The daemon's half: even ids.
 #[derive(Debug, Default)]

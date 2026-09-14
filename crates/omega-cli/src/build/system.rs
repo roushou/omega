@@ -1,10 +1,5 @@
-//! Evaluating the configuration plane.
-//!
-//! `system/` is a crate that computes a state document and prints it. Running
-//! it is the only way to learn what a config means, because a config is a
-//! program — but it is a program with one entry point and no side effects, so
-//! the build runs it, reads its answer, and validates it before anything else
-//! sees it.
+//! Run the `system/` binary and decode its desired-state document from stdout.
+//! Validate the result before publication.
 
 use anyhow::{Context, bail};
 
@@ -21,9 +16,8 @@ impl<'a> System<'a> {
         Self { layout }
     }
 
-    /// The document this config declares, or an empty one when the config has
-    /// no `system/` crate — a workspace of units and nothing else is a valid
-    /// config, and every unit in it runs.
+    /// Evaluate `system/`, or return an empty document if the crate is absent.
+    /// Built plugins run by default even without a system document.
     pub(super) async fn evaluate(&self, profile: Profile) -> anyhow::Result<StateDocument> {
         if !self.layout.system_dir().exists() {
             return Ok(StateDocument::default());

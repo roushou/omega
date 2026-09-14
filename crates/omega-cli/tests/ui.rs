@@ -1,8 +1,4 @@
-//! What the CLI's output promises, asserted rather than eyeballed.
-//!
-//! The output is the product: it is what a person sees of omega before they
-//! see anything else, and a regression in it is silent everywhere but on
-//! their screen.
+//! CLI stdout, stderr, alignment, and styling assertions.
 
 use std::path::Path;
 
@@ -207,8 +203,7 @@ fn a_size_reads_as_a_disk_is_sold() {
     assert_eq!(Paint::size(0), "0 B");
     assert_eq!(Paint::size(999), "999 B");
 
-    // Decimal, not binary: `du -h` says GiB and disks are sold in GB. The
-    // one a person compares this against is the vendor's.
+    // Disk usage is formatted in decimal units.
     assert_eq!(Paint::size(1_000), "1.0 kB");
     assert_eq!(Paint::size(999_999_999_999_999), "1000 TB");
 

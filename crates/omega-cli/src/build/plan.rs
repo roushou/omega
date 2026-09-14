@@ -5,9 +5,7 @@ use omega_document::{DocumentFile, StateDocument};
 use omega_host::{BuiltUnit, Generations, Layout, Profile, StateConfig, workspace::Plugins};
 use omega_proto::{Manifest, UnitName};
 
-/// The build, decided up front: every manifest read and validated, every
-/// source path resolved. Materializing it is a copy loop with no decisions
-/// left in it.
+/// Validated build inputs and resolved source paths for generation materialization.
 pub(super) struct Plan {
     units: Vec<UnitBuild>,
     generation: omega_host::GenerationStage,
@@ -54,9 +52,7 @@ impl Plan {
         self.units.len()
     }
 
-    /// What this build asked the daemon for, in one line: the point of
-    /// deriving a manifest is that nobody typed it, so the build says what it
-    /// derived.
+    /// Summarize aggregated manifest declarations.
     pub(super) fn grants(&self) -> String {
         let capabilities: std::collections::BTreeSet<&'static str> = self
             .units
@@ -84,8 +80,7 @@ impl Plan {
         for unit in &self.units {
             let entry = BuiltUnit::new(layout, unit.name.clone());
 
-            // The canonical bytes, not a re-encoding of them: this file is
-            // what the daemon hashes, so it must be what was hashed.
+            // Preserve canonical bytes: the staged file and handshake hash must match.
             stage.write(&entry.manifest, &unit.manifest.canonical())?;
 
             built.push(entry);
@@ -95,8 +90,7 @@ impl Plan {
             .file::<StateConfig>(StateConfig::FILE_NAME)
             .write(&StateConfig { units: built })?;
 
-        // What was built, and what it is all for: the pair lands together or
-        // not at all.
+        // Publish binaries and their document as one generation.
         DocumentFile::at(stage.path().join(DocumentFile::FILE_NAME)).write(document)?;
 
         if let Some(shell) = omega_omarchy::shell::CompiledShell::of(document)? {

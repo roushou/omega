@@ -1,7 +1,7 @@
-//! The workspaces, and which is being looked at.
+//! Compositor workspaces and active workspace selection.
 
 crate::wiring::reading! {
-    /// The workspaces, and which is being looked at.
+    /// Compositor workspaces and active workspace selection.
     Workspaces: omega_proto::omega::WorkspacesState
 }
 
@@ -26,24 +26,22 @@ impl Workspace {
         }
     }
 
-    /// The compositor's own id, which survives a rename — so a list keys
-    /// rows by this rather than by what it is called.
+    /// Compositor workspace ID. Stable across renames; suitable for item keys.
     pub fn id(&self) -> i32 {
         self.id
     }
 
-    /// `1`, or whatever it was named.
+    /// Workspace display name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// `eDP-1`.
+    /// Output identifier, such as `eDP-1`.
     pub fn monitor(&self) -> &str {
         &self.monitor
     }
 
-    /// How many windows are on it. Nought is an empty workspace, which a bar
-    /// usually draws quieter rather than not at all.
+    /// Number of windows on this workspace.
     pub fn windows(&self) -> u32 {
         self.windows
     }
@@ -64,12 +62,12 @@ impl Workspaces {
             .unwrap_or_default()
     }
 
-    /// The one being looked at.
+    /// Return the active workspace, if available.
     pub fn active(&self) -> Option<Workspace> {
         self.all().into_iter().find(Workspace::is_active)
     }
 
-    /// The ones on a given monitor, for a bar pinned to one.
+    /// Return workspaces assigned to the given output identifier.
     pub fn on(&self, monitor: &str) -> Vec<Workspace> {
         self.all()
             .into_iter()

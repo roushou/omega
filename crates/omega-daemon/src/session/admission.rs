@@ -1,16 +1,7 @@
-//! Who is on the other end, and what they were granted.
-//!
-//! Three kinds of peer, distinguished by what the kernel says about them:
-//!
-//! - a **unit**, holding the token the daemon minted for its spawn, granted
-//!   exactly what its manifest declares;
-//! - an **operator**, running as the daemon's own user — the person who owns
-//!   the daemon, who can already signal it and rewrite its state dir, so
-//!   lifecycle control over it grants nothing they lacked;
-//! - anyone else, refused.
-//!
-//! Grants are read from the daemon's own copy of the manifest, never from
-//! anything the peer sends.
+//! Authenticate plugin and operator peers.
+//! Plugin identity requires peer credentials and a daemon-issued spawn token.
+//! Operators must have the daemon owner's UID. Other peers are refused.
+//! Capabilities come only from the daemon's stored manifest.
 
 use std::collections::HashMap;
 
@@ -55,13 +46,7 @@ impl Peer {
         })
     }
 
-    /// A peer with no token. It is the operator if it is the daemon's own
-    /// user, and nobody otherwise.
-    ///
-    /// The uid is the whole check on purpose: on the socket's own terms there
-    /// is nothing stronger to ask for. A token file in the runtime directory
-    /// would be readable by exactly the same processes, and would only make
-    /// the boundary look sturdier than it is.
+    /// Authenticate a tokenless operator using the daemon owner's peer UID.
     pub fn operator(pid: i32, uid: u32) -> Result<Self, Refusal> {
         if uid != Identity::uid() {
             return Err(Refusal::unauthenticated(

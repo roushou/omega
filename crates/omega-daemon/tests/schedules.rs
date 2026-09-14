@@ -1,11 +1,5 @@
-//! Schedules: the only thing in the runtime plane nobody asks for.
-//!
-//! Two halves, tested apart because they fail apart. The reconciler decides
-//! *which* schedules should be running, and the mistake it can make is
-//! restarting a timer that did not change — which shows up as a clock that
-//! resets every time an unrelated unit connects. The runtime decides *when*,
-//! and the mistake it can make is firing a schedule the document has stopped
-//! declaring.
+//! Schedule reconciliation and timer execution tests.
+//! Unchanged declarations must preserve timer progress; removed declarations must stop firing.
 
 use std::time::Duration;
 
@@ -55,9 +49,7 @@ async fn fired(events: &mut omega_daemon::hub::history::Receiver<Event>) -> Stri
 
 #[tokio::test]
 async fn a_schedule_fires_as_soon_as_it_starts() {
-    // Not after one period. A schedule that waited out its first interval
-    // would leave whatever it feeds empty until then, and "every ten minutes"
-    // is not a request to start in ten minutes.
+    // The first schedule tick is immediate.
     let (hub, schedules) = schedules();
     let mut events = hub.subscribe_events();
 
@@ -111,9 +103,7 @@ async fn a_schedule_that_was_stopped_does_not_fire_again() {
 
 #[tokio::test]
 async fn a_cadence_this_build_cannot_read_starts_nothing() {
-    // The failure the grammar exists to prevent, at the boundary where a
-    // document arrives from disk: a schedule that is accepted and then never
-    // fires is worse than one that is refused.
+    // Reject unsupported cron syntax at document validation.
     let (_hub, schedules) = schedules();
 
     let cron = Schedule {
@@ -169,10 +159,7 @@ fn a_document_that_declares_a_schedule_plans_to_start_it() {
 
 #[tokio::test]
 async fn a_schedule_that_did_not_change_is_left_alone() {
-    // The whole reason the timers outlive a pass. Convergence runs whenever a
-    // unit connects or a bar re-renders; a plan that restarted every schedule
-    // each time would reset every clock on the machine, and a ten-minute
-    // refresh would never reach ten minutes.
+    // Unrelated convergence must not reset existing timer deadlines.
     let (_hub, schedules) = schedules();
     let document = document([Schedule::announcing("refresh", Cadence::minutes(10))]);
 
@@ -251,8 +238,7 @@ async fn a_schedule_performs_the_action_the_document_gave_it() {
         .await
         .unwrap();
 
-    // The action is spawned and not waited for, so this waits for the
-    // effect rather than for the call.
+    // Wait for asynchronous action completion.
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while !touched.exists() && std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;

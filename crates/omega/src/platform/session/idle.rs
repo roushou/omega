@@ -1,7 +1,7 @@
-//! Whether anybody is using the machine.
+//! Session activity and lock state.
 
 crate::wiring::reading! {
-    /// Whether anybody is using the machine.
+    /// Session activity and lock state.
     Idle: omega_proto::omega::IdleState
 }
 
@@ -13,14 +13,12 @@ impl Idle {
         self.read().is_some_and(|idle| idle.idle)
     }
 
-    /// Whether it is locked. Not the same question: a locked session is not
-    /// necessarily idle and an idle one is not necessarily locked.
+    /// Whether the session is locked. Independent of idle state.
     pub fn is_locked(&self) -> bool {
         self.read().is_some_and(|idle| idle.locked)
     }
 
-    /// When it went idle. `None` while somebody is using it, which is what
-    /// the wire's nought means.
+    /// Time the session became idle, or `None` if no idle timestamp is available.
     pub fn since(&self) -> Option<SystemTime> {
         let idle = self.read()?;
         match idle.idle_since {
@@ -29,7 +27,7 @@ impl Idle {
         }
     }
 
-    /// How long it has been idle, or `None` if it is not.
+    /// Current idle duration, or `None` if no idle timestamp is available.
     pub fn how_long(&self) -> Option<Duration> {
         SystemTime::now().duration_since(self.since()?).ok()
     }

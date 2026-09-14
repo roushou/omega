@@ -10,40 +10,31 @@ use tokio::process::Command;
 pub struct Capture;
 
 impl Capture {
-    /// `grim` is the Wayland screenshot tool; `slurp` selects a region and
-    /// `wl-copy` puts the result on the clipboard. Named here rather than in
-    /// the daemon because knowing them is a desktop convention.
+    /// Use grim for capture, slurp for region selection, and wl-copy for clipboard output.
     pub fn command(shot: &Screenshot) -> Option<String> {
         let mut grim = String::from("grim");
 
         if !shot.region_monitor_id.is_empty() {
             grim.push_str(&format!(" -o {}", Self::named(&shot.region_monitor_id)?));
         } else if !shot.fullscreen {
-            // Neither a monitor nor the whole screen: ask where.
+            // Interactive capture requires selecting a region.
             grim.push_str(" -g \"$(slurp)\"");
         }
 
         Some(match (shot.clipboard, shot.output_path.is_empty()) {
-            // grim writes to stdout when told to, which is what the clipboard
-            // wants — and a path as well means both, which grim cannot do in
-            // one pass.
+            // Clipboard capture uses stdout and cannot also write a path in the same invocation.
             (true, true) => format!("{grim} - | wl-copy"),
             (true, false) => format!(
                 "{grim} {path} && wl-copy < {path}",
                 path = Self::named(&shot.output_path)?
             ),
             (false, false) => format!("{grim} {}", Self::named(&shot.output_path)?),
-            // Nowhere to put it. grim's own default is a dated file in the
-            // working directory, which for a daemon is not a place anyone
-            // will find it.
+            // Require a destination instead of using the daemon's working directory.
             (false, true) => return None,
         })
     }
 
-    /// A name that could be pasted into a shell line.
-    ///
-    /// These go through a shell — `grim … | wl-copy` is a pipeline — so a
-    /// path carrying a quote or a semicolon would be a second command.
+    /// Quote arguments before inserting them into a shell pipeline.
     fn named(name: &str) -> Option<&str> {
         if name.is_empty() || name.contains(['\'', '"', ';', '&', '|', '$', '`', '\n']) {
             None
@@ -73,7 +64,6 @@ impl Desktop {
         if status.success() {
             Ok(())
         } else {
-            // Loud: a screenshot nobody took is not a screenshot.
             Err(BrokerError::unreadable(format!(
                 "{command:?} exited {status}"
             )))

@@ -1,15 +1,4 @@
-//! What a published crate carries, and what it asks for.
-//!
-//! Cargo packages a crate's own directory and nothing above it, so a file
-//! read from the repository root builds perfectly here and is simply missing
-//! for everyone who installs it. Both halves of omega had that at once —
-//! `omega-proto` compiled its protobuf schema from `../../schema`, and this
-//! crate embedded its templates and its renderer from `../../../` — and no
-//! test or build said a word, because on a developer's machine those files
-//! are exactly where they are expected to be.
-//!
-//! These read the repository rather than a fixture, because the thing being
-//! checked is where files are and what the manifests say about them.
+//! Verify published crates include all compile-time assets and versioned dependencies.
 
 use std::path::{Path, PathBuf};
 
@@ -45,9 +34,7 @@ fn sources(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Every `.rs` file a crate *tests* with, which `sources` deliberately skips:
-/// a test is not published, so it may climb, but it still runs on somebody's
-/// machine.
+/// Find Rust test sources separately from packaged production sources.
 fn test_sources(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     walk(&root.join("tests"), &mut found);
@@ -69,13 +56,7 @@ fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// How far each `include_str!` in this source climbs before it descends.
-///
-/// Only the first literal of an invocation is read, because that is where a
-/// climb can be: `concat!("../", DIR, "/", NAME)` puts every `..` in the
-/// first piece, and nothing a later piece expands to can bring a path back
-/// up. Counting the climb rather than resolving the path is what makes a
-/// macro-built include checkable at all.
+/// Count parent-directory traversal in include macros' leading literals.
 fn climbs(source: &str) -> Vec<(String, usize)> {
     let mut found = Vec::new();
     for macro_name in ["include_str!", "include_bytes!"] {
@@ -106,11 +87,7 @@ fn depth(file: &Path, root: &Path) -> usize {
         .unwrap_or(0)
 }
 
-/// One manifest, read loosely.
-///
-/// Not through the typed model: that one describes the manifests omega
-/// *generates*, and every crate in this repository inherits half its package
-/// table with `workspace = true`, which that model has no shape for.
+/// Package manifest model supporting workspace-inherited metadata.
 fn manifest(path: &Path) -> toml::Value {
     let source =
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -158,9 +135,7 @@ fn nothing_a_crate_compiles_reaches_above_its_own_root() {
 
 #[test]
 fn the_schema_a_published_proto_crate_compiles_is_inside_it() {
-    // `omega-proto` generates its types from the schema at build time, so the
-    // schema has to travel with it. The same rule as the test above, asserted
-    // where a build script rather than the compiler reads the path.
+    // Require schemas to be packaged with their build script.
     let wire = checkout().join("crates/omega-proto");
     let build = std::fs::read_to_string(wire.join("build.rs")).unwrap();
 
@@ -191,10 +166,7 @@ fn every_internal_dependency_carries_the_version_it_will_publish_as() {
 
         for table in dependency_tables(&manifest) {
             for (name, dependency) in table {
-                // A path dependency with no version cannot be published:
-                // cargo has nothing to write into the registry entry and
-                // refuses. One with the *wrong* version publishes, and then
-                // resolves to somebody else's release.
+                // Path dependencies need matching versions for registry publication.
                 if !name.starts_with("omega") || dependency.get("path").is_none() {
                     continue;
                 }
@@ -214,15 +186,7 @@ fn every_internal_dependency_carries_the_version_it_will_publish_as() {
 
 #[test]
 fn nothing_that_runs_cargo_builds_in_the_system_temp_directory() {
-    // `/tmp` is a tmpfs on most Linux installs — memory, capped at half of
-    // it, wiped on reboot. That is the right home for a socket or a manifest,
-    // and the wrong one for a cargo target directory, which runs to hundreds
-    // of megabytes: the build is held in RAM while it runs and thrown away
-    // before the next one, so every run recompiles from nothing.
-    //
-    // Cargo hands integration tests `CARGO_TARGET_TMPDIR` for exactly this.
-    // The rule is therefore narrow: keep using `temp_dir` for scratch, but
-    // not in a file that also drives a compiler.
+    // Keep compiler output under CARGO_TARGET_TMPDIR; temporary files may use temp_dir.
     let mut checked = 0;
 
     for root in crate_roots() {
@@ -265,11 +229,7 @@ fn inherited<'a>(
 
 #[test]
 fn every_published_crate_carries_the_metadata_a_registry_shows() {
-    // Description and license decide whether a publish is accepted; readme,
-    // keywords and categories decide whether anybody finds the crate
-    // afterwards. All of them are invisible locally — nothing but a publish
-    // reads them — so a crate added without them is only noticed on the day
-    // it ships.
+    // Require publication metadata on every package.
     let workspace = manifest(&checkout().join("Cargo.toml"));
 
     let mut checked = 0;

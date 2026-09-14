@@ -6,10 +6,7 @@ use crate::fs::AtomicFile;
 use crate::toml::schema::TomlSchema;
 use crate::toml::{Toml, TomlDoc};
 
-/// A typed address: this path holds a document of schema `S`.
-///
-/// Constructing one does no I/O, so a file can be located, passed around, and
-/// stored long before it is touched.
+/// Typed document path. Construction performs no I/O.
 pub struct TomlFile<S> {
     path: PathBuf,
     schema: PhantomData<fn() -> S>,

@@ -1,13 +1,5 @@
-//! Making the daemon part of the session.
-//!
-//! Run from a terminal, omega is something you started. Run as a service, it
-//! is part of the desktop: it comes back after a reboot, it is restarted when
-//! it fails, and it goes away with the session that it draws into.
-//!
-//! Unlike the renderer, the unit file cannot be carried in the binary — it
-//! names the binary's own path, so it is written from whichever `omega` is
-//! doing the installing. That is also the failure worth diagnosing: two omegas
-//! on one machine, with the service running the other one.
+//! Generate and manage the Omega user service.
+//! The installed unit records the installing executable's absolute path.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -21,17 +13,10 @@ use omega_host::AtomicFile;
 pub struct Service;
 
 impl Service {
-    /// What the unit is called, which is what a person types after
-    /// `systemctl --user`.
+    /// Systemd user service name.
     pub const NAME: &'static str = "omega.service";
 
-    /// The unit file for a daemon run from `program`.
-    ///
-    /// `graphical-session.target` on both sides is the whole of the lifetime:
-    /// the daemon binds its sockets in `$XDG_RUNTIME_DIR` and draws through a
-    /// shell that belongs to one session, so it starts with a session and is
-    /// stopped with it rather than lingering as a daemon with nothing to draw
-    /// into.
+    /// Generate a unit bound to the graphical session for the given executable.
     pub fn unit(program: &Path) -> String {
         format!(
             "\
@@ -58,15 +43,12 @@ WantedBy=graphical-session.target
         )
     }
 
-    /// The omega a service installed now would run.
+    /// Resolve the executable used by a new service installation.
     pub fn program() -> anyhow::Result<PathBuf> {
         std::env::current_exe().context("cannot tell where this omega is on disk")
     }
 
-    /// Write the unit file at `path`, replacing whatever was there.
-    ///
-    /// The path is given rather than asked of a [`ServiceManager`]: which
-    /// file this is belongs to the manager, and what goes in it does not.
+    /// Write the generated unit file at the supplied path.
     pub fn install(path: &Path, program: &Path) -> anyhow::Result<()> {
         AtomicFile::at(path)
             .write(Self::unit(program).as_bytes())
@@ -74,7 +56,7 @@ WantedBy=graphical-session.target
         Ok(())
     }
 
-    /// Take the unit file away. Says whether there was one.
+    /// Remove the unit file. Return whether it existed.
     pub fn uninstall(path: &Path) -> anyhow::Result<bool> {
         if path.exists() {
             std::fs::remove_file(path)?;
@@ -84,7 +66,7 @@ WantedBy=graphical-session.target
         }
     }
 
-    /// What is on disk where the unit file belongs.
+    /// Inspect the installed unit file.
     pub fn installed(path: &Path, program: &Path) -> Installed {
         let Ok(found) = std::fs::read_to_string(path) else {
             return Installed::Missing;
@@ -99,9 +81,7 @@ WantedBy=graphical-session.target
         }
     }
 
-    /// The omega an installed unit file runs, which is the diagnostic that
-    /// matters: a service that came back after a reboot running a different
-    /// binary looks exactly like one that did not come back at all.
+    /// Return the executable named by the installed unit's `ExecStart`.
     fn runs(unit: &str) -> Option<String> {
         let line = unit
             .lines()
@@ -109,8 +89,7 @@ WantedBy=graphical-session.target
         Some(line.split_whitespace().next()?.to_string())
     }
 
-    /// Whether this program sits in a directory cargo builds into, and so is
-    /// one `cargo clean` away from a service that cannot start.
+    /// Whether Cargo cleanup could remove this executable.
     pub fn is_a_build_artifact(program: &Path) -> bool {
         program
             .ancestors()
@@ -125,31 +104,21 @@ pub enum Installed {
     Missing,
     /// The unit file this binary would write, byte for byte.
     Current,
-    /// Something else — an older install, a hand edit, or one that runs a
-    /// different omega. The program is the one it runs, when it names one.
+    /// An installed unit that differs from the expected contents, including its executable.
     Stale { program: Option<String> },
 }
 
-/// What keeps a user's services running on this machine.
-///
-/// A type rather than a path, for the same reason [`omega_omarchy::HostShell`]
-/// is one: installing is more than writing a file — something has to be told
-/// the file exists, and told to run it.
+/// Supported user service manager and its unit-file location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceManager {
     Systemd,
 }
 
 impl ServiceManager {
-    /// Names the unit directory outright, for a machine laid out unusually —
-    /// and for the tests, which must not write where a real manager reads.
+    /// Override the unit directory, including for isolated tests.
     pub const ENV: &'static str = "OMEGA_SERVICE_DIR";
 
-    /// The service manager on this machine, if omega knows how to install
-    /// into it.
-    ///
-    /// Both halves matter: `systemctl` on a machine whose user manager is not
-    /// running would take an install and never run it.
+    /// Detect a supported, running user service manager.
     pub fn detect() -> Option<Self> {
         if std::env::var_os(Self::ENV).is_some() {
             return Some(Self::Systemd);
@@ -208,11 +177,7 @@ impl ServiceManager {
         self.run(&["disable", "--now", Service::NAME])
     }
 
-    /// Run it again, so a rewritten unit file is the one in effect.
-    ///
-    /// Enabling an already-running service starts nothing: the instance that
-    /// is up keeps the `ExecStart` it was started with, which after an
-    /// install is the previous omega.
+    /// Restart the service to activate updated unit-file contents.
     pub fn restart(self) -> std::io::Result<Output> {
         self.run(&["restart", Service::NAME])
     }
@@ -227,7 +192,7 @@ impl ServiceManager {
         self.succeeds(&["is-active", Service::NAME])
     }
 
-    /// How a person reads what went wrong, which omega does not paraphrase.
+    /// Diagnostic command for service-manager failures.
     pub fn diagnose_command(self) -> String {
         match self {
             Self::Systemd => format!("systemctl --user status {}", Service::NAME),

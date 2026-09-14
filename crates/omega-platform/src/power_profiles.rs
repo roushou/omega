@@ -1,14 +1,5 @@
-//! How the machine trades performance against power.
-//!
-//! `power-profiles-daemon` owns the setting and anything on the machine may
-//! change it — a terminal, a vendor tool, the daemon itself when the lid gets
-//! warm. So this is a reading rather than something a unit remembers having
-//! set: a memory is right until somebody else acts, and then it is confidently
-//! wrong.
-//!
-//! `ActiveProfile` is a writable property that emits a change, so setting it
-//! is a property write and the next reading comes back through the same signal
-//! every other change does. Nothing here has to guess what it did.
+//! Observe and control power-profiles-daemon.
+//! Property signals refresh active profile state after local or external changes.
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -25,10 +16,7 @@ use omega_proto::{ActionKind, SystemTopic};
 use crate::broker::{Broker, BrokerError, opaque_debug};
 use crate::dbus;
 
-/// What the daemon calls each profile.
-///
-/// The one place the spelling lives. Omega's ontology names them; this
-/// translates, the way `logind`'s broker knows that `Sleep` is `Suspend`.
+/// Map protocol profiles to service names.
 fn spelled(profile: PowerProfile) -> Option<&'static str> {
     match profile {
         PowerProfile::Saver => Some("power-saver"),
@@ -38,9 +26,7 @@ fn spelled(profile: PowerProfile) -> Option<&'static str> {
     }
 }
 
-/// And back. A name this build does not know reads as unspecified rather than
-/// as a guess — a vendor profile is a profile Omega cannot offer, not one it
-/// should mislabel.
+/// Map unknown service profile names to Unspecified.
 fn named(id: &str) -> PowerProfile {
     match id {
         "power-saver" => PowerProfile::Saver,
@@ -110,9 +96,7 @@ impl Link {
     }
 
     async fn set(&self, profile: PowerProfile) -> Result<(), BrokerError> {
-        // The proto zero. A caller that did not say which profile has not
-        // asked for one, and picking a default here would be this broker
-        // deciding something the document should have.
+        // Reject unspecified profiles rather than selecting a default.
         let id = spelled(profile)
             .ok_or_else(|| BrokerError::unreadable("SetPowerProfile names no profile"))?;
         self.profiles

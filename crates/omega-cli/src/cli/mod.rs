@@ -46,13 +46,8 @@ impl Cli {
         self.verbose
     }
 
-    /// `RUST_LOG` wins; otherwise the verbosity flag sets omega's own level.
-    ///
-    /// Logs go to stderr, like every other thing the CLI says about itself,
-    /// and the module path is left out until someone asks for it — `omega
-    /// daemon` is something a person watches in a terminal, and
-    /// `omega_daemon::supervisor::process` in front of every line is for
-    /// whoever is debugging omega, not for whoever is running it.
+    /// `RUST_LOG` overrides verbosity flags. Write diagnostics to stderr;
+    /// include module paths only at debug verbosity.
     pub fn init_tracing(verbose: u8) {
         let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             let level = match verbose {

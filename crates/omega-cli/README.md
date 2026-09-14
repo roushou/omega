@@ -6,8 +6,8 @@ plugins or run them against the live desktop during development.
 
 Omega requires Linux with a systemd user manager and Rust 1.88 or newer.
 Quickshell renders independent windows and overlays; Omarchy hosts bar placements. Install this package with
-`cargo install omega-cli`; the [project README](https://github.com/roushou/omega)
-describes source installation for changes ahead of the published releases.
+`cargo install omega-cli --locked`; see the
+[project README](https://github.com/roushou/omega) for setup.
 
 ## Using Omega
 
@@ -93,15 +93,15 @@ These details go to stderr alongside the usual plugin table on stdout.
 then suggests adoption, application, or explicit overwrite as appropriate.
 Array paths use positions so widget ordering remains visible.
 
+`omega preview <package>` opens isolated development cases from a plugin or library,
+including private components. It watches edits, keeps failed builds visibly stale,
+and captures effects for explicit simulated outcomes. `--capture` and `--baseline`
+compare deterministic viewport images. See [the preview guide](../../docs/previews.md)
+for registration, reset, and fixture requirements.
+
 Run `omega --help` or `omega <command> --help` for the full command reference.
 
 [Project](https://github.com/roushou/omega) ·
 [Architecture](https://github.com/roushou/omega/blob/main/docs/architecture.md)
 
 Licensed under MIT.
-
-`omega preview <package>` opens isolated development cases from a plugin or library,
-including private components. It watches edits, keeps failed builds visibly stale,
-and captures effects for explicit simulated outcomes. `--capture` and `--baseline`
-compare deterministic viewport images. See [the preview guide](../../docs/previews.md)
-for registration, reset, and fixture requirements.

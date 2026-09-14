@@ -61,9 +61,7 @@ fn a_plugins_manifest_is_the_sum_of_its_fields() {
     let manifest =
         manifest_of(&omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
 
-    // Nothing here was typed by an author. Holding a `Battery` is what asks
-    // to read the battery topic, and asking to read is what costs the
-    // capability.
+    // Reading fields declare their topic subscriptions and capabilities.
     assert_eq!(manifest.state_topics, vec!["battery"]);
     assert_eq!(manifest.granted().unwrap(), vec![Capability::StateRead]);
     assert_eq!(manifest.surfaces.len(), 1);
@@ -184,10 +182,7 @@ fn an_instance_is_configured_by_the_document() {
     assert_eq!(Warning::read(&settings), Warning { low_threshold: 20 });
 }
 
-/// A command with settings.
-///
-/// The case a placement cannot serve: a command is never put in a bar, so the
-/// settings its unit was given are the only ones it can ever have.
+/// Command fixture using unit-level settings.
 #[derive(omega::Command)]
 #[omega(name = "threshold")]
 struct Threshold {
@@ -226,9 +221,7 @@ async fn a_unit_is_told_its_settings_at_the_handshake() {
     let mut daemon =
         TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").command::<Threshold>());
 
-    // There is no later moment that would do: a plugin's fields are built out
-    // of its settings, so a unit that was not told them at construction was
-    // built without them.
+    // Settings must be available when plugin fields are constructed.
     daemon
         .welcome_configured(&State::new(), &Warning { low_threshold: 20 }.write())
         .await;
@@ -292,9 +285,7 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
         "batt low"
     );
 
-    // A placement that names one key must not silently reset the others: the
-    // threshold it says nothing about is still the unit's 20, not the
-    // field's default of 0.
+    // Placement settings override only specified keys.
     let drawn = daemon
         .render(
             "battery",
@@ -369,9 +360,7 @@ async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
         omega::Plugin::named("charge", "0.1.0").surface_default::<MaybeCharge>(),
     );
 
-    // A desktop has no battery, and the daemon says so by publishing the
-    // topic with no value. That is an answer, so the widget draws — where
-    // waiting for a reading that never comes held the first render forever.
+    // Reported absence satisfies readiness and allows the first render.
     daemon
         .welcome(&State::new().absent(SystemTopic::Battery))
         .await;
@@ -498,10 +487,7 @@ impl Surface for Showing {
 
 #[test]
 fn a_topics_address_comes_from_where_it_is_defined() {
-    // The crate that defines the type owns the keyspace, and the type names
-    // the key. Neither is a string anybody typed — including here: asserting
-    // the literal would pin this crate's own package name, which is not what
-    // the rule is about.
+    // Record addresses derive from the defining crate and type.
     assert_eq!(Mode::UNIT, env!("CARGO_PKG_NAME"));
     assert_eq!(Mode::KEY, "mode");
     assert_eq!(Mode::address(), format!("unit.{}.mode", Mode::UNIT));
@@ -515,8 +501,7 @@ fn owning_state_declares_the_right_to_publish_it() {
             .command::<Focus>(),
     );
 
-    // Writing needs permission to write; reading somebody's keyspace is what
-    // a manifest declares, so both ends of this plugin are in it.
+    // Declare write capability and record subscriptions.
     assert_eq!(
         manifest.granted().unwrap(),
         vec![Capability::StateRead, Capability::StateWrite]
@@ -584,21 +569,12 @@ async fn one_plugin_draws_what_another_published() {
 
 // ---- the contract the shell reads ----
 
-/// What a node looks like on the wire, as the renderer sees it.
-///
-/// The shell is QML and cannot be compiled against these types, so this is
-/// where the two halves are held to the same shape: a prop renamed here and
-/// not there is a widget that silently draws nothing.
+/// Assert the SDK wire shapes consumed by the QML renderer.
 fn wire(ui: Ui) -> serde_json::Value {
     serde_json::to_value(ui.into_tree()).unwrap()
 }
 
-/// One of every node kind, with the props that make each one what it is.
-///
-/// Shared by the two tests below, which ask different things of it: one pins
-/// the shapes the wire carries, the other that every prop on it is a prop the
-/// vocabulary declares. Both are only as exhaustive as this is, so it is one
-/// tree rather than two that drift.
+/// Shared exhaustive node fixture for property-shape and vocabulary checks.
 #[derive(omega::Form)]
 struct FormValues {
     #[omega(label = "Name")]
@@ -672,9 +648,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     let root = &tree["root"];
     assert_eq!(root["type"], "stack");
     assert_eq!(root["props"]["align"]["stringValue"], "row");
-    // Protobuf JSON writes a 64-bit integer as a string, which a reader has
-    // to parse rather than use. Pinned here because forgetting it renders a
-    // gap of NaN.
+    // Protobuf int64 JSON values require string-to-number conversion.
     assert_eq!(root["props"]["gap"]["intValue"], "6");
 
     let children = root["children"].as_array().unwrap();
@@ -692,13 +666,10 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[3]["type"], "button");
     assert_eq!(children[3]["props"]["icon"]["stringValue"], "play");
     assert_eq!(children[3]["props"]["label"]["stringValue"], "toggle");
-    // What a node *does* is not a prop. A binding lives beside them, so the
-    // shell reads behaviour from one place rather than sniffing prop names.
+    // Bindings are separate from node properties.
     assert_eq!(children[3]["events"]["press"]["command"], "toggle");
 
-    // Arguments travel as protobuf JSON `Value`s, which is exactly what an
-    // `InvokeUnit` carries — so the shell forwards them verbatim instead of
-    // re-encoding them, and this is the shape it forwards.
+    // Bound arguments use protobuf JSON Value encoding.
     let connect = &children[4]["events"]["press"];
     assert_eq!(connect["command"], "connect");
     assert_eq!(connect["args"][0]["stringValue"], "home");
@@ -772,32 +743,21 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[17]["type"], "grid");
     assert_eq!(children[17]["props"]["columns"]["intValue"], "2");
 
-    // A local file reaches the shell; a URL does not. Fetching what a unit
-    // named would make the shell issue requests on its behalf, which no
-    // capability granted — so the source is dropped and the node draws
-    // nothing rather than reaching out.
+    // Reject remote image URLs without fetching them.
     assert_eq!(
         children[18]["props"]["source"]["stringValue"],
         "/tmp/art.png"
     );
     assert!(children[19]["props"].get("source").is_none());
 
-    // Keys are the path to a node, and the renderer keeps a node whose key it
-    // already has rather than rebuilding it.
+    // Stable keys preserve renderer node identity.
     assert_eq!(root["key"], "root");
     assert_eq!(children[3]["key"], "root.3");
 }
 
 #[test]
 fn the_sdk_emits_only_props_the_vocabulary_declares() {
-    // The third party to an agreement the other two now keep between them.
-    // `Props.js` is generated from the node table, so a shell cannot read a
-    // name nothing publishes — which is worth nothing if the SDK publishes a
-    // name the table has never heard of. Then the prop is on the wire, no
-    // reader exists for it, and the widget draws the fallback in silence.
-    //
-    // The tree below is the one the pinning test builds, walked instead of
-    // indexed: every node in it, whatever it is.
+    // Every emitted property must exist in the shared node vocabulary.
     let tree = wire(every_node());
     let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
 
@@ -819,8 +779,7 @@ fn the_sdk_emits_only_props_the_vocabulary_declares() {
         }
     });
 
-    // And the tree stays exhaustive, or the check above is only as good as
-    // whatever somebody last remembered to add to it.
+    // Require coverage of every supported node kind.
     for kind in omega_proto::NodeKind::ALL {
         assert!(
             seen.contains(kind.name()),
@@ -844,8 +803,7 @@ fn walk(node: &serde_json::Value, each: &mut impl FnMut(&serde_json::Value)) {
 
 #[test]
 fn a_widget_that_draws_nothing_says_so() {
-    // An empty view has no root, which the shell renders as absent rather
-    // than as a gap where something used to be.
+    // Empty views contribute no root or layout gap.
     assert_eq!(wire(Ui::empty())["root"], serde_json::Value::Null);
 }
 
@@ -905,26 +863,21 @@ fn a_unit_can_publish_a_list() {
         names: vec!["home".into(), "cafe".into()],
     };
 
-    // Through the same map a keyspace value travels as. A struct in the list
-    // is a value in its own right, which is what lets it be in one.
+    // Round-trip nested structs through generic values.
     let round_tripped = Scan::read(&scan.write());
     assert_eq!(round_tripped, scan);
 }
 
 #[test]
 fn a_list_that_cannot_be_read_takes_the_default() {
-    // Reading a *field* is total, so a list of the wrong shape reads as the
-    // type's default rather than failing the whole document — the same rule
-    // that lets a field be added without breaking a writer that predates it.
+    // Invalid field values use the derived reader's default.
     let wrong = Values::new().with("names", 7_i64);
     assert_eq!(Scan::read(&wrong).names, Vec::<String>::new());
 }
 
 #[test]
 fn one_unreadable_element_is_not_a_shorter_list() {
-    // All or nothing on the way back. Dropping the element nobody could read
-    // would hand back a list that looks complete and is not — which is worse
-    // than saying the list was not understood.
+    // Reject the complete list if any element cannot be decoded.
     let mixed: Vec<omega::internal::Value> = vec![
         omega::internal::IntoValue::into_value("home"),
         omega::internal::IntoValue::into_value(7_i64),
@@ -954,9 +907,7 @@ impl Surface for BarClock {
 
 #[test]
 fn a_clock_draws_the_time_without_carrying_a_calendar() {
-    // The daemon applies the zone rules and hands over the parts. A unit that
-    // had to convert a timestamp would need the whole tz database to draw two
-    // digits.
+    // Clock readings already contain timezone-adjusted parts.
     let state = State::new().with(omega_proto::omega::TimeState {
         year: 2026,
         month: 9,
@@ -974,12 +925,11 @@ fn a_clock_draws_the_time_without_carrying_a_calendar() {
 
 #[test]
 fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
-    // Every accessor falls back, so a widget built before the first tick
-    // draws something wrong rather than taking the unit down.
+    // Accessors return defaults for missing clock readings.
     assert_eq!(Drawn::of::<BarClock>(&State::new()).text(), "Sun 00:00");
 }
 
-// ---- a topic nobody wrote accessors for ----
+// Raw topic access
 
 /// Reading a topic that has no typed accessors, only the floor `get()` gives.
 #[derive(omega::Surface)]
@@ -1040,7 +990,7 @@ fn a_handle_declares_the_topic_its_type_names() {
 
 // ---- composites ----------------------------------------------------------
 
-/// A widget holding a composite rather than its two parts.
+/// Composite reading fixture.
 #[derive(omega::Surface)]
 struct Situation {
     power: omega::platform::power::Power,
@@ -1054,9 +1004,7 @@ impl Surface for Situation {
 
 #[test]
 fn a_composite_declares_every_topic_it_is_made_of() {
-    // The point of it being a field like any other: the manifest is still the
-    // union of what the fields declare, and a composite is one field that
-    // declares two topics.
+    // Composite dependencies contribute all their topics to the manifest.
     let manifest =
         manifest_of(&omega::Plugin::named("situation", "0.1.0").surface_default::<Situation>());
     assert_eq!(manifest.state_topics, vec!["battery", "mains"]);
@@ -1080,8 +1028,7 @@ fn a_full_battery_on_the_wall_is_neither_charging_nor_on_battery() {
 
 #[test]
 fn a_machine_with_no_battery_is_on_mains_not_flat() {
-    // A desktop. `charge()` is None rather than nought, so nothing reads it as
-    // an empty battery.
+    // Missing battery charge must remain None.
     let desktop = State::new().absent(SystemTopic::Battery).mains(true);
     assert_eq!(Drawn::of::<Situation>(&desktop).text(), "On mains");
 }

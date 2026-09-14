@@ -48,7 +48,7 @@ async fn an_operator_can_cycle_a_running_unit() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
-    // The operator presents no token; the uid is the whole claim.
+    // The operator authenticates by uid without a spawn token.
     let mut transport = harness.connect("operator", "").await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
@@ -119,9 +119,7 @@ async fn an_operator_may_not_read_a_units_state() {
         .await
         .unwrap();
 
-    // State reads are a unit's business, gated by a manifest an operator does
-    // not have. What the operator can watch, it watches on the read-only
-    // observation socket.
+    // Operators observe state through the observation socket.
     let refusal = expect_refusal(next_result(&mut transport).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
 }

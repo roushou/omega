@@ -43,9 +43,7 @@ pub struct Session {
     shutdown: Shutdown,
     /// Where a connected unit registers itself, so the daemon can invoke it.
     units: UnitTable,
-    /// The subsystems this daemon brokers. Empty by default, which answers
-    /// every brokered action `UNIMPLEMENTED` — right for a session that is
-    /// not a daemon, and for a test that is only exercising the protocol.
+    /// Broker routing. The empty default returns UNIMPLEMENTED for brokered actions.
     brokers: Brokerage,
     layout: Option<omega_host::Layout>,
     deployment: crate::reconcile::deployment::Deployment,
@@ -100,11 +98,7 @@ impl Session {
         self
     }
 
-    /// Serve one connection until the peer goes away.
-    ///
-    /// A peer that is turned away is *told* — the refusal goes out as a frame
-    /// before the socket closes, so a unit can report why it was rejected
-    /// instead of seeing an unexplained EOF.
+    /// Serve a peer session. Send a structured refusal before closing a rejected handshake.
     pub async fn serve(self, stream: UnixStream) -> Result<(), SessionError> {
         let shutdown = self.shutdown.clone();
         tokio::select! {
@@ -180,10 +174,7 @@ impl Session {
                     daemon_version: env!("CARGO_PKG_VERSION").to_string(),
                     capabilities: peer.grants().wire(),
                     state: Some(snapshot),
-                    // What the document configured this unit with. It arrives
-                    // at the handshake because a plugin's fields are built out
-                    // of it: there is no moment later than construction at
-                    // which handing it over would mean anything.
+                    // Deliver settings before plugin fields are constructed.
                     config: settings,
                 })),
             })
@@ -212,17 +203,13 @@ impl Session {
             tokio::select! {
                 published = state.recv() => {
                     match published {
-                        // Only what this peer subscribed to: a unit is woken
-                        // for the topics it declared, not for every source on
-                        // the machine.
+                        // Forward only subscribed topics.
                         Ok(patch) => {
                             if let Some(patch) = subscriptions.filter(&patch) {
                                 connection.send(Self::patch_frame(patch)).await?;
                             }
                         }
-                        // The mirror is now behind by an unknown amount, and a
-                        // silently stale mirror is worse than a slow one: send
-                        // the whole truth rather than let it drift forever.
+                        // Repair lag with a fresh snapshot and subscription.
                         Err(broadcast::error::RecvError::Lagged(missed)) => {
                             tracing::warn!(unit = %peer.label(), missed, "state subscriber lagged; resyncing");
                             let (snapshot, receiver) = self.hub.subscribe_state();
@@ -236,9 +223,7 @@ impl Session {
                 }
                 event = events.recv() => {
                     match event {
-                        // An event is a moment, not a value: a unit that was
-                        // not listening missed it, and there is nothing to
-                        // resend.
+                        // Events are not replayed to late subscribers.
                         Ok(event) if subscriptions.wants_event(&event) => {
                             if let Some(patch) = subscriptions.filter(&self.snapshot_patch()) {
                                 connection.send(Self::patch_frame(patch)).await?;
@@ -313,8 +298,7 @@ impl Session {
         }
     }
 
-    /// The topics a peer may see: what its manifest declares, or — for a
-    /// debug client the operator admitted on purpose — everything, read-only.
+    /// Allowed topics: declared plugin subscriptions or all topics for an authorized observer.
     fn subscriptions(&self, peer: &Peer) -> Subscriptions {
         peer.unit_name()
             .and_then(|name| self.units.manifest(name).map(|unit| (name, unit)))
@@ -333,10 +317,7 @@ impl Session {
         Ok(Handshake::expect_hello(frame)?)
     }
 
-    /// Identity, then grants. Both come from the daemon's own records: the
-    /// supervisor says which unit owns this (pid, token), and the manifest on
-    /// disk says what that unit may do. Nothing here is taken from `Hello`
-    /// except the claim being checked.
+    /// Resolve pid and token against supervision records, then load manifest grants.
     fn admit(&self, pid: i32, uid: u32, hello: &Hello) -> Result<Peer, Refusal> {
         let Some(name) = self.supervisor.identify(pid, &hello.token) else {
             return Peer::operator(pid, uid);
@@ -371,9 +352,7 @@ impl Session {
         }
     }
 
-    /// Route a `Result` back to whatever asked for it. Only streams the
-    /// daemon allocated are its own answers; a unit's `Result` on an odd
-    /// stream is a reply to nothing it asked.
+    /// Route replies only for daemon-allocated even stream IDs.
     fn answers_daemon(frame: &Frame, pending: &mut HashMap<u64, PendingRequest>) -> bool {
         if !DaemonStreams::is_ours(frame.stream_id) {
             return false;

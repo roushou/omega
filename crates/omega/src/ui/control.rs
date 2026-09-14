@@ -1,16 +1,7 @@
-//! Things the user acts on.
-//!
-//! What separates these from the rest of the vocabulary is that the unit
-//! hears about them. A [`Progress`] shows a proportion; a [`Slider`] reports
-//! one. A typed [`Bind`] connects the interaction to a command accepting
-//! that value. Decoding happens before the command executes.
-//!
-//! Interaction state is not on the wire. Which row is expanded, where a drag
-//! is right now, what is half-typed — the shell owns all of it, because a
-//! half-finished gesture is not a fact about the machine. The unit hears the
-//! value when there is one to hear.
-//!
-//! [`Progress`]: crate::ui::Progress
+//! Interactive controls with typed command and local-message bindings.
+//! Controls submit values through [`Bind`]; input decoding occurs before dispatch.
+//! The renderer retains focus, drag state, and unsubmitted text across updates.
+//! Use controlled fields and lists to synchronize editing or selection with a model.
 
 use std::fmt::Display;
 
@@ -20,11 +11,7 @@ use crate::units::Percent;
 use crate::{Command, Input};
 use crate::{command::CommandRef, ui::Bind};
 
-/// Something to press.
-///
-/// Pressing it calls one of this unit's own commands — the same command
-/// `omega run` calls, and the same one a keybind would. A button is not a way
-/// to reach past the unit that drew it.
+/// A button that submits a command or local message when activated.
 #[derive(Debug, Clone)]
 pub struct Button {
     node: Node,
@@ -48,10 +35,8 @@ impl Button {
         self
     }
 
-    /// What to call when it is pressed. Must be a command this unit
-    /// registered, or the daemon refuses the call.
-    ///
-    /// Accepts a command taking `()`, or a command reference with its input bound.
+    /// Bind activation to a local message or a command registered by this plugin.
+    /// Accepts a binding with no input or with all command input already bound.
     pub fn on_press(mut self, press: impl Into<Bind<()>>) -> Self {
         self.node = self.node.on("press", press);
         self
@@ -60,13 +45,8 @@ impl Button {
 
 styled!(Button);
 
-/// A proportion the user can drag.
-///
-/// Submits a [`Percent`] to the bound command.
-///
-/// The drag itself is the shell's business. A unit hears where it landed, not
-/// every pixel on the way — a render round trip per frame would make the
-/// control lag the finger doing it.
+/// An adjustable percentage slider.
+/// Submits a [`Percent`] when a drag is released or a keyboard adjustment is made.
 #[derive(Debug, Clone)]
 pub struct Slider {
     node: Node,
@@ -79,7 +59,7 @@ impl Slider {
         }
     }
 
-    /// A command accepting the percentage selected by the user.
+    /// Bind percentage changes to a command or local message.
     pub fn on_change(mut self, change: impl Into<Bind<Percent>>) -> Self {
         self.node = self.node.on("change", change);
         self
@@ -88,12 +68,9 @@ impl Slider {
 
 styled!(Slider);
 
-/// Something with two states.
-///
-/// The state it lands in is appended to the binding's arguments as a boolean.
-/// It flips as soon as it is pressed rather than waiting to be told: the
-/// round trip is short, but not so short that a switch which hesitates reads
-/// as a switch that did not work. The next render says what is actually true.
+/// A boolean switch.
+/// Submits the selected boolean value. The renderer displays the change
+/// immediately; subsequent views supply the authoritative state.
 #[derive(Debug, Clone)]
 pub struct Toggle {
     node: Node,
@@ -106,8 +83,7 @@ impl Toggle {
         }
     }
 
-    /// What to call when the user flips it. The state it landed in is
-    /// appended to the binding's arguments.
+    /// Bind changes to a command or local message accepting `bool`.
     pub fn on_change(mut self, change: impl Into<Bind<bool>>) -> Self {
         self.node = self.node.on("change", change);
         self
@@ -116,15 +92,9 @@ impl Toggle {
 
 styled!(Toggle);
 
-/// Something to type into.
-///
-/// The buffer lives in the shell. A half-typed passphrase is not a fact about
-/// the machine, and a render round trip per keystroke would put a Unix socket
-/// in the path of every character — so the unit hears the value once, when
-/// the user commits it:
-///
-///
-/// A standalone field submits a `String`; a form submits all its fields together.
+/// A text input with a persistent label.
+/// Standalone submission sends a `String`. Inside a form, fields submit together.
+/// Use `controlled` and `on_change` to synchronize edits with a surface model.
 #[derive(Debug, Clone)]
 pub struct Field {
     node: Node,
@@ -175,29 +145,21 @@ impl Field {
         self
     }
 
-    /// Draw what is typed as dots.
-    ///
-    /// Only how it draws. It is the same text on the wire when submitted, and
-    /// this is not a claim about how the value is handled after that.
+    /// Mask displayed input. Submitted values still contain the original text.
     pub fn secret(mut self) -> Self {
         self.node = self.node.flag("secret", true);
         self
     }
 
-    /// What the field starts with, and what it goes back to whenever the unit
-    /// says so.
-    ///
-    /// The exception to the buffer being the shell's: giving a value takes it
-    /// over, so a unit can clear a field after acting on it. Without one the
-    /// field keeps what the user typed across a re-render, which is what
-    /// stops a list refreshing underneath somebody mid-passphrase.
+    /// Set the field's model value. A changed value replaces the local draft;
+    /// repeated unchanged values preserve edits. Use [`Self::controlled`] for
+    /// revision-aware updates and explicit resets.
     pub fn value(mut self, value: impl Display) -> Self {
         self.node = self.node.text_prop("value", value.to_string());
         self
     }
 
-    /// What to call when the user commits it. The text is appended to the
-    /// binding's arguments.
+    /// Bind text submission to a command or local message accepting `String`.
     pub fn on_submit(mut self, submit: impl Into<Bind<String>>) -> Self {
         self.node = self.node.on("submit", submit);
         self
@@ -206,23 +168,13 @@ impl Field {
 
 styled!(Field);
 
-/// Rows to choose from.
+/// A selectable list with keyboard and pointer activation.
+/// Arrow keys change selection; Enter or a click activates a row. Assign each
+/// child a stable [`key`](crate::ui::Text::key); selection and activation submit
+/// that key. Use [`Self::selected`] and [`Self::on_select`] for model-owned selection.
 ///
-/// A [`Stack`] draws children in a line; a list is the one the user moves
-/// through. Arrows change selection and Enter activates it. Selection can be
-/// controlled with `selected` and `on_select`; activation delivers the row key
-/// to the binding.
-///
-/// Give every child a [`key`]: it is the identity the selection is kept
-/// against and the one handed back on activation, so a list of networks
-/// should key by SSID rather than let position decide.
-///
-/// [`height`] is what it scrolls at. Unset, it is as tall as its rows.
-///
-/// [`height`]: List::height
-///
-/// [`Stack`]: crate::ui::Stack
-/// [`key`]: crate::ui::Text::key
+/// Set [`Self::height`] to constrain the viewport and enable scrolling.
+/// Without it, the list sizes to its rows.
 #[derive(Debug, Clone)]
 pub struct List {
     node: Node,
@@ -265,9 +217,8 @@ impl List {
         self
     }
 
-    /// What to call when a row is activated, by Enter or by clicking it. The
-    /// row's key is appended to the binding's arguments. The input must decode
-    /// a string, such as `String` or `applications::ApplicationId`.
+    /// Bind row activation by Enter or click. Submits the row's key; the input
+    /// must decode a string, such as `String` or `ApplicationId`.
     pub fn on_activate<I: crate::Input>(mut self, activate: impl Into<Bind<I>>) -> Self {
         self.node = self.node.on("activate", activate);
         self

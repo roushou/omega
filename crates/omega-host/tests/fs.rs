@@ -185,9 +185,7 @@ mod watching {
         )
         .unwrap();
 
-        // The first `cargo build` inside a config dir creates `target/` from
-        // nothing; if that reads as a change, a watcher rebuilds because it
-        // built.
+        // Creating build output must not trigger source rebuilds.
         std::fs::create_dir_all(config.join("target/release")).unwrap();
         std::fs::write(config.join("target/release/battery"), "binary").unwrap();
 

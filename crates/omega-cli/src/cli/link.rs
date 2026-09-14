@@ -1,14 +1,6 @@
-//! `omega link`: build this config against a checkout of omega.
-//!
-//! A config's `Cargo.toml` names the published crates, because a config is a
-//! git repository that has to build on every machine it is cloned onto. That
-//! is the right thing to commit and the wrong thing for somebody working on
-//! omega's internals, who needs their own tree.
-//!
-//! Both are true at once through cargo's own answer: `[patch]`, written to
-//! `.cargo/config.toml`, which the scaffold tells git to ignore. The manifest
-//! stays portable; this machine builds against a checkout; and nobody's home
-//! directory ends up in a committed file.
+//! Configure machine-local Cargo patches for an Omega checkout.
+//! Overrides live in the gitignored `.cargo/config.toml`; manifest dependencies
+//! continue to name published packages.
 
 use anyhow::{Context, bail};
 
@@ -65,10 +57,7 @@ impl LinkCmd {
             .prepare(Some(&tree))?
             .apply()?;
 
-        // A patch only applies to a requirement it satisfies, so linking also
-        // makes the config ask for the version the checkout carries. Without
-        // this, a checkout that has moved on leaves cargo reporting a patch
-        // that "was not used" and no way to see why.
+        // Cargo ignores patches whose versions do not satisfy dependency requirements.
         let version = tree.version()?;
 
         ui.step(

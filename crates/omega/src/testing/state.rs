@@ -1,14 +1,11 @@
-//! The machine a test describes.
+//! State fixtures for plugin tests.
 
 use omega_proto::omega::{BatteryState, NetworkState, StatePatch, StateSnapshot, StateTopic};
 use omega_proto::{TopicValue, Values};
 
 use crate::runtime::context::Context;
 
-/// The state a plugin reads, built for a test.
-///
-/// Set topics with the same types the daemon publishes, so a test cannot
-/// describe a machine the daemon could not.
+/// Typed system topics and plugin records for tests.
 #[derive(Debug, Default, Clone)]
 pub struct State {
     topics: Vec<StateTopic>,
@@ -31,9 +28,9 @@ impl State {
         self
     }
 
-    /// Say this topic has nothing to report: the daemon has spoken about
-    /// it and there is no reading. A machine with no battery, an adapter
-    /// that is unplugged, a broker that is down.
+    /// Mark a topic as reported with no current reading.
+    /// Use to test missing devices or unavailable services. An omitted topic
+    /// remains pending instead.
     pub fn absent(mut self, topic: omega_proto::SystemTopic) -> Self {
         let topic = topic.as_str().to_string();
         self.topics.retain(|held| held.topic != topic);
@@ -45,7 +42,7 @@ impl State {
         self
     }
 
-    /// The battery, spelled the way a test means it.
+    /// Set battery charge from a fraction and its charging state.
     pub fn battery(self, charge: f64, charging: bool) -> Self {
         self.with(BatteryState {
             level: charge,
@@ -55,17 +52,12 @@ impl State {
         })
     }
 
-    /// Whether the cable is in. Its own topic, so a test can describe a
-    /// desktop — no battery, on mains — which is the case a widget holding
-    /// both is most likely to get wrong.
+    /// Set external power connection state independently of battery state.
     pub fn mains(self, connected: bool) -> Self {
         self.with(omega_proto::omega::MainsState { connected })
     }
 
-    /// The profile in force, and what this machine offers.
-    ///
-    /// Two arguments because the pair is the interesting case: a desktop that
-    /// offers no performance mode should not draw a button for one.
+    /// Set the active power profile and the profiles supported by the system.
     pub fn power_profile(
         self,
         active: omega_proto::omega::PowerProfile,
@@ -117,7 +109,7 @@ impl State {
         }
     }
 
-    /// A context holding this state, with effects collected rather than sent.
+    /// Construct fixture state with an isolated effect queue.
     pub(super) fn context(&self) -> (Context, crate::effect::queue::Effects) {
         let (sender, effects) = crate::effect::queue::Effects::channel();
         (Context::new(&self.snapshot(), sender), effects)

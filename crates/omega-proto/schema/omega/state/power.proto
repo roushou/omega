@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package omega;
 
-// What the machine is running on.
+// Battery, external power, and profile state.
 
 message BatteryState {
   double level = 1;             // 0.0 .. 1.0
@@ -11,45 +11,23 @@ message BatteryState {
   uint32 seconds_to_full = 4;
 }
 
-// Whether the machine is plugged in.
-//
-// Named for the socket rather than for power in general, and kept apart from
-// BatteryState for two reasons that both matter. A desktop has no battery, so
-// `battery` is absent there and this is not — a machine with nothing to say
-// about a battery still has something to say about the wall. And the two move
-// at different rates: a charge changes on every poll and this changes when
-// somebody pulls the cable, so a widget that only watches the cable should not
-// be woken by the other.
+// External power state, independent of battery presence and charge updates.
 message MainsState {
-  // Whether the machine is running on mains rather than its battery. From
-  // the same broker as the battery: it is one power supply subsystem, and two
-  // brokers reading it would be two answers to one question.
+  // Whether external power is connected.
   bool connected = 1;
 
-  // 2 was `load_percent`, which is not a power-supply reading — it is the
-  // kernel's own load average, and it belongs in a `system` topic beside CPU
-  // and memory rather than here. Nothing ever filled it.
+  // Reserved field number; do not reuse.
   reserved 2;
 }
 
-// How the machine is trading performance against power.
-//
-// `power-profiles-daemon` owns this: it is not something Omega decides, and
-// anything on the machine may change it. That is why it is a reading rather
-// than a unit remembering what it last set — a unit's memory is right until
-// somebody runs `powerprofilesctl` in a terminal, and then it is confidently
-// wrong.
+// Power profiles reported by power-profiles-daemon.
 message PowerProfileState {
   PowerProfile active = 1;
 
-  // What this machine offers. A desktop without a performance mode does not
-  // get an option that fails when pressed, so a panel draws this rather than
-  // every profile the enum can name.
+  // Profiles supported by this machine.
   repeated PowerProfile available = 2;
 
-  // Why performance is being held back — "lap-detected", "high-operating-
-  // temperature" — or empty when it is not. A reason rather than a flag,
-  // because "unavailable" is not worth drawing without saying why.
+  // Performance limitation reason, or empty if none is reported.
   string degraded = 3;
 }
 
@@ -60,8 +38,7 @@ enum PowerProfile {
   POWER_PROFILE_PERFORMANCE = 3;
 }
 
-// The batteries of things plugged into the machine, rather than the machine's
-// own: a mouse, a keyboard, a headset.
+// Peripheral batteries, excluding the system battery.
 message PeripheralsState {
   repeated Peripheral devices = 1;
 }
@@ -74,9 +51,7 @@ message Peripheral {
   bool charging = 5;
 }
 
-// UPower knows thirty kinds of device. These are the ones a bar draws
-// differently; everything else is `OTHER`, which is honest — a widget can
-// still show the model and the percentage.
+// Supported peripheral device kinds; unrecognized kinds map to OTHER.
 enum PeripheralKind {
   PERIPHERAL_KIND_UNSPECIFIED = 0;
   PERIPHERAL_KIND_MOUSE = 1;

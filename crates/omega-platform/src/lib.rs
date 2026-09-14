@@ -1,27 +1,7 @@
-//! The subsystems Omega brokers.
-//!
-//! One broker per subsystem, holding one connection, reporting the topics
-//! that subsystem owns and serving the actions that write to it. A broker
-//! depends on the protocol and on its subsystem's client, and on nothing
-//! else.
-//!
-//! Cadence is the broker's own. A subsystem with signals is woken by them
-//! (`upower`); one without is polled (`backlight`). Both are the same shape
-//! to the daemon's driver.
-//!
-//! Where a subsystem's numbers and the ontology's disagree — percent against
-//! fraction, a state enum against a boolean — the translation is split out as
-//! a plain function over a plain struct, testable without a bus.
-//!
-//! A broker says how to [`connect`], [`wake`] and [`read`]; the daemon's
-//! driver says when — see [`Broker`].
-//!
-//! [`connect`]: Broker::connect
-//! [`wake`]: Broker::wake
-//! [`read`]: Broker::read
-//!
-//! `tests/coverage.rs` compares which broker covers what against the
-//! ontology, so a topic or action nothing serves fails the test.
+//! Linux subsystem brokers for state readings and control actions.
+//! Implementations own connections and protocol conversion. The daemon driver
+//! controls connection attempts, wakeups, reads, and retries.
+//! Coverage tests verify declared topics and action handlers.
 
 pub mod applications;
 pub use applications::Applications;

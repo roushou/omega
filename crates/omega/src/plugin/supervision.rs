@@ -36,12 +36,12 @@ impl UnitReport {
         self.phase
     }
 
-    /// Spawns after the first. Nought is a unit that has never fallen over.
+    /// Number of process restarts after the initial spawn.
     pub fn restarts(&self) -> u32 {
         self.restarts
     }
 
-    /// How it last exited, or `None` where it was signalled or never ran.
+    /// Last process exit code, or `None` if terminated by a signal or not yet exited.
     pub fn last_exit_code(&self) -> Option<i32> {
         match self.last_exit_code {
             -1 => None,
@@ -49,7 +49,7 @@ impl UnitReport {
         }
     }
 
-    /// The last failure, for a person to read.
+    /// Most recent failure description.
     pub fn detail(&self) -> Option<&str> {
         match self.detail.is_empty() {
             true => None,
@@ -61,8 +61,7 @@ impl UnitReport {
         self.phase == UnitPhase::Running
     }
 
-    /// Failed outright, or exited and waiting out a backoff. Both are a unit
-    /// that is not doing its job, which is the question a health widget asks.
+    /// Whether the unit is failed or waiting to restart after an exit.
     pub fn is_troubled(&self) -> bool {
         matches!(self.phase, UnitPhase::Failed | UnitPhase::Restarting)
     }
@@ -79,7 +78,7 @@ impl Units {
         self.all().into_iter().find(|report| report.unit == unit)
     }
 
-    /// Everything that is not doing its job.
+    /// Return units that are failed or waiting to restart.
     pub fn troubled(&self) -> Vec<UnitReport> {
         self.all()
             .into_iter()

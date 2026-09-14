@@ -1,10 +1,4 @@
-//! `omega shell`: the renderer that draws what units publish.
-//!
-//! A unit's view tree becomes pixels inside the host shell's process, so
-//! omega ships a plugin for it. This installs that plugin out of the binary,
-//! which is what keeps it in step with the daemon it reads: no checkout to
-//! copy from, no version to keep in your head, and no way to be running a
-//! renderer that is older than the wire format it is reading.
+//! Install the embedded renderer and manage Omarchy shell configuration.
 
 use anyhow::Context;
 
@@ -42,9 +36,8 @@ enum Action {
 
 #[derive(Debug, clap::Args)]
 struct Install {
-    /// Symlink a checkout instead of copying it in, so edits to the QML
-    /// reload without reinstalling. Defaults to `$OMEGA_SOURCE`, else the
-    /// tree this binary was built from.
+    /// Symlink renderer files from a checkout. Defaults to `$OMEGA_SOURCE`
+    /// or this binary's source tree. Rescan the shell after editing linked files.
     #[arg(long, num_args = 0..=1, default_missing_value = "", value_name = "PATH")]
     link: Option<String>,
 }
@@ -77,9 +70,7 @@ impl ShellCmd {
         match action {
             Action::Install(install) => {
                 Self::install(install, shell, ui)?;
-                // Where a widget sits in the bar is the person's layout, and
-                // a command that rearranges someone's screen because they
-                // installed something is a command they stop trusting.
+                // Renderer installation does not change widget placements.
                 ui.next(&shell.enable_command(Renderer::VIEW.id));
                 Ok(())
             }
@@ -145,11 +136,7 @@ impl ShellCmd {
         Ok(())
     }
 
-    /// Install the renderer as part of setting omega up, and put it on the
-    /// bar — which is what somebody running `omega init` is asking for.
-    ///
-    /// A machine with no host shell is not a failed setup: the daemon runs,
-    /// and there is simply nowhere to draw yet.
+    /// Install the renderer during initialization if a supported host shell is available.
     pub(crate) fn setup(ui: &mut Ui) -> anyhow::Result<()> {
         let Some(shell) = HostShell::detect() else {
             ui.warn("no host shell here — nothing will be drawn until there is one");
@@ -179,9 +166,7 @@ impl ShellCmd {
                             Paint::path(tree.root().join(renderer.source))
                         ),
                     );
-                    // The shell finds a link but does not watch through one,
-                    // and somebody expecting their edit on screen deserves to
-                    // hear that from the command that made it so.
+                    // Linked renderer files require an explicit shell rescan after edits.
                     ui.detail(Paint::dim(format!(
                         "not watched through a link — {} after editing",
                         shell.reload_command()
@@ -250,8 +235,6 @@ impl ShellCmd {
             }
         }
 
-        // Not a failure: a machine that draws nothing on its bar is entitled
-        // to have no renderer installed. It is a thing to do about it.
         if wanted {
             ui.next("omega shell install");
         } else {
@@ -294,9 +277,7 @@ impl ShellCmd {
         }
     }
 
-    /// Ask the shell to look again, and say so only when it could not be
-    /// asked: a shell that is not running is not a failed install, and the
-    /// files are on disk either way.
+    /// Request a plugin rescan. Report an unavailable shell without undoing installation.
     fn rescan(shell: HostShell, ui: &mut Ui) {
         match shell.rescan() {
             Ok(output) if output.status.success() => {}

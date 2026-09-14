@@ -20,7 +20,7 @@ pub struct View {
 }
 
 impl View {
-    /// Draw nothing, either as a whole widget or as a child.
+    /// Draw no content. Empty children add no layout slot.
     pub fn empty() -> Self {
         Self::default()
     }

@@ -1,16 +1,6 @@
-//! `omega dev`: run a unit from source, against the daemon that is already
-//! running.
-//!
-//! Without this a unit cannot be run at all. A unit proves itself with a
-//! token only the daemon issues, so a process started by hand is refused —
-//! and the only way to see a change was a release build of the whole
-//! workspace followed by a reload. This is the loop that replaces it: the
-//! daemon hands over the unit's identity, this process runs the debug binary
-//! in its place, and every save rebuilds and restarts it.
-//!
-//! The adoption lasts exactly as long as this command does. Whatever ends it
-//! — Ctrl-C, a closed terminal, a crash — closes the connection, and the
-//! daemon puts the built unit back.
+//! Run a plugin from source against the current daemon, rebuilding on changes.
+//! The daemon lends its supervised identity for the lifetime of the operator
+//! connection and restores the built plugin when that connection closes.
 
 use anyhow::{Context, bail};
 
@@ -83,9 +73,7 @@ impl DevCmd {
 
             let restart = tokio::select! {
                 exit = child.wait() => {
-                    // The unit stopped on its own. Waiting for a change
-                    // rather than respawning is the difference between a dev
-                    // loop and a crash loop: the fix is a save away.
+                    // Wait for a source change after process exit instead of repeatedly respawning.
                     Self::exited(ui, &name, exit);
                     changes.next().await.is_some()
                 }
@@ -93,8 +81,6 @@ impl DevCmd {
                     Self::stop(&mut child).await;
                     true
                 }
-                // The daemon went away; there is nothing left to develop
-                // against.
                 _ = attached.hold() => {
                     Self::stop(&mut child).await;
                     ui.warn("the daemon closed the connection");
@@ -122,8 +108,6 @@ impl DevCmd {
             }
         }
 
-        // Dropping the connection is what ends the adoption; saying so is
-        // just manners.
         ui.step(
             Step::Released,
             format!("{} — the built unit runs again", Paint::name(&name)),
@@ -138,9 +122,7 @@ impl DevCmd {
         Ok(())
     }
 
-    /// The unit, started the way the supervisor would start it: the daemon's
-    /// socket, and the token it is this unit by. Its output is inherited,
-    /// because reading it is the reason to be here.
+    /// Spawn with the adopted token and daemon socket; inherit terminal output.
     fn spawn(
         program: &std::path::Path,
         socket: &Socket,

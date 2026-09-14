@@ -1,12 +1,8 @@
 import QtQuick
 import "../Props.js" as Props
 
-// Something with two states.
-//
-// It flips as soon as it is pressed rather than waiting to be told. The round
-// trip is short, but not so short that a switch which hesitates reads as a
-// switch that did not work — and the next render says what is actually true,
-// so an optimistic flip that the unit refuses corrects itself.
+// Boolean toggle with optimistic interaction feedback.
+// Subsequent model values reconcile the displayed state.
 Rectangle {
     id: swtch
     required property var host
@@ -14,8 +10,7 @@ Rectangle {
     readonly property var bound: Props.bind(host.model, "change")
     readonly property bool published: Props.toggleOn(host.model)
 
-    // Null until pressed, then the state we are showing until the unit
-    // publishes one of its own.
+    // Optimistic toggle state, cleared when the published value arrives.
     property var optimistic: null
     readonly property bool checked:
         swtch.optimistic === null ? swtch.published : swtch.optimistic

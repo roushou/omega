@@ -1,9 +1,4 @@
-//! Turning NetworkManager's answers into the ontology.
-//!
-//! NetworkManager's vocabulary and the ontology's disagree about almost
-//! everything: a state ladder against a boolean, a connection-type string
-//! against an enum, and two different names for the network. The walk that
-//! gathers the answers needs a bus; deciding what they mean does not.
+//! NetworkManager state, connection type, and access-point conversion tests.
 
 mod common;
 
@@ -41,9 +36,7 @@ fn a_state_ladder_becomes_a_boolean() {
         );
     }
 
-    // Connected to a network that does not reach the internet is still
-    // connected to a network. Whether it reaches the internet is a different
-    // question and not the one this field asks.
+    // Local connectivity does not imply internet access.
     for state in [50, 60, 70] {
         assert!(
             Reading {
@@ -70,15 +63,13 @@ fn a_connection_type_becomes_a_kind() {
     assert_eq!(kind("802-11-wireless"), NetworkType::Wifi as i32);
     assert_eq!(kind("802-3-ethernet"), NetworkType::Ethernet as i32);
     assert_eq!(kind("gsm"), NetworkType::Cellular as i32);
-    // A type this build has no arm for is unspecified rather than guessed at.
+    // Unknown network types map to Unspecified.
     assert_eq!(kind("bluetooth"), NetworkType::Unspecified as i32);
 }
 
 #[test]
 fn a_vpn_is_reported_as_one_however_it_is_spelled() {
-    // NetworkManager says it twice: a flag on the active connection, and a
-    // type string. A reading that trusted only the string would call a
-    // WireGuard tunnel Wi-Fi, because the flag is what the manager sets.
+    // The active-connection VPN flag takes precedence over the type string.
     let flagged = Reading {
         is_vpn: true,
         ..wifi()
@@ -139,8 +130,7 @@ fn seen(ssid: &str, strength: u8) -> Point {
 
 #[test]
 fn one_network_on_several_radios_is_one_row() {
-    // A network is often two or three access points. A picker listing each of
-    // them is showing the hardware rather than the choice.
+    // Deduplicate access points by SSID.
     let scan = Scan {
         points: vec![seen("home", 40), seen("home", 71), seen("cafe", 55)],
         active: "home".into(),
@@ -148,7 +138,7 @@ fn one_network_on_several_radios_is_one_row() {
     let state = scan.state();
 
     assert_eq!(state.access_points.len(), 2);
-    // And it keeps the strongest, which is the one that would be joined.
+    // Keep the strongest access point for each SSID.
     assert_eq!(state.access_points[0].ssid, "home");
     assert_eq!(state.access_points[0].signal_percent, 71);
 }
@@ -166,8 +156,7 @@ fn the_list_is_strongest_first_and_stable_between_equals() {
         .map(|point| point.ssid.as_str())
         .collect();
 
-    // Equals break by name, so a list does not reorder itself under the
-    // cursor every time somebody scans.
+    // Break equal-strength ties by SSID for stable ordering.
     assert_eq!(names, vec!["best", "alpha", "beta"]);
 }
 
@@ -256,8 +245,7 @@ fn a_tunnel_is_spelled_two_ways_and_neither_alone_is_enough() {
 
 #[test]
 fn on_wifi_and_a_vpn_is_two_readings_not_one() {
-    // The whole reason this is a topic rather than another arm of the type
-    // enum: a machine is on both, and an enum can say only one.
+    // Physical and tunnel connectivity can coexist.
     let all = vec![
         active("home wifi", "802-11-wireless", false),
         active("work", "vpn", true),
@@ -277,9 +265,7 @@ async fn it_reads_the_machine_it_is_running_on() {
     let patch = common::first(&mut network)
         .await
         .expect("NetworkManager answered");
-    // One connection, one broker, two topics: what the machine is on, and
-    // what it could be on. The hub coalesces them apart, so an indicator
-    // holding one is not woken by the other.
+    // Connectivity and scan results publish on separate topics.
     let topics: Vec<&str> = patch
         .topics
         .iter()
@@ -299,9 +285,7 @@ async fn it_reads_the_machine_it_is_running_on() {
         );
     }
 
-    // The second reading waits — for a signal, or for the refresh that puts a
-    // floor under them. It must not come back instantly, or the broker is a
-    // hot loop wearing a signal stream.
+    // Subsequent reads wait for a signal or refresh interval.
     assert!(
         common::waits(&mut network).await,
         "a second reading should wait"

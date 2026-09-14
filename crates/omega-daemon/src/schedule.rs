@@ -1,24 +1,7 @@
-//! The schedules the daemon is running, and the clock they run on.
-//!
-//! A schedule fires from the document alone — not from a shell, a caller, or
-//! a subsystem. Two things reach a unit when one fires, and they are not two
-//! ways of doing the same thing:
-//!
-//! - the schedule's **action**, which is what the document said to do, and
-//!   goes through the same [`Actions`] the shell and every unit go through;
-//! - **`EVENT_SCHEDULE_FIRED`**, which is the announcement that it happened,
-//!   heard by every unit that declared the event and told apart by id.
-//!
-//! A document that names an action gets the first. One that names none gets
-//! only the second, which is how a unit reacts to a cadence its author does
-//! not own.
-//!
-//! # Trust
-//!
-//! Nothing here is capability-checked. Capabilities bound what a *unit* may
-//! ask the daemon for, and a schedule is the document speaking, not a unit
-//! asking. `Actions::authorize` applies to sessions on the far side of the
-//! socket; there is no session here.
+//! Recurring document actions and schedule events.
+//! Each tick dispatches the optional action and broadcasts `EVENT_SCHEDULE_FIRED`.
+//! Schedule declarations are trusted configuration; peer capability checks apply
+//! at session dispatch, not to document-triggered execution.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -35,10 +18,7 @@ use crate::hub::Hub;
 use crate::shutdown::Shutdown;
 use crate::units::UnitTable;
 
-/// The live schedules. Cloneable, and outlives any one convergence pass —
-/// which is the whole reason it is a handle and not a field on the provider:
-/// a reconciler is rebuilt on every pass, and timers that were rebuilt with
-/// it would fire once and never again.
+/// Live timer registry shared across convergence passes.
 #[derive(Debug, Clone)]
 pub struct Schedules {
     inner: Arc<Inner>,
@@ -114,8 +94,7 @@ impl Schedules {
         self.inner.timers.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// What is firing right now, as it was declared. Sorted, because a plan
-    /// is read by a person.
+    /// Return current declarations sorted by schedule ID.
     pub fn declared(&self) -> Vec<Schedule> {
         let mut schedules: Vec<Schedule> = self
             .timers()
@@ -127,12 +106,7 @@ impl Schedules {
         schedules
     }
 
-    /// Start firing a schedule, replacing any that already had its id.
-    ///
-    /// The first tick is immediate. A schedule that waited out its first
-    /// period would leave whatever it feeds empty until then — ten minutes of
-    /// a blank weather widget on every login — and "run this every ten
-    /// minutes" is not usually a request to start in ten minutes.
+    /// Start a schedule with an immediate first tick, replacing any timer with the same ID.
     pub async fn start(&self, schedule: &Schedule) -> Result<(), ScheduleError> {
         let cadence = schedule.parsed()?;
         tokio::time::Instant::now()
@@ -177,9 +151,7 @@ impl Schedules {
         Ok(())
     }
 
-    /// Stop firing a schedule. Silent on one that is not running: a document
-    /// that no longer declares a schedule the daemon never started is already
-    /// converged.
+    /// Stop a running schedule. A missing schedule is already converged.
     pub async fn stop(&self, id: &str) {
         let _change = self.inner.changes.lock().await;
         self.remove(id).await;
@@ -220,10 +192,7 @@ impl Firing {
     async fn run(self, period: std::time::Duration) {
         let mut ticks = tokio::time::interval(period);
 
-        // A slow action must not be repaid with a burst of catch-up ticks:
-        // an action that takes longer than its period is a schedule asking
-        // for more than the machine can give, and the answer is to fire less
-        // often rather than to queue.
+        // Skip missed ticks rather than queueing catch-up actions.
         ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
@@ -243,9 +212,7 @@ impl Firing {
     async fn fire(&self) {
         tracing::debug!(schedule = %self.schedule.id, "schedule fired");
 
-        // Announced first, and whatever the action does. An event is what
-        // happened, and the firing happened even if what it asked for could
-        // not be done.
+        // Publish the firing event even if the subsequent action fails.
         if let Err(error) = self.hub.publish_schedule_fired(&self.schedule.id) {
             tracing::error!(%error, schedule = %self.schedule.id, "schedule event refused");
         }
@@ -263,9 +230,7 @@ impl Firing {
             .perform(action)
             .await
         {
-            // Logged and dropped: there is nobody to answer. A schedule that
-            // stopped itself on a failure would be a weather refresh that
-            // gives up for good the first time the network is down.
+            // Log action failure and retain the schedule for subsequent ticks.
             tracing::warn!(
                 schedule = %self.schedule.id,
                 action = omega_proto::ActionKind::of(action).name(),

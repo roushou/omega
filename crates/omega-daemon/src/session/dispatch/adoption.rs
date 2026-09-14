@@ -1,15 +1,10 @@
-//! Standing in for a unit while somebody works on it.
+//! Operator-scoped development adoption of a plugin identity.
 
 use omega_proto::UnitName;
 
 use crate::supervisor::Supervisor;
 
-/// The units one connection has taken over, given back when it ends.
-///
-/// An adoption lasts exactly as long as the connection that asked for it.
-/// Tying it to anything else — a timeout, a second op the caller has to
-/// remember — would leave a unit dead on the machine because a terminal was
-/// closed.
+/// Connection-owned development adoptions, released when the connection closes.
 #[derive(Debug)]
 pub(super) struct Adoptions {
     supervisor: Supervisor,

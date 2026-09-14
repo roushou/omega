@@ -128,8 +128,7 @@ async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
 
     let (_, mut patches) = hub.subscribe_state();
 
-    // A binary that does not exist: the supervisor must report it rather than
-    // spin silently.
+    // Report missing executables and back off before retrying.
     supervisor.spawn(UnitSpec::new(unit("missing-unit"), "/nonexistent/omega"));
 
     // Nothing here sleeps for real: the clock jumps to each backoff in turn,
@@ -152,9 +151,7 @@ async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
 
     let statuses = supervisor.statuses();
     assert_eq!(statuses[0].unit, "missing-unit");
-    // Not merely non-empty: a bare "No such file or directory" is what this
-    // reads as to whoever runs `omega status`, and the missing path is the
-    // only part of it that says anything.
+    // Spawn failures must include the missing binary path.
     assert!(
         statuses[0].detail.contains("/nonexistent/omega"),
         "a unit that cannot be spawned names the program it could not run, \
@@ -174,7 +171,7 @@ async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
         "{waited:?} is slower than the backoff asks for"
     );
 
-    // And it stops when the daemon does, rather than respawning forever.
+    // Shutdown must stop respawning.
     shutdown.trigger();
     tokio::time::timeout(Duration::from_secs(30), async {
         while !supervisor.all_stopped() {

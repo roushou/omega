@@ -27,10 +27,7 @@ fn a_moment_is_broken_down_where_the_machine_is() {
 
 #[test]
 fn every_field_is_truncated_to_the_minute() {
-    // Including the timestamp. A value that moved every second would be a new
-    // revision every second, and last-value-wins only helps when the value is
-    // actually the same — so a bar of clocks would redraw sixty times an hour
-    // to show the same two digits.
+    // Minute readings must remain identical within the minute, including their timestamp.
     let early = Clock::of(at(1));
     let late = Clock::of(at(59));
 

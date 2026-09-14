@@ -7,10 +7,8 @@ import "omega/event.proto";
 import "omega/value.proto";
 import "omega/instance.proto";
 
-// The configuration plane compiles to this document. It is the desired state
-// of the machine, not a script: the reconciler diffs it against actual state
-// and converges. Entities carry stable ids for that diff. Desired and actual
-// state are deliberately different types — see state.proto.
+// Desired desktop state computed by the configuration plane.
+// Stable entity IDs identify changes during reconciliation; observed state uses separate messages.
 
 message StateDocument {
   uint64 revision = 1;                  // from omega.lock
@@ -25,7 +23,7 @@ message StateDocument {
   repeated UnitRef units = 9;
   repeated EnvironmentVariable environment = 10;
 
-  // omega-document owns this host-specific declaration; units do not interpret it.
+  // Omarchy-specific declaration interpreted by omega-omarchy, not by plugins.
   string shell_json = 11;
   repeated ConfiguredPresentation presentations = 12;
 }
@@ -89,19 +87,10 @@ message WidgetModule {
   string unit = 1;              // unit name from its manifest
   map<string, Value> config = 2;
 
-  // Which of the unit's view surfaces goes in the bar slot. Empty means the
-  // unit's only one, which is what naming a unit has always meant — a unit
-  // with several could not be addressed by name alone, and this is the
-  // document saying which.
+  // Widget surface ID. Empty selects the unit's sole widget surface.
   string surface = 3;
 
-  // A second surface, drawn as a popout anchored to the first. Empty for a
-  // widget that is only a widget.
-  //
-  // Anchored rather than free-standing because that is the shape the host
-  // shell's popup primitive has: a bar item that pops out, owning focus and
-  // dismissal. A surface summoned from nowhere is a different kind of window
-  // and would be a different placement.
+  // Popup surface ID anchored to this placement. Empty means no popup.
   string panel = 4;
 }
 
@@ -140,20 +129,12 @@ message CursorSetting {
   uint32 size = 2;
 }
 
-// Something the daemon does on its own clock.
-//
-// The action is optional: a schedule with none fires EVENT_SCHEDULE_FIRED and
-// nothing else, which is how a unit reacts to a cadence the document owns
-// without the document naming what it does about it.
+// Recurring schedule. Every tick emits EVENT_SCHEDULE_FIRED and executes
+// the action if one is present.
 message Schedule {
   string id = 1;
 
-  // How often. `every <n><s|m|h|d>` — "every 30s", "every 10m", "every 1h".
-  //
-  // Named for what it is rather than for cron, which this does not parse: a
-  // field called `cron` holding something that is not cron is a promise the
-  // daemon cannot keep, and an expression it cannot read is refused rather
-  // than silently never fired.
+  // Elapsed-time cadence: `every <n><s|m|h|d>`, with n > 0. Cron is unsupported.
   string cadence = 2;
 
   Action action = 3;

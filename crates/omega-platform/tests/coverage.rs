@@ -1,14 +1,4 @@
-//! What the ontology declares against what a broker actually serves.
-//!
-//! The SDK publishes a handle per topic and per effect. Nothing tied those
-//! handles to an implementation, so `Network` and `Audio` shipped as reads of
-//! topics no producer filled — a unit holding one never draws, because the
-//! runtime waits for a value that never arrives — and `Volume`, `Session` and
-//! `Notify` shipped as writes the daemon answers `UNIMPLEMENTED`.
-//!
-//! This is the check that was missing. Every topic and every action is
-//! either served by a broker or named below, so a hole is a line in this file
-//! rather than a widget that hangs. A broker landing deletes lines from it.
+//! Require every topic and action to have a handler or an explicit unsupported entry.
 
 use std::collections::HashSet;
 
@@ -18,26 +8,13 @@ use omega_proto::{ActionKind, SystemTopic};
 /// Topics no broker projects yet.
 const UNSERVED_TOPICS: &[SystemTopic] = &[];
 
-/// Topics the daemon fills itself rather than through a broker.
-///
-/// Not a subsystem: the supervisor's report on the units it runs is its own
-/// projection of its own table, and a broker for it would be the daemon
-/// asking itself.
+/// Topics projected by the daemon itself.
 const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Units];
 
-/// Actions nothing serves yet.
-///
-/// `RunCommand` and `InvokeUnit` are absent because the daemon performs them
-/// itself: spawning a process is not brokering a subsystem, and routing
-/// between units is the daemon's own job.
-///
-/// `SetSetting` and `ToggleSetting` are on this list rather than the daemon's
-/// because nothing performs them. They are the daemon's to serve when
-/// something does — they act on the state document's own settings, which no
-/// subsystem owns.
+/// Actions without current handlers. Daemon-owned actions are listed separately.
 const UNSERVED_ACTIONS: &[ActionKind] = &[ActionKind::SetSetting, ActionKind::ToggleSetting];
 
-/// Actions the daemon performs itself rather than through a broker.
+/// Actions handled by the daemon.
 const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokeUnit];
 
 fn served_topics() -> HashSet<SystemTopic> {
@@ -89,9 +66,7 @@ fn every_action_is_served_or_named_unserved() {
 
 #[test]
 fn nothing_is_named_unserved_and_then_served() {
-    // The lists above are an inventory of holes, not a place to leave a name
-    // behind. A broker that lands has to delete its line, or the inventory
-    // stops being the truth about what is missing.
+    // Remove implemented brokers from the uncovered inventory.
     let served = served_topics();
     for topic in UNSERVED_TOPICS.iter().chain(DAEMON_TOPICS) {
         assert!(

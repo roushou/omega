@@ -1,21 +1,6 @@
-//! The observation stream: where to find it, and how to read a state line.
-//!
-//! The daemon streams everything it holds — rendered views and state topics —
-//! as newline-delimited JSON on a second socket. Reading needs no handshake;
-//! requests require the daemon owner's identity and the operator policy.
-//!
-//! Its address lives here because both readers need it and neither is the
-//! daemon: `omega status` reads this stream, and so does the shell that draws
-//! the bar.
-//!
-//! The state half of the stream is [`StateTopic`] — a protocol type, so a
-//! reader parses it rather than indexing JSON by hand. The view half is not
-//! here: a view is addressed by identifiers the protocol does not own.
-//!
-//! It also goes the other way. A shell that draws a button has to press it
-//! and cannot encode protobuf, so a request is the *same* [`Frame`] carrying
-//! the same [`Invoke`], written as JSON. The daemon authorizes a JSON request
-//! through the same table it authorizes a framed one through.
+//! Observation socket addressing and newline-delimited JSON decoding.
+//! State and views stream without a handshake. Requests use protocol Frames
+//! and the daemon's shared dispatcher and authorization policy.
 
 use crate::Socket;
 use crate::omega::StateTopic;
@@ -37,21 +22,12 @@ impl Observation {
         Socket::resolve_named(Self::SOCKET_NAME, Self::SOCKET_ENV)
     }
 
-    /// The state topic one line carries, or `None` when the line was
-    /// something else.
-    ///
-    /// A reader that wants topics skips the lines that are not, which is what
-    /// "everything the daemon holds, on one stream" costs its readers.
+    /// Decode a state-topic line, returning `None` for other observation messages.
     pub fn topic(line: &str) -> Option<StateTopic> {
         serde_json::from_str(line).ok()
     }
 
-    /// A request, on a stream of its own so its answer is unambiguous.
-    ///
-    /// The op is the protocol's own — `Act`, `RestartUnit`, and the rest —
-    /// because a shell asking for something and a unit asking for it are the
-    /// same request from the daemon's side, and only one of them should have
-    /// a taxonomy.
+    /// Encode a protocol request with its correlation stream ID.
     pub fn request(stream_id: u64, op: invoke::Op) -> Frame {
         Frame {
             stream_id,

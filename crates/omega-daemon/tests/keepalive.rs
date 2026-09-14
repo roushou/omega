@@ -11,8 +11,7 @@ use omega_proto::omega::{Frame, Ping, frame};
 
 #[tokio::test(start_paused = true)]
 async fn a_peer_is_declared_unresponsive_only_after_the_timeout() {
-    // The cadence a desktop actually runs, asserted on a clock the test moves
-    // rather than waited out.
+    // Assert keepalive pacing with paused Tokio time.
     let mut liveness = Liveness::new();
 
     assert_eq!(liveness.health(), Health::Alive);
@@ -32,8 +31,7 @@ async fn a_peer_is_declared_unresponsive_only_after_the_timeout() {
     assert_eq!(liveness.health(), Health::Alive);
 }
 
-/// The whole point of the keepalive: a peer that never answers does not hold
-/// its session open forever.
+/// Close sessions whose peers fail to answer keepalives.
 #[tokio::test(start_paused = true)]
 async fn a_peer_that_stops_answering_is_closed() {
     let manifest = widget_manifest("battery-widget", "battery");

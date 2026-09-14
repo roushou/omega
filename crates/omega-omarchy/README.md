@@ -1,11 +1,11 @@
 # Omega Omarchy integration
 
-Describe the desktop configuration Omega should apply: plugin settings, widget
-placements, keybindings, and schedules. This crate is the authoring API for the
-`system/` crate in an Omega configuration workspace.
+Configure Omarchy's shell layout, native widgets, Omega widget placements, and
+idle behavior from your config's `system/` crate. Compose `Shell` into an
+`omega_document::Document`; `omega build` evaluates it and the daemon applies it.
 
-The document describes desired state. Constructing it does not change the desktop;
-`omega build` evaluates it, and the daemon applies the result.
+Plugin settings and schedules belong to `omega-document`. This crate provides
+Omarchy-specific authoring and host integration.
 
 ```rust
 use omega_document::Document;
@@ -59,10 +59,10 @@ error libraries through `std::error::Error`.
 
 Use [omega-rs](https://crates.io/crates/omega-rs) to implement plugins and
 [omega-cli](https://crates.io/crates/omega-cli) to create and build the workspace.
-This crate also provides document serialization and validation for Omega's host
-components.
+This crate also compiles and validates Omarchy declarations and installs the
+host adapter.
 
-[API reference](https://docs.rs/omega-document) ·
+[API reference](https://docs.rs/omega-omarchy) ·
 [Project](https://github.com/roushou/omega)
 
 Licensed under MIT.

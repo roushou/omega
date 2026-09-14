@@ -1,10 +1,5 @@
-//! The Bluetooth adapter and its devices, from BlueZ.
-//!
-//! One `GetManagedObjects` call answers everything BlueZ knows — the adapter
-//! and every device under it, with all their interfaces — so a reading is one
-//! round trip rather than a walk.
-//!
-//! Property and object signals wake the broker; polling also reconciles state.
+//! Read BlueZ adapter and device state through `GetManagedObjects`.
+//! Property/object signals and periodic polls refresh the reading.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -35,8 +30,7 @@ pub struct Device {
     pub id: BluetoothDeviceId,
     pub can_connect: bool,
     pub address: String,
-    /// The alias, which is what a person renamed it to. BlueZ falls back to
-    /// the name the device broadcasts, so this is always the better one.
+    /// Prefer the user-configurable BlueZ alias, with broadcast name fallback.
     pub alias: String,
     pub connected: bool,
     pub paired: bool,
@@ -69,20 +63,14 @@ impl Objects {
         Ok(device)
     }
 
-    /// The machine's own devices, connected first.
-    ///
-    /// Only what is paired or connected. BlueZ also lists whatever it has
-    /// seen recently, and a bar showing every phone that walked past is
-    /// showing the air rather than the machine.
+    /// Return paired or connected devices, excluding unpaired scan results.
     pub fn state(adapter: Option<&Adapter>, devices: &[Device]) -> BluetoothState {
         let mut mine: Vec<&Device> = devices
             .iter()
             .filter(|device| device.paired || device.connected)
             .collect();
 
-        // Connected first, then by name: BlueZ answers in whatever order it
-        // holds paths, and a list that reordered itself would move under the
-        // cursor.
+        // Sort connected devices first, then by name for stable ordering.
         mine.sort_by(|a, b| {
             b.connected
                 .cmp(&a.connected)
@@ -134,8 +122,7 @@ impl Link {
             .await
             .map_err(BrokerError::unreadable)?;
 
-        // Everything BlueZ says, rather than a rule per interface: an adapter
-        // powering on and a headset connecting are the same kind of news.
+        // Subscribe to property and object changes across BlueZ interfaces.
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .sender(Self::SERVICE)

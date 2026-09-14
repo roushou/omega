@@ -1,9 +1,4 @@
-//! The observation socket: what an observer is sent, and what it can decline.
-//!
-//! Reading it needs no handshake, so the default is everything the daemon
-//! holds. What was missing is the other half — an observer that only draws
-//! views had no way to say so, and was sent every state topic there is
-//! whatever it asked for.
+//! Observation subscriptions, snapshots, and heartbeat tests.
 
 mod common;
 
@@ -26,8 +21,7 @@ use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
 /// asserted is that it arrives, not how fast.
 const PROMPTLY: Duration = Duration::from_secs(5);
 
-/// How long to give a line that should never come. Short, because every one
-/// of these is spent waiting on purpose.
+/// Deadline for asserting that no matching line arrives.
 const SETTLES: Duration = Duration::from_millis(750);
 
 /// Long enough for a heartbeat to fall due, whatever the socket's cadence.
@@ -75,12 +69,7 @@ impl Observing {
         }
     }
 
-    /// Ask for exactly these topics and nothing else.
-    ///
-    /// Returns once the daemon has *answered*, not merely once a line has
-    /// arrived: the snapshot it sends on connect comes first, and going on
-    /// before the request is served would race the subscription against
-    /// whatever the test publishes next.
+    /// Replace the topic subscription and wait for its correlated acknowledgment.
     async fn subscribe_to(&mut self, topics: &[&str]) {
         let names = topics
             .iter()
@@ -118,10 +107,7 @@ impl Observing {
         serde_json::from_str(line.trim()).unwrap()
     }
 
-    /// Whether this topic arrives within `patience`, skipping any others.
-    ///
-    /// The daemon sends everything it holds on connect, so a test looking for
-    /// one topic has to read past the rest rather than assume it comes first.
+    /// Wait for a matching topic while consuming unrelated snapshot lines.
     async fn sees(&mut self, topic: &str, patience: Duration) -> bool {
         let deadline = tokio::time::Instant::now() + patience;
         loop {
@@ -134,11 +120,7 @@ impl Observing {
         }
     }
 
-    /// The first state topic to arrive, or `None` if none does in time.
-    ///
-    /// Waiting for a marker line instead would race it against the topic:
-    /// views and state are separate broadcasts, and which the connection
-    /// picks up first is the runtime's business.
+    /// Read the next state topic, or return None on timeout.
     async fn topic_within(&mut self, patience: Duration) -> Option<String> {
         let deadline = tokio::time::Instant::now() + patience;
 
@@ -146,8 +128,7 @@ impl Observing {
             let left = deadline.saturating_duration_since(tokio::time::Instant::now());
             let mut line = String::new();
             match tokio::time::timeout(left, self.reader.read_line(&mut line)).await {
-                // Nothing more is coming, which for a narrowed observer is
-                // the whole assertion.
+                // No additional state is expected after subscription narrowing.
                 Err(_) | Ok(Ok(0)) => return None,
                 Ok(Err(e)) => panic!("the observer connection broke: {e}"),
                 Ok(Ok(_)) => {
@@ -221,11 +202,7 @@ async fn an_observer_is_sent_the_topics_it_named_and_no_others() {
 
 #[tokio::test]
 async fn a_quiet_daemon_still_says_it_is_there() {
-    // An observer cannot tell a quiet daemon from a dead one — a peer that
-    // goes away leaves the socket reading connected — so the shell watches
-    // for silence and reconnects through it. Before the heartbeat that made
-    // incidental traffic load-bearing, and an observer that narrowed its
-    // subscription had turned its own keepalive off.
+    // Heartbeats must remain active with an empty state subscription.
     let mut observing = Observing::new("observe-quiet").await;
     observing.subscribe_to(&[]).await;
 
@@ -241,9 +218,7 @@ async fn a_quiet_daemon_still_says_it_is_there() {
 
 #[test]
 fn a_heartbeat_is_a_line_an_observer_can_tell_apart() {
-    // Every line on this socket is a JSON object told apart by its keys, so
-    // the beat must not look like a view or a topic to a reader that only
-    // checks for one.
+    // Heartbeat frames must not decode as views or state patches.
     let line = serde_json::to_value(omega_daemon::hub::Heartbeat { heartbeat: true }).unwrap();
 
     assert_eq!(line["heartbeat"].as_bool(), Some(true));

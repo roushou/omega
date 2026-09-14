@@ -1,9 +1,4 @@
-//! `units.toml`: the built state the daemon runs.
-//!
-//! Written by `omega build`, read by the daemon. It belongs to neither of
-//! them — it is the on-disk contract between them, and it sits beside the
-//! unit manifest it points at, because the two are what a build emits and
-//! what the daemon reads back.
+//! Built-unit index written by the CLI and loaded by the daemon.
 
 use std::path::PathBuf;
 
@@ -12,8 +7,7 @@ use crate::{TomlFile, TomlSchema};
 use omega_proto::UnitName;
 use serde::{Deserialize, Serialize};
 
-/// A built unit the daemon should run. Paths are relative to the state dir,
-/// so the whole directory can be moved or staged without rewriting it.
+/// Built unit executable with a path relative to its generation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BuiltUnit {
     pub name: UnitName,
@@ -39,10 +33,7 @@ pub struct StateConfig {
 }
 
 impl StateConfig {
-    /// The file's name inside the state dir, so a staged copy and the final
-    /// one cannot disagree.
-    ///
-    /// The layout places it; this is the same name, not a second one.
+    /// Filename shared by staged and published built-unit indexes.
     pub const FILE_NAME: &'static str = Layout::UNITS_TOML;
 
     pub fn new(layout: &Layout, names: impl IntoIterator<Item = UnitName>) -> Self {

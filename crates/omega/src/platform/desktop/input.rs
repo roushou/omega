@@ -1,7 +1,7 @@
-//! How the machine is being typed at.
+//! Keyboard device and layout state.
 
 crate::wiring::reading! {
-    /// How the machine is being typed at.
+    /// Keyboard device and layout state.
     Input: omega_proto::omega::InputState
 }
 
@@ -13,14 +13,14 @@ impl Input {
             .filter(|name| !name.is_empty())
     }
 
-    /// The layout as xkb spells it: `us`, `fr`. What a bar slot shows.
+    /// XKB layout identifier, such as `us` or `fr`.
     pub fn layout(&self) -> Option<String> {
         self.read()
             .map(|input| input.layout)
             .filter(|layout| !layout.is_empty())
     }
 
-    /// The layout as a person reads it: `English (US)`.
+    /// Layout display name, such as `English (US)`.
     pub fn keymap(&self) -> Option<String> {
         self.read()
             .map(|input| input.keymap)

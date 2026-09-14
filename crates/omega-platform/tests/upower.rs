@@ -1,9 +1,4 @@
-//! Turning UPower's numbers into the ontology.
-//!
-//! The connection is not testable without a bus; this is. What UPower reports
-//! and what a widget draws are different vocabularies — percent against
-//! fraction, a state enum against a boolean, and two time fields of which
-//! only one ever applies — and every one of those is somewhere to be wrong.
+//! UPower battery, charging, and remaining-time conversion tests.
 
 mod common;
 
@@ -47,9 +42,7 @@ fn only_the_time_that_applies_is_reported() {
         "a battery being charged is not also emptying"
     );
 
-    // And the other way: UPower leaves the inapplicable one at whatever it
-    // last was, so passing both through would show a full-in-30-minutes on a
-    // battery nothing is charging.
+    // Discard the time estimate that does not match the charging state.
     let stale = Reading {
         time_to_full: 1800,
         ..discharging()
@@ -73,9 +66,7 @@ fn a_full_battery_on_ac_is_not_charging() {
 
 #[test]
 fn a_machine_with_no_battery_has_no_reading() {
-    // Two ways UPower says it, and neither is an error: a desktop reports a
-    // display device that is not a battery, and a laptop with the pack out
-    // reports a battery that is not present.
+    // A non-battery display device or absent battery produces no reading.
     assert!(
         Reading {
             kind: 0,
@@ -179,9 +170,7 @@ use omega_proto::omega::state_topic;
 async fn it_reads_the_machine_it_is_running_on() {
     let mut upower = UPower::new();
 
-    // A fresh connection reports what is true now. Waiting for the next
-    // change instead would leave a widget blank until the battery moved,
-    // which on a machine sitting on AC is never.
+    // Publish an initial reading immediately after connecting.
     let patch = common::first(&mut upower).await.expect("UPower answered");
     // One power supply subsystem, one broker, two topics: the battery and
     // whether the machine is on mains.
@@ -205,9 +194,7 @@ async fn it_reads_the_machine_it_is_running_on() {
         other => panic!("expected a battery, got {other:?}"),
     }
 
-    // The second reading waits for UPower to say something changed. A broker
-    // that answered again straight away would be a hot loop pretending to be
-    // signal-driven.
+    // Subsequent reads wait for a UPower change signal.
     assert!(
         common::waits(&mut upower).await,
         "a second reading should wait"

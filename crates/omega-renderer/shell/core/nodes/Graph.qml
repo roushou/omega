@@ -1,11 +1,7 @@
 import QtQuick
 import "../Props.js" as Props
 
-// A series, drawn small.
-//
-// A filled line rather than bars: at this size the eye reads a shape, and the
-// shape of a latency history is what somebody is looking for. The newest
-// point is the right-hand edge, which is where an eye goes for "now".
+// Filled line graph with samples ordered oldest to newest.
 Canvas {
     id: graph
     required property var host
@@ -14,9 +10,7 @@ Canvas {
     readonly property real low: Props.graphLow(host.model)
     readonly property real high: Props.graphHigh(host.model)
 
-    // Given a range, use it. Given none — or one that is not a range — scale
-    // to the data, which is right for a latency and wrong for a percentage.
-    // The unit is the one that knows which it has.
+    // Use explicit valid bounds or derive the scale from samples.
     readonly property bool pinned: graph.high > graph.low
 
     implicitWidth: host.space(72)
@@ -35,8 +29,7 @@ Canvas {
         ctx.reset()
 
         var count = graph.points.length
-        // One point is not a line. Nothing to draw is not a reason to draw
-        // something wrong.
+        // At least two points are required to draw a line.
         if (count < 2) return
 
         var lowest = graph.low
@@ -50,8 +43,7 @@ Canvas {
             }
         }
 
-        // A flat series has no range to scale against. Draw it down the
-        // middle rather than divide by nothing.
+        // Place constant-valued series at mid-height to avoid division by zero.
         var span = highest - lowest
         var flat = span <= 0
 

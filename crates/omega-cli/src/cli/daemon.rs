@@ -1,14 +1,4 @@
-//! `omega daemon`: run the daemon, or make it part of the session.
-//!
-//! Bare, it runs in the foreground — the way a person watches it while they
-//! are working on something. Installed, it is a service the session manager
-//! keeps running, which is the difference between a process somebody started
-//! and a desktop that comes back after a reboot.
-//!
-//! One noun on purpose. The unit file is not the daemon, and the type that
-//! writes it says so ([`crate::service`]) — but from outside there is one
-//! background process, and making somebody learn a second word for it to find
-//! out how to keep it running serves the implementation, not them.
+//! Run the daemon in the foreground or manage its user service.
 
 use anyhow::Context;
 
@@ -48,8 +38,6 @@ struct Install {
 
 impl DaemonCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        // Running is what `omega daemon` has always meant, and it is what a
-        // person types most; the service verbs join it rather than displace it.
         let Some(action) = self.action else {
             return Self::serve().await;
         };
@@ -62,10 +50,7 @@ impl DaemonCmd {
         }
     }
 
-    /// Run the daemon against `~/.local/state/omega`.
-    ///
-    /// Tracing is initialized once in `main`; this only wires the daemon
-    /// together and runs it.
+    /// Construct and run the daemon. Tracing is initialized by main.
     async fn serve() -> anyhow::Result<()> {
         let layout = Layout::resolve();
         let daemon = Daemon::from_layout(&layout)?;
@@ -84,10 +69,7 @@ impl DaemonCmd {
         )
     }
 
-    /// Install the service as part of setting omega up.
-    ///
-    /// A machine with no service manager is not a failed setup: the daemon
-    /// still runs, it just has to be started by hand.
+    /// Install the user service during initialization, if a service manager is available.
     pub(crate) fn setup(ui: &mut Ui) -> anyhow::Result<()> {
         let Some(manager) = ServiceManager::detect() else {
             ui.warn("no service manager here — start the daemon with `omega daemon`");
@@ -118,25 +100,18 @@ impl DaemonCmd {
             ),
         );
 
-        // Whoever holds the socket decides what happens next. This service
-        // already holding it is a reinstall; anything else holding it is a
-        // daemon somebody started, and starting a second one over it produces
-        // a failed service and an error about a path that says nothing about
-        // the one they are running.
+        // Do not start a second daemon if a foreground process already owns the socket.
         let running = manager.is_active();
         let foreign = !install.no_start && !running && Socket::resolve().is_live();
 
-        // A manager that refused has already said why, in its own words. It
-        // must not then be told that the daemon is running.
+        // Stop installation reporting if the service manager rejects an operation.
         if !Self::tell(manager.reload(), manager, ui)?
             || !Self::tell(manager.enable(!install.no_start && !foreign), manager, ui)?
         {
             return Ok(());
         }
 
-        // Enabling a service that is already up starts nothing, so the
-        // instance still running is the one started from the unit file this
-        // install just replaced.
+        // An active service must restart to use the newly installed executable.
         if running && !install.no_start && !Self::tell(manager.restart(), manager, ui)? {
             return Ok(());
         }
@@ -182,8 +157,6 @@ impl DaemonCmd {
                 false,
                 format!("{}  not installed", Paint::name(Service::NAME)),
             ),
-            // The failure that looks like every other failure: the service
-            // came back after a reboot, and came back as somebody else.
             Installed::Stale { program: runs } => ui.item(
                 false,
                 format!(
@@ -195,9 +168,7 @@ impl DaemonCmd {
             ),
         }
 
-        // Asked of the manager only when there is a unit for it to know
-        // about: `is-enabled` on a unit that does not exist is an error
-        // report, not an answer.
+        // Query enablement only for an installed service.
         let (enabled, active) = match installed {
             Installed::Missing => (false, false),
             _ => (manager.is_enabled(), manager.is_active()),
@@ -218,9 +189,7 @@ impl DaemonCmd {
             );
         }
 
-        // Installed and enabled is not the same as running, and a summary
-        // that says a stopped daemon is part of the session is the one thing
-        // worse than saying nothing.
+        // Report installed, enabled, and active states independently.
         match (installed == Installed::Current, enabled, active) {
             (true, true, true) => ui.step(Step::Checked, "the daemon is part of this session"),
             (true, true, false) => ui.next("systemctl --user start omega.service"),
@@ -230,10 +199,7 @@ impl DaemonCmd {
     }
 
     fn uninstall(manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
-        // Stopped before the file goes: a manager asked to disable a unit it
-        // can no longer read leaves it running with nothing describing it.
-        // And only when there is one — asking systemd to disable a unit that
-        // was never installed is an error report about nothing.
+        // Stop and disable the service before removing its unit file.
         if manager.unit_path().exists() {
             Self::tell(manager.disable(), manager, ui)?;
         }
@@ -255,11 +221,7 @@ impl DaemonCmd {
         Ok(())
     }
 
-    /// Report what the manager said, and only when it refused.
-    ///
-    /// Its own words rather than a paraphrase: whatever systemd has to say
-    /// about a unit it would not take is more use than anything omega could
-    /// say on its behalf.
+    /// Report service-manager stderr when an operation fails.
     fn tell(
         result: std::io::Result<std::process::Output>,
         manager: ServiceManager,

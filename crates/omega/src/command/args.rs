@@ -1,7 +1,7 @@
 //! Positional values delivered to a command.
 use omega_proto::{FromValue, omega::Value};
 
-/// What a command was called with.
+/// Raw positional command arguments.
 #[derive(Debug, Clone, Default)]
 pub struct Args {
     values: Vec<Value>,
@@ -12,7 +12,7 @@ impl Args {
         Self { values }
     }
 
-    /// The argument at this position, if it is of this type.
+    /// Return the argument at `index`, or `None` if it is missing or cannot be decoded as `T`.
     pub fn get<T: FromValue>(&self, index: usize) -> Option<T> {
         T::from_value(self.values.get(index)?)
     }

@@ -20,15 +20,8 @@ pub struct Mounted {
 pub struct Mounts;
 
 impl Mounts {
-    /// Filesystems that are the kernel talking to itself.
-    ///
-    /// A machine has forty-odd mounts and four of them are disks. A bar
-    /// listing `cgroup2` and eleven `tmpfs` is listing the kernel's furniture,
-    /// and the one the user cares about is somewhere in the middle of it.
-    ///
-    /// A fast path, not the rule. This list will never be complete — there is
-    /// always another pseudo-filesystem — so what actually decides is whether
-    /// a mount reports any blocks at all, which is asked after.
+    /// Skip known pseudo-filesystems before querying capacity.
+    /// Unknown types must still report nonzero blocks to be included.
     const PSEUDO: &'static [&'static str] = &[
         "autofs",
         "bpf",
@@ -53,12 +46,8 @@ impl Mounts {
         "tracefs",
     ];
 
-    /// One entry per device, at its shortest mount point.
-    ///
-    /// Subvolumes and bind mounts put one filesystem at several paths — a
-    /// btrfs root is often also `/home` and `/var/log` — and they share the
-    /// space, so reporting each is reporting the same disk three times with
-    /// the same numbers. The shortest path is the one a person means.
+    /// Deduplicate by device, retaining the shortest mount path.
+    /// Bind mounts and subvolumes can report the same underlying capacity.
     pub fn by_device(mut measured: Vec<Mount>) -> Vec<Mount> {
         measured.sort_by(|a, b| {
             a.device
@@ -68,7 +57,7 @@ impl Mounts {
         });
         measured.dedup_by(|a, b| a.device == b.device);
 
-        // Back into the order a person reads: by where it is mounted.
+        // Sort retained mounts by path.
         measured.sort_by(|a, b| a.path.cmp(&b.path));
         measured
     }
@@ -161,9 +150,7 @@ impl DiskSampler {
         let block = stats.f_frsize as u64;
         let total = (stats.f_blocks as u64).saturating_mul(block);
 
-        // What actually separates a disk from the kernel's furniture: a
-        // filesystem with no blocks is not somewhere anything is kept. Catches
-        // every pseudo-filesystem the name list above does not know about.
+        // Exclude filesystems reporting zero blocks.
         if total == 0 {
             return None;
         }
@@ -173,9 +160,7 @@ impl DiskSampler {
             device: mounted.device.clone(),
             filesystem: mounted.filesystem.clone(),
             total_bytes: total,
-            // `f_bavail`, not `f_bfree`: the difference is the blocks reserved
-            // for root, and counting those as free is how a disk looks like it
-            // has room right up until nothing can be saved.
+            // Use blocks available to unprivileged users; exclude root-reserved capacity.
             available_bytes: (stats.f_bavail as u64).saturating_mul(block),
         })
     }

@@ -1,9 +1,5 @@
-//! Converging the machine toward the state document.
-//!
-//! A reconciler is not a script. Each provider owns one domain, *plans* what
-//! would change without touching anything, and only then applies it — so a
-//! change can be shown before it happens, and applying nothing is the normal
-//! outcome of a machine that already matches its document.
+//! Plan and apply desired-state changes per domain.
+//! Planning is pure; applying an empty plan leaves runtime state unchanged.
 
 mod build;
 pub mod converger;

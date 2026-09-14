@@ -1,13 +1,5 @@
-//! How hot the machine is, from `hwmon`.
-//!
-//! Every chip that reports a temperature or a fan appears under
-//! `/sys/class/hwmon`, and what is there varies wildly: this laptop offers the
-//! CPU die, the GPU edge, the SSD, the wireless card, and six ACPI zones that
-//! all read the same number. Nothing here tries to pick the important one —
-//! that is a decision about what to draw, and it belongs to whatever draws it.
-//!
-//! Unreadable sensors may be disabled or removed. Numeric zero is a valid
-//! temperature or stopped fan, and is preserved.
+//! Read temperature and fan sensors from `/sys/class/hwmon`.
+//! Skip unreadable sensors; retain numeric zero as a valid measurement.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -32,10 +24,7 @@ impl Default for Hwmon {
 }
 
 impl Hwmon {
-    /// How often the machine is felt.
-    ///
-    /// Slower than the CPU reading: a die warms and cools over seconds, and
-    /// this is a directory walk and a dozen file reads rather than one.
+    /// Thermal polling interval.
     pub const INTERVAL: Duration = Duration::from_secs(5);
 
     /// Point the broker at another tree — a fixture, or a container.
@@ -69,9 +58,7 @@ impl Hwmon {
         chips
     }
 
-    /// One reading. A chip that cannot be read is skipped rather than failing
-    /// the lot: hwmon is a collection of independent devices and one of them
-    /// going away is not the others going away.
+    /// Read each chip independently; skip inaccessible chips.
     pub fn reading(&self) -> ThermalsState {
         let mut sensors = Vec::new();
         let mut fans = Vec::new();
@@ -104,10 +91,7 @@ impl Hwmon {
         ThermalsState { sensors, fans }
     }
 
-    /// How many of each kind to look for per chip. hwmon numbers them from one
-    /// with no upper bound stated anywhere; this laptop's busiest chip has
-    /// eight, and a chip with more than this is reporting more than anything
-    /// would draw.
+    /// Bound the number of sensor files probed per chip.
     const MOST: u32 = 16;
 
     /// A sensor's label, or its name in the chip where it has none — `temp3`

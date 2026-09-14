@@ -1,8 +1,9 @@
 # Architecture
 
-This document describes implemented behavior. The
-[desktop platform design](desktop-platform.md) and
-[implementation plan](desktop-platform-plan.md) record architectural decisions and completed milestone validation.
+Maintainer reference for implemented subsystem boundaries and runtime contracts.
+For plugin development, start with the [authoring guide](authoring.md).
+The [desktop platform decisions](desktop-platform.md) summarize composition rules;
+[open design questions](design.md) track limitations.
 
 ## Two planes
 
@@ -10,10 +11,8 @@ The **configuration plane** is a Rust program that computes a state document
 with no side effects. The **runtime plane** is units running as supervised
 processes, converged toward that document.
 
-The split resolves the bootstrap paradox: the committed document boots a
-machine with no toolchain. It also means a config that does not compile cannot
-take the desktop down — the last good document keeps running. Cargo is a
-build-time concern on the developer's machine, never a boot-time requirement.
+The daemon runs published binaries and documents without invoking Cargo.
+A failed build leaves the last accepted generation active.
 
 ## Crate boundaries
 
@@ -137,24 +136,16 @@ writable by that unit alone with `CAPABILITY_STATE_WRITE` and readable by any
 unit that declares that keyspace. Units compose through replicated records;
 typed `Watch<T>` consumers depend on the crate defining `T`.
 
-Hot reload is therefore kill-and-restart, and crash recovery is the same code
-path. Liveness is a property of the process model, not the language.
+Reload replaces changed plugin processes. Process supervision also handles crash recovery.
 
 ## Protocol
 
-protobuf as the IDL, no gRPC. Length-prefixed frames over a Unix socket,
-`SO_PEERCRED` for unforgeable identity, canonical JSON for the observation
-socket and debug output.
-
-protobuf gives messages, not a protocol. Multiplexed streams, bounded queues,
-last-value-wins coalescing, request ids, and handshake version negotiation are
-designed on top. Encoding is swappable; ontology is permanent — so the schema
-is where the care goes. It models a desktop, not Hyprland.
-
-`crates/omega-proto/schema/` is the single source of truth. The generated Rust
-types are shared by the daemon, the CLI, and every user crate: `Keybind` in
-the daemon and `Keybind` in a config are the same type, with no translation
-layer where a lie can live.
+Protocol messages use Protobuf schemas and length-prefixed frames over Unix
+sockets. Peer credentials establish process identity. The observation socket
+encodes the same requests and outcomes as newline-delimited protobuf JSON.
+Multiplexing, request correlation, flow control, and version negotiation are
+implemented above the encoding layer. `crates/omega-proto/schema/` defines the
+shared messages; generated Rust types are used by all native participants.
 
 The current protocol version and minimum accepted version are both 7, defined in
 `omega-proto/src/protocol.rs`. Rebuild plugins and update the daemon together
@@ -369,8 +360,8 @@ Limits include 256 instances per plugin, 4096 globally, 128 KiB construction set
 per instance and 8 MiB in aggregate, 64 observation connections, bounded request
 queues, and five-second observation writes. The hub also bounds retained views.
 The SDK caps pending view publications and retries current trees after acknowledgments.
-Protocol version 6 is required throughout. Renderer attachment also requires
-local-message and controlled-input features. Commands are separate manifest
+All participants must negotiate a supported protocol version. Renderer attachment
+also requires local-message and controlled-input features. Commands are separate manifest
 endpoints throughout; wire manifests cannot advertise them as UI surfaces.
 
 ### Stateful surfaces
@@ -418,10 +409,8 @@ catalogue data and does not launch desktop applications.
 
 ## Reconciliation
 
-The four domain providers `plan` purely against the document and only then `apply`, so a
-change can be shown before it happens. Convergence runs in one task, one pass
-at a time, and is keyed per entity id — which is what keeps the blast radius
-of an edit to the thing it names. The daemon owns the convergence task, cancels
+Domain providers compute pure plans before applying changes. Convergence runs
+in one task, one pass at a time, with changes keyed by entity ID. The daemon owns the convergence task, cancels
 an in-progress pass on shutdown and joins it before draining schedules. Dropping
 the owner also cancels convergence.
 
@@ -460,29 +449,19 @@ development unit until its adoption ends. Unchanged timers are left alone on
 retry. Environment read errors are failures, not missing files. There is no
 separate settings provider: construction settings belong to build activation.
 
-| domain        | converges                        |
-| ------------- | -------------------------------- |
-| `units`       | which units run                  |
-| `environment` | the session environment file     |
-| `schedules`   | persistent timers                |
-| `bars`        | surface instances placed in bars |
+| domain          | converges                    |
+| --------------- | ---------------------------- |
+| `units`         | which units run              |
+| `environment`   | the session environment file |
+| `schedules`     | persistent timers            |
+| `presentations` | configured surface instances |
 
-Two topics can come from one subsystem when they move at different rates:
-`network` carries the SSID and the signal, `throughput` carries bytes per
-second, because a widget drawing the network's name should not be woken twice a
-second by bytes it is not showing. A broker that reports a rate differences two
-samples itself — a counter is meaningless alone, and every widget that did its
-own subtraction would have its own idea of what to do when an interface
-disappears.
+Topics separate facts with different update rates. Brokers compute transfer rates
+from successive counters and handle counter resets before publication.
 
-A schedule is the one thing the runtime plane does that nobody asked for. Its
-cadence is `every <n><s|m|h|d>` — one grammar, in `omega-proto`, with an immediate first tick and no cron support,
-so the config
-plane that writes it and the daemon that reads it cannot drift. When one
-fires, the daemon publishes `EVENT_SCHEDULE_FIRED` and performs the action the
-document gave it, if it gave one; a schedule with no action is a cadence a
-unit reacts to. Nothing here is capability-checked, because a schedule is the
-machine's own document speaking rather than a unit asking.
+Schedules use `every <n><s|m|h|d>` with an immediate first tick. Cron is unsupported.
+Each tick emits `EVENT_SCHEDULE_FIRED` and dispatches the optional action.
+Document schedules are trusted configuration, independent of peer capabilities.
 
 Schedule startup rejects periods outside the monotonic clock range.
 Schedule mutations are serialized. Replacing or removing a timer joins it before
@@ -658,9 +637,8 @@ completed publication before waiting on the next. Individual writes keep their
 five-second deadline and bounded request draining. The private connection accepts
 an async stream so in-memory backpressure tests can use Tokio's paused clock.
 
-Units publish declarative view trees; the shell renders them. A first-party
-Quickshell plugin instantiates QML per node, so units inherit Omarchy theming
-without knowing about it. Normal Wayland toplevels need none of this.
+Plugins publish declarative view trees. Shared QML controls render them in both
+Omarchy placements and standalone Quickshell hosts. Hosts supply theme and assets.
 
 The CLI embeds renderer assets. `omega shell install` installs the assets carried
 by that binary; replacing the binary alone does not refresh installed or loaded
@@ -669,19 +647,13 @@ readers, SDK emission tests and the shell's explicit undrawn-prop list keep the
 vocabulary aligned. See the [renderer contract](../crates/omega-renderer/shell/README.md)
 for interaction, host integration and node implementation.
 
-## Design rules
+## Design constraints
 
-1. **The typed path must be shorter than the bash path** for the fifty most
-   common operations. If `run("brightnessctl set 5%+")` is one line and the
-   SDK is fifteen, the SDK is decoration on a pile of shell scripts.
-2. **Blast radius of one.** Any edit touches exactly one thing; a keybind
-   change does not restart the bar.
-3. **Scales down.** A fresh install is a few lines in one file.
-4. **A config that does not compile never takes the desktop down.**
-
-Non-goals: not Nix; not a reimplementation of NetworkManager, PipeWire, UPower
-or Hyprland; not a full OS. Omega is a programmable layer on top of Omarchy,
-reusing its shell and compositor.
+- Keep typed APIs concise for common desktop operations.
+- Reconcile only changed entities; retain unaffected processes and instances.
+- Preserve the last accepted generation when compilation or validation fails.
+- Delegate external service behavior to its platform integration.
+- Share UI primitives across Omarchy and standalone hosts.
 
 ## Retained state and history
 
@@ -777,7 +749,7 @@ Renderer behavior tests run with `crates/omega-renderer/shell/test.sh` (also in 
 
 `WifiControl` requires network capability. Connection requests acknowledge
 NetworkManager activation admission; the Wi-Fi reading reports connecting,
-connected or failed state independently. The initial implementation uses the first
+connected or failed state independently. The implementation uses the first
 wireless adapter, visible networks and open/personal authentication or saved
 profiles. Newly supplied credentials create a volatile NetworkManager profile,
 not a persistent saved network. Hidden networks, enterprise authentication and
@@ -910,10 +882,10 @@ and restores originals before retrying. Published generations keep their runtime
 contract. `omega-omarchy` owns shell authoring, compilation, validation of its
 projected instances, transport adapter, and installation. Its validator removes
 the handled shell payload before invoking core validation, which rejects an
-unhandled payload. The protocol's existing shell payload remains until the
-presentation protocol phase.
+unhandled payload. The shell payload remains host-specific; core validation does not interpret it.
 
-`omega-renderer` embeds only the shared QML core and depends on `omega-proto`.
+`omega-renderer` embeds shared QML controls, standalone hosts, and preview assets
+and depends on `omega-proto`.
 Both the Omarchy adapter and the isolated fixture harness use that core. Theme,
 assets, interaction session, and allocated dimensions enter at `ViewNode`;
 nested controls retain bindings to them. The fixture harness captures interactions

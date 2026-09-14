@@ -1,8 +1,4 @@
-//! Length-delimited frame codec.
-//!
-//! The wire format is `varint length ++ protobuf(Frame)`. [`FrameCodec`] is the
-//! single unit of framing; every transport in Omega is
-//! [`tokio_util::codec::Framed`] over this codec.
+//! Length-delimited protobuf framing: varint body length followed by an encoded Frame.
 
 use bytes::{Buf, BytesMut};
 use prost::Message;

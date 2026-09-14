@@ -1,12 +1,7 @@
 import QtQuick
 import "../Props.js" as Props
 
-// A proportion the user can drag.
-//
-// The drag lives here and nowhere else: a unit hears where it landed, not
-// every pixel on the way, because a render round trip per frame would make
-// the control lag the finger doing it. `dragging` is what keeps the published
-// value from yanking the handle back mid-gesture.
+// Slider with a local drag value. Submit on release and preserve the value while pending.
 Item {
     id: track
     required property var host

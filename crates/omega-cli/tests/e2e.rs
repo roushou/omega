@@ -1,9 +1,5 @@
-//! The whole cycle, as a person runs it.
-//!
-//! Ignored by default: it compiles a scaffolded config with cargo, which
-//! takes minutes and a registry the machine can reach. It exists so the shell
-//! session everyone reruns by hand — `init`, `new`, `build`, `daemon`, `status`,
-//! `restart` — is written down and repeatable:
+//! End-to-end CLI tests using a scaffolded config and real binaries.
+//! Ignored by default because they compile generated workspaces and may access the registry.
 //!
 //! ```text
 //! cargo test -p omega-cli -- --ignored --nocapture
@@ -16,8 +12,7 @@ use std::time::{Duration, Instant};
 /// This test's own build of the CLI, whichever profile cargo used.
 const OMEGA: &str = env!("CARGO_BIN_EXE_omega");
 
-/// A whole machine in a temp directory: three roots and two sockets, so the
-/// cycle runs against nothing the developer owns.
+/// Isolated config, state, and cache roots with two test sockets.
 struct Machine {
     root: PathBuf,
 }
@@ -33,9 +28,7 @@ impl Machine {
         Self { root }
     }
 
-    /// Cargo's own scratch for integration tests, under `target/`. Not
-    /// `/tmp`: a cargo build of the scaffolded config runs to gigabytes, and
-    /// on a typical machine `/tmp` is memory.
+    /// Use Cargo target scratch space for generated builds, which may require gigabytes.
     fn scratch() -> PathBuf {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("e2e")
     }
@@ -74,9 +67,7 @@ impl Machine {
     /// Run cargo over the scaffolded workspace, the way its author would.
     fn cargo(&self, args: &[&str]) -> String {
         let output = Command::new("cargo")
-            // Where the config's `.cargo/config.toml` says which omega it
-            // builds against — cargo looks up from here, not from the
-            // manifest.
+            // Cargo discovers local patches relative to its working directory.
             .current_dir(self.root.join("config"))
             .args(args)
             .arg("--manifest-path")
@@ -150,8 +141,7 @@ fn a_scaffolded_config_builds_and_runs() {
     machine.run(&["init", "--bare"]);
     machine.run(&["new", "battery-widget", "--template", "battery"]);
 
-    // Scaffolding from a checkout links the config to it, so what follows
-    // resolves against this tree rather than a crate nobody has published.
+    // Use checkout patches for the scaffolded config.
     assert!(
         machine.root.join("config/.cargo/config.toml").exists(),
         "init should link a config it can see a checkout for"

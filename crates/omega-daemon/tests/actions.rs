@@ -26,12 +26,7 @@ fn act(stream_id: u64, kind: action::Kind) -> Frame {
     }
 }
 
-/// A broker that serves one kind and remembers being asked.
-///
-/// Standing in for the real one on purpose: what the daemon owes is that an
-/// action reaches the broker claiming its kind. Whether sysfs then took the
-/// write is `omega-platform`' business, and dragging a device tree in here
-/// would test that twice and this once.
+/// Test broker recording routed actions without contacting a subsystem.
 #[derive(Debug, Clone, Default)]
 struct Recorder {
     served: Arc<Mutex<Vec<ActionKind>>>,
@@ -139,9 +134,7 @@ async fn a_granted_command_actually_runs() {
 
 #[tokio::test]
 async fn an_action_is_refused_for_its_capability_before_its_implementation() {
-    // `policy` may spawn, but it may not control the machine — and Lock is
-    // not implemented either. The capability is the reason it hears about,
-    // so a missing handler can never be mistaken for a grant.
+    // Capability denial takes precedence over an unavailable handler.
     let (_harness, mut transport) = connected("act-order", policy_manifest("policy")).await;
 
     transport
@@ -199,10 +192,7 @@ async fn an_action_reaches_the_broker_that_claims_its_kind() {
 
 #[tokio::test]
 async fn an_action_no_broker_claims_is_still_unimplemented() {
-    // The same request, on a daemon running no broker for it. Authorization
-    // already passed — so the answer has to be that nothing can do it, not
-    // silence, or a granted capability would stand in for a handler that does
-    // not exist.
+    // An authorized action with no handler returns UNIMPLEMENTED.
     let (_harness, mut transport) = connected("act-unbrokered", backlight_manifest("dimmer")).await;
 
     transport.send(act(1, dim())).await.unwrap();

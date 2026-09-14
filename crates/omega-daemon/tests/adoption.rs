@@ -47,8 +47,7 @@ fn welcome(frame: Option<Frame>) -> Welcome {
     }
 }
 
-/// Poll until `done`, or fail. Adoption ends when a connection does, and a
-/// connection ending is something the daemon notices rather than announces.
+/// Poll until the asynchronous adoption cleanup completes.
 async fn until(within: Duration, done: impl Fn() -> bool) {
     let deadline = tokio::time::Instant::now() + within;
     while tokio::time::Instant::now() < deadline {
@@ -82,9 +81,7 @@ async fn a_token_the_daemon_hands_out_makes_this_process_the_unit() {
         "an adopted unit is granted what its manifest declares"
     );
 
-    // And it is *running*. The supervised process was stopped to make room
-    // for this one, so reporting the lifecycle of the process that left would
-    // describe the wrong thing entirely.
+    // Adopted lifecycle reports the replacement process.
     until(Duration::from_secs(2), || {
         phase_of(&harness, &name) == UnitPhase::Running as i32
     })
@@ -110,14 +107,13 @@ async fn an_adopted_unit_is_not_started_underneath_the_process_developing_it() {
     operator.recv().await.unwrap().unwrap();
     adopted(&mut operator, "battery-widget").await;
 
-    // The reconciler starts what the document wants and nothing is running.
-    // An adopted unit is running — by somebody else.
+    // Active adoption prevents convergence from spawning another process.
     assert!(
         harness.supervisor.running().contains(&name),
         "an adopted unit must count as held, or the built binary races the one being written"
     );
 
-    // And a status that did not say so would be describing the wrong process.
+    // Status must identify the adopted process.
     let status = harness
         .units
         .statuses()
@@ -144,10 +140,7 @@ async fn an_adoption_ends_with_the_connection_that_asked_for_it() {
     })
     .await;
 
-    // The token died with the adoption. What is left is a peer holding a
-    // secret that identifies nobody — which is exactly a peer holding no
-    // secret at all, and is admitted, if at all, on the only other claim it
-    // has: being the owner. It gets none of the unit's grants.
+    // An expired adoption token grants no unit authority.
     let hash = widget_manifest("battery-widget", "battery").hash();
     let mut late = harness.connect(&hash, &token).await;
     let welcome = welcome(late.recv().await.unwrap());

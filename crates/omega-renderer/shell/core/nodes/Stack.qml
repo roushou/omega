@@ -3,13 +3,7 @@ import QtQml.Models
 import QtQuick.Layouts
 import "../Props.js" as Props
 
-// Children in a line, along one axis or the other.
-//
-// A layout, not a positioner: positioners leave children at their own size and
-// top-align them, and a child whose width came from the width it helped decide
-// is a binding loop. Children load by url — QML refuses a component that names
-// itself — and are keyed, so a delegate mid-interaction survives its
-// neighbours changing.
+// Row or column layout with keyed delegates. Load children by URL to support recursion.
 Loader {
     id: stack
     required property var host
@@ -19,9 +13,7 @@ Loader {
 
     sourceComponent: stack.column ? columnLayout : rowLayout
 
-    // Mirrors this stack's children, updated in place so a delegate survives
-    // its neighbours changing. Rebuilt wholesale only when nothing matches.
-    // Node payloads are QVariantMaps, including nested children and props.
+    // Retain matching delegates while updating their QVariantMap payloads.
     ListModel { id: rows; dynamicRoles: true }
 
     readonly property var wanted: Props.children(stack.host.model)
@@ -87,9 +79,7 @@ Loader {
                 delegate: childNode
             }
 
-            // The slack, at the trailing edge. Stands down once a child claims
-            // the room. A column needs none: the surface holding one is as tall
-            // as what it draws.
+            // Trailing row space applies only when no child requests expansion.
             Item {
                 Layout.fillWidth: !stack.claimed
                 implicitWidth: 0
@@ -109,8 +99,7 @@ Loader {
         }
     }
 
-    // `model` is bound rather than passed at construction, so a delegate kept
-    // across a reorder is handed its new node through the same binding.
+    // Bind delegates to current model data so reused items receive reordered payloads.
     Component {
         id: childNode
         Loader {
@@ -129,9 +118,7 @@ Loader {
             Layout.minimumWidth: 0
             Layout.fillWidth: child.spans
             Layout.fillHeight: child.rule && !stack.column
-            // Centred across the axis, at the size it draws. A spanning child
-            // names no alignment in the direction it spans, or that alignment
-            // would pin it to its preferred width.
+            // Center fixed-size children across the axis; expanding children have no alignment constraint.
             Layout.alignment: stack.column
                 ? (child.spans ? Qt.AlignVCenter : (Qt.AlignLeft | Qt.AlignVCenter))
                 : (child.rule ? Qt.AlignHCenter : Qt.AlignVCenter)

@@ -1,11 +1,14 @@
+> Historical implementation journal. This is not current API documentation.
+> Use the [authoring guide](../authoring.md) or [architecture reference](../architecture.md).
+
 # Desktop platform implementation plan
 
 Status: complete — phases 1–5 implemented and dogfooded. This is the delivery
 record: milestone scopes and checkpoints below retain their original planning
 language, and each delivery record describes validation at that milestone.
 Temporary adapters mentioned in early phases were removed by later phases.
-See [architecture](architecture.md) for current contracts, [design decisions](desktop-platform.md)
-for their rationale, and [open questions](design.md) for remaining work.
+See [architecture](../architecture.md) for current contracts, [design decisions](../desktop-platform.md)
+for their rationale, and [open questions](../design.md) for remaining work.
 
 ## Delivery rules
 
@@ -455,7 +458,7 @@ refresh its watch roots. Capture requires fixed local images instead of native
 theme icon providers. Fixture-owned clocks/randomness and arbitrary Rust I/O
 must be controlled by the fixture; this is effect isolation, not an OS sandbox.
 Pixel checks are separate from compositor/input/portal integration checks.
-See [the preview guide](previews.md) for the concrete API and workflow.
+See [the preview guide](../previews.md) for the concrete API and workflow.
 
 ## Documentation and rollout at every milestone
 

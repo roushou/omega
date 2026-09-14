@@ -37,9 +37,7 @@ BarWidget {
     panelLink.report(panelLink.instance, root.opened ? "PRESENTATION_STATE_VISIBLE" : "PRESENTATION_STATE_HIDDEN")
   }
 
-  // `open`, `close` and `opened` together are what `Bar.findPanelWidget`
-  // looks for. A widget missing any of the three is skipped, so a panel that
-  // opens on a press would still not answer `omarchy shell toggle`.
+  // Bar.findPanelWidget requires open, close, and opened for shell toggle support.
   function open() { root.opened = true }
   function close() { root.opened = false }
 
@@ -49,8 +47,7 @@ BarWidget {
     unit: root.unit
     surface: root.surface
     module: root.module
-    // Empty means the default, which `Connection` already knows: naming the
-    // path here too would be a second place for it to be wrong.
+    // An empty socket path selects the shared transport default.
     socketPath: root.socketPath !== "" ? root.socketPath : link.defaultSocketPath
   }
 
@@ -74,9 +71,7 @@ BarWidget {
     bar: root.bar
     // The tree draws itself; the button is the bar's chrome around it.
     labelVisible: false
-    // What the slot's own root node asked to say on hover. The bar owns the
-    // tooltip window, so this is the one node in a tree that can have one —
-    // a tooltip deeper in would need a host that follows the pointer.
+    // Expose the root node tooltip through the host bar tooltip window.
     tooltipText: link.requests.error || link.status || (link.tree ? Props.tooltip(link.tree) : "")
     hasVisualContent: link.tree !== null || fallback.visible
     // A button with no label is a button with no width, and the bar lays out
@@ -106,24 +101,14 @@ BarWidget {
       session: indicatorSession
     }
 
-    // Pressing the slot opens the popout — but only where the tree itself did
-    // not want the press. A widget that drew a button has said what a press
-    // means, and stealing it to open a panel would make the button dead.
-    //
-    // Ordering is what arranges that, rather than a second mouse area: `view`
-    // is parented to the button after the button's own, so a node that
-    // handles a click gets it and this never runs. Putting one *underneath*
-    // cannot work — `WidgetButton` fills itself with a MouseArea that accepts
-    // every button, and nothing below it is ever reached.
+    // Child controls must receive clicks before the popup trigger.
+    // Parent `view` after WidgetButton's MouseArea; a sibling below it cannot receive clicks.
     onPressed: function (mouseButton) {
       if (root.hasPanel && mouseButton === Qt.LeftButton) root.opened = !root.opened
     }
   }
 
-  // The popout, anchored to the slot. `KeyboardPanel` owns the layer-shell
-  // window, focus on open, outside-click dismissal, and positioning against
-  // the bar — all of which a panel needs and none of which is Omega's to
-  // reinvent.
+  // KeyboardPanel owns popup anchoring, focus, and dismissal.
   Loader {
     active: root.hasPanel
     sourceComponent: KeyboardPanel {

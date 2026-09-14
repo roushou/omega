@@ -1,14 +1,4 @@
-//! The keys a keybind can name.
-//!
-//! `Keybind.key` is a string on the wire, and its own schema comment says the
-//! SDK wraps it in a closed enum. This is that enum: the names are the keysyms
-//! a compositor expects, so `Key::PageUp` is `Prior` and `Key::VolumeUp` is
-//! `XF86AudioRaiseVolume` — spellings nobody should have to remember, and
-//! nobody should be able to get subtly wrong.
-//!
-//! Closed like every other taxonomy here. A keyboard has more keys than this;
-//! the set grows in the table below when somebody needs one, which is a build
-//! error away rather than a bind that silently never fires.
+//! Supported keyboard keys and their compositor keysym names.
 
 use std::fmt;
 
@@ -153,8 +143,7 @@ mod tests {
 
     #[test]
     fn the_spellings_are_the_compositor_s_rather_than_the_obvious_ones() {
-        // The whole reason this is a type: nobody remembers that page-up is
-        // `Prior`, and a bind spelled `PageUp` would simply never fire.
+        // Map public key names to compositor keysyms.
         assert_eq!(Key::PageUp.keysym(), "Prior");
         assert_eq!(Key::PageDown.keysym(), "Next");
         assert_eq!(Key::VolumeUp.keysym(), "XF86AudioRaiseVolume");

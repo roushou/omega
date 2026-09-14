@@ -1,8 +1,6 @@
-//! Testing a plugin without a daemon.
-//!
-//! A widget is a function from state to a tree, so most of what can be wrong
-//! with one is wrong before any socket exists. Build the plugin against the
-//! state you want and look at what it drew:
+//! Render surfaces, invoke commands, and inspect effects using isolated fixtures.
+//! Use [`Drawn`] for view assertions, [`Called`] for command results, and
+//! [`TestDaemon`] for protocol-level tests. No live desktop services are required.
 //!
 //! ```
 //! use omega::testing::{Drawn, State};
@@ -25,10 +23,6 @@
 //! assert_eq!(drawn.text(), "80%");
 //! ```
 //!
-//! The rest — what a command answers, which instances a document hands a
-//! widget, whether a plugin publishes at all — needs the protocol, so
-//! [`TestDaemon`] speaks it over a `UnixStream::pair`. There is no listener,
-//! no socket file, and no daemon: the test *is* the daemon.
 
 mod called;
 mod daemon;
@@ -43,12 +37,8 @@ pub use daemon::{Published, TestDaemon, manifest_of};
 pub use drawn::Drawn;
 pub use state::State;
 
-/// The topic payloads [`State::with`] takes, one per row of `omega-proto`'s
-/// topic table.
-///
-/// The shorthands on [`State`] cover what most tests mean; a test about the
-/// time left has to name the state itself. Re-exported here because a unit
-/// depends on this crate and not on `omega-proto`.
+/// Raw topic payloads accepted by [`State::with`]. Use these when the
+/// fixture helpers do not expose the fields needed by a test.
 ///
 /// ```
 /// use omega::testing::{State, topic::BatteryState};

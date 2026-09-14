@@ -1,8 +1,4 @@
-//! The handshake, shared by both peers.
-//!
-//! The unit speaks [`Hello`] first; the daemon answers [`Welcome`]. Both sides
-//! validate the protocol version and extract the expected frame through this
-//! type, so the protocol boundary has exactly one implementation.
+//! Shared Hello/Welcome exchange and protocol-version validation.
 
 use std::time::Duration;
 
@@ -38,13 +34,7 @@ impl Handshake {
         std::env::var(Self::TOKEN_ENV).unwrap_or_default()
     }
 
-    /// Validate a peer's claimed protocol version, and answer with the one
-    /// the two of them will actually speak.
-    ///
-    /// A peer inside the supported window is accepted at the lower of the two
-    /// versions. Outside it, the connection ends here: a peer that is too old
-    /// would be served frames it cannot parse, and one that is too new would
-    /// be answered by a daemon that cannot parse its.
+    /// Negotiate the lower supported protocol version or refuse an incompatible peer.
     pub fn negotiate(peer: u32) -> Result<u32, HandshakeError> {
         if !(MIN_PROTOCOL_VERSION..=PROTOCOL_VERSION).contains(&peer) {
             return Err(HandshakeError::VersionMismatch {

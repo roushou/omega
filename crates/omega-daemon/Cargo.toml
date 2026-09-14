@@ -43,6 +43,5 @@ tracing.workspace = true
 
 [dev-dependencies]
 omega-document.workspace = true
-# `start_paused`: backoff pacing and keepalive timeouts are asserted on a
-# clock the test moves, not waited out.
+# Use paused Tokio time for backoff and keepalive tests.
 tokio = { workspace = true, features = ["test-util"] }

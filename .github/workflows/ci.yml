@@ -63,17 +63,8 @@ jobs:
           persist-credentials: false
 
       - name: Install QML tooling and runtime modules
-        # `update`'s exit code is not the signal, for the same reason
-        # qmllint's own is not: it reports on things we did not ask about.
-        # The runner image carries third-party apt repos we have no use for —
-        # Google Chrome, Microsoft — and when one of their CDNs serves an
-        # index that disagrees with its own Release file, `update` exits 100
-        # having already fallen back to the indices it had. That failed this
-        # job on Chrome's repo while Ubuntu's archive was fetched perfectly.
-        #
-        # The install below is the real gate: if the archive we actually need
-        # is broken, the package does not arrive and the job goes red there,
-        # with an error about the package rather than about a browser.
+        # Unrelated third-party repositories may fail to refresh. Package installation
+        # remains mandatory and fails if required Ubuntu packages are unavailable.
         run: |
           sudo apt-get update || true
           sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts qml6-module-qtquick-controls qml6-module-qtquick-templates

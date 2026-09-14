@@ -1,11 +1,5 @@
-//! The units this daemon knows about.
-//!
-//! One table, one lock, one answer to "what do we know about unit X" — its
-//! manifest, its lifecycle, the token it proves itself with, the handles that
-//! stop and cycle it, and the session it is reachable through.
-//!
-//! The `units` state topic is a projection of this table, published whenever
-//! it changes. Nothing else keeps a parallel record.
+//! Authoritative unit table: manifests, lifecycle, tokens, supervision, and sessions.
+//! Publish the units topic as a projection whenever these records change.
 
 mod instance;
 pub mod lifecycle;
@@ -51,9 +45,7 @@ struct Inner {
     >,
     request_bytes: Arc<tokio::sync::Semaphore>,
     hub: Hub,
-    /// Announces a unit becoming reachable. A unit is started before it can
-    /// be asked for anything, so whoever wants to ask has to be told when it
-    /// arrives.
+    /// Notify waiters when a unit becomes reachable.
     connected: mpsc::Sender<UnitName>,
 }
 
@@ -163,12 +155,8 @@ impl UnitTable {
         self.mint(name, false)
     }
 
-    /// Mint a token for a process the daemon will not spawn, and hold the
-    /// unit's place while that process is it.
-    ///
-    /// The token is the same kind of token: an adopted unit is admitted, and
-    /// granted, exactly as a spawned one — the manifest is still the ceiling.
-    /// What differs is only who started the process.
+    /// Issue a development spawn token and reserve the unit identity.
+    /// Adopted sessions use the same manifest grants as supervised sessions.
     pub fn adopt_unit(&self, name: &UnitName) -> UnitToken {
         let token = self.mint(name, true);
         self.publish();
@@ -317,8 +305,7 @@ impl UnitTable {
         }
         self.publish();
 
-        // Best effort: a full channel means a convergence is already pending,
-        // which is what this would have asked for.
+        // A full trigger channel already represents pending convergence.
         let _ = self.inner.connected.try_send(name.clone());
         SessionGuard::new(self.clone(), name.clone(), link)
     }
@@ -437,9 +424,7 @@ impl UnitTable {
             .all(|record| record.lifecycle.is_stopped() || !record.is_supervised())
     }
 
-    /// Publish the table as the `units` topic. "This daemon runs no units" is
-    /// a fact about the machine like any other, so the topic exists from the
-    /// start rather than appearing with the first unit.
+    /// Publish the unit table, including an empty initial table.
     pub fn publish(&self) {
         let records = self.lock();
         let units = records.values().map(UnitRecord::status).collect();
@@ -456,9 +441,7 @@ impl UnitTable {
     }
 
     fn lock(&self) -> MutexGuard<'_, BTreeMap<UnitName, UnitRecord>> {
-        // A panic while holding this lock would poison it; the table holds no
-        // invariant a panic could break, so recover rather than cascade one
-        // unit's failure into the daemon's.
+        // Recover poisoned locks: table contents remain valid after unwinding.
         self.inner.units.lock().unwrap_or_else(|e| e.into_inner())
     }
 }

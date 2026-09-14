@@ -1,9 +1,4 @@
-//! The daemon itself: the run loop, against a state dir on disk.
-//!
-//! Everything below drives a real `Daemon` — its listener, its watch on the
-//! state dir, its converger, its supervisor — and asserts on what the daemon
-//! knows afterwards. The only things given to it are the two socket paths and
-//! a temp directory to be a machine.
+//! Daemon integration tests with real listeners, filesystem watching, convergence, and supervision.
 
 mod common;
 
@@ -250,11 +245,7 @@ async fn a_broken_build_leaves_the_running_one_alone() {
 
 #[tokio::test]
 async fn a_machine_nothing_has_been_built_for_yet_still_starts() {
-    // `omega init` installs the service before anything is built, so the very
-    // first start finds a state dir with no `units.toml` in it. Treating that
-    // as fatal made the daemon exit 1, and systemd restart it until it hit the
-    // start limit and gave up — permanently dead by the time the first
-    // `omega build` wrote the file three minutes later.
+    // The daemon must remain running before the first config build.
     let machine = Machine::new("unbuilt");
     assert!(
         !machine.layout.state_units_toml().exists(),

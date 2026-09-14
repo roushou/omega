@@ -1,4 +1,4 @@
-//! What the machine could connect to.
+//! Wi-Fi scan results and connection control.
 
 use crate::units::Percent;
 
@@ -9,21 +9,16 @@ use crate::wiring::does;
 use omega_proto::omega::{ConnectWifi, DisconnectWifi, action};
 
 crate::wiring::reading! {
-    /// The networks it could have.
+    /// Wi-Fi scan results and connection status.
     Wifi: omega_proto::omega::WifiState
 }
 
-/// The networks on the air, as the last scan found them.
-///
-/// Separate from [`Network`], which is the one connection the machine *has*.
-/// A picker holds this; an indicator holds that, and holding only what it
-/// draws is what keeps an indicator from waking every time a signal jitters
-/// three rooms away.
+/// Wi-Fi scan results. Use [`Network`] for the primary connection status.
 ///
 /// [`Network`]: crate::platform::network::Network
 impl Wifi {
-    /// Every network, strongest first. One entry per name: a network is often
-    /// several radios, and the daemon has already folded them.
+    /// Return scanned networks in descending signal-strength order.
+    /// Access points with the same SSID are grouped into one entry.
     pub fn networks(&self) -> Vec<AccessPoint> {
         self.read()
             .map(|wifi| {
@@ -35,13 +30,13 @@ impl Wifi {
             .unwrap_or_default()
     }
 
-    /// The one the machine is on, if it is on one in this list.
+    /// Return the active network if it appears in the current scan results.
     pub fn active(&self) -> Option<AccessPoint> {
         self.networks().into_iter().find(AccessPoint::is_active)
     }
 }
 
-/// One network to choose from.
+/// A scanned Wi-Fi network.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccessPoint {
     ssid: String,
@@ -60,13 +55,12 @@ impl AccessPoint {
         }
     }
 
-    /// Its name, which is also its identity: a list keys rows by this, and it
-    /// is what a row hands back when it is chosen.
+    /// Network SSID. Use it as the selection value and stable item key.
     pub fn ssid(&self) -> &str {
         &self.ssid
     }
 
-    /// How well it is heard. Prints itself as `70%`.
+    /// Signal strength as a percentage.
     pub fn strength(&self) -> Percent {
         self.strength
     }

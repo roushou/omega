@@ -1,8 +1,4 @@
-//! Reading and setting the volume through `pactl`.
-//!
-//! PulseAudio's scale and the ontology's are not the same, and neither are
-//! their spellings of a change. Both conversions are pure, so both are here
-//! without a sound server in the room.
+//! pactl volume and command conversion tests without a sound server.
 
 mod common;
 
@@ -67,8 +63,7 @@ fn an_absolute_level_is_a_percentage_of_unattenuated() {
     let set = PipeWire::arguments(&set_volume::Change::Absolute(0.42));
     assert_eq!(set.last().unwrap(), "42%");
 
-    // The ontology's range is zero to one, and a caller outside it gets the
-    // nearest end rather than an amplifier.
+    // Clamp volume to the protocol range.
     let loud = PipeWire::arguments(&set_volume::Change::Absolute(4.0));
     assert_eq!(loud.last().unwrap(), "100%");
 }
@@ -96,9 +91,7 @@ async fn it_reads_the_machine_it_is_running_on() {
     };
     assert!((0.0..=1.0).contains(&audio.volume), "{audio:?}");
 
-    // The second reading waits on the subscription. `pactl subscribe` reports
-    // every stream a browser opens, so a broker that woke on all of them
-    // would run two processes per notification sound.
+    // Ignore subscription events unrelated to the selected audio device.
     assert!(
         common::waits(&mut pipewire).await,
         "a second reading should wait"

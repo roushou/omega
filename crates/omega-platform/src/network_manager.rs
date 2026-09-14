@@ -1,14 +1,5 @@
-//! The network, from NetworkManager.
-//!
-//! NetworkManager answers "what is this machine on" through a chain: the
-//! manager names a primary connection, the connection names a device, and a
-//! wireless device names the access point it is associated with. Walking it
-//! here is what keeps every widget from walking it itself.
-//!
-//! Woken by signals *and* polled. `PropertiesChanged` on the manager reports
-//! connecting and disconnecting the moment they happen, but signal strength
-//! lives on the access point and changes as somebody walks around — so a slow
-//! tick is the floor under the signals rather than a replacement for them.
+//! NetworkManager connection, Wi-Fi, and VPN state.
+//! Property signals and fallback polling refresh primary routes and access-point data.
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -27,19 +18,14 @@ use omega_proto::{ActionKind, SystemTopic};
 use crate::broker::{Broker, BrokerError, Cadence, opaque_debug};
 use crate::dbus;
 
-/// What NetworkManager reports, as it reports it.
-///
-/// Split from the walk that gathers it because the walk needs a bus and this
-/// does not: NetworkManager's vocabulary and the ontology's disagree about
-/// almost everything, and that is where the mistakes are.
+/// Collected NetworkManager properties for protocol conversion.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Reading {
     /// `NMState`. 70 is connected with internet, 20 disconnected.
     pub manager_state: u32,
     /// The connection's `Type`: `"802-11-wireless"`, `"802-3-ethernet"`, …
     pub kind: String,
-    /// The connection's name. For Wi-Fi it is usually the SSID, but it is
-    /// the *connection's* name and somebody may have renamed it.
+    /// Connection profile name, which may differ from the Wi-Fi SSID.
     pub id: String,
     pub interface: String,
     /// From the associated access point, which is authoritative where the
@@ -51,17 +37,10 @@ pub struct Reading {
 }
 
 impl Reading {
-    /// `NM_STATE_CONNECTED_LOCAL`. Below this the machine is not on a network;
-    /// above it, it is on one that may or may not reach the internet — which
-    /// is a different question, and not the one this field asks.
+    /// NM_STATE_CONNECTED_LOCAL: local connectivity without an internet guarantee.
     const CONNECTED: u32 = 50;
 
-    /// The ontology's view.
-    ///
-    /// Always a reading, never absent: NetworkManager answering at all means
-    /// there is something true to say, and "disconnected" is one of the things
-    /// it can be. Absence is for a machine with no NetworkManager, which is
-    /// the broker failing to connect rather than a reading of nothing.
+    /// Convert reachable service state, including disconnected state, into a reading.
     pub fn state(&self) -> NetworkState {
         NetworkState {
             connected: self.manager_state >= Self::CONNECTED,
@@ -72,12 +51,7 @@ impl Reading {
         }
     }
 
-    /// What to call the network.
-    ///
-    /// The access point where there is one, because a connection can be
-    /// renamed and the SSID cannot. The connection's own name is the fallback
-    /// rather than nothing: a Wi-Fi widget with a blank label while the
-    /// association settles looks broken.
+    /// Use the access-point SSID, falling back to the connection name during association.
     fn name(&self) -> String {
         if self.ssid.is_empty() {
             self.id.clone()
@@ -87,10 +61,7 @@ impl Reading {
     }
 
     fn kind(&self) -> NetworkType {
-        // A VPN is reported as the primary connection when one is up, which
-        // is why it is checked first. The cost is that the network it runs
-        // over is not also reported — "on Wi-Fi *and* a VPN" needs a topic of
-        // its own, not another arm of this enum.
+        // Report VPN as the primary connection type when active.
         if self.is_vpn {
             return NetworkType::Vpn;
         }
@@ -135,15 +106,8 @@ pub struct Scan {
 }
 
 impl Scan {
-    /// The ontology's view: one entry per network, strongest first.
-    ///
-    /// A network is often several radios on the same SSID, and a picker
-    /// listing each of them is showing the hardware rather than the choice —
-    /// so they are folded, keeping the strongest, which is the one that would
-    /// be joined anyway.
-    ///
-    /// Hidden networks broadcast an empty SSID. They are dropped: a row a
-    /// user cannot tell from another row is not a choice.
+    /// Group visible access points by SSID, retaining the strongest signal.
+    /// Exclude empty SSIDs and sort by descending strength.
     pub fn state(&self) -> WifiState {
         let mut best: Vec<AccessPoint> = Vec::new();
 
@@ -189,11 +153,7 @@ pub struct Active {
 }
 
 impl Active {
-    /// Whether this connection is a tunnel rather than the link under one.
-    ///
-    /// Two spellings, and neither alone is enough: NetworkManager sets the
-    /// flag for its VPN plugins and leaves it false for WireGuard, which it
-    /// drives natively.
+    /// Detect VPN plugins by their flag and native WireGuard by connection type.
     pub fn is_tunnel(&self) -> bool {
         self.is_vpn || matches!(self.kind.as_str(), "vpn" | "wireguard")
     }
@@ -204,11 +164,7 @@ impl Active {
 pub struct Tunnels;
 
 impl Tunnels {
-    /// Every tunnel up, by name.
-    ///
-    /// A list because a machine can be on Wi-Fi *and* a VPN, and on two
-    /// tunnels at once — which is unusual and not wrong. Sorted by name so a
-    /// bar does not reorder them between readings.
+    /// Return active tunnels sorted by name.
     pub fn state(active: &[Active]) -> VpnState {
         let mut up: Vec<Tunnel> = active
             .iter()
@@ -295,11 +251,8 @@ impl Link {
         })
     }
 
-    /// Walk from the manager to the access point, taking what is there.
-    ///
-    /// Every step after the first is optional. A machine that is disconnected
-    /// has no primary connection; a wired one has no access point. Those are
-    /// answers, so the walk stops and reports what it has rather than failing.
+    /// Traverse the primary connection and device properties.
+    /// Missing optional objects produce disconnected or partial state, not errors.
     async fn read(&self) -> Result<Reading, BrokerError> {
         let mut reading = Reading {
             manager_state: dbus::property(&self.manager, "State").await.unwrap_or(0),
@@ -342,11 +295,7 @@ impl Link {
         Ok(reading)
     }
 
-    /// Every access point the wireless device can see.
-    ///
-    /// From the device rather than the connection: a machine that is on
-    /// nothing still scans, and a picker with no list is the case that most
-    /// needs one.
+    /// Read visible access points from the wireless device, including while disconnected.
     async fn scan(&self, active: String) -> Scan {
         let mut scan = Scan {
             active,
@@ -376,10 +325,7 @@ impl Link {
         scan
     }
 
-    /// Every active connection, with what it is and what it runs on.
-    ///
-    /// From `ActiveConnections` rather than `PrimaryConnection`: a VPN over
-    /// Wi-Fi has both up at once, and the primary one is only ever the tunnel.
+    /// Read all active connections, including simultaneous physical and tunnel links.
     async fn active(&self) -> Vec<Active> {
         let paths: Vec<OwnedObjectPath> = dbus::property(&self.manager, "ActiveConnections")
             .await
@@ -619,9 +565,7 @@ impl Default for NetworkManager {
 }
 
 impl NetworkManager {
-    /// The floor under the signals. Connecting and disconnecting arrive as
-    /// `PropertiesChanged`; signal strength does not, because it lives on the
-    /// access point and changes as somebody walks around.
+    /// Polling fallback for access-point changes not covered by manager signals.
     pub const REFRESH: Duration = Duration::from_secs(5);
 
     pub fn new() -> Self {
@@ -631,9 +575,7 @@ impl NetworkManager {
         }
     }
 
-    /// Both topics in one patch. The hub coalesces per topic, so a signal
-    /// that only moved the connection does not wake a picker, and a scan that
-    /// only moved the list does not wake an indicator.
+    /// Publish connectivity and scan topics together; revisions are coalesced per topic.
     fn patch(network: NetworkState, wifi: WifiState, vpn: VpnState) -> StatePatch {
         StatePatch {
             topics: vec![

@@ -63,6 +63,7 @@ Omega targets Linux and requires Rust 1.88 or newer. Quickshell renders surfaces
 Omarchy supplies the integrated bar host. The `omega-preview` dev dependency
 provides isolated component and surface cases without a daemon.
 
+[Authoring guide](https://github.com/roushou/omega/blob/main/docs/authoring.md) ·
 [API reference](https://docs.rs/omega-rs) ·
 [Examples](https://github.com/roushou/omega/tree/main/crates/omega/examples) ·
 [Project and setup](https://github.com/roushou/omega)

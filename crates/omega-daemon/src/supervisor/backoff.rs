@@ -2,11 +2,7 @@
 
 use std::time::Duration;
 
-/// Exponential backoff with jitter, capped.
-///
-/// A unit that fails on startup would otherwise respawn as fast as the kernel
-/// can fork; a unit that failed once an hour ago should not be punished for
-/// it, so a run that lasted is treated as a success and resets the delay.
+/// Capped exponential restart backoff with jitter. Stable runs reset the delay.
 #[derive(Debug, Clone)]
 pub struct Backoff {
     attempt: u32,

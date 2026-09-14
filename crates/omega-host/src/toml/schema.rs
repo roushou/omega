@@ -4,18 +4,14 @@ use serde::de::DeserializeOwned;
 use crate::layout::Layout;
 use crate::toml::file::TomlFile;
 
-/// A kind of TOML document: what it is called, and where its instances live.
-///
-/// This is the single declaration of a document. Call sites never join paths
-/// or name files; they ask [`Layout::file`] for a [`TomlFile`] and read it.
+/// A TOML document's kind, location, and formatting.
+/// Use [`Layout::file`] to locate a [`TomlFile`] for the schema.
 pub trait TomlSchema: Serialize + DeserializeOwned + Sized {
     /// How the document is named in errors: "unit manifest", "cargo manifest".
     const KIND: &'static str;
 
-    /// Dotted paths to tables whose entries are written as inline tables —
-    /// `omega = { workspace = true }` rather than a
-    /// `[dependencies.omega]` section. Formatting is part of a document's
-    /// declaration, not a decision at the call site.
+    /// Dotted paths to tables whose entries use inline-table syntax,
+    /// such as `omega = { workspace = true }`.
     const INLINE_ENTRIES: &'static [&'static str] = &[];
 
     /// Everything needed to address one instance. `()` for singletons; an

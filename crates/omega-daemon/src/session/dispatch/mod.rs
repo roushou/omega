@@ -1,9 +1,5 @@
-//! What an admitted peer may ask for.
-//!
-//! Every op the wire defines is listed in [`OpKind`], and the policy for the
-//! ones this daemon serves is declared in one table. An op with no row is
-//! refused as unimplemented, so a handler can never become reachable without
-//! a policy: authorization is not something a call site can forget.
+//! Dispatch admitted operations through the shared policy table.
+//! An operation without a policy row is refused as unimplemented.
 
 use omega_proto::omega::{
     Empty, Frame, Invoke, StatePatch, StateTopic, Value, invoke, result, state_topic,
@@ -56,10 +52,7 @@ impl Response {
     }
 }
 
-/// Applies the policy table to one peer's invocations.
-///
-/// One per connection, and it outlives no connection: the units this peer
-/// adopted are given back when it drops.
+/// Per-connection invocation authorization and dispatch. Dropping it releases adoptions.
 #[derive(Debug)]
 pub struct Dispatcher {
     attachment: Option<attachment::RendererAttachment>,
@@ -143,9 +136,7 @@ impl Dispatcher {
             )));
         }
 
-        // Capabilities bound what the daemon's own children may do. The
-        // operator is not a child of the daemon; the role check above is its
-        // authorization, and it holds no manifest to check against anyway.
+        // Operator authorization is role-based; units additionally require manifest capabilities.
         if peer.role() == Role::Unit {
             Self::authorize(policy, peer.grants(), op)?;
         }
@@ -334,9 +325,7 @@ impl Dispatcher {
                     .and_then(|action| action.kind.as_ref())
                     .ok_or_else(|| Refusal::invalid("Act carries no action"))?;
 
-                // What an action costs is declared per action, not per op: a
-                // unit granted the shell escape hatch has not thereby been
-                // granted the power button.
+                // Check the capability for this action kind.
                 if peer.role() == Role::Unit {
                     Actions::authorize(action, peer.grants())?;
                 }
@@ -367,9 +356,7 @@ impl Dispatcher {
                     .unit_name()
                     .ok_or_else(|| Refusal::denied("only units own a keyspace"))?;
 
-                // A unit writes its own keyspace and nothing else: system
-                // topics belong to the daemon, and another unit's keyspace to
-                // that unit, whatever capability the writer holds.
+                // Units may write only their own record keyspace.
                 let topic = Address::parse(&set.topic).or_refuse()?;
                 if topic.owner() != Some(unit.as_str()) {
                     return Err(Refusal::denied(format!(
@@ -437,9 +424,7 @@ impl Dispatcher {
             invoke::Op::RestartUnit(restart) => {
                 let name = UnitName::parse(restart.unit.clone()).or_refuse()?;
 
-                // Restarting is not a change of intent: the document still
-                // says this unit should run, so the supervisor cycles the
-                // process rather than stopping the unit.
+                // Restart preserves the document's desired running state.
                 if !self.supervisor.restart(&name) {
                     return Err(Refusal::invalid(format!("{name} is not running")));
                 }

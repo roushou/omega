@@ -24,7 +24,7 @@ mod node;
 mod style;
 mod text;
 
-/// The icon set a shell draws: what [`Icon::new`] names.
+/// Supported glyphs for [`Icon::new`].
 pub use omega_proto::Glyph;
 
 pub use bind::Bind;

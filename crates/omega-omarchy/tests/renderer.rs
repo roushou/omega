@@ -1,10 +1,4 @@
-//! The renderer omega installs, and what keeps it in step with the daemon.
-//!
-//! The renderer reads the wire format the daemon writes, so the two are one
-//! protocol in halves. These are the checks that make the halves inseparable:
-//! everything in the tree is in the binary, the binary's version is the one
-//! the shell is told, and installing leaves the directory saying only what
-//! this binary carries.
+//! Embedded renderer assets, version matching, and installation integrity tests.
 
 use std::path::{Path, PathBuf};
 
@@ -60,9 +54,7 @@ fn every_file_in_the_tree_is_carried_in_the_binary() {
 #[test]
 fn the_renderer_tells_the_shell_the_version_this_binary_speaks() {
     for renderer in Renderer::ALL {
-        // Not patched at install time: the file that ships is the file that
-        // is written, so a `--link` install serves the same version a copy
-        // does. This is what keeps the two honest.
+        // Linked and copied installs use the same embedded manifest.
         assert_eq!(
             renderer.declared_version().as_deref(),
             Some(Renderer::VERSION),
@@ -110,9 +102,7 @@ fn an_install_this_binary_did_not_write_reads_as_stale() {
     std::fs::write(dir.join("Props.js"), "// somebody's own\n").unwrap();
 
     match renderer.installed(&plugins) {
-        // Still announcing this version while reading a different one is
-        // exactly the failure the check exists for: the manifest is not
-        // evidence, the contents are.
+        // Detect content changes even when the manifest version matches.
         Installed::Stale { version } => assert_eq!(version.as_deref(), Some(Renderer::VERSION)),
         other => panic!("an edited install read as {other:?}"),
     }
@@ -186,9 +176,7 @@ fn a_copy_that_claims_the_right_version_still_says_what_is_wrong() {
     let renderer = &Renderer::VIEW;
     let dir = renderer.install(&plugins).unwrap();
 
-    // The manifest still announces this version, because only the contents
-    // changed. Reporting the two versions here would print the same number
-    // twice and read as a bug in the check rather than a fact about the disk.
+    // Equal versions with different contents must report a content mismatch.
     std::fs::write(dir.join("Props.js"), "// somebody's own\n").unwrap();
     assert_eq!(
         renderer.installed(&plugins).difference().as_deref(),
@@ -214,9 +202,7 @@ fn what_matches_has_no_difference_to_report() {
     let plugins = plugins("quiet");
     let renderer = &Renderer::VIEW;
 
-    // `omega check` warns on the difference and nothing else, so a missing
-    // renderer must not report one: a machine that puts nothing on its bar is
-    // entitled to have none installed.
+    // A missing optional renderer is not a version mismatch.
     assert_eq!(renderer.installed(&plugins).difference(), None);
     renderer.install(&plugins).unwrap();
     assert_eq!(renderer.installed(&plugins).difference(), None);
@@ -248,8 +234,7 @@ fn the_checked_in_icon_set_is_what_the_table_generates() {
 
 #[test]
 fn the_shell_carries_the_icon_set_the_table_declares() {
-    // The file above is on disk; this is the copy that travels inside the
-    // binary, which is what actually gets installed.
+    // Verify embedded assets as well as source files.
     let icons = Core::FILES
         .iter()
         .find(|asset| asset.name == format!("core/{}", Icons::FILE))

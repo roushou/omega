@@ -16,13 +16,7 @@ use omega_proto::omega::{Capability, EventKind, Frame, SurfaceKind};
 use omega_proto::{Handshake, Socket, Transport};
 use omega_proto::{Manifest, Surface};
 
-/// An in-process daemon core: serves sessions over socket pairs, the same way
-/// the real daemon serves them over its listener.
-///
-/// There is no listener and no socket file. `UnixStream::pair` is the whole
-/// connection, and `SO_PEERCRED` reports this process on both ends — which is
-/// precisely what a unit spawned by this process, or the operator who owns it,
-/// presents to the daemon.
+/// In-process sessions over UnixStream::pair; peer credentials identify the test process.
 pub struct Harness {
     pub supervisor: Supervisor,
     pub hub: Hub,
@@ -150,9 +144,7 @@ pub fn writer_manifest(name: &str) -> Manifest {
     widget_manifest(name, "battery").granting([Capability::StateRead, Capability::StateWrite])
 }
 
-/// The next `Result` frame, skipping the state patches that arrive alongside
-/// it — a unit's own keyspace write is replicated back to it, and the two
-/// have no ordering guarantee.
+/// Read the next result, skipping independently ordered state patches.
 pub async fn next_result(transport: &mut Transport<tokio::net::UnixStream>) -> Option<Frame> {
     loop {
         let frame = tokio::time::timeout(std::time::Duration::from_secs(2), transport.recv())

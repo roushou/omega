@@ -58,12 +58,8 @@ impl Daemon {
         Self::builder(layout).build()
     }
 
-    /// Build the daemon with its endpoints given rather than resolved.
-    ///
-    /// The two socket paths are the only things the daemon cannot derive from
-    /// the layout, and resolving them from the environment is what confines a
-    /// daemon to one per process. Naming them is what lets several run at
-    /// once, against temp dirs, in a test.
+    /// Build a daemon with explicit control and observation socket paths.
+    /// Distinct paths and layouts allow isolated daemons in the same process.
     pub fn builder(layout: &Layout) -> DaemonBuilder {
         DaemonBuilder {
             layout: layout.clone(),
@@ -96,9 +92,7 @@ impl Daemon {
         tracing::info!(path = %self.socket.path().display(), "daemon listening");
         tracing::info!(shell = %self.shell.path().display(), "shell socket listening");
 
-        // Convergence runs in its own task: a bar instance can wait five
-        // seconds on a wedged unit, and the daemon must keep accepting
-        // connections and answering signals while it does.
+        // Run convergence separately so slow plugin requests do not block connections or signals.
         let schedules = Schedules::new(
             self.hub.clone(),
             self.units.clone(),
@@ -233,9 +227,7 @@ impl Daemon {
         }
     }
 
-    /// Tell everything to wind down and give the units time to do it. The
-    /// supervisor's tasks send SIGTERM and wait; this bounds how long the
-    /// daemon waits for them.
+    /// Request shutdown and bound the wait for supervised processes to exit.
     async fn stop(&self) {
         self.shutdown.trigger();
         self.brokers.stop().await;
@@ -339,11 +331,7 @@ impl DaemonBuilder {
     }
 }
 
-/// A running daemon, seen from outside its run loop.
-///
-/// Cloneable and inert: it holds the same state the daemon serves from, so a
-/// caller can watch what the daemon knows and ask it to stop, without being
-/// the loop.
+/// Cloneable daemon state and shutdown handle, independent of the run-loop future.
 #[derive(Debug, Clone)]
 pub struct DaemonHandle {
     pub hub: Hub,

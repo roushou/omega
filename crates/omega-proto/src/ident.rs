@@ -1,18 +1,11 @@
-//! The names things have.
-//!
-//! Every identifier omega passes around is parsed once at the edge and then
-//! carried as a newtype, so an unvalidated string can never reach the
-//! filesystem, the wire, or a map key. They share one rule — lowercase
-//! letters, digits, hyphens and underscores, starting with a letter —
-//! because a unit, a surface and a bar module are all names a person types
-//! and later has to match by eye.
+//! Validated identifiers for units, surfaces, modules, and instances.
+//! Parse identifiers at input boundaries and retain their typed values internally.
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// The shared rule. Kept private: a caller names the *kind* of identifier it
-/// wants, and the kind decides what is allowed.
+/// Shared identifier validation; public newtypes select their identifier kind.
 pub(crate) struct Ident;
 
 impl Ident {
@@ -31,9 +24,8 @@ impl Ident {
     }
 }
 
-/// A unit's identity: lowercase letters, digits, and hyphens, starting with a
-/// letter (matching cargo's crate-name rules). Serializes transparently as a
-/// plain string so `units.toml` keeps its current shape.
+/// Unit identifier using lowercase ASCII letters, digits, hyphens, and underscores.
+/// Must start with a letter. Serializes as a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct UnitName(String);
@@ -55,8 +47,7 @@ impl fmt::Display for UnitName {
     }
 }
 
-/// A surface's id within its unit: what a unit calls one of the faces it
-/// exposes. Unique only within the unit that declares it.
+/// Surface identifier, unique within its declaring unit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct SurfaceId(String);
@@ -99,8 +90,7 @@ impl fmt::Display for ModuleId {
     }
 }
 
-/// A name that does not obey the one rule every omega identifier follows.
-/// The kind is carried so the message says what was being named.
+/// Invalid identifier with its kind and validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum IdentError {
     #[error("{kind} exceeds 128 bytes")]

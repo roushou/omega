@@ -1,37 +1,12 @@
-//! The view vocabulary: the node kinds a shell draws, and the props each one
-//! carries.
-//!
-//! `ui.proto` deliberately stops short of this. `ViewNode.type` is a string
-//! and `ViewNode.props` is a `map<string, Value>`, so a tree from a newer
-//! plugin degrades to the parts a shell understands instead of failing to
-//! parse. What the *core* set is has to live somewhere else, and this is it —
-//! the same shape [`SystemTopic`] and [`ActionKind`] already have, for the
-//! same reason: a closed taxonomy the schema cannot express as an enum needs
-//! one table, or it is several lists that have to agree.
-//!
-//! Three things read it. The SDK builds nodes and is checked against it; the
-//! renderer's `Props.js` is *generated* from it, so a shell cannot read a
-//! prop by a name nothing publishes; and a test asks whether every prop
-//! declared here is drawn by something.
-//!
-//! It lives in this crate rather than the SDK because the renderer needs it
-//! and must not depend on the SDK — the daemon depends on the renderer, and
-//! no part of the daemon depends on what a unit is written against.
-//!
-//! [`SystemTopic`]: crate::SystemTopic
-//! [`ActionKind`]: crate::ActionKind
+//! Node kinds and property schemas shared by the SDK and renderer.
+//! The SDK validates emitted properties against this table; the renderer generates
+//! `Props.js` accessors from it. Wire kind names remain strings for forward compatibility.
 
 use std::fmt;
 
-/// What a prop carries, and therefore how a shell has to read it.
-///
-/// The distinction that matters is [`Number`] against [`Fraction`]: protobuf
-/// JSON writes a 64-bit integer as a *string*, so a reader that treats the
-/// two alike lays out a NaN. Naming them apart here is what lets the
-/// generated reader parse one and not the other.
-///
-/// [`Number`]: Self::Number
-/// [`Fraction`]: Self::Fraction
+/// Property value encoding.
+/// [`Number`](Self::Number) uses protobuf int64 strings;
+/// [`Fraction`](Self::Fraction) uses JSON numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PropKind {
     /// `Value::string_value`.
@@ -47,11 +22,7 @@ pub enum PropKind {
 }
 
 impl PropKind {
-    /// What a shell reads when the prop is absent, as a JavaScript literal.
-    ///
-    /// Absence is the common case — a prop is set only when it is not the
-    /// obvious thing — so the fallback is part of the prop's meaning rather
-    /// than something each call site picks for itself.
+    /// JavaScript fallback value for an absent property.
     pub const fn zero(self) -> &'static str {
         match self {
             Self::Text => "\"\"",
@@ -84,11 +55,7 @@ pub struct Prop {
     pub fallback: &'static str,
 }
 
-/// Declare the node kinds and what each one carries.
-///
-/// A prop states a fallback only where it is not its kind's zero — an unset
-/// `align` is a row, an unset `columns` is one column, and everything else
-/// is empty, nought or false.
+/// Declare node kinds and their properties, including nonzero default values.
 macro_rules! nodes {
     (
         shared { $( $(#[$smeta:meta])* $sprop:ident : $skind:ident $(= $sfall:literal)? ),* $(,)? }
@@ -99,11 +66,7 @@ macro_rules! nodes {
             }
         ),* $(,)?
     ) => {
-        /// The node kinds a shell draws.
-        ///
-        /// Closed here, open on the wire: `ViewNode.type` stays a string so a
-        /// shell meeting a kind it does not know draws nothing rather than
-        /// refusing the tree.
+        /// Supported node kinds. Unknown wire kinds render no content.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum NodeKind {
             $($(#[$kmeta])* $Kind,)*
@@ -150,14 +113,9 @@ macro_rules! nodes {
 }
 
 nodes! {
-    // Every node may carry these. They are read once, for any kind, rather
-    // than repeated per node — which is why they have no kind in their
-    // generated reader's name.
+    // Shared properties supported by every node kind.
     shared {
-        /// A role in the shell's palette: `"foreground"`, `"muted"`,
-        /// `"accent"`, `"urgent"`, `"background"`. Not a literal — a colour
-        /// no theme chose is a widget that does not belong to the desktop
-        /// it is drawn on.
+        /// Theme palette role: foreground, muted, accent, urgent, or background.
         color: Text,
         /// Visual importance: primary, secondary or muted.
         emphasis: Text,
@@ -178,13 +136,7 @@ nodes! {
         busy: Flag,
         width: Number,
         height: Number,
-        /// As wide as the room it is in: in a row the width its neighbours
-        /// left over, in a column the column's own width. Ignored where a
-        /// `width` was named.
-        ///
-        /// Not how a stack in a column or a rule comes to span — those the
-        /// shell decides from the kind — so a tree carries this only where
-        /// an author chose it.
+        /// Fill available width unless an explicit width is set.
         fill: Flag,
     }
 
@@ -194,23 +146,12 @@ nodes! {
         align: Text = "\"row\"",
         gap: Number,
     },
-    /// A run of text.
-    ///
-    /// `size` names a role on the shell's type scale — `"caption"`,
-    /// `"body"`, `"subtitle"`, `"title"`, `"heading"`, `"display"` — not a
-    /// number of pixels, which a unit has no way to choose well. A string
-    /// for the same reason `align` is one: the set is closed, the schema
-    /// cannot say so, and a shell that meets a role it does not know falls
-    /// back to body rather than refusing the tree.
+    /// Text with a semantic size role. Unknown size names fall back to body size.
     Text => "text" {
         text: Text,
         size: Text = "\"body\"",
     },
-    /// A glyph from the shell's icon set.
-    ///
-    /// Sized on the same scale as text, so a glyph beside a `display`
-    /// figure can be told to grow with it. Unset, it is whatever the shell
-    /// draws icons at, which is not the same as body text.
+    /// Named glyph with an optional semantic size. Unset size uses the theme icon size.
     Icon => "icon" {
         name: Text,
         size: Text,
@@ -232,11 +173,7 @@ nodes! {
     Slider => "slider" { value: Fraction },
     /// Something on or off.
     Toggle => "toggle" { on: Flag },
-    /// A line to type in.
-    ///
-    /// `value` is how it draws, not what it holds: the buffer belongs to the
-    /// shell until the user commits it, so this is a string the unit sets and
-    /// not the one being typed.
+    /// Text input with optional model value and controlled-edit metadata.
     Form => "form" { label: Text },
     Field => "field" {
         navigation: Text, controlled: Flag, edit_revision: Number, reset_revision: Number, autofocus: Flag,
@@ -253,10 +190,7 @@ nodes! {
     Group => "group" { selected: Text = "null" },
     /// How full something is.
     Progress => "progress" { value: Fraction },
-    /// A series, drawn against a fixed range.
-    ///
-    /// The range is stated rather than taken from the points, because a
-    /// series scaled to its own noise shows an idle machine as one on fire.
+    /// Numeric series with optional explicit scale bounds.
     Graph => "graph" {
         points: Fractions,
         low: Fraction,
@@ -316,10 +250,7 @@ mod tests {
 
     #[test]
     fn one_name_may_mean_two_things_but_never_in_one_kind() {
-        // `value` is a fraction on a slider and a string on a field, which is
-        // exactly why a generated reader is named for its kind as well as its
-        // prop. This pins that the collision is real, so the naming scheme is
-        // not quietly simplified back to something that cannot express it.
+        // Property types depend on node kind: slider value is numeric, field value is text.
         let slider = NodeKind::Slider.props()[0];
         let field = NodeKind::Field
             .props()

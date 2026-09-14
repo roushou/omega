@@ -73,17 +73,7 @@ pub struct ViewUpdate {
     pub view: ViewTree,
 }
 
-/// Proof the daemon is still on the other end.
-///
-/// An observer cannot tell a quiet daemon from a dead one: a peer that goes
-/// away leaves the socket reading connected, so the shell watches for silence
-/// instead and reconnects through it. That made incidental traffic load-
-/// bearing — the shell stayed up because some topic happened to change every
-/// couple of seconds — and an observer that narrows its subscription is an
-/// observer that has just turned its own keepalive off.
-///
-/// So the socket says it out loud on a cadence of its own, and liveness stops
-/// depending on how busy the machine is.
+/// Heartbeat independent of topic changes and subscription selection.
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Heartbeat {
@@ -92,11 +82,7 @@ pub struct Heartbeat {
     pub heartbeat: bool,
 }
 
-/// A handle to the daemon's authoritative state and message channels.
-///
-/// One clone is handed to each session, source, and the shell server; the
-/// daemon core holds the original. All methods are sync — the mutex never
-/// crosses an await.
+/// Shared authoritative state and message channels. Locks must not cross await points.
 #[derive(Debug, Clone)]
 pub struct Hub {
     inner: Arc<HubInner>,
@@ -175,9 +161,7 @@ impl Hub {
         }
     }
 
-    /// The state store. A panic while holding either lock would poison it;
-    /// neither guards an invariant a panic could break, so one unit's failure
-    /// does not become the daemon's.
+    /// Recover poisoned locks; these stores have no multi-step invariant to repair.
     fn store(&self) -> std::sync::MutexGuard<'_, StateStore> {
         self.inner.store.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -186,9 +170,7 @@ impl Hub {
         self.inner.views.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Store a patch (assigning revisions) and broadcast what changed.
-    /// Sessions filter it against their own subscriptions, so the hub
-    /// broadcasts patches rather than frames.
+    /// Assign revisions, store changes, and broadcast patches for sessions to filter.
     pub fn publish_state(&self, patch: StatePatch) -> Result<(), PublishError> {
         let mut store = self.store();
         let changed = store.apply(patch)?;
@@ -214,9 +196,7 @@ impl Hub {
         Ok(())
     }
 
-    /// Broadcast an event to whoever subscribes to its kind. Events are not
-    /// stored: a unit that was not listening missed it, which is what makes
-    /// an event an event and not state.
+    /// Broadcast an event to current subscribers. Events are not retained or replayed.
     pub fn publish_event(&self, event: Event) -> Result<(), PublishError> {
         let size = event.encoded_len();
         if size > Self::PUBLICATION_BYTES {
@@ -258,12 +238,8 @@ impl Hub {
         self.store().read(topics)
     }
 
-    /// Store the latest view for a surface and broadcast it to shell
-    /// subscribers.
-    ///
-    /// The hub owns the `revision`: it stamps each *changed* tree with the
-    /// next monotonic value for that surface. Identical re-publishes are
-    /// deduplicated (no new revision, no broadcast).
+    /// Store and broadcast a changed instance view with a new revision.
+    /// Identical trees do not advance the revision or broadcast.
     pub fn publish_view(&self, mut update: ViewUpdate) -> Result<(), PublishError> {
         let size = update.size();
         if size > Self::PUBLICATION_BYTES {
@@ -301,18 +277,9 @@ impl Hub {
         Ok(())
     }
 
-    /// Forget everything a unit was showing, because it has gone.
-    ///
-    /// A view is what a unit is *currently* saying. Keeping the last one
-    /// after its process ends leaves a widget on the bar reporting a number
-    /// nobody is taking — and, worse, tells the reconciler that the unit
-    /// still knows about the instances the document gave it. It does not:
-    /// that knowledge lived in the process, and the process is gone. Left
-    /// alone, the unit comes back, is never told about its instances again,
-    /// and the bar shows its last frame forever.
-    ///
-    /// Observers are told, with an empty tree for each surface: a shell that
-    /// is not told cannot know to stop drawing.
+    /// Remove a disconnected unit's views and invalidate its rendered instances.
+    /// Publish empty trees to observers and allow convergence to recreate instances
+    /// after the unit reconnects.
     pub fn forget_unit(&self, unit: &UnitName) {
         let mut registry = self.views();
         let dropped: Vec<_> = registry
@@ -389,9 +356,7 @@ impl Hub {
         self.views().latest.get(instance).cloned()
     }
 
-    /// Snapshot + subscription, taken under one lock so a publish can never
-    /// fall in the gap between them (it is either in the snapshot or arrives
-    /// on the receiver).
+    /// Take the snapshot and subscription under one lock to avoid missed publications.
     pub fn subscribe_state(&self) -> (StateSnapshot, Receiver<StatePatch>) {
         let store = self.store();
         (store.snapshot(), self.inner.state.subscribe())
@@ -586,12 +551,7 @@ mod tests {
 
     #[test]
     fn a_poisoned_lock_does_not_take_the_daemon_with_it() {
-        // The policy the accessors above exist to hold, asserted rather than
-        // stated: neither lock guards an invariant a panic could break, so
-        // one panicked update must not turn every later read into a second
-        // panic. `view_snapshot` took its own lock and unwrapped it, which is
-        // the observer resync path — one bad view would have ended every
-        // observer connection instead of one.
+        // Recover poisoned locks whose protected values remain valid after unwinding.
         let hub = Hub::new();
 
         let hushed = std::panic::take_hook();

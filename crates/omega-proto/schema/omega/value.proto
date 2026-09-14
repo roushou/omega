@@ -2,9 +2,8 @@ syntax = "proto3";
 
 package omega;
 
-// The generic data model. The escape hatch for anything the closed ontology
-// does not (yet) cover: unit keyspace state, widget props, custom settings,
-// agent tool payloads. The SDK narrows this to typed accessors at the edge.
+// Generic values for plugin records, node properties, settings, and command input.
+// SDK accessors validate and convert values at input boundaries.
 
 message Value {
   oneof kind {

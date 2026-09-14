@@ -22,8 +22,7 @@ pub(crate) struct Check {
 }
 
 impl Check {
-    /// Checking is not deploying: nobody waiting on an answer wants an
-    /// optimiser.
+    /// Use the debug profile for validation builds.
     const PROFILE: Profile = Profile::Debug;
 
     pub(crate) async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
@@ -42,8 +41,7 @@ impl Check {
         ui.step(Step::Checking, Paint::count(units.len(), "plugin"));
         Cargo::new(&layout).build(Self::PROFILE).await?;
 
-        // Report every plugin rather than stopping at the first: a check that
-        // makes you re-run it once per mistake is worse than no check.
+        // Collect validation results for every plugin.
         let describe = Describe::new(&layout, Self::PROFILE);
         let mut failures = 0;
         let mut manifests = Vec::with_capacity(units.len());
@@ -90,13 +88,8 @@ impl Check {
         Ok(())
     }
 
-    /// Whether what draws these plugins is as old as they are.
-    ///
-    /// A renderer reads the wire format this binary writes, so one left
-    /// behind by an older install is a widget that silently draws nothing —
-    /// which is the hardest kind of wrong to find, because everything else
-    /// reports success. Only a *stale* one is worth saying: a machine that
-    /// puts nothing on its bar is entitled to have no renderer at all.
+    /// Warn if an installed renderer differs from the embedded version.
+    /// A missing renderer is permitted for configurations without UI.
     fn renderer(ui: &mut Ui) {
         let Some(shell) = HostShell::detect() else {
             return;
@@ -115,10 +108,7 @@ impl Check {
         }
     }
 
-    /// What a plugin asked for, in the words it asked in.
-    ///
-    /// The point of a derived manifest is that nobody typed it, so this is
-    /// where a person finds out what their code added up to.
+    /// Report the capabilities and subscriptions declared by a plugin.
     fn asks(manifest: &omega_proto::Manifest) -> String {
         let mut asks = Vec::new();
 
@@ -126,8 +116,7 @@ impl Check {
             asks.push(format!("reads {}", manifest.state_topics.join(", ")));
         }
 
-        // Reading is already spelled out by the topics; what is left is what
-        // the plugin can change.
+        // Read capabilities are already represented by the topic list.
         let effects: Vec<String> = manifest
             .granted()
             .unwrap_or_default()

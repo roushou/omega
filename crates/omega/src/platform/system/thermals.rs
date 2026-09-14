@@ -1,7 +1,7 @@
-//! How hot the machine is, and what the fans are doing about it.
+//! Temperature sensors and fan speeds.
 
 crate::wiring::reading! {
-    /// How hot it is, and what the fans are doing.
+    /// Temperature sensor readings and fan speeds.
     Thermals: omega_proto::omega::ThermalsState
 }
 
@@ -29,19 +29,17 @@ impl Sensor {
         &self.chip
     }
 
-    /// What the chip calls this sensor — `CPU`, `edge`, `Composite` — or its
-    /// name in the chip where it has no label.
+    /// Sensor label, falling back to its name within the chip.
     pub fn label(&self) -> &str {
         &self.label
     }
 
-    /// Chip and label together, which is the identity: neither is unique on a
-    /// machine with eight thermal zones. A list keys rows by this.
+    /// Combined chip and sensor label identifier, suitable for item keys.
     pub fn id(&self) -> String {
         format!("{}/{}", self.chip, self.label)
     }
 
-    /// How hot. Prints itself as `44°C`.
+    /// Sensor temperature.
     pub fn temperature(&self) -> Temperature {
         self.temperature
     }
@@ -76,8 +74,7 @@ impl Fan {
         format!("{}/{}", self.chip, self.label)
     }
 
-    /// Revolutions per minute. Nought is a fan that is stopped, which is a
-    /// quiet machine rather than a missing sensor.
+    /// Fan speed in revolutions per minute. Zero indicates a stopped fan.
     pub fn rpm(&self) -> u32 {
         self.rpm
     }
@@ -95,14 +92,12 @@ impl Thermals {
             .unwrap_or_default()
     }
 
-    /// The hottest thing on the machine — what a bar slot draws when it wants
-    /// one number rather than a list of nine.
+    /// Return the sensor with the highest reported temperature.
     pub fn hottest(&self) -> Option<Sensor> {
         self.sensors().into_iter().max_by_key(Sensor::temperature)
     }
 
-    /// Every sensor a given chip reports, for a panel that wants the CPU's
-    /// dies together rather than mixed in with the SSD.
+    /// Return sensors reported by the named chip.
     pub fn on(&self, chip: &str) -> Vec<Sensor> {
         self.sensors()
             .into_iter()
@@ -116,8 +111,7 @@ impl Thermals {
             .unwrap_or_default()
     }
 
-    /// Whether anything is actually turning. A machine with fans reported and
-    /// none spinning is a quiet one, which is worth being able to say.
+    /// Whether any reported fan has a nonzero speed.
     pub fn is_spinning(&self) -> bool {
         self.fans().iter().any(Fan::is_spinning)
     }

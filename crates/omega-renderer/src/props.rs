@@ -1,22 +1,6 @@
-//! Generating the shell's prop readers.
-//!
-//! QML cannot be compiled against the SDK's types, so the boundary between
-//! what a unit publishes and what a shell reads has always been two lists of
-//! strings that had to agree. A test pinned the shapes the wire carries,
-//! which catches a prop that changed shape — and never caught a prop the
-//! shell reads by a name nothing publishes, or one published that nothing
-//! reads. Both are silent: a widget that draws an empty string.
-//!
-//! So the readers are not written. [`NodeKind`] is the vocabulary and this
-//! emits `Props.js` from it, one named accessor per (kind, prop): a shell
-//! calls `Props.textText(node)`, never `Props.text(node, "text", "")`, and
-//! the only place a prop's name is spelled is the table.
-//!
-//! The result is checked in rather than built. The renderer's tree travels
-//! inside the binary and is asserted against the directory on disk, the QML
-//! linter runs over it, and a reviewer should see what changed — none of
-//! which is true of a file that only exists in `OUT_DIR`. A test regenerates
-//! and compares; `OMEGA_REGENERATE=1 cargo test -p omega-renderer` writes it.
+//! Generate named QML property accessors from [`NodeKind`].
+//! The checked-in `Props.js` must match this generator; regenerate with
+//! `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
 
 use std::fmt::Write as _;
 
@@ -30,11 +14,8 @@ impl Props {
     /// Where the generated file belongs in the shell tree.
     pub const FILE: &'static str = "Props.js";
 
-    /// The accessor a shell calls for one of a kind's own props.
-    ///
-    /// Named for the kind as well as the prop, because one name can mean two
-    /// things: `value` is a fraction on a slider and a string on a field, and
-    /// a single `value` reader would have to guess which.
+    /// Generate a kind-qualified property accessor.
+    /// Names must distinguish fields with different encodings, such as slider and field values.
     pub fn accessor(kind: NodeKind, prop: &Prop) -> String {
         format!("{}{}", kind.name(), Self::capitalize(prop.name))
     }
@@ -62,7 +43,7 @@ impl Props {
         names
     }
 
-    /// The whole file.
+    /// Generate the complete JavaScript file.
     pub fn generate() -> String {
         let mut out = String::new();
         out.push_str(Self::PREAMBLE);
@@ -96,26 +77,12 @@ impl Props {
         );
     }
 
-    /// The hand-written half: decoding a `Value`, and the parts of a node
-    /// that are not props at all.
-    ///
-    /// Five decoders and three helpers, because they are about the *wire*
-    /// rather than the vocabulary — protobuf JSON's shape does not change
-    /// when a node kind is added.
+    /// Shared protobuf JSON decoders and non-property node helpers.
     const PREAMBLE: &'static str = r#".pragma library
 
-// Reading a node's props. GENERATED from `omega-proto`'s node table by
-// `omega_renderer::Props` — do not edit; add the prop there and regenerate
-// with `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
-//
-// A prop is a protobuf `Value`, which in JSON is a one-key object naming the
-// kind: `{"stringValue": "80%"}`, `{"boolValue": true}`. The one that catches
-// people is `intValue` — protobuf writes 64-bit integers as *strings*, so a
-// gap of 6 arrives as "6" and using it directly lays out a NaN. That is why
-// a number and a fraction have separate readers below, and why nothing here
-// takes a prop name from its caller: a shell that could spell a name could
-// spell it wrong, and an unread prop draws an empty string rather than
-// failing.
+// GENERATED property readers from `omega-proto` by `omega_renderer::Props`.
+// Edit the source table and run `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
+// Protobuf JSON encodes int64 values as strings; numeric readers must convert them.
 
 // ---- decoding one Value ----
 
@@ -141,9 +108,7 @@ function readFlag(node, name, fallback) {
     return value && value.boolValue !== undefined ? Boolean(value.boolValue) : fallback
 }
 
-// A run of numbers: a `Value` holding a `ListValue` of doubles, which
-// protobuf JSON writes as `{"list": {"values": [{"doubleValue": 1.0}, ...]}}`.
-// An entry that is not a double is dropped rather than laid out as NaN.
+// Decode a protobuf JSON list of doubles, skipping non-double entries.
 function readFractions(node, name, fallback) {
     var value = prop(node, name)
     if (!value || !value.list || !value.list.values) return fallback
@@ -165,25 +130,15 @@ function prop(node, name) {
     const EPILOGUE: &'static str = r#"
 // ---- what a node is, besides its props ----
 
-// A node's binding for an event, or null. The shape is
-// `{"command": "connect", "args": [{"stringValue": "home"}]}` — and those
-// args are already protobuf JSON `Value`s, which is exactly what an
-// `InvokeUnit` carries, so they travel back untouched.
-//
-// Not generated: an event is not a prop. `ViewNode.events` is its own map on
-// the wire, so that a shell reads behaviour from one place rather than
-// sniffing prop names for it.
+// Return the node's event binding or null. Arguments retain protobuf JSON encoding.
 function bind(node, event) {
     if (!node || !node.events) return null
     var bound = node.events[event]
     return bound && (bound.command || (bound.local && bound.local !== "0")) ? bound : null
 }
 
-// A JS value as a protobuf JSON `Value`, for a control reporting what the
-// user did. Doubles and booleans travel as themselves; `intValue` is the one
-// protobuf JSON writes as a *string*, which is why a whole number is sent as
-// a double unless a caller asks otherwise — a control's value is a reading,
-// not a count.
+// Encode a JavaScript control value as a protobuf JSON Value.
+// Numbers use doubleValue; explicit int64 values require string encoding.
 function encode(value) {
     switch (typeof value) {
         case "boolean": return { "boolValue": value }

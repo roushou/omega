@@ -14,9 +14,7 @@ Rectangle {
     readonly property int gap: Props.listGap(host.model)
     readonly property int fixedHeight: Props.height(host.model)
 
-    // Which row the cursor is on. -1 is none, which is where a list starts:
-    // showing a selection nobody made would have the first Enter do something
-    // the user did not choose.
+    // Keyboard cursor index. `-1` means no row is selected.
     property int selected: -1
 
     color: "transparent"
@@ -24,9 +22,7 @@ Rectangle {
     border.color: list.host.ink
     radius: list.host.radius
     implicitWidth: host.space(280)
-    // As tall as its rows, up to a point: a list of forty networks in a
-    // popout that grew to fit them would be a popout taller than the screen.
-    // A unit that knows better says so with `height`.
+    // Cap list height unless the node specifies an explicit height.
     readonly property int cap: host.space(400)
     implicitHeight: list.fixedHeight > 0
         ? list.fixedHeight
@@ -61,17 +57,13 @@ Rectangle {
         return node && node.key ? node.key : ""
     }
 
-    // The same keyed reconcile a stack does: remove what is gone, then walk
-    // the wanted order moving or inserting, replacing each row's data so a
-    // kept delegate is handed the new reading through its bindings.
+    // Reconcile rows by key and update retained delegate payloads.
     function reconcile() {
         var wanted = list.wanted
         var selectedKey = list.selected >= 0 && list.selected < held.count ? held.get(list.selected).key : null
 
         for (var i = held.count - 1; i >= 0; i--) {
-            // Not `held`: `var` is function-scoped and hoisted, so a local of
-            // that name would shadow the model for the whole function and
-            // every `held.count` would read undefined.
+            // Avoid a local named held: function-scoped var would shadow the model.
             var existing = held.get(i).key
             var stillWanted = false
             for (var w = 0; w < wanted.length; w++) {
@@ -134,7 +126,7 @@ Rectangle {
         Keys.onReturnPressed: list.activate(list.selected)
         Keys.onEnterPressed: list.activate(list.selected)
 
-        // Follow the cursor rather than let it walk off the visible rows.
+        // Scroll the keyboard selection into view.
         onCurrentIndexChanged: rows.positionViewAtIndex(rows.currentIndex, ListView.Contain)
         currentIndex: list.selected
 
@@ -146,9 +138,7 @@ Rectangle {
             width: rows.width
             implicitHeight: Math.max(list.host.space(36), child.item ? child.item.implicitHeight + list.host.space(12) : 0)
 
-            // Where the cursor is, and where the pointer is. Two states
-            // rather than one: a list that only marked the cursor gave no
-            // feedback at all to somebody using the mouse.
+            // Keep keyboard selection and pointer hover feedback independent.
             Rectangle {
                 anchors.fill: parent
                 radius: list.host.radius

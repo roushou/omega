@@ -1,9 +1,8 @@
 # Omega shell renderer
 
-The `omega.view` plugin renders Omega widgets and panels inside Omarchy's
-Quickshell shell. Plugin authors build views with the Rust SDK; this directory
-contains the shared QML core, fixture harness, and interaction tests.
-The Omarchy adapter lives in `../../omega-omarchy/shell/`.
+Maintainer reference for the shared QML controls, standalone and preview hosts,
+and interaction tests. Plugin authors use the [Rust authoring guide](../../../docs/authoring.md).
+The Omarchy adapter and `omega.view` plugin live in `../../omega-omarchy/shell/`.
 
 ## Installation and development
 
@@ -14,8 +13,8 @@ omega shell install
 omega shell status
 ```
 
-Installation prints the command for enabling the plugin in the shell. `omega init`
-also enables it during initial setup. Reinstall after rebuilding the CLI to use
+Installation prints an enable command; configured placements are declared in the
+Rust shell layout. `omega init` imports an existing shell during initial setup. Reinstall after rebuilding the CLI to use
 updated embedded assets. Installation stages and replaces the renderer directory,
 removing obsolete files from earlier installations.
 

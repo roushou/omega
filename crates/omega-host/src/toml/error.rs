@@ -2,12 +2,8 @@
 
 use std::path::PathBuf;
 
-/// A TOML operation that failed, labelled with the schema's
-/// [`KIND`](crate::TomlSchema::KIND) and, where one exists, the file.
-///
-/// `toml`'s own errors are ~130 bytes (they carry the offending source text),
-/// so they are boxed: a `Result<T, TomlError>` is returned from every TOML
-/// call site and a large `Err` is paid for on the success path too.
+/// TOML operation errors with schema kind and file context.
+/// Parser errors are boxed to bound the size of the error variant.
 #[derive(Debug, thiserror::Error)]
 pub enum TomlError {
     #[error("cannot read {kind} {}: {source}", path.display())]

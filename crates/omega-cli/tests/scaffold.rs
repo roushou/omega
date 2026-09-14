@@ -122,9 +122,7 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
 fn a_founded_config_names_no_plugin() {
     let main = Scaffold::new().system_main();
 
-    // `omega init` founds a config; `omega new` writes plugins. A template
-    // that named one would name a crate the workspace does not build, and
-    // the first `omega build` on a fresh machine would fail.
+    // The initial workspace must contain only scaffolded members.
     assert!(
         !main.contains("{unit"),
         "a token was left unstamped: {main}"
@@ -138,8 +136,7 @@ fn a_founded_config_names_no_plugin() {
 
 #[test]
 fn the_config_plane_reaches_a_plugin_by_path() {
-    // What `omega new` adds, and the reason it does: depending on the plugin
-    // is what makes its settings a type here rather than a map of strings.
+    // Scaffolding adds a system dependency on the plugin library.
     let dependency = Scaffold::depends_on(&unit());
 
     assert!(
@@ -198,8 +195,7 @@ fn the_program_is_the_library_and_a_call() {
 fn the_scaffolded_unit_arrives_with_tests_that_pass() {
     let main = Template::Minimal.library();
 
-    // A plugin nobody can test is a plugin nobody changes twice. The
-    // shortest way to say one is testable is to hand someone one that is.
+    // Generated plugins must include executable fixture tests.
     assert!(main.contains("#[cfg(test)]"), "{main}");
     assert!(main.contains("omega::testing"), "{main}");
     assert!(main.contains("Drawn::of"), "{main}");
@@ -229,9 +225,7 @@ fn a_config_names_the_published_crates_whoever_scaffolded_it() {
     let manifest = Scaffold::from_source(Published::at("0.4.2")).workspace_manifest();
     let dependencies = &manifest.workspace.as_ref().unwrap().dependencies;
 
-    // One shape, always. A config is a git repository that has to build on
-    // every machine it is cloned onto, and a path into somebody's home
-    // directory does not travel — so no manifest omega writes contains one.
+    // Generated manifests use portable registry dependency requirements.
     for name in ["omega", "omega-document"] {
         let dependency = dependencies.get(name).unwrap();
         assert_eq!(dependency.version(), Some("0.4.2"), "{name}");
@@ -242,11 +236,7 @@ fn a_config_names_the_published_crates_whoever_scaffolded_it() {
         );
     }
 
-    // The SDK is published as `omega-rs`, because `omega` on crates.io is an
-    // unrelated crate — but a config says `omega`, and every template, doc
-    // and `use` in the world says `omega`. Cargo's `package` key is what
-    // holds those apart, and it has to be in the manifest omega writes or the
-    // config resolves to somebody else's crate.
+    // The SDK dependency alias omega must name the registry package omega-rs.
     let sdk = dependencies.get("omega").unwrap();
     assert_eq!(sdk.package(), Some("omega-rs"));
     assert!(
@@ -268,14 +258,7 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
         .expect("the tests run from a checkout");
     let patched = tree.patch(false).unwrap();
 
-    // Building against a checkout is cargo's `[patch]`, in a file the
-    // scaffold tells git to ignore — so the committed manifest stays the
-    // same on the machine that develops omega and the machine that only
-    // runs it.
-    // Keyed by what the registry calls a crate, not what the manifest does:
-    // `[patch.crates-io]` replaces a *source*, so `omega-rs` is the entry
-    // even though the dependency above it reads `omega`. Getting this wrong
-    // yields a patch cargo silently ignores.
+    // Local patches are gitignored and keyed by registry package name, including omega-rs.
     for name in ["omega-rs", "omega-document"] {
         let path = patched.get(name).unwrap().path().unwrap();
         assert!(std::path::Path::new(path).is_absolute(), "{name}: {path}");
@@ -295,10 +278,7 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
 
 #[test]
 fn a_checkout_cargo_owns_is_not_one_to_link() {
-    // `cargo install --path ~/dev/omega` is a release build of a durable
-    // checkout and should link; `cargo install --git` unpacks into
-    // `$CARGO_HOME` and cargo may delete it afterwards. The profile does not
-    // tell those apart, and for a while this code asked it.
+    // Durable checkouts can be linked regardless of profile; Cargo-managed checkout caches cannot.
     let cargo_home = std::path::PathBuf::from(
         std::env::var("CARGO_HOME")
             .unwrap_or_else(|_| format!("{}/.cargo", std::env::var("HOME").unwrap())),
@@ -319,8 +299,7 @@ fn a_checkout_cargo_owns_is_not_one_to_link() {
 fn a_path_that_is_not_a_checkout_says_so() {
     let error = SourceTree::at("/etc").unwrap_err().to_string();
 
-    // A patch pointing at nothing would fail three commands later, naming a
-    // file nobody wrote.
+    // Reject nonexistent checkout paths before writing Cargo patches.
     assert!(error.contains("not an omega checkout"), "{error}");
 }
 
@@ -332,9 +311,7 @@ fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
     );
     let lib = Template::Minimal.library();
 
-    // The hint is pasted into a Rust file and has to compile there, so every
-    // name in it has to exist in the plugin it names. These are the two
-    // halves, and they are edited a file apart.
+    // Placement hints must reference exported plugin symbols.
     assert!(hint.contains("battery_widget::Hello"), "{hint}");
     assert!(lib.contains("pub struct Hello"), "{lib}");
     assert!(!hint.contains("Settings"), "{hint}");

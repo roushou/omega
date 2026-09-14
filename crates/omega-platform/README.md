@@ -20,8 +20,8 @@ connections to these services.
 [API reference](https://docs.rs/omega-platform) ·
 [Architecture](https://github.com/roushou/omega/blob/main/docs/architecture.md)
 
-Licensed under MIT.
-
 Application discovery and activation use GLib/GIO on a dedicated main-context
 thread. Building this crate requires the GLib development headers (`libglib2.0-dev`
 on Debian/Ubuntu); plugin authors do not compile or link these dependencies.
+
+Licensed under MIT.

@@ -1,15 +1,12 @@
-//! Whether the machine is plugged in.
+//! External power connection state.
 
 crate::wiring::reading! {
-    /// Whether it is plugged in.
+    /// External power connection state.
     Mains: omega_proto::omega::MainsState
 }
 
 impl Mains {
-    /// Whether it is running on mains.
-    ///
-    /// False on a machine that has not said, which is the answer a widget
-    /// wants anyway: draw the battery, not a claim about the wall.
+    /// Whether external power is connected. Returns `false` without a reading.
     pub fn is_connected(&self) -> bool {
         self.read().is_some_and(|mains| mains.connected)
     }

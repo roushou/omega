@@ -7,17 +7,14 @@ use std::io;
 pub struct Identity;
 
 impl Identity {
-    /// The effective user the daemon runs as. A peer with the same uid can
-    /// already signal the daemon and rewrite its state dir, so it is the
-    /// operator, not a stranger.
+    /// Effective daemon uid used to identify the operator.
     pub fn uid() -> u32 {
         // SAFETY: `geteuid` reads a process attribute and cannot fail.
         unsafe { libc::geteuid() }
     }
 }
 
-/// A polite request to a child process. `Child::kill` is `SIGKILL`, which is
-/// the wrong first word to a unit that may have a socket to flush.
+/// Send SIGTERM before escalating to SIGKILL at the shutdown deadline.
 #[derive(Debug)]
 pub struct Signal;
 

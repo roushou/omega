@@ -1,14 +1,4 @@
-//! What time it is, where this machine is.
-//!
-//! Not a subsystem so much as a fact nobody else was going to broker. A unit
-//! could read the clock itself, but not the zone rules — turning a timestamp
-//! into "14:32" needs the tz database, and every unit carrying one to draw a
-//! bar clock is the thing this daemon exists to avoid.
-//!
-//! Wakes once a minute, on the minute. A tick a second would wake every clock
-//! on the bar sixty times an hour to redraw the same two digits, and sleeping
-//! to the boundary rather than counting seconds is what keeps the displayed
-//! minute from lagging the real one by up to a second.
+//! Publish local date and time at minute boundaries using platform time-zone rules.
 
 use std::time::Duration;
 
@@ -28,11 +18,7 @@ impl Clock {
         Self::default()
     }
 
-    /// The wall clock now, truncated to the minute.
-    ///
-    /// Truncated including the timestamp: a value that moved every second
-    /// would be a new revision every second, and last-value-wins only helps
-    /// when the value is actually the same.
+    /// Read wall-clock time with minute precision, including its timestamp.
     pub fn now() -> TimeState {
         Self::of(Local::now())
     }
@@ -43,9 +29,7 @@ impl Clock {
         let offset = at.offset().local_minus_utc();
         TimeState {
             unix_seconds: at.timestamp() - i64::from(at.second()),
-            // `%Z` is the abbreviation the platform knows this zone by. The
-            // IANA name is not reliably recoverable from a `DateTime`, and an
-            // abbreviation a person recognises beats a name nobody set.
+            // Use the platform time-zone abbreviation; the IANA name is not available here.
             zone: at.format("%Z").to_string(),
             utc_offset_seconds: offset,
             year: at.year(),
@@ -57,10 +41,7 @@ impl Clock {
         }
     }
 
-    /// How long until the clock reads a different minute.
-    ///
-    /// Never zero: waking exactly on the boundary can land a whisker early
-    /// and read the minute that is ending, so this sleeps into the next one.
+    /// Delay until just after the next minute boundary to avoid rereading the current minute.
     fn until_next_minute(at: &chrono::DateTime<Local>) -> Duration {
         let past = u64::from(at.second());
         Duration::from_secs(60 - past.min(59))
@@ -88,9 +69,7 @@ impl Broker for Clock {
     }
 
     async fn wake(&mut self) -> Result<(), BrokerError> {
-        // `sleep` is cancel-safe, and losing one costs a recomputed deadline
-        // rather than a missed minute — the next call sleeps to whatever
-        // boundary is next from wherever the clock is then.
+        // Recompute the wall-clock boundary after cancellation.
         tokio::time::sleep(Self::until_next_minute(&Local::now())).await;
         Ok(())
     }

@@ -1,4 +1,4 @@
-//! Sound output.
+//! Audio output state and volume control.
 
 use crate::units::Percent;
 
@@ -13,9 +13,9 @@ crate::wiring::reading! {
     Audio: omega_proto::omega::AudioState
 }
 
-/// What the speakers are doing. To *change* them, hold a `Volume`.
+/// Current audio output state. Use [`Volume`] to change it.
 impl Audio {
-    /// The output level. Prints itself as `40%`.
+    /// Output volume as a percentage.
     pub fn volume(&self) -> Percent {
         self.read()
             .map(|audio| Percent::of(audio.volume))
@@ -36,12 +36,12 @@ pub struct Volume {
 does!(Volume, Audio);
 
 impl Volume {
-    /// Set it outright.
+    /// Set the output volume.
     pub fn set(&self, level: Percent) -> crate::effect::Effect {
         self.change(set_volume::Change::Absolute(level.fraction()))
     }
 
-    /// Move it by a signed fraction: `0.05` is five percent louder.
+    /// Adjust volume by a signed fraction; `0.05` adds five percentage points.
     pub fn adjust(&self, delta: f64) -> crate::effect::Effect {
         self.change(set_volume::Change::Delta(delta))
     }

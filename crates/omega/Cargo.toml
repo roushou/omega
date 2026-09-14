@@ -14,9 +14,7 @@ description = "Write an Omega plugin: declare what you need by holding it, and d
 [lints]
 workspace = true
 
-# `omega` is taken on crates.io by an unrelated crate, so the package is
-# `omega-rs` and the library keeps the name everything reads and writes:
-# `use omega::…`, unchanged in every config, template and doc.
+# Published as omega-rs; consumers import the library as omega.
 [lib]
 name = "omega"
 
@@ -27,10 +25,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "time", "rt", "sync", "macros"] }
 
 [dev-dependencies]
-# `json`: the view tests compare a rendered tree against protobuf JSON. Without
-# it here, `cargo test -p omega-rs` fails on its own and passes from the
-# workspace, which is the feature unification catching somebody out rather
-# than telling them anything.
+# Enable protobuf JSON for standalone SDK wire-format tests.
 omega-proto = { workspace = true, features = ["json"] }
 rustix = { version = "1", features = ["time"] }
 serde_json.workspace = true

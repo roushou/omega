@@ -18,9 +18,7 @@ fn notify(timeout_ms: u32) -> Notify {
 
 #[test]
 fn a_timeout_nobody_gave_is_the_desktops_own() {
-    // Zero is "not given" on the wire and "never expire" on the bus. A unit
-    // that said nothing wants the desktop's default, not a notification that
-    // stays on screen until somebody clicks it.
+    // Convert an omitted timeout to the service default, not the bus's never-expire value.
     assert_eq!(Sent::of(&notify(0)).timeout_ms, -1);
     assert_eq!(Sent::of(&notify(5_000)).timeout_ms, 5_000);
 }

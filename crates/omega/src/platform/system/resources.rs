@@ -1,13 +1,13 @@
-//! What the machine is doing with itself.
+//! CPU, memory, and uptime readings.
 
 crate::wiring::reading! {
-    /// What the machine is doing with itself.
+    /// CPU, memory, and uptime readings.
     System: omega_proto::omega::SystemState
 }
 
 use crate::units::{Bytes, Percent, Uptime};
 
-/// A pool of memory: how much there is, and how much of it is spoken for.
+/// Total and available memory for a memory pool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Memory {
     total: Bytes,
@@ -23,20 +23,18 @@ impl Memory {
         self.available
     }
 
-    /// Total less available, floored — the figure a panel actually shows.
+    /// Used bytes, computed as total minus available and saturated at zero.
     pub fn used(self) -> Bytes {
         self.total.less(self.available)
     }
 
-    /// How full it is, or `None` on a machine with none of this kind — a
-    /// desktop with no swap is not a desktop whose swap is full.
+    /// Used fraction, or `None` if the total is zero.
     pub fn share(self) -> Option<Percent> {
         self.used().share_of(self.total)
     }
 }
 
-/// How loaded the machine has been over the last one, five and fifteen
-/// minutes, as the kernel reports them.
+/// CPU load averages over one, five, and fifteen minutes.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Load {
     pub one: f64,
@@ -45,14 +43,14 @@ pub struct Load {
 }
 
 impl System {
-    /// How busy the processor is, across every core. Prints itself as `12%`.
+    /// Aggregate CPU utilization across all cores.
     pub fn cpu(&self) -> Percent {
         self.read()
             .map(|system| Percent::whole(system.cpu_percent.min(100) as u8))
             .unwrap_or(Percent::ZERO)
     }
 
-    /// The same, per core, in the order the kernel lists them.
+    /// Per-core CPU utilization in kernel enumeration order.
     pub fn cores(&self) -> Vec<Percent> {
         self.read()
             .map(|system| {
@@ -93,7 +91,7 @@ impl System {
             .unwrap_or_default()
     }
 
-    /// How long since it booted. Prints itself as `3d 4h`.
+    /// Time elapsed since system boot.
     pub fn uptime(&self) -> Uptime {
         Uptime::seconds(self.read().map(|system| system.uptime_seconds).unwrap_or(0))
     }

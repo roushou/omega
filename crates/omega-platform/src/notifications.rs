@@ -1,11 +1,4 @@
-//! Desktop notifications, over the session bus.
-//!
-//! A write-only broker like logind, and for the same reason: what a
-//! notification daemon knows — what is on screen, what was dismissed — is
-//! worth a topic and does not have one. Sending is what units ask for.
-//!
-//! The session bus, not the system one. Notifications belong to a logged-in
-//! session and the daemon runs inside one.
+//! Send notifications through the session bus. Notification history is not provided.
 
 use std::collections::HashMap;
 
@@ -18,18 +11,13 @@ use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, opaque_debug};
 
-/// One notification, as `org.freedesktop.Notifications` takes it.
-///
-/// The signature is eight positional arguments, four of which Omega has no
-/// opinion about. Naming them here is what stops the call site being a row of
-/// bare literals nobody can read.
+/// Arguments for `org.freedesktop.Notifications.Notify`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sent {
     pub summary: String,
     pub body: String,
     pub icon: String,
-    /// Milliseconds. Negative is the daemon's own default, which is what a
-    /// unit that said nothing means.
+    /// Timeout in milliseconds. Negative selects the notification service's default.
     pub timeout_ms: i32,
 }
 
@@ -40,9 +28,7 @@ impl Sent {
             summary: notify.summary.clone(),
             body: notify.body.clone(),
             icon: notify.icon.clone(),
-            // Zero is "no timeout given" on the wire and "never expire" on
-            // the bus. A unit that asked for nothing wants the desktop's
-            // default, not a notification that stays until it is clicked.
+            // Map unspecified timeout to the service default; bus zero means never expire.
             timeout_ms: match notify.timeout_ms {
                 0 => -1,
                 given => i32::try_from(given).unwrap_or(i32::MAX),
@@ -76,11 +62,7 @@ impl Link {
             .call_method(
                 "Notify",
                 &(
-                    // Who it is from. Every notification in the tray says
-                    // "omega" rather than the unit that sent it, because the
-                    // daemon is the one holding the bus — a unit naming
-                    // itself here would be a unit choosing how it is
-                    // attributed.
+                    // Use the daemon's application name for notification attribution.
                     "omega",
                     // Replaces nothing: Omega has no notification ids yet, so
                     // every send is a new one.

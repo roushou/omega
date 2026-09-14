@@ -1,4 +1,4 @@
-//! What a widget drew, asked questions rather than destructured.
+//! Assertions over rendered view trees.
 
 use omega_proto::Values;
 use omega_proto::omega::{ViewNode, value};
@@ -7,7 +7,7 @@ use crate::surface::Surface;
 use crate::testing::state::State;
 use crate::ui::View;
 
-/// What a widget drew, asked questions rather than destructured.
+/// A rendered view tree with helpers for inspecting content and properties.
 #[derive(Debug, Clone)]
 pub struct Drawn {
     pub(super) tree: omega_proto::omega::ViewTree,
@@ -23,7 +23,7 @@ impl Drawn {
         Self::configured::<W>(state, &Values::new())
     }
 
-    /// The same, for one instance the document configured.
+    /// Render a surface once using fixture state and explicit instance settings.
     pub fn configured<W: Surface>(state: &State, settings: &Values) -> Self {
         let (context, _effects) = state.context();
         Self::of_view(W::build(&context, settings).render())
@@ -48,8 +48,7 @@ impl Drawn {
         }
     }
 
-    /// Every text node, in tree order, separated by a space. What the widget
-    /// reads as, which is usually the whole assertion.
+    /// Return all text-node content in tree order, separated by spaces.
     pub fn text(&self) -> String {
         self.nodes()
             .into_iter()
@@ -76,10 +75,7 @@ impl Drawn {
         }
     }
 
-    /// Any flag of any node — `bold`, `dim`, `fill`.
-    ///
-    /// `None` where the node did not set it, which is not false: a widget that
-    /// stopped publishing a flag and one publishing it off are different bugs.
+    /// Return a boolean property, or `None` if the node or property is absent.
     pub fn flag(&self, key: &str, flag: &str) -> Option<bool> {
         match self.node(key)?.props.get(flag)?.kind.as_ref()? {
             value::Kind::BoolValue(set) => Some(*set),
@@ -87,8 +83,7 @@ impl Drawn {
         }
     }
 
-    /// The key of the first node of a kind, in tree order — for the nodes an
-    /// author never named, where the kind is the identity a test means.
+    /// Return the first matching node's key in tree order.
     pub fn first(&self, kind: &str) -> Option<String> {
         self.nodes()
             .into_iter()
@@ -101,7 +96,7 @@ impl Drawn {
         self.nodes().into_iter().find(|node| node.key == key)
     }
 
-    /// Every node's kind, in tree order: what the widget actually built.
+    /// Return node kinds in tree order.
     pub fn kinds(&self) -> Vec<&str> {
         self.nodes()
             .into_iter()

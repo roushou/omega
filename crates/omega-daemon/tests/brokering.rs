@@ -1,13 +1,4 @@
-//! What the daemon does with a broker between its readings.
-//!
-//! The driver had no test of its own, and the hole was the shape of the bug
-//! that lived in it: every broker registered by a test claimed an action, so
-//! the path taken by a broker that only reports was never once driven. Five
-//! of the twelve real brokers take it.
-//!
-//! Pacing is asserted on a clock the test moves — `start_paused`, per the
-//! daemon's rule — so what these measure is the driver's behaviour and not
-//! the machine's load.
+//! Broker pacing and recovery tests using paused Tokio time.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -27,11 +18,7 @@ const TICK: Duration = Duration::from_secs(2);
 /// an idle paused runtime advances straight to the deadline.
 const NEVER: Duration = Duration::from_secs(3600);
 
-/// A broker on a fixed cadence that counts what the driver asks of it.
-///
-/// What it claims is the whole variable: a broker that serves actions and one
-/// that only reports differ in nothing else here, and the driver owes them
-/// the same pacing.
+/// Fixed-cadence broker fixture with optional action handling.
 #[derive(Clone)]
 struct Metronome {
     reads: Arc<AtomicU32>,
@@ -144,10 +131,7 @@ async fn the_first_reading_is_taken_before_the_first_wake() {
 
 #[tokio::test(start_paused = true)]
 async fn a_broker_that_claims_no_actions_waits_between_readings() {
-    // The regression. Such a broker is routed nothing, so its inbox closes
-    // as soon as it is registered — and a closed inbox that answers is an
-    // arm of the driver's select that wins every poll, which reads in a
-    // tight loop and never reaches the wait below.
+    // A closed action inbox must not bypass the reporting cadence.
     let broker = Metronome::reporting();
     let (brokers, _shutdown) = brokerage();
     brokers.add(Box::new(broker.clone()));
@@ -166,9 +150,7 @@ async fn a_broker_that_claims_no_actions_waits_between_readings() {
 
 #[tokio::test(start_paused = true)]
 async fn claiming_an_action_does_not_change_the_pacing() {
-    // The control. Whether a broker serves actions is not supposed to be
-    // visible in how often it is read — and it was: this one paced
-    // correctly the whole time the one above was spinning.
+    // Action-serving brokers use the same reporting cadence.
     let broker = Metronome::serving();
     let (brokers, _shutdown) = brokerage();
     brokers.add(Box::new(broker.clone()));
@@ -205,9 +187,7 @@ async fn an_action_is_served_without_waiting_for_the_cadence() {
 
 #[tokio::test(start_paused = true)]
 async fn a_failed_reading_is_retried_behind_a_backoff() {
-    // A subsystem that went away comes back, so a failure reopens rather
-    // than ending the driver — but not faster than the backoff allows, or a
-    // broker whose connection is gone spins on reconnecting instead.
+    // Connection failures retry with backoff.
     let broker = Metronome::broken();
     let (brokers, _shutdown) = brokerage();
     brokers.add(Box::new(broker.clone()));

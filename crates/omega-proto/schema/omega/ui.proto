@@ -4,10 +4,8 @@ package omega;
 
 import "omega/value.proto";
 
-// Declarative view tree rendered by the shell. Designed as a reconciler
-// target: nodes carry stable keys so the shell diffs against the previous
-// tree rather than re-rendering. The core element types are a closed set in
-// the SDK; "type" stays a string here so plugins can extend it.
+// Declarative view nodes with stable keys for renderer reconciliation.
+// Supported kinds are defined by the protocol node table; unknown wire kinds render nothing.
 
 message ViewTree {
   ViewNode root = 1;
@@ -20,28 +18,14 @@ message ViewNode {
   map<string, Value> props = 3;
   repeated ViewNode children = 4;
 
-  // What this node does when something happens to it, keyed by the event:
-  // "press", "change", "submit", "activate". A string rather than an enum for
-  // the same reason "type" is one — a shell ignores an event it has no
-  // meaning for, so a tree from a newer unit degrades instead of failing.
-  //
-  // Separate from props because they answer different questions. Props are
-  // what a node looks like; events are what it does. A shell reading a
-  // binding out of the prop map would be sniffing names for behaviour.
+  // Bindings indexed by event name, such as press, change, submit, or activate.
+  // Unknown event names are ignored. Properties and bindings use separate maps.
   map<string, Bind> events = 5;
 }
 
-// What a node does when something happens to it.
-//
-// The command is one of the publishing unit's own, so a press reaches the
-// unit that drew it and no other. The args are what that unit wants handed
-// back: a Wi-Fi row says which network it is, and without them a list of
-// forty needs forty registered commands.
-//
-// A control that carries a value appends it as the last argument, so a
-// slider's "change" arrives as `args ++ [0.42]`. The unit reads its own args
-// by position and the value last, which is why args are ordered and not a
-// map.
+// A declared command or instance-local message binding.
+// Command targets belong to the publishing unit. Fixed arguments retain order;
+// a control value is appended on interaction. Local bindings use local_id and no arguments.
 message Bind {
   string command = 1;
   repeated Value args = 2;

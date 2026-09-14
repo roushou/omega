@@ -6,11 +6,8 @@ use omega_proto::omega::{Bind as WireBind, Value, ViewNode, value};
 
 use crate::ui::bind::Bind;
 
-/// A node in a view tree.
-///
-/// Built through the types in this module rather than by hand — `Text`,
-/// `Row`, `Icon` — each of which is a `Node` with the properties that make
-/// sense for it already set.
+/// A declarative view node. Construct through UI builders such as
+/// [`Text`](crate::ui::Text), [`Row`](crate::ui::Row), or [`Icon`](crate::ui::Icon).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     kind: &'static str,
@@ -33,19 +30,14 @@ impl Node {
         }
     }
 
-    /// Name this node, for a list whose items move.
-    ///
-    /// Positional keys are right until two renders disagree about what is at
-    /// a position: a list that reorders, or one whose items come and go. Then
-    /// the identity belongs to the item, and this is how to say so.
+    /// Assign a stable identity to this node.
+    /// Keys must be unique within the view and stable across renders.
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
         self
     }
 
-    // ---- shared properties ----
-
-    /// A colour, by the part it plays. See [`Role`].
+    /// Set a semantic theme color. See [`Role`].
     pub fn color(self, role: Role) -> Self {
         self.text_prop("color", role.as_str())
     }
@@ -54,7 +46,7 @@ impl Node {
         self.flag("bold", true)
     }
 
-    /// Draw it quieter than its neighbours.
+    /// Set the node's visual emphasis.
     pub fn emphasis(self, emphasis: Emphasis) -> Self {
         self.text_prop("emphasis", emphasis.as_str())
     }
@@ -63,17 +55,15 @@ impl Node {
         self.text_prop("tone", tone.as_str())
     }
 
-    /// Space around the node, in the shell's units.
+    /// Set padding in logical pixels.
     pub fn padding(self, pad: u32) -> Self {
         self.number("pad", pad)
     }
 
-    /// Text to show when someone hovers it.
+    /// Set hover tooltip text.
     pub fn tooltip(self, tooltip: impl Into<String>) -> Self {
         self.text_prop("tooltip", tooltip)
     }
-
-    // ---- building ----
 
     pub(crate) fn child(mut self, child: impl Into<crate::View>) -> Self {
         if let Some(child) = child.into().root {
@@ -104,10 +94,7 @@ impl Node {
         self
     }
 
-    /// A run of numbers — the points of a graph.
-    ///
-    /// The only prop that is not one value. `Value` has carried a list all
-    /// along; nothing had a use for one until something had to draw a series.
+    /// Store a list of numeric values as a node property.
     pub(crate) fn fractions(mut self, name: &str, values: Vec<f64>) -> Self {
         self.set(
             name,
@@ -133,11 +120,8 @@ impl Node {
             .insert(name.to_string(), Value { kind: Some(kind) });
     }
 
-    /// Give every unnamed node the key its position implies.
-    ///
-    /// Depth-first, parent before children, so a node's key is the path to
-    /// it: `0`, `0.1`, `0.1.0`. Stable across renders for as long as the
-    /// shape is, which is exactly when positional identity is the truth.
+    /// Assign hierarchical positional keys to unnamed nodes, parent before children.
+    /// Explicit keys preserve item identity when siblings are reordered.
     pub(crate) fn assign_keys(&mut self) {
         self.assign_in("root".into(), None);
     }
@@ -188,21 +172,14 @@ impl Node {
     }
 }
 
-/// A colour, by the part it plays rather than by its value.
-///
-/// Closed, and deliberately with no way to name a literal. A hex here was the
-/// one thing that let a plugin draw a colour the desktop's theme had never
-/// heard of — which is how a bar ends up looking like nine people's taste
-/// instead of one machine's. A role the shell does not know falls back to
-/// whatever it inherited, so a tree from a newer plugin degrades rather than
-/// drawing something arbitrary.
+/// A semantic theme color. The renderer resolves each role against the active theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
-    /// What text is drawn in unless it says otherwise.
+    /// Default text and icon color.
     Foreground,
-    /// The theme's own highlight.
+    /// Theme accent color.
     Accent,
-    /// The colour behind things, for the rare node that draws on top of it.
+    /// Theme background color.
     Background,
 }
 
@@ -216,26 +193,18 @@ impl Role {
     }
 }
 
-/// How big a run of text is, as a role rather than a measurement.
-///
-/// A unit cannot pick a pixel size well: it does not know the theme's base
-/// font, the display's scale, or what is drawn beside it. What it does know
-/// is what the text is *for* — a caption under a figure, the figure itself —
-/// and the shell turns that into a size on its own type scale.
-///
-/// [`Header`] takes none of these: being a header is already the answer.
-///
-/// [`Header`]: crate::ui::Header
+/// Semantic text size resolved by the renderer.
+/// [`Header`](crate::ui::Header) uses the theme's section-heading style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Size {
-    /// Smaller than body. A label under a reading.
+    /// Small supporting text.
     Caption,
-    /// What text is unless it says otherwise.
+    /// Default body text.
     Body,
     Subtitle,
     Title,
     Heading,
-    /// The one figure a panel was opened to read.
+    /// Large display text for prominent values.
     Display,
 }
 

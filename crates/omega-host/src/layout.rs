@@ -1,23 +1,12 @@
-//! The on-disk contract, declared once.
-//!
-//! Every path the CLI and daemon agree on — source layout, build output, and
-//! the assembled state dir — is derived here from three roots. Callers never
-//! join `units/<name>/unit.pb` by hand; they ask the [`Layout`], and for a
-//! TOML document they ask [`Layout::file`], which hands back a typed
-//! [`TomlFile`] located by the document's own schema.
+//! Shared source, state, and cache paths.
+//! Resolve paths through [`Layout`] and typed document paths through [`Layout::file`].
 
 use std::path::{Path, PathBuf};
 
 use crate::toml::{TomlFile, TomlSchema};
 use omega_proto::{Manifest, UnitName};
 
-/// Which cargo profile a build produces, and so which directory its binaries
-/// land in.
-///
-/// A release build is what a machine runs. A debug build is what a person
-/// iterating on a unit waits for, and it is worth several times its own
-/// weight in seconds — so which one to produce belongs to whoever is waiting.
-/// The daemon does not care: a unit is a binary either way.
+/// Cargo build profile used for compilation and artifact lookup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Profile {
     /// Fast to build, slow to run: the inner loop.
@@ -36,8 +25,7 @@ impl Profile {
         }
     }
 
-    /// The flag that asks cargo for it. Debug is cargo's default and is
-    /// spelled by asking for nothing.
+    /// Cargo profile flag. Debug uses the default and returns no flag.
     pub fn flag(self) -> Option<&'static str> {
         match self {
             Self::Debug => None,
@@ -60,8 +48,7 @@ impl Layout {
     /// CLI scaffolds it, cargo builds it, and the build runs it.
     pub const SYSTEM_CRATE: &'static str = "system";
 
-    /// The listing of what a build produced, inside the state dir. The layout
-    /// places the file; what goes in it is `omega-manifest`'s business.
+    /// Path to the built-unit index inside the state directory.
     pub const UNITS_TOML: &'static str = "units.toml";
 
     /// Resolve the three roots (env-overridable, XDG defaults).
@@ -148,11 +135,8 @@ impl Layout {
         self.config.join("Cargo.toml")
     }
 
-    /// `~/.config/omega/.cargo/config.toml` — where this machine says the
-    /// omega crates actually are.
-    ///
-    /// Not committed: it is the one file in a config that is about the
-    /// machine rather than about the desktop.
+    /// Machine-local Cargo configuration at `~/.config/omega/.cargo/config.toml`.
+    /// Scaffolding excludes this file from Git.
     pub fn cargo_config(&self) -> PathBuf {
         self.config.join(".cargo").join("config.toml")
     }
@@ -207,10 +191,7 @@ impl Layout {
         self.unit_src_dir(name).join("Cargo.toml")
     }
 
-    /// `~/.config/omega/plugins/<name>/src/lib.rs` — the plugin itself.
-    ///
-    /// A plugin is a library as well as a program, so the config plane can
-    /// depend on it and be checked against the settings it declares.
+    /// Plugin library entry point at `plugins/<name>/src/lib.rs`.
     pub fn unit_lib_src(&self, name: &UnitName) -> PathBuf {
         self.unit_src_dir(name).join("src").join("lib.rs")
     }
@@ -238,13 +219,8 @@ impl Layout {
 
     // ---- build output ----
 
-    /// `~/.config/omega/target` — the cargo target dir.
-    ///
-    /// Beside the source, which is where cargo puts one by default. That is
-    /// the point: `omega build` passes this path explicitly and a person
-    /// running `cargo build` in the config gets the same directory, so the
-    /// two cannot each fill one. The watcher ignores it and the scaffold
-    /// gitignores it.
+    /// Shared Cargo target directory at `~/.config/omega/target`.
+    /// Ignored by source watchers and the scaffolded Git configuration.
     pub fn target_dir(&self) -> PathBuf {
         self.config.join("target")
     }

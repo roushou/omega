@@ -1,4 +1,4 @@
-//! The machine's own life cycle.
+//! Session locking and system power controls.
 
 use omega_proto::omega::{Lock, Reboot, Shutdown, Sleep, action};
 

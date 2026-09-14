@@ -1,16 +1,5 @@
-//! The one thing that converges.
-//!
-//! Convergence is triggered from several places — the daemon starting, a
-//! rebuild landing, a unit connecting — and it can take a while: rendering a
-//! bar instance waits on a unit, which may be slow or wedged. Two things
-//! follow from that, and both are structural rather than careful:
-//!
-//! - it runs in its own task, so a slow unit cannot stop the daemon from
-//!   accepting connections or answering a signal;
-//! - it runs *one at a time*, and requests that arrive while it is working
-//!   are merged into the next pass rather than starting a second one.
-//!
-//! So a trigger is a request, never a call.
+//! Run convergence in one background task. Merge triggers received during a pass
+//! into the next pass; never run passes concurrently or block session dispatch.
 
 use std::sync::{Arc, Mutex};
 
@@ -26,9 +15,7 @@ use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
 
-/// What a pass has to do. Merging is a union: a reload asked for while a
-/// plain convergence is pending upgrades the pending one rather than queuing
-/// behind it.
+/// Pending convergence work. Merging combines flags into one subsequent pass.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Work {
     /// Re-read the built state: what was built, what it is for, and the
@@ -142,9 +129,7 @@ pub struct Context {
     pub layout: Layout,
     pub supervisor: Supervisor,
     pub units: UnitTable,
-    /// The timers the document declares. Held here rather than built per
-    /// pass: a schedule that survives a convergence is one that keeps
-    /// ticking through it.
+    /// Timers must outlive individual convergence passes.
     pub schedules: Schedules,
 }
 
@@ -177,9 +162,7 @@ impl Worker {
                             }
                         };
                     }
-                    // A fresh machine, not a broken one. The daemon keeps
-                    // running with nothing to converge toward, and the build
-                    // that lands triggers the pass that adopts it.
+                    // An empty state directory is valid before the first build.
                     Ok(None) => {
                         reload_pending = false;
                         tracing::info!("nothing built yet; run `omega build`");
@@ -219,9 +202,7 @@ impl Worker {
         }
     }
 
-    /// Re-read everything derived from the state dir. The manifests the
-    /// daemon vouches for are replaced together with the document that says
-    /// what to do with them.
+    /// Reload manifests and desired state from the selected generation together.
     fn reload(&self) -> Result<Option<ValidatedBuild>, DaemonError> {
         let candidate = ValidatedBuild::load(&self.context.layout, &self.context.deployment);
         if self.build.is_some() || matches!(candidate, Ok(Some(_))) {
@@ -498,10 +479,7 @@ mod tests {
 
     #[test]
     fn a_machine_with_no_build_has_nothing_to_adopt() {
-        // The ordinary first boot. `omega build` has not run, so there is no
-        // unit config to read — which was reported as a failure to load one,
-        // and made every fresh install log an error about the state it was
-        // supposed to be in.
+        // Missing unit configuration is valid before the first build.
         let dir = TempDir::new("unbuilt");
         let worker = dir.worker();
 

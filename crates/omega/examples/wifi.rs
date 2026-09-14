@@ -61,11 +61,7 @@ impl Surface for Indicator {
     }
 }
 
-/// How the signal has been, kept by this unit because nobody keeps it for it.
-///
-/// The daemon publishes readings, not histories — a topic that carried one
-/// would be a new revision on every sample. So a series is something a unit
-/// accumulates in its own keyspace, which outlives the process that wrote it.
+/// Signal history stored in the plugin record. Retained while the daemon runs.
 #[derive(omega::UnitState, Debug, Clone, Default, PartialEq)]
 pub struct Signal {
     pub recent: Vec<f64>,
@@ -114,8 +110,7 @@ impl Surface for Panel {
                         .child(Progress::new(self.network.strength()).fill_width())
                         .child(Text::new(self.network.strength()).muted()),
                 )
-                // Pinned to the whole range: a signal wobbling between 70 and
-                // 74 would otherwise fill the frame and read as a collapse.
+                // Use the full signal range to keep small fluctuations in proportion.
                 .child(
                     Graph::new(self.signal.get().recent)
                         .range(0.0, 100.0)
@@ -140,11 +135,7 @@ impl Surface for Panel {
     }
 }
 
-/// Everything on the air, one row each.
-///
-/// The list owns the cursor: arrows move it and Enter activates, and neither
-/// reaches this unit. What arrives is the key of the row that was chosen —
-/// which is the SSID, because that is what the row was keyed by.
+/// Available Wi-Fi networks. Row keys are SSIDs passed to the connection command.
 fn networks(wifi: &Wifi) -> List {
     List::new()
         .gap(2)
@@ -199,14 +190,8 @@ impl Command for Connect {
     }
 }
 
-/// Take a signal reading, for the graph to draw later.
-///
-/// A command rather than the widget, because writing state is doing something
-/// — a widget that recorded on every render would record on every percent the
-/// battery moved, too.
-///
-/// Nothing in this unit calls it: how often a history is sampled belongs to
-/// whoever runs the machine, so the document says it.
+/// Append a signal sample to history. Schedule this command from the system
+/// document at the desired sampling interval.
 ///
 /// ```ignore
 /// Schedules::every("sample-wifi", Cadence::seconds(30), Actions::invoke(Sample))
@@ -256,11 +241,7 @@ impl Command for Disconnect {
     }
 }
 
-/// Which icon a strength reads as.
-///
-/// One glyph today: the shell's icon set has `wifi` and nothing weaker, so
-/// strength is carried by the colour instead. A richer set would branch here
-/// and nothing else would change.
+/// Select the Wi-Fi glyph. Signal strength is represented by color.
 fn bars(_strength: Percent) -> Glyph {
     Glyph::Wifi
 }

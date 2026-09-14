@@ -21,12 +21,7 @@ pub struct ManifestStore {
 }
 
 impl ManifestStore {
-    /// Load and validate the manifest of every unit in the state config.
-    ///
-    /// The bytes on disk are the ones the plugin answered `--omega-manifest`
-    /// with, so the hash computed here is over exactly what the build staged.
-    /// A unit whose manifest lies about its identity fails the load rather
-    /// than starting unvouched.
+    /// Load and validate built manifests. Hash the exact staged canonical bytes.
     pub fn load(config: &StateConfig, layout: &Layout) -> Result<Self, ManifestStoreError> {
         let mut units = HashMap::with_capacity(config.units.len());
 
@@ -55,12 +50,8 @@ impl ManifestStore {
         Ok(manifest)
     }
 
-    /// A store built from manifests already in memory (tests, dev).
-    ///
-    /// Panics on a manifest whose name is not a usable identifier. Nothing
-    /// that reaches this has been near a socket: a manifest built in process
-    /// was built from an already-parsed [`UnitName`], so a bad one here is a
-    /// mistake in the caller rather than something a peer can provoke.
+    /// Construct a manifest store from in-memory values.
+    /// Panics if a manifest contains an invalid unit identifier.
     pub fn from_manifests(manifests: impl IntoIterator<Item = Manifest>) -> Self {
         Self {
             units: manifests

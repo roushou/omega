@@ -1,12 +1,5 @@
-//! State topic addresses.
-//!
-//! `StateTopic.topic` is a string on the wire, and this is the edge that
-//! validates it: a closed set of system topics, plus one open escape hatch —
-//! `unit.<name>.<key>`, the keyspace a unit owns. A typo like `"batery"` is
-//! rejected here rather than silently subscribing to nothing.
-//!
-//! The `topics!` table declares each topic's name and payload type together
-//! and generates [`SystemTopic::ALL`], keeping enumeration and lookup consistent.
+//! Validated system-topic and plugin-record addresses.
+//! The topic table binds names to payload types and generates enumeration and lookup.
 
 use std::fmt;
 
@@ -17,12 +10,7 @@ use crate::omega::{
     VpnState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
-/// Declare the system topics: the enum, `ALL`, the wire name, and the value
-/// type each one carries.
-///
-/// The variant is also the `state_topic::Value` variant, which prost names
-/// after the oneof field — so `Battery` here is `battery` there, and a row
-/// whose proto field is not the snake_case of its variant will not compile.
+/// Generate topic names, enumeration, and payload mapping from the protocol oneof.
 macro_rules! topics {
     ($(
         $(#[$meta:meta])*
@@ -90,7 +78,7 @@ topics! {
     Bluetooth => "bluetooth": BluetoothState,
     /// What the machine is doing with itself.
     System => "system": SystemState,
-    /// Whether anybody is using it.
+    /// Session idle and locked state.
     Idle => "idle": IdleState,
     /// The batteries of things plugged into it.
     Peripherals => "peripherals": PeripheralsState,
@@ -120,8 +108,7 @@ impl fmt::Display for SystemTopic {
     }
 }
 
-/// A validated topic address: where a value lives, rather than what it
-/// carries — [`TopicValue`] is that.
+/// A validated system-topic or plugin-record address.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Address {
     /// One of the daemon's own topics.
@@ -187,11 +174,7 @@ impl fmt::Display for Address {
     }
 }
 
-/// A topic's value type.
-///
-/// The ontology in `state.proto` is closed, so the mapping from a topic to
-/// the type it carries can be too: a reader names the type it wants and gets
-/// it or nothing, instead of matching a oneof at every call site.
+/// Typed conversion between a system topic and its protocol payload.
 pub trait TopicValue: Sized {
     /// The topic this type is the value of.
     const TOPIC: SystemTopic;
@@ -199,10 +182,6 @@ pub trait TopicValue: Sized {
     /// Extract this type from a topic's value, if that is what it holds.
     fn of(value: &state_topic::Value) -> Option<&Self>;
 
-    /// Put this type back into a topic's value. The inverse of [`of`], so a
-    /// test can build the state a unit reads with the same types the unit
-    /// reads it with.
-    ///
-    /// [`of`]: Self::of
+    /// Wrap this payload in a protocol topic value.
     fn into_value(self) -> state_topic::Value;
 }

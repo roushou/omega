@@ -1,9 +1,4 @@
-//! Ordered shutdown.
-//!
-//! A daemon that simply returns from `main` takes its units down with a
-//! `SIGKILL` from `kill_on_drop`: no chance to flush, no chance to exit
-//! cleanly. This is the signal every long-lived task selects on so the daemon
-//! can stop accepting, ask its units to leave, and wait for them.
+//! Shared shutdown signal for long-lived tasks and graceful process termination.
 
 use futures_util::FutureExt;
 use tokio::sync::watch;
@@ -34,8 +29,7 @@ impl Shutdown {
         Self { tx, rx }
     }
 
-    /// Begin shutting down. Idempotent: the second signal changes nothing,
-    /// which is what makes a doubled Ctrl-C harmless.
+    /// Begin shutdown. Repeated calls have no additional effect.
     pub fn trigger(&self) {
         self.tx.send_if_modified(|reason| {
             if matches!(reason, Reason::Running) {

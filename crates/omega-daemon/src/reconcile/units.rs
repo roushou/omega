@@ -1,9 +1,5 @@
-//! Which units run.
-//!
-//! Two planes meet here: the workspace decides what is *built*, the document
-//! decides what is *enabled*. A built unit the document never mentions runs —
-//! putting a crate in the workspace is already a declaration — and naming it
-//! with `enabled = false` turns it off without deleting it.
+//! Reconcile built-unit lifecycle. Unlisted built units are enabled; explicit
+//! `enabled = false` disables a unit without removing its artifact.
 
 use std::collections::BTreeSet;
 

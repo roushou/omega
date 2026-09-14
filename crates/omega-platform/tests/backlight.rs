@@ -1,8 +1,4 @@
-//! The backlight broker, in both directions.
-//!
-//! The raw scale is per device — 255 on one panel, 96000 on the next — so the
-//! arithmetic between raw and percent is the part worth pinning: a writer that
-//! rounded differently from the reader would set 40% and report 39%.
+//! Backlight raw-value and percentage conversion tests.
 
 use std::path::PathBuf;
 
@@ -19,11 +15,7 @@ impl Fixture {
         std::fs::create_dir_all(&device).unwrap();
         std::fs::write(device.join("max_brightness"), format!("{max}\n")).unwrap();
         std::fs::write(device.join("brightness"), format!("{raw}\n")).unwrap();
-        // Deliberately disagrees with the setpoint. `actual_brightness` lags
-        // a write while the panel fades, so reading it would make a step
-        // that was just applied read back as the old value — and the next
-        // relative step would then start from a number the user already
-        // moved away from.
+        // Read the brightness setpoint; actual_brightness may lag during panel transitions.
         std::fs::write(device.join("actual_brightness"), b"1\n").unwrap();
         fixture
     }

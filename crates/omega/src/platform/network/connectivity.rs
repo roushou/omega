@@ -1,7 +1,7 @@
-//! The network.
+//! Primary network connection state.
 
 crate::wiring::reading! {
-    /// The connection the machine has.
+    /// Primary network connection state.
     Network: omega_proto::omega::NetworkState
 }
 
@@ -20,7 +20,7 @@ impl Network {
             .filter(|ssid| !ssid.is_empty())
     }
 
-    /// Signal strength. Prints itself as `70%`.
+    /// Wireless signal strength as a percentage.
     pub fn strength(&self) -> Percent {
         self.read()
             .map(|network| Percent::whole(network.signal_percent.min(100) as u8))

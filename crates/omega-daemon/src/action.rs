@@ -1,8 +1,4 @@
-//! Performing actions, and refusing the ones a unit may not ask for.
-//!
-//! The taxonomy and its costs are [`ActionKind`], declared in `omega-proto`
-//! because a broker names the kinds it serves. This is the half that decides
-//! whether a caller may, and then does the ones the daemon itself performs.
+//! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
 use omega_proto::Refusal;
 use omega_proto::UnitName;
@@ -18,11 +14,7 @@ use crate::units::UnitTable;
 
 pub use omega_proto::ActionKind;
 
-/// Performing actions the daemon knows how to perform.
-///
-/// Three kinds: the daemon's own doing, a request to a unit, and a request to
-/// the broker that owns the subsystem — which is why this holds the way to
-/// reach both.
+/// Dispatch actions to daemon handlers, plugin commands, or subsystem brokers.
 #[derive(Debug)]
 pub struct Actions {
     units: UnitTable,
@@ -60,12 +52,8 @@ impl Actions {
         }
     }
 
-    /// Hand the action to whichever broker owns the subsystem.
-    ///
-    /// A kind nothing claims is `UNIMPLEMENTED` — the daemon cannot do it,
-    /// and saying so is what keeps a granted capability from standing in for
-    /// a handler that does not exist. A broker that *did* claim it and failed
-    /// is a different answer: the subsystem is there and said no.
+    /// Dispatch to the responsible broker. Return Unimplemented when no broker claims
+    /// the action; propagate execution failures from a registered broker.
     async fn broker(&self, action: &action::Kind) -> Result<Response, Refusal> {
         match self.brokers.act(action).await {
             None => Err(Refusal::unimplemented(format!(
@@ -77,11 +65,7 @@ impl Actions {
         }
     }
 
-    /// Call a unit's command surface.
-    ///
-    /// The daemon checks that the unit declares the command before asking for
-    /// it: a typo should be answered here, with the list of what does exist,
-    /// rather than by a unit that has to invent its own error for it.
+    /// Validate the target command against the manifest before dispatching it.
     async fn invoke_unit(&self, call: &InvokeUnit) -> Result<Response, Refusal> {
         let unit =
             UnitName::parse(call.unit.clone()).map_err(|e| Refusal::invalid(e.to_string()))?;
@@ -135,9 +119,7 @@ impl Actions {
         }
     }
 
-    /// The shell escape hatch. Spawned and left alone: an action is a request
-    /// to do something, not a request to wait for it, and a unit that blocks
-    /// the daemon on a slow command would take the desktop with it.
+    /// Spawn a shell command without waiting for its exit.
     fn run(run: &RunCommand) -> Result<Response, Refusal> {
         let command = run.command.clone();
         tokio::spawn(async move {

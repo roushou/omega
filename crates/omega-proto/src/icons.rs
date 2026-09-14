@@ -1,22 +1,6 @@
-//! The icon set: the names a unit can ask for, and the glyphs a shell draws
-//! them as.
-//!
-//! One table, for the same reason [`NodeKind`] is one: the names lived in a
-//! rustdoc list, a hand-written `Icons.js`, and a test that scraped backticks
-//! out of the first to compare against lines parsed out of the second. Three
-//! places, agreeing by inspection.
-//!
-//! Now the enum is the vocabulary. `Icons.js` is generated from it the way
-//! `Props.js` is generated from the node table, so a glyph added here reaches
-//! the shell or fails the build — and `Icon::new` takes a [`Glyph`], so a
-//! name the shell has no glyph for is a compile error rather than a word in
-//! somebody's bar.
-//!
-//! The codepoints are the Font Awesome block (U+F000..U+F2FF), the oldest and
-//! most widely present part of every Nerd Font patch: a glyph from here draws
-//! under JetBrainsMono, CaskaydiaCove, Hack and the rest alike.
-//!
-//! [`NodeKind`]: crate::NodeKind
+//! Supported glyph names and Nerd Font codepoints.
+//! The renderer's `Icons.js` is generated from this table. Codepoints must remain
+//! in the Font Awesome range U+F000–U+F2FF for supported font coverage.
 
 use std::fmt;
 
@@ -26,15 +10,7 @@ macro_rules! glyphs {
         $(#[$meta:meta])*
         $Variant:ident => $name:literal : $glyph:literal,
     )*) => {
-        /// An icon a unit can ask for.
-        ///
-        /// Closed here, open on the wire: `icon.name` stays a string, so a
-        /// shell meeting a name it does not know draws the name itself — a
-        /// legible word rather than a blank space. [`Icon::named`] is how a
-        /// unit written for a richer shell reaches one this build cannot
-        /// name.
-        ///
-        /// [`Icon::named`]: https://docs.rs/omega-rs
+        /// A supported glyph icon. Unknown wire names are rendered as text.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum Glyph {
             $($(#[$meta])* $Variant,)*
@@ -158,8 +134,7 @@ mod tests {
 
     #[test]
     fn every_glyph_is_in_the_block_every_nerd_font_patches() {
-        // Outside U+F000..U+F2FF a glyph is present in some patches and not
-        // others, which is a widget that draws a box on somebody's machine.
+        // Restrict glyphs to the supported Nerd Font codepoint range.
         for glyph in Glyph::ALL {
             let point = glyph.glyph() as u32;
             assert!(

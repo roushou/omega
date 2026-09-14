@@ -1,7 +1,4 @@
-//! Turning Hyprland's monitors into the ontology.
-//!
-//! The answer is JSON, so the whole translation is testable with no
-//! compositor in the room — which is the point of parsing being its own step.
+//! Hyprland response conversion tests using JSON fixtures.
 
 mod common;
 
@@ -62,9 +59,7 @@ fn a_disabled_monitor_is_not_connected() {
 
 #[test]
 fn a_field_hyprland_omits_takes_its_default() {
-    // Older Hyprland does not report `disabled`. A monitor it is describing
-    // at all is one it is driving, so absent reads as connected rather than
-    // as a parse failure that blanks every display.
+    // An omitted disabled property defaults to a connected monitor.
     let older = LAPTOP.replace(",\n    \"disabled\": false", "");
     assert!(Monitors::parse(&older).unwrap().monitors[0].connected);
 }
@@ -145,9 +140,7 @@ fn the_active_workspace_is_read_by_name() {
 
 #[test]
 fn an_empty_workspace_has_nothing_focused() {
-    // Hyprland answers `{}` when nothing has focus. That is nothing focused,
-    // not a window with no name — a bar drawing an empty title would look
-    // like a bug rather than an empty desktop.
+    // An empty compositor response means no focused window.
     assert!(Session::window("{}").unwrap().focused.is_none());
 }
 
@@ -275,9 +268,7 @@ fn a_window_moves_with_the_workspace_it_is_sent_to() {
 
 #[test]
 fn fullscreen_is_refused_for_a_window_that_is_not_focused() {
-    // Hyprland fullscreens the focused window and takes no selector. Doing it
-    // to whichever window happens to be focused instead would be doing
-    // something the caller did not ask for.
+    // Refuse targeted fullscreen requests; the dispatch operates on the focused window.
     let focused_one = Dispatch::of(&action::Kind::ToggleFullscreen(ToggleFullscreen {
         window: focused(),
     }));
@@ -291,9 +282,7 @@ fn fullscreen_is_refused_for_a_window_that_is_not_focused() {
 
 #[test]
 fn a_name_that_would_end_the_line_is_refused() {
-    // A dispatch is one line on a socket. A newline in a window class would
-    // make the rest of it a second dispatch, and a semicolon chains them —
-    // so a name carrying either is not sent at all.
+    // Reject dispatch delimiters in selectors.
     for hostile in ["", "firefox\nkillactive", "firefox;killactive", "a\rb"] {
         let close = Dispatch::of(&action::Kind::ToggleFloating(ToggleFloating {
             window: named(hostile),

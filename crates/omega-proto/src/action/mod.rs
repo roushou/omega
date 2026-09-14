@@ -1,16 +1,6 @@
-//! Actions: the closed taxonomy of what a unit may make the machine do.
-//!
-//! One table. [`ActionKind`] names every action in `action.proto` and the
-//! capability each one costs, and the match that reads a wire action is
-//! exhaustive — so the schema growing is a compile error here until the new
-//! action's cost is stated.
-//!
-//! Authorization is complete even where implementation is not: an action the
-//! daemon cannot perform yet is refused for the right reason first, so a unit
-//! is never granted something by the accident of a missing handler.
-//!
-//! This lives in the protocol crate rather than the daemon because a broker
-//! declares the kinds it serves, and a broker must not depend on the daemon.
+//! Closed action vocabulary and required capabilities.
+//! The exhaustive wire mapping requires every new action to declare its permission.
+//! Authorization precedes handler availability checks.
 
 use crate::omega::{Capability, action};
 
@@ -24,11 +14,7 @@ macro_rules! cost {
     };
 }
 
-/// Declare the action kinds: the enum, `ALL`, the name, the capability each
-/// costs, and the mapping from a wire action.
-///
-/// The variant is also the `action::Kind` variant, so a row naming an action
-/// `action.proto` does not have will not compile.
+/// Generate action kinds, names, capabilities, and exhaustive wire conversion.
 macro_rules! actions {
     ($(
         $(#[$meta:meta])*
@@ -59,9 +45,8 @@ macro_rules! actions {
                 }
             }
 
-            /// The capability this action costs. `None` is not "free": it
-            /// means the action affects only the unit's own surfaces, and the
-            /// daemon still has to be able to perform it.
+            /// Required capability, or `None` for operations scoped to the caller's own surfaces.
+            /// Scope and handler checks still apply.
             pub fn cost(self) -> Option<Capability> {
                 match self {
                     $(Self::$variant => cost!($cost),)*

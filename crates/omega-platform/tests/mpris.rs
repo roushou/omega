@@ -41,9 +41,7 @@ fn whatever_is_playing_is_the_one_a_key_reaches() {
 
 #[test]
 fn with_nothing_playing_the_first_by_name_is_reached() {
-    // Still a decision, and a stable one: the bus answers in whatever order
-    // it holds names, so a bar would otherwise swap between two paused
-    // players every refresh.
+    // Player selection must be stable regardless of bus enumeration order.
     let players = vec![player("spotify", "Paused"), player("chromium", "Paused")];
     let state = Players::state(&players);
 
@@ -53,8 +51,7 @@ fn with_nothing_playing_the_first_by_name_is_reached() {
 
 #[test]
 fn no_players_is_a_reading_and_reaches_nothing() {
-    // A desktop with nothing open is an answer. A key with nowhere to go is
-    // refused rather than sent to a player that is not there.
+    // No player is valid state; control requests without a target fail.
     assert!(Players::state(&[]).players.is_empty());
     assert!(Players::active(&[]).is_none());
 }
@@ -77,16 +74,13 @@ fn a_status_becomes_a_playback() {
     assert_eq!(of("Playing"), Playback::Playing as i32);
     assert_eq!(of("Paused"), Playback::Paused as i32);
     assert_eq!(of("Stopped"), Playback::Stopped as i32);
-    // A player saying something this build has no arm for is unspecified
-    // rather than guessed at as playing.
+    // Unknown playback states map to Unspecified.
     assert_eq!(of("Buffering"), Playback::Unspecified as i32);
 }
 
 #[test]
 fn a_length_a_player_does_not_know_is_not_a_negative_track() {
-    // `mpris:length` is signed and occasionally negative before a player has
-    // worked it out. The ontology's is unsigned, and casting would report a
-    // track lasting six hundred thousand years.
+    // Negative MPRIS lengths map to zero before unsigned conversion.
     let unknown = Player {
         length_us: -1,
         ..player("spotify", "Playing")
@@ -107,7 +101,7 @@ fn every_media_key_has_a_method() {
     assert_eq!(method(media_key::Key::MediaNext), Some("Next"));
     assert_eq!(method(media_key::Key::MediaPrevious), Some("Previous"));
     assert_eq!(method(media_key::Key::MediaStop), Some("Stop"));
-    // A key nobody named is refused rather than turned into play.
+    // Reject unspecified media keys.
     assert_eq!(method(media_key::Key::MediaKeyUnspecified), None);
 }
 

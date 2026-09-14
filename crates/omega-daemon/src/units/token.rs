@@ -5,7 +5,7 @@
 pub struct UnitToken(String);
 
 impl UnitToken {
-    /// 128 bits from the OS. Guessing one is not a threat model we accept.
+    /// Generate a 128-bit token from OS randomness.
     pub fn mint() -> Self {
         let mut bytes = [0u8; 16];
         getrandom::fill(&mut bytes).expect("the OS must provide randomness");

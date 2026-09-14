@@ -1,14 +1,9 @@
-//! The units a reading is in.
-//!
-//! A battery level is not an `f64`. The wire carries `0.0 .. 1.0` and a
-//! widget wants "80%", and every plugin that multiplies by a hundred itself
-//! is a plugin that can get it wrong. These types carry the scale so nobody
-//! has to remember it, and print themselves so nobody has to format it.
+//! Measurement types with conversions and display formatting.
 
 use std::fmt;
 use std::time::Duration;
 
-/// A fraction of something, printed as a whole percent.
+/// A fraction displayed as a whole percentage.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Percent(f64);
 
@@ -16,23 +11,22 @@ impl Percent {
     pub const ZERO: Self = Self(0.0);
     pub const FULL: Self = Self(1.0);
 
-    /// From the wire's `0.0 .. 1.0`, clamped: a source that reports 1.3 is
-    /// wrong, and a widget drawing a bar 130% wide is wrong too.
+    /// Construct from a fraction, clamped to `0.0..=1.0`.
     pub fn of(fraction: f64) -> Self {
         Self(fraction.clamp(0.0, 1.0))
     }
 
-    /// From a whole percent, as a person says it: `Percent::whole(80)`.
+    /// Construct from a whole percentage, clamped to 100.
     pub fn whole(percent: u8) -> Self {
         Self::of(f64::from(percent) / 100.0)
     }
 
-    /// `0.0 .. 1.0`, for drawing.
+    /// Return the fraction in `0.0..=1.0`.
     pub fn fraction(self) -> f64 {
         self.0
     }
 
-    /// `0 ..= 100`, for comparing against a threshold someone typed.
+    /// Return the rounded whole percentage in `0..=100`.
     pub fn whole_percent(self) -> u8 {
         (self.0 * 100.0).round() as u8
     }
@@ -56,7 +50,7 @@ impl PartialOrd<u8> for Percent {
     }
 }
 
-/// A span of time, printed the way a bar shows it: `2h 40m`, `12m`.
+/// A nonzero duration formatted as hours and minutes, such as `2h 40m` or `12m`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Remaining(Duration);
 
@@ -65,7 +59,7 @@ impl Remaining {
         Self(duration)
     }
 
-    /// `None` for zero, which is how the wire spells "unknown".
+    /// Construct from seconds. Returns `None` for zero.
     pub fn seconds(seconds: u32) -> Option<Self> {
         match seconds {
             0 => None,
@@ -89,10 +83,7 @@ impl fmt::Display for Remaining {
     }
 }
 
-/// A quantity of bytes, printed the way a panel shows it: `7.5 GiB`, `912 MiB`.
-///
-/// Binary units, because that is what `/proc/meminfo` and `statvfs` report
-/// and what every other tool on the machine prints.
+/// A byte count formatted in binary units, such as `7.5 GiB` or `912 MiB`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Bytes(u64);
 
@@ -115,8 +106,7 @@ impl Bytes {
         self.0
     }
 
-    /// What fraction of a whole this is. `None` where the whole is nought,
-    /// which is a filesystem that reported nothing rather than a full one.
+    /// Return the fraction of `whole`, or `None` if `whole` is zero.
     pub fn share_of(self, whole: Bytes) -> Option<Percent> {
         match whole.0 {
             0 => None,
@@ -124,9 +114,7 @@ impl Bytes {
         }
     }
 
-    /// This much less that much, floored at nought — how "used" is computed
-    /// from a total and what is free, without a widget underflowing when a
-    /// source reports them a moment apart.
+    /// Subtract `other`, saturating at zero.
     pub fn less(self, other: Bytes) -> Self {
         Self(self.0.saturating_sub(other.0))
     }
@@ -138,23 +126,16 @@ impl fmt::Display for Bytes {
             .iter()
             .copied()
             .find(|(_, size)| self.0 >= *size)
-            // Nought is bytes, not a panic.
             .unwrap_or(("B", 1));
 
         match unit {
-            // A count of bytes has no fractional part worth showing.
             "B" => write!(f, "{} B", self.0),
             _ => write!(f, "{:.1} {unit}", self.0 as f64 / size as f64),
         }
     }
 }
 
-/// How long the machine has been up, printed the way an uptime is said:
-/// `3d 4h`, `4h 12m`, `12m`.
-///
-/// Distinct from [`Remaining`] because it counts the other way and reads at a
-/// different scale: nobody says a machine has been up "2h 40m" once it has
-/// been up for days.
+/// System uptime formatted in days, hours, and minutes, such as `3d 4h`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uptime(Duration);
 
@@ -186,11 +167,7 @@ impl fmt::Display for Uptime {
     }
 }
 
-/// Bytes per second, printed the way a monitor shows it: `1.2 MiB/s`.
-///
-/// A newtype over [`Bytes`] rather than a bare count, so a widget cannot draw
-/// a rate as a total or vice versa — they read the same and mean different
-/// things.
+/// A transfer rate in bytes per second, formatted in binary units, such as `1.2 MiB/s`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Rate(Bytes);
 
@@ -201,7 +178,7 @@ impl Rate {
         Self(Bytes::of(bytes_per_second))
     }
 
-    /// How much, without the "per second".
+    /// Return the number of bytes transferred per second.
     pub const fn amount(self) -> Bytes {
         self.0
     }
@@ -217,11 +194,7 @@ impl fmt::Display for Rate {
     }
 }
 
-/// How hot something is, printed the way a bar shows it: `44°C`.
-///
-/// hwmon reports thousandths of a degree, which is three digits of precision
-/// nothing draws and a new revision on every flutter. This carries what the
-/// kernel said and rounds when it prints.
+/// A temperature stored in millidegrees Celsius and displayed in rounded degrees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Temperature(i32);
 
@@ -234,7 +207,7 @@ impl Temperature {
         f64::from(self.0) / 1000.0
     }
 
-    /// Whole degrees, for comparing against a threshold somebody typed.
+    /// Return the temperature rounded to whole degrees Celsius.
     pub fn whole_celsius(self) -> i32 {
         (self.celsius()).round() as i32
     }
@@ -265,8 +238,7 @@ mod tests {
 
     #[test]
     fn used_is_a_subtraction_that_cannot_underflow() {
-        // Total and available come from two reads of the same file, and a
-        // source that reports more free than it has must not wrap to 16 EiB.
+        // Subtraction must saturate if an inconsistent reading reports available > total.
         let total = Bytes::of(1 << 30);
         assert_eq!(total.less(Bytes::of(1 << 29)), Bytes::of(1 << 29));
         assert_eq!(total.less(Bytes::of(1 << 31)), Bytes::ZERO);
@@ -291,9 +263,7 @@ mod tests {
     #[test]
     fn a_temperature_prints_in_whole_degrees() {
         assert_eq!(Temperature::of_millicelsius(44_000).to_string(), "44°C");
-        // Rounded, not truncated: 44.6 is nearer 45.
         assert_eq!(Temperature::of_millicelsius(44_600).to_string(), "45°C");
-        // Signed, because a sensor outdoors can be below freezing.
         assert_eq!(Temperature::of_millicelsius(-5_500).to_string(), "-6°C");
     }
 

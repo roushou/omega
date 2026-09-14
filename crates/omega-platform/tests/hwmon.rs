@@ -1,8 +1,4 @@
-//! Reading `hwmon`.
-//!
-//! A tree of tiny files, so the whole translation is testable against a
-//! fixture — including the two cases the kernel forces and a naive reader gets
-//! wrong.
+//! hwmon parsing against filesystem fixtures.
 
 use std::path::Path;
 

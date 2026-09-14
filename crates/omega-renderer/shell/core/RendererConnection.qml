@@ -19,9 +19,7 @@ Item {
     property int attachmentStream: 0
     signal viewUpdated(var snapshot)
 
-    // Where the daemon listens, unless a host was configured with somewhere
-    // else. Named separately so a host can fall back to it explicitly: a host
-    // that repeated the path would be a second place for it to be wrong.
+    // Default daemon socket path, overridable by the host.
     readonly property string defaultSocketPath:
         Quickshell.env("XDG_RUNTIME_DIR") + "/omega-shell.sock"
     property string socketPath: link.defaultSocketPath
@@ -64,8 +62,7 @@ Item {
         link.units = []
         requests.disconnected(reason)
     }
-    // When the daemon last said anything. A socket whose peer went away does
-    // not reliably report itself closed, so silence is what we watch instead.
+    // Track inbound activity to detect stale connections even without a socket close signal.
     property double lastHeard: 0
     property int nextStream: 1
     readonly property alias requests: requests
@@ -81,9 +78,7 @@ Item {
             return
         }
 
-        // An answer to something this host asked. A press that was refused
-        // said why, and a button that silently does nothing is the worst way
-        // to find that out.
+        // Route correlated results to pending controls.
         if (msg.result) {
             if (Number(msg.streamId) === link.attachmentStream) {
                 if (msg.result.error) {
@@ -103,9 +98,7 @@ Item {
             return
         }
 
-        // Only a view line describes a surface. Topics share this stream, and
-        // a filter that is empty matches them too — which cleared the tree on
-        // every state change the daemon published.
+        // Only view frames may replace the rendered tree.
         if (msg.view && link.attached) link.receiveView(msg)
     }
 
@@ -206,9 +199,7 @@ Item {
             parser: SplitParser {
                 onRead: function(line) { link.onLine(line) }
             }
-            // A daemon that went away is not a daemon still saying 91%.
-            // Holding the last tree would leave the bar showing a reading
-            // nobody is taking.
+            // Clear stale views when the daemon disconnects.
             onConnectedChanged: {
                 if (connected) {
                     link.connected = true
@@ -241,23 +232,9 @@ Item {
 
     Component.onCompleted: link.openSocket()
 
-    // Recover from a daemon this host cannot currently reach.
-    //
-    // Not by asking whether the socket is connected: a peer that goes away
-    // leaves `connected` reading true, and a host that trusts it freezes on
-    // the last view it ever saw — which is worse than showing nothing,
-    // because it looks like a working widget reporting a stale number.
-    //
-    // Silence is the signal instead. The daemon sends everything it holds the
-    // moment a connection opens, so reconnecting after a quiet stretch costs
-    // one snapshot.
-    //
-    // The retry rebuilds the `Socket` rather than toggling `connected` on the
-    // existing one. A socket whose first connect found no file stays down
-    // through every later toggle, so a host loaded before the daemon — which
-    // is the order `omega init` installs them in — would never draw at all.
-    // Reactivation is deferred a turn so the destroy and the create cannot
-    // coalesce into no change.
+    // Reconnect after the heartbeat silence deadline.
+    // Replace the Socket object after failure; toggling a failed socket can leave it
+    // disconnected. Defer reactivation so destruction and creation cannot coalesce.
     Timer {
         interval: 5000
         running: true

@@ -1,4 +1,4 @@
-//! `omega status`: what the daemon is running, and what keeps falling over.
+//! Inspect daemon activation, reconciliation, and plugin process status.
 
 use std::time::Duration;
 
@@ -143,9 +143,7 @@ impl StatusCmd {
         }
     }
 
-    /// One row per unit. Phase carries the colour, because it is the column
-    /// a reader scans; a restart count of zero is dimmed so that a count
-    /// which is not zero is the thing their eye lands on.
+    /// Highlight phases and nonzero restart counts.
     fn table(units: &[UnitStatus]) -> Table {
         let mut table = Table::new(vec![
             Column::left("UNIT"),
@@ -187,9 +185,7 @@ impl StatusCmd {
     }
 }
 
-/// A unit's phase as the reader sees it: a word and the colour that word is
-/// worth. Decided here rather than at the cell, so `running` cannot be green
-/// in one column and plain in another.
+/// Consistent labels and colors for process phases.
 #[derive(Debug, Clone, Copy)]
 enum Phase {
     Starting,

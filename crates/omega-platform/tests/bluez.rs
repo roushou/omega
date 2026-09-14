@@ -28,8 +28,7 @@ fn adapter() -> Adapter {
 
 #[test]
 fn only_the_machines_own_devices_are_listed() {
-    // BlueZ also lists whatever it has seen recently. A bar showing every
-    // phone that walked past is showing the air rather than the machine.
+    // Exclude unpaired, disconnected scan results.
     let seen = vec![
         device("Bose NC 700", true, false),
         device("Somebody's Pixel", false, false),

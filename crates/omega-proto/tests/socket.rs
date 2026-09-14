@@ -31,7 +31,7 @@ async fn a_stale_socket_file_is_replaced() {
     let path = TempPath::new("stale");
     let socket = path.socket();
 
-    // A crashed process leaves the file behind with nobody listening.
+    // Reclaim a stale socket with no listening process.
     drop(std::os::unix::net::UnixListener::bind(socket.path()).unwrap());
     assert!(socket.path().exists());
     assert!(!socket.is_live());

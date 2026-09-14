@@ -6,11 +6,7 @@ use omega_proto::omega::{Value, value};
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
 
-/// Run one of a unit's declared commands.
-///
-/// The unit does the work with its own capabilities, which is the point: the
-/// command is the unit's, and calling it is not a way to borrow powers it was
-/// never granted.
+/// Invoke a registered plugin command using that plugin's granted capabilities.
 #[derive(Debug, clap::Args)]
 pub struct RunCmd {
     /// The unit that declares the command.

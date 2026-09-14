@@ -7,10 +7,8 @@ use crate::{
 use omega_proto::omega::Capability;
 use std::marker::PhantomData;
 
-/// Somebody's state, read only — this plugin's own, or another's.
-///
-/// Reading another plugin's keyspace is what its manifest declares, so
-/// holding this is what asks for it.
+/// Read a typed record owned by this plugin or another plugin.
+/// The field declares the required keyspace subscription.
 #[derive(Debug)]
 pub struct Watch<T: UnitState> {
     context: Context,
@@ -20,8 +18,7 @@ pub struct Watch<T: UnitState> {
 impl<T: UnitState> Wiring for Watch<T> {
     const CAPABILITIES: &'static [Capability] = &[Capability::StateRead];
 
-    /// Reading somebody's keyspace is what a manifest declares, so holding
-    /// this is what asks for it.
+    /// Declare the keyspace subscription in the manifest.
     fn keyspaces() -> Vec<String> {
         vec![T::address()]
     }
@@ -37,8 +34,7 @@ impl<T: UnitState> Wiring for Watch<T> {
 impl<T: UnitState> Reads for Watch<T> {}
 
 impl<T: UnitState> Watch<T> {
-    /// What the daemon currently holds, or this type's default if nobody has
-    /// set it.
+    /// Return the replicated record, or `T::default()` if it has not been published.
     pub fn get(&self) -> T {
         T::read(&self.context.keyspace(&T::address()).unwrap_or_default())
     }

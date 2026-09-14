@@ -1,9 +1,5 @@
-//! A plugin: what it offers, and running it.
-//!
-//! A plugin is not a thing you implement — it is what you registered. Each
-//! registration puts a surface in the manifest and a constructor in the
-//! runtime, so what the daemon grants and what the plugin can do are the same
-//! list, arrived at once.
+//! Register plugin surfaces, commands, and reactions, then start the runtime.
+//! Registrations determine the generated manifest and available endpoints.
 //!
 //! ```no_run
 //! # use omega::platform::power::Battery;
@@ -29,11 +25,7 @@ use crate::error::Error;
 use crate::plugin::registry::{CommandEntry, ReactionEntry, SurfaceEntry};
 use crate::{Command, Reaction, Surface};
 
-/// Name a plugin after the crate it is.
-///
-/// The unit's name is its crate name — the build copies
-/// `target/release/<crate>` and the daemon runs it under that name — so
-/// typing it again would be a second place to get it wrong.
+/// Create a plugin using the defining package's name and version.
 #[macro_export]
 macro_rules! plugin {
     () => {
@@ -41,7 +33,7 @@ macro_rules! plugin {
     };
 }
 
-/// The surfaces a plugin offers.
+/// Plugin registration and runtime entry points.
 pub struct Plugin {
     name: String,
     version: String,
@@ -106,38 +98,33 @@ impl Plugin {
         self
     }
 
-    /// Draw something. The surface takes the plugin's own name, which is what
-    /// a document refers to it by.
+    /// Register a surface using the plugin name as its surface ID.
     pub fn surface_default<W: Surface>(self) -> Self {
         let id = self.name.clone();
         self.surface_as::<W>(id)
     }
 
-    /// Draw something, under a name of its own — for a plugin with more than
-    /// one surface to draw.
+    /// Register a surface with an explicit surface ID.
     pub fn surface_as<W: Surface>(mut self, surface: impl Into<String>) -> Self {
         self.surfaces.push(SurfaceEntry::of::<W>(surface.into()));
         self
     }
 
-    /// Answer to being asked to do something.
+    /// Register a typed command endpoint.
     pub fn command<C: Command>(mut self) -> Self {
         self.commands
             .push(CommandEntry::of::<C>(C::NAME.to_string()));
         self
     }
 
-    /// Run when something happens.
+    /// Register a reaction for the specified event kind.
     pub fn on<R: Reaction>(mut self, event: EventKind) -> Self {
         self.reactions.push(ReactionEntry::of::<R>(event));
         self
     }
 
-    /// What this plugin declares, as the daemon will read it.
-    ///
-    /// The union of every registered surface's fields. Nothing here was
-    /// typed: topics come from the state a plugin holds, capabilities from
-    /// the effects it holds, surfaces from what it registered.
+    /// Build and validate the plugin manifest from its registered types.
+    /// Subscriptions and capabilities are aggregated from their fields.
     pub fn manifest(&self) -> Result<Manifest, Error> {
         let name = omega_proto::UnitName::parse(&self.name)
             .map_err(|source| Error::Name(self.name.clone(), source))?;
@@ -194,8 +181,6 @@ impl Plugin {
             .granting(capabilities)
             .exposing(surfaces)
             .serving(commands)
-            // The machine's topics and the plugins' own, in one list: the
-            // daemon does not distinguish, and neither should a reader.
             .reading(
                 topics
                     .into_iter()
@@ -205,18 +190,11 @@ impl Plugin {
             .handling(self.reactions.iter().map(|reaction| reaction.event)))
     }
 
-    /// Serve until the daemon goes away.
-    ///
-    /// Starts a runtime of its own: a plugin author should not have to know
-    /// this program is asynchronous, because nothing they wrote is.
+    /// Start a Tokio runtime and serve the plugin until the session ends.
+    /// Use [`Self::serve`] when running inside an existing runtime.
     pub fn run(self) -> Result<(), Error> {
-        // `omega build` compiles a plugin and then asks it what it declares.
-        // That is why there is no manifest file to keep in step with the
-        // code: the code is asked.
-        // The answer is the canonical encoding itself, on stdout: the build
-        // stages exactly these bytes, and the hash the daemon recomputes is
-        // taken over exactly these bytes. Nothing re-encodes it in between,
-        // so nothing can disagree about them.
+        // Write canonical manifest bytes for the build tool. Generation hashes
+        // must be computed from these exact bytes.
         if std::env::args().any(|argument| argument == Manifest::DESCRIBE) {
             use std::io::Write as _;
             std::io::stdout()
@@ -232,7 +210,7 @@ impl Plugin {
             .block_on(self.serve())
     }
 
-    /// Serve on a runtime the caller already has.
+    /// Serve the plugin using the caller's asynchronous runtime.
     pub async fn serve(self) -> Result<(), Error> {
         let manifest = self.manifest()?;
         crate::runtime::Runtime::connect(&manifest)

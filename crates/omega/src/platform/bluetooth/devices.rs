@@ -1,7 +1,7 @@
-//! The adapter, and what is paired with it.
+//! Bluetooth adapter state and paired or connected devices.
 
 crate::wiring::reading! {
-    /// The adapter and the devices paired with it.
+    /// Bluetooth adapters and paired or connected devices.
     Bluetooth: omega_proto::omega::BluetoothState
 }
 
@@ -65,7 +65,7 @@ impl BluetoothDevice {
         &self.address
     }
 
-    /// The alias, which is what a person renamed it to.
+    /// Device alias reported by BlueZ.
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -78,8 +78,8 @@ impl BluetoothDevice {
         self.paired
     }
 
-    /// BlueZ's own icon name — `audio-headphones`. Not one of this shell's
-    /// glyph names: it is a freedesktop icon name, from a different set.
+    /// Freedesktop icon name reported by BlueZ, such as `audio-headphones`.
+    /// Use with `Image::icon`, not `Icon::named`.
     pub fn icon(&self) -> &str {
         &self.icon
     }
@@ -118,7 +118,7 @@ impl Bluetooth {
         }
     }
 
-    /// Whether the machine has an adapter at all.
+    /// Whether at least one Bluetooth adapter is present. Returns `false` without a reading.
     pub fn is_available(&self) -> bool {
         self.read().is_some_and(|state| state.available)
     }
@@ -138,7 +138,7 @@ impl Bluetooth {
             .unwrap_or_default()
     }
 
-    /// Only what is connected right now — what a bar slot counts.
+    /// Return the currently connected devices.
     pub fn connected_devices(&self) -> Vec<BluetoothDevice> {
         self.known_devices()
             .into_iter()

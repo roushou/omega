@@ -1,9 +1,5 @@
-//! What `omega init` writes, declared as data.
-//!
-//! The dependency table below is the only place a generated workspace's
-//! dependencies are named. A unit crate's `[dependencies]` is *derived* from
-//! it — every entry inherited with `workspace = true` — so the two can never
-//! drift apart.
+//! Workspace templates and dependency specifications used by scaffolding.
+//! Generated member dependencies inherit the shared declarations.
 
 use omega_host::Layout;
 use omega_host::workspace::cargo::{
@@ -49,10 +45,7 @@ pub enum ScaffoldError {
     ProgramTemplate { token: &'static str },
 }
 
-/// Where a generated config gets omega's crates from: always the published
-/// ones, because a config is a git repository that must build on every
-/// machine it is cloned onto. Building against a checkout is a `[patch]`
-/// override instead — see [`crate::checkout::SourceTree`].
+/// Published dependency specifications. Local checkout paths belong in Cargo patches.
 #[derive(Debug, Clone)]
 pub struct Published {
     version: String,
@@ -85,20 +78,11 @@ pub struct Scaffold {
 }
 
 impl Scaffold {
-    /// What a plugin crate depends on.
-    ///
-    /// One crate. A plugin holds handles, draws a view, and returns
-    /// `omega::Result` — the protocol, the runtime and the manifest are all
-    /// behind that one name, and none of them is a plugin author's problem.
+    /// Dependencies inherited by generated plugin crates.
     pub(crate) const UNIT_DEPENDENCIES: &'static [DependencySpec] =
         &[DependencySpec::omega("omega").published_as("omega-rs")];
 
-    /// What the config plane depends on: the document, and nothing else.
-    ///
-    /// A separate list because the two crates are two audiences. One list for
-    /// both made every unit declare the authoring API it never calls, and the
-    /// config plane declare an async runtime for a program that computes a
-    /// value and exits.
+    /// Dependencies inherited by the generated system crate.
     pub(crate) const SYSTEM_DEPENDENCIES: &'static [DependencySpec] = &[
         DependencySpec::omega("omega-document"),
         DependencySpec::omega("omega-omarchy"),
@@ -117,12 +101,8 @@ impl Scaffold {
         Self { published }
     }
 
-    /// The omega crates a generated config depends on, and so the ones a
-    /// checkout patches.
-    ///
-    /// The specs, not their names: a `[patch]` is keyed by what the registry
-    /// calls a crate and a dependency table by what the config calls it, and
-    /// for the SDK those differ.
+    /// Dependency specifications patched when linking a checkout.
+    /// Registry package names may differ from manifest aliases.
     pub fn omega_crates() -> impl Iterator<Item = &'static DependencySpec> {
         Self::UNIT_DEPENDENCIES
             .iter()
@@ -138,9 +118,7 @@ impl Scaffold {
 
     /// `~/.config/omega/Cargo.toml`: the workspace every unit crate joins.
     pub fn workspace_manifest(&self) -> CargoManifest {
-        // Everything either member inherits, declared once at the root. The
-        // table is keyed by name, so a dependency both of them want is
-        // resolved once and written once.
+        // Deduplicate inherited dependencies by manifest alias.
         let mut dependencies = Dependencies::new();
         for spec in Self::UNIT_DEPENDENCIES
             .iter()
@@ -191,12 +169,7 @@ impl Scaffold {
         Self::stamp(UNIT_MAIN, name)
     }
 
-    /// `system/Cargo.toml`: the configuration plane's crate, a member of the
-    /// same workspace as the plugins it configures.
-    ///
-    /// It is founded depending on no plugin, because founding a config and
-    /// writing a plugin are different days. `omega new` adds each plugin as
-    /// it is written — see [`Scaffold::depends_on`].
+    /// Generate the system crate manifest. Plugin dependencies are added by `omega new`.
     pub fn system_manifest(&self) -> CargoManifest {
         CargoManifest {
             package: Some(Package::new(
@@ -213,20 +186,13 @@ impl Scaffold {
         }
     }
 
-    /// How the config plane depends on one plugin.
-    ///
-    /// Depending on a plugin is what makes its settings a type rather than a
-    /// map of strings — so this is added for every plugin, and it is the one
-    /// edit `omega new` makes to a file the author owns, because a path
-    /// between two crates in one workspace is bookkeeping and not a decision.
+    /// Generate the system crate's path dependency on a plugin.
     pub fn depends_on(unit: &UnitName) -> Dependency {
         Dependency::local(format!("../plugins/{unit}"), &[])
     }
 
-    /// The line `omega new` prints, to paste into the config plane. Fully
-    /// qualified so it compiles wherever it lands. Lives beside the plugin
-    /// template because every name in it must exist there; a test holds the
-    /// two together.
+    /// Fully qualified placement expression for the generated plugin.
+    /// Template tests verify referenced types and names.
     pub fn placement_hint(unit: &PluginName, template: Template) -> String {
         let krate = unit.rust_ident();
         let unit = unit.package();
@@ -237,12 +203,7 @@ impl Scaffold {
         format!("omega_omarchy::shell::PluginWidget::new(\"{unit}\", {krate}::{widget}).into()")
     }
 
-    /// `system/src/main.rs`: a document with an empty bar.
-    ///
-    /// It names no unit, because at the moment a config is founded there are
-    /// none. What goes in the bar is the author's to write, and `omega new`
-    /// prints the line rather than editing this file: where a widget sits and
-    /// how it is configured is the one part of scaffolding that is a decision.
+    /// Generate a system entry point with an empty bar.
     pub fn system_main(&self) -> &'static str {
         SYSTEM_MAIN
     }
@@ -252,16 +213,11 @@ impl Scaffold {
         include_str!("../../templates/system-import/src/main.rs")
     }
 
-    /// A template with the unit's name in it, or a loud failure.
-    ///
-    /// A `str::replace` that matches nothing is silent, and the failure it
-    /// produces arrives commands later as a config that does not build. This
-    /// is where it is caught.
+    /// Expand required template placeholders or fail if any are missing.
     fn stamp(template: &str, name: &PluginName) -> Result<String, ScaffoldError> {
         let stamped = template.replace(CRATE_TOKEN, name.rust_ident());
 
-        // A `str::replace` that matched nothing is silent, and a template
-        // that still has a token in it is a file that will not compile.
+        // Reject unmatched placeholders before writing an invalid template.
         if stamped == template || stamped.contains("{unit") {
             Err(ScaffoldError::ProgramTemplate { token: CRATE_TOKEN })
         } else {

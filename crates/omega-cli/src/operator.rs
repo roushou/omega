@@ -1,9 +1,5 @@
-//! Talking to the daemon as its owner.
-//!
-//! The CLI is not a unit: it holds no spawn token and asks for none of a
-//! unit's powers. What it is, is the user who owns the daemon — and the
-//! daemon decides that from the connection's uid, not from anything said
-//! here.
+//! Operator requests authenticated by the daemon owner's peer UID.
+//! Operator connections do not use plugin spawn tokens.
 
 use omega_proto::omega::{
     Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value,
@@ -12,8 +8,6 @@ use omega_proto::{Client, ClientError, Socket};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
-    /// Everything that can go wrong between a peer and the daemon is the
-    /// client's to describe; the CLI only decides how to say it.
     #[error(transparent)]
     Client(#[from] ClientError),
     #[error("the daemon answered {0} with something other than {1}")]
@@ -112,11 +106,7 @@ impl Operator {
         })
     }
 
-    /// A connection held open rather than spent on one request.
-    ///
-    /// Some things the daemon does for an operator last as long as the asking
-    /// connection does — adopting a unit is one — so the connection has to be
-    /// something the caller keeps.
+    /// Open a persistent operator connection for session-scoped operations.
     pub async fn attach(&self) -> Result<Attached, OperatorError> {
         let (client, _welcome) = Client::connect(&self.socket, "", "").await?;
         Ok(Attached { client })
@@ -133,18 +123,14 @@ impl Operator {
     }
 }
 
-/// An operator connection the caller is holding on to.
-///
-/// What it authorizes ends when it does, which is the point: close the
-/// terminal and the daemon takes its units back.
+/// Persistent operator session. Closing it releases adopted plugin identities.
 #[derive(Debug)]
 pub struct Attached {
     client: Client,
 }
 
 impl Attached {
-    /// Take a unit's place, and get the token a process of our own connects
-    /// with. Valid until this connection closes.
+    /// Adopt a plugin and return its spawn token, valid until this connection closes.
     pub async fn adopt(&mut self, unit: &str) -> Result<String, OperatorError> {
         let outcome = self
             .request(invoke::Op::AdoptUnit(AdoptUnit {
@@ -160,12 +146,8 @@ impl Attached {
         }
     }
 
-    /// Answer the daemon's keepalives until it goes away.
-    ///
-    /// A held connection nobody reads is a connection the daemon closes: it
-    /// pings, hears nothing, and concludes the peer is wedged. Reading is how
-    /// the connection stays alive, so a caller holding one runs this
-    /// alongside whatever it is holding it for.
+    /// Read incoming frames and answer keepalives until disconnected.
+    /// Run concurrently with work that requires the operator session to remain open.
     pub async fn hold(&mut self) -> Result<(), OperatorError> {
         while self.client.recv().await?.is_some() {}
         Ok(())

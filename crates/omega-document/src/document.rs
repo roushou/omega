@@ -1,8 +1,4 @@
-//! Authoring a state document.
-//!
-//! The API a config's `system/` crate writes against. It exists for one
-//! reason: the typed path has to be shorter than the untyped one, or the
-//! config plane is just JSON with extra steps.
+//! Builders for the desired-state document emitted by `system/`.
 
 use omega_proto::omega::{
     Action, Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting,
@@ -14,11 +10,7 @@ use omega_proto::omega::{
 use crate::keys::Key;
 use omega_proto::{Cadence, Fields, IntoValue, Values};
 
-/// The machine's desired state, built one declaration at a time.
-///
-/// Every method takes and returns `self`, so a config reads as one
-/// expression: what the machine *is*, with no order of operations to get
-/// wrong.
+/// Desktop desired state: plugin settings, presentations, schedules, and integrations.
 #[derive(Debug, Default, Clone)]
 pub struct Document {
     inner: StateDocument,
@@ -60,24 +52,20 @@ impl Document {
         self
     }
 
-    /// Something the daemon does on its own clock. See [`Schedules`].
+    /// Add a recurring action. See [`Schedules`].
     pub fn schedule(mut self, schedule: Schedule) -> Self {
         self.inner.schedules.push(schedule);
         self
     }
 
-    /// A key that does something. See [`Keybinds`].
-    ///
-    /// Nothing converges these yet — `omega build` refuses a document that
-    /// declares one rather than staging a bind that would never fire.
+    /// Add a keybinding declaration. Core keybinding reconciliation is not supported;
+    /// `omega build` rejects these declarations. Configure bindings through a supported host.
     pub fn keybind(mut self, keybind: Keybind) -> Self {
         self.inner.keybinds.push(keybind);
         self
     }
 
-    /// Configure a unit the workspace builds. A unit that is built and not
-    /// mentioned here runs as it is; mentioning it is how you turn it off or
-    /// hand it configuration.
+    /// Configure a built plugin. Unlisted plugins run with default settings.
     pub fn unit(mut self, unit: UnitRef) -> Self {
         self.inner.units.push(unit);
         self
@@ -95,11 +83,8 @@ impl Document {
         self.inner
     }
 
-    /// Print the document to stdout, which is how `omega build` collects it.
-    ///
-    /// A `system/` crate is one entry point with no side effects: it computes
-    /// a document and says it. Anything else it writes to stdout would be
-    /// part of the document, so there is nothing else to write.
+    /// Write the document as JSON to stdout for `omega build`.
+    /// The system entry point must not write other output to stdout.
     pub fn emit(self) -> crate::Result<()> {
         use std::io::Write;
         std::io::stdout()
@@ -109,13 +94,12 @@ impl Document {
     }
 }
 
-/// Which machine this is, for a config composed per host.
+/// Host information for conditional configuration.
 #[derive(Debug)]
 pub struct Host;
 
 impl Host {
-    /// The machine's hostname, or `"unknown"` where it cannot be read. A
-    /// config branches on this rather than on a git branch.
+    /// Return the hostname, or `"unknown"` if it cannot be read.
     pub fn name() -> String {
         std::fs::read_to_string("/etc/hostname")
             .map(|name| name.trim().to_string())
@@ -172,13 +156,7 @@ impl Modules {
         Self::of(id, module::Kind::Battery(BatteryModule { show_percent }))
     }
 
-    /// A widget unit, instantiated in the bar with its own settings.
-    ///
-    /// The settings are the plugin's own type. A config workspace is one
-    /// cargo workspace, so `system/` can depend on the plugin it configures
-    /// and hand it a value the compiler has already checked — a misspelled
-    /// setting is a build error here rather than a default silently taken on
-    /// the machine.
+    /// Create a bar widget placement with typed instance settings.
     pub fn widget(
         id: impl Into<String>,
         unit: impl Into<String>,
@@ -187,13 +165,12 @@ impl Modules {
         Self::configured(id, unit, settings.write())
     }
 
-    /// The same, for a widget that takes no settings.
+    /// Create a bar widget placement without instance settings.
     pub fn plain_widget(id: impl Into<String>, unit: impl Into<String>) -> Module {
         Self::configured(id, unit, Values::new())
     }
 
-    /// The same, from values assembled by hand — for a setting whose type is
-    /// not available here.
+    /// Create a bar widget placement using raw settings values.
     pub fn configured(id: impl Into<String>, unit: impl Into<String>, settings: Values) -> Module {
         Self::of(
             id,
@@ -206,11 +183,7 @@ impl Modules {
         )
     }
 
-    /// Which of the unit's surfaces this placement draws.
-    ///
-    /// Only needed for a unit with more than one: naming a unit has always
-    /// meant its only widget surface, and a unit with several cannot be
-    /// addressed by name alone.
+    /// Set the surface ID drawn by a widget placement.
     ///
     /// ```
     /// # use omega_document::Modules;
@@ -220,12 +193,7 @@ impl Modules {
         Self::mapped(module, |widget| widget.surface = surface.into())
     }
 
-    /// A second of the unit's surfaces, drawn as a popout anchored to this
-    /// one — the shape of every panel in the bar.
-    ///
-    /// The bar draws the first; pressing it opens the second. What the popout
-    /// contains is the unit's business, and a unit that renders nothing for it
-    /// has a panel with nothing in it rather than a panel that will not open.
+    /// Attach a popup surface to a widget placement. Activating the widget opens it.
     ///
     /// ```
     /// # use omega_document::Modules;
@@ -236,9 +204,7 @@ impl Modules {
         Self::mapped(module, |widget| widget.panel = panel.into())
     }
 
-    /// Change a widget placement, leaving anything else alone: a clock has no
-    /// surfaces to name, and saying so is not an error worth failing a build
-    /// over.
+    /// Modify widget placement fields; other module kinds are unchanged.
     fn mapped(mut module: Module, change: impl FnOnce(&mut WidgetModule)) -> Module {
         if let Some(module::Kind::Widget(widget)) = module.kind.as_mut() {
             change(widget);
@@ -254,11 +220,7 @@ impl Modules {
     }
 }
 
-/// Keys that do things.
-///
-/// The key is a [`Key`] rather than a string: nobody remembers that page-up
-/// is spelled `Prior`, and a bind that names it wrong is a bind that never
-/// fires and never says so.
+/// Construct keybinding declarations using typed keyboard keys.
 ///
 /// ```
 /// # use omega_document::{Actions, Key, Keybinds};
@@ -284,7 +246,7 @@ impl Keybinds {
         }
     }
 
-    /// The same, held down: a brightness key that keeps going while it is.
+    /// Enable repeated activation while the key is held.
     pub fn repeating(keybind: Keybind) -> Keybind {
         Keybind {
             repeat: true,
@@ -293,12 +255,7 @@ impl Keybinds {
     }
 }
 
-/// Work the machine does on its own.
-///
-/// The cadence belongs here rather than in a plugin, because how often the
-/// weather is fetched is a property of the machine and the person using it —
-/// not of the code that knows how to fetch it. A plugin author who picked
-/// ten minutes would be picking it for everybody.
+/// Recurring actions and schedule events configured by the system document.
 #[derive(Debug)]
 pub struct Schedules;
 
@@ -318,9 +275,8 @@ impl Schedules {
         Schedule::new(id, cadence, action)
     }
 
-    /// Announce a cadence and leave what to do about it to whoever is
-    /// listening — a unit with a reaction registered for
-    /// [`EventKind::EventScheduleFired`], which tells schedules apart by id.
+    /// Emit [`EventKind::EventScheduleFired`] at each interval without an action.
+    /// Reactions can distinguish schedules by ID.
     ///
     /// [`EventKind::EventScheduleFired`]: omega_proto::omega::EventKind::EventScheduleFired
     pub fn announcing(id: impl Into<String>, cadence: Cadence) -> Schedule {
@@ -328,11 +284,7 @@ impl Schedules {
     }
 }
 
-/// The things a schedule or a keybind can be told to do.
-///
-/// A thin builder over `action.proto`: the actions here are the ones a
-/// document has a reason to name. The rest of the taxonomy exists for units
-/// to ask for, where the capability check that governs it lives.
+/// Actions for schedules and keybindings.
 #[derive(Debug)]
 pub struct Actions;
 
@@ -433,7 +385,7 @@ impl Actions {
         }))
     }
 
-    /// Say something.
+    /// Create a desktop notification action.
     pub fn notify(summary: impl Into<String>, body: impl Into<String>) -> Action {
         Self::of(action::Kind::Notify(Notify {
             summary: summary.into(),
@@ -515,8 +467,7 @@ impl Units {
         }
     }
 
-    /// Keep a unit on. A unit the document never mentions runs anyway; this
-    /// is how to say so out loud.
+    /// Enable a plugin explicitly. Built plugins are enabled by default.
     pub fn enabled(name: impl Into<String>) -> UnitRef {
         UnitRef {
             name: name.into(),
@@ -525,20 +476,9 @@ impl Units {
         }
     }
 
-    /// Keep a unit on, and hand it settings — its own type, checked here.
-    ///
-    /// These are the unit's settings rather than one instance's. Every
-    /// surface it offers is built out of them, which for a command or a
-    /// reaction is the only configuration there is: neither is ever placed
-    /// anywhere to be configured there.
-    ///
-    /// A widget placed in a bar is *also* configured where it is placed, and
-    /// the two layer — the placement's settings over these — so configuring a
-    /// plugin once is not repeated at every placement, and naming one key in
-    /// a placement does not reset the rest.
-    ///
-    /// They reach the unit at its handshake, because that is when its fields
-    /// are built out of them. Changing them therefore runs the unit again.
+    /// Enable a plugin with typed unit settings.
+    /// Settings apply to all its commands, reactions, and surfaces. Placement settings
+    /// override only the keys they provide. Changing unit settings restarts the plugin.
     pub fn configured(name: impl Into<String>, settings: &impl Fields) -> UnitRef {
         UnitRef {
             name: name.into(),

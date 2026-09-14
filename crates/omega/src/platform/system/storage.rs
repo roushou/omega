@@ -1,7 +1,7 @@
-//! Where the machine keeps things.
+//! Mounted filesystem capacity readings.
 
 crate::wiring::reading! {
-    /// Where it keeps things.
+    /// Mounted filesystem capacity readings.
     Disk: omega_proto::omega::DiskState
 }
 
@@ -28,18 +28,17 @@ impl Mount {
         }
     }
 
-    /// Where it is mounted: `/`, `/home`. Also its identity — a list keys
-    /// rows by this, because it survives a device being renamed.
+    /// Mount path, such as `/` or `/home`. Suitable for item keys.
     pub fn path(&self) -> &str {
         &self.path
     }
 
-    /// `/dev/nvme0n1p2`.
+    /// Source device, such as `/dev/nvme0n1p2`.
     pub fn device(&self) -> &str {
         &self.device
     }
 
-    /// `ext4`, `btrfs`. Somebody else's vocabulary, so a string.
+    /// Filesystem type reported by the system, such as `ext4` or `btrfs`.
     pub fn filesystem(&self) -> &str {
         &self.filesystem
     }
@@ -52,13 +51,12 @@ impl Mount {
         self.available
     }
 
-    /// Total less available. Prints itself as `412.7 GiB`.
+    /// Used space, computed as total minus available and saturated at zero.
     pub fn used(&self) -> Bytes {
         self.total.less(self.available)
     }
 
-    /// How full it is, or `None` for a filesystem that reported no size —
-    /// which is a pseudo-filesystem, not a full one.
+    /// Used fraction, or `None` if the reported total is zero.
     pub fn share(&self) -> Option<Percent> {
         self.used().share_of(self.total)
     }

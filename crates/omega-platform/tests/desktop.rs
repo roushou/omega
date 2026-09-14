@@ -17,7 +17,7 @@ fn a_screenshot_says_where_it_is_going() {
         Capture::command(&shot(true, "", "/tmp/shot.png", false)).unwrap(),
         "grim /tmp/shot.png"
     );
-    // grim writes to stdout when told to, which is what the clipboard wants.
+    // Clipboard capture must write to stdout.
     assert_eq!(
         Capture::command(&shot(true, "", "", true)).unwrap(),
         "grim - | wl-copy"
@@ -31,8 +31,7 @@ fn a_screenshot_says_where_it_is_going() {
 
 #[test]
 fn a_screenshot_with_nowhere_to_go_is_refused() {
-    // grim's own default is a dated file in the working directory, which for
-    // a daemon is not a place anybody will find it.
+    // File captures require an explicit destination.
     assert!(Capture::command(&shot(true, "", "", false)).is_none());
 }
 
@@ -50,8 +49,7 @@ fn neither_a_monitor_nor_the_whole_screen_means_ask() {
 
 #[test]
 fn a_path_that_would_start_a_second_command_is_refused() {
-    // These go through a shell — `grim … | wl-copy` is a pipeline — so a path
-    // carrying a semicolon or a backtick would be a command of its own.
+    // Quote paths passed through the screenshot-to-clipboard shell pipeline.
     for hostile in ["/tmp/a;rm -rf ~", "/tmp/`id`", "/tmp/a|sh", "/tmp/a$(id)"] {
         assert!(
             Capture::command(&shot(true, "", hostile, false)).is_none(),

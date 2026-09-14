@@ -1,4 +1,4 @@
-/// Declares an effect handle: what it costs, and how it is built.
+/// Declare an effect handle's capability and context construction.
 macro_rules! does {
     ($handle:ident, $capability:ident) => {
         impl $crate::wiring::Wiring for $handle {

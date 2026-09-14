@@ -1,9 +1,4 @@
-//! The peer's half of a connection.
-//!
-//! Everything that is the same whether the peer is a unit or the operator:
-//! connect, say `Hello`, read the `Welcome`, allocate stream ids that cannot
-//! collide with the daemon's, and answer keepalives. What differs — a unit's
-//! state mirror, the CLI's one-shot request — is built on top.
+//! Peer connection, handshake, odd stream-ID allocation, and keepalive handling.
 
 use std::time::Duration;
 
@@ -46,10 +41,8 @@ impl Client {
     /// How long to wait for the daemon's `Welcome`, and for an answer.
     pub const TIMEOUT: Duration = Duration::from_secs(5);
 
-    /// Connect and complete the handshake.
-    ///
-    /// The token is what makes a peer a unit; an empty one says "I am not a
-    /// unit", which the operator means literally.
+    /// Connect and complete the handshake. Plugin peers supply a spawn token;
+    /// operators use an empty token.
     pub async fn connect(
         socket: &Socket,
         manifest_hash: &str,
@@ -66,12 +59,7 @@ impl Client {
         Self::over(stream, manifest_hash, token).await
     }
 
-    /// Complete the handshake over a stream someone else opened.
-    ///
-    /// The socket path is the daemon's address, not the protocol: given a
-    /// connected stream there is nothing left to look up. A `UnixStream::pair`
-    /// is a connection with no listener and no file, which is what lets a unit
-    /// be tested against a daemon that is really a test.
+    /// Complete the handshake over an existing Unix stream, including socket pairs in tests.
     pub async fn over(
         stream: UnixStream,
         manifest_hash: &str,
@@ -131,8 +119,6 @@ impl Client {
                 return Ok(None);
             };
 
-            // A daemon checking whether this peer is still there gets its
-            // answer here rather than from every caller's loop.
             if let Some(frame::Body::Ping(Ping { nonce })) = frame.body.as_ref() {
                 let nonce = *nonce;
                 self.send(Frame {

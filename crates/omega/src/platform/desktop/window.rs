@@ -1,7 +1,7 @@
-//! What has focus.
+//! Focused window state.
 
 crate::wiring::reading! {
-    /// What has focus.
+    /// Focused window state.
     Window: omega_proto::omega::WindowState
 }
 
@@ -30,7 +30,7 @@ impl Focused {
         }
     }
 
-    /// What the application calls itself to the compositor.
+    /// Application identifier reported by the compositor.
     pub fn app_id(&self) -> &str {
         &self.app_id
     }
@@ -62,13 +62,12 @@ impl Focused {
 }
 
 impl Window {
-    /// What has focus, or `None` when nothing does — an empty workspace is
-    /// not a window with an empty title.
+    /// Return the focused window, or `None` if no window has focus.
     pub fn focused(&self) -> Option<Focused> {
         self.read()?.focused.map(Focused::of)
     }
 
-    /// The focused window's title, which is what a bar slot draws.
+    /// Focused window title, or `None` if no window has focus.
     pub fn title(&self) -> Option<String> {
         self.focused()
             .map(|window| window.title)

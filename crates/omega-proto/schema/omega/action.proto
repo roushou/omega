@@ -5,11 +5,8 @@ package omega;
 import "omega/state/power.proto";
 import "omega/value.proto";
 
-// Actions are the closed taxonomy of things a keybind, command, schedule, or
-// policy can do. Closed on purpose: "real enums, no strings". The SDK gets
-// exhaustive matching for free, and a keybind to a nonexistent action is a
-// compile error, not a runtime surprise. RunCommand is the explicit,
-// capability-gated escape hatch for everything else.
+// Closed action vocabulary. The daemon checks action-specific capabilities
+// before execution. RunCommand supports explicit shell execution.
 
 message Action {
   oneof kind {
@@ -42,7 +39,7 @@ message Action {
   }
 }
 
-// Launch by desktop-entry id ("firefox.desktop"). Typed, no shell involved.
+// Launch a desktop entry by ID without shell parsing.
 message LaunchApp {
   string desktop_id = 1;
   // Literal URIs, substituted according to the desktop entry field codes.
@@ -162,11 +159,7 @@ message InvokeUnit {
   repeated Value args = 3;
 }
 
-// Trade performance against power.
-//
-// The profile is the ontology's enum rather than the daemon's string: what
-// power-profiles-daemon calls each one is the broker's business, not a
-// caller's.
+// Select a power profile. Platform-specific profile names are mapped by the broker.
 message SetPowerProfile {
   PowerProfile profile = 1;
 }

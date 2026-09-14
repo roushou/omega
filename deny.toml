@@ -1,4 +1,4 @@
-# cargo-deny: what omega is willing to depend on.
+# Dependency policy checked by cargo-deny.
 
 [graph]
 all-features = true
@@ -8,11 +8,7 @@ all-features = true
 yanked = "deny"
 
 [licenses]
-# Exactly the licenses present in the tree. A new one is meant to be a
-# decision, not a surprise, so this list is added to deliberately rather than
-# stocked with permissive licences nothing depends on yet — an allowance
-# nothing matches is warned about, and warnings nobody acts on train people to
-# ignore the tool.
+# Allow only reviewed licenses used by current dependencies.
 allow = [
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
@@ -25,14 +21,11 @@ allow = [
 ]
 
 [bans]
-# Warn, not deny: duplicate versions are normal mid-ecosystem (hashbrown,
-# syn, windows-sys all appear twice today) and are somebody else's release
-# schedule, not a defect in this workspace.
+# Report duplicate versions without blocking transitive dependency upgrades.
 multiple-versions = "warn"
 wildcards = "deny"
 
 [sources]
-# Everything comes from crates.io. A git or private-registry dependency would
-# not be publishable, which `packaging.rs` also enforces.
+# Published packages must resolve dependencies from crates.io.
 unknown-registry = "deny"
 unknown-git = "deny"

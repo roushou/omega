@@ -3,16 +3,14 @@
 use crate::View;
 use crate::wiring::Wired;
 
-/// Something to draw.
+/// A declarative UI surface backed by read-only dependencies.
 ///
-/// `render` is called once the topics its fields declare have arrived, and
-/// again when its dependencies or model are invalidated. Required readings gate
-/// each instance independently; `Optional<R>` removes a dependency’s startup gate. Explicit absence counts as a
-/// report, and unwritten records have defaults. A requested instance awaiting its
-/// topics answers with an empty view and publishes once ready.
+/// The first render waits until each required topic has been reported. An absent
+/// reading counts as reported. Use [`Optional`] to
+/// render before a dependency is ready. Unwritten records use their defaults.
 ///
-/// The runtime suppresses identical trees per instance before sending them.
-/// Rendering holds only readings; effects are excluded by the `Reads` bound.
+/// Subsequent dependency changes trigger rendering. Identical views are not
+/// published again. Effects belong in commands, reactions, or stateful behavior.
 pub trait Surface: Wired {
     fn render(&self) -> View;
 }

@@ -20,16 +20,8 @@ pub const fn effective_version(peer: u32) -> u32 {
     }
 }
 
-/// Generated protobuf types.
-///
-/// prost-build consolidates every file sharing `package omega` into a single
-/// `omega.rs`; pbjson-build emits the matching serde impls into
-/// `omega.serde.rs`. Both are included here because they reference each
-/// other's types by bare name.
-///
-/// The serde half is behind the `json` feature and is not generated
-/// otherwise, so a unit compiles the ontology without a JSON encoding for
-/// every type.
+/// Generated protobuf types and optional protobuf JSON implementations.
+/// Both generated files share this module to resolve bare type references.
 #[allow(clippy::all)] // generated code
 pub mod omega {
     include!(concat!(env!("OUT_DIR"), "/omega.rs"));

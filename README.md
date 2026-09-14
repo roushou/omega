@@ -222,13 +222,14 @@ provide explicit visual comparisons. See [the preview guide](docs/previews.md).
 
 ## Documentation
 
-See the [architecture](docs/architecture.md) for how Omega fits together,
-[desktop platform design](docs/desktop-platform.md) and
-[completed implementation plan](docs/desktop-platform-plan.md) for architectural
-decisions and validation, [open design questions](docs/design.md) for remaining limitations, and
-[contributing guidelines](AGENTS.md) for working on Omega itself. Maintainers can
-follow the [release process](docs/releasing.md). `omega --help`
-lists the available commands.
+- [Plugin and component guide](docs/authoring.md): readings, commands, composition, and state.
+- [API reference](https://docs.rs/omega-rs): types, methods, and examples.
+- [Previews](docs/previews.md): fixtures, interaction, and visual comparisons.
+- [CLI guide](crates/omega-cli/README.md): build, inspect, and develop a config.
+
+For maintainers: [architecture](docs/architecture.md),
+[design decisions](docs/desktop-platform.md), [open questions](docs/design.md),
+[contribution rules](AGENTS.md), and [release process](docs/releasing.md).
 
 ## License
 

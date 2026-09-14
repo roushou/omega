@@ -38,12 +38,8 @@ impl Socket {
         &self.path
     }
 
-    /// Bind a listener, creating parent directories.
-    ///
-    /// A socket file left by a crashed process is cleared, but one that is
-    /// still being served is not: unlinking it would silently steal the
-    /// endpoint from a running daemon, and every unit connecting afterwards
-    /// would reach the wrong one. The difference is whether anybody answers.
+    /// Bind a Unix listener and create parent directories.
+    /// Remove stale socket files only when no running server responds.
     pub fn bind(&self) -> io::Result<BoundSocket> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;

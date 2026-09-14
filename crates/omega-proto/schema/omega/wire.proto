@@ -11,14 +11,9 @@ import "omega/instance.proto";
 import "omega/unit.proto";
 import "omega/value.proto";
 
-// One length-prefixed frame on the Unix socket. Identity is unforgeable from
-// SO_PEERCRED and never appears in a message. All traffic is multiplexed over
-// stream_id: a request and its response share one id, and a streaming response
-// sends multiple Result frames ending with done = true.
-//
-// The daemon enforces a bounded queue per unit; state patches are coalesced
-// last-value-wins, and events may be dropped under pressure according to the
-// unit's subscription. Backpressure is policy, not schema.
+// Length-prefixed frame on a multiplexed Unix connection.
+// Requests and responses share a stream ID; streaming results end with done = true.
+// Unix peer credentials participate in authentication; message fields do not grant authority.
 
 message Frame {
   uint64 stream_id = 1;
@@ -35,21 +30,15 @@ message Frame {
   }
 }
 
-// Peer -> daemon, first frame. The daemon maps SO_PEERCRED to the unit it
-// exec'd and verifies the manifest hash.
-//
-// A peer with no token is not a unit. If it runs as the daemon's own user it
-// is an operator — the person who owns the daemon, who can already signal it
-// and rewrite its state dir, and who is therefore granted lifecycle control
-// and nothing else. Any other uid is refused.
+// Initial peer handshake. Plugins authenticate with peer credentials and a
+// spawn token; the manifest hash must match the daemon's copy.
+// Tokenless peers with the daemon owner's UID use operator policy; other UIDs are refused.
 message Hello {
   uint32 protocol_version = 1;
   string manifest_hash = 2;
 
-  // The one-time token the daemon minted for this spawn and passed in the
-  // unit's environment. Identity is (SO_PEERCRED pid, token): a pid alone is
-  // recycled by the kernel and would let an unrelated process inherit a dead
-  // unit's grants.
+  // Daemon-issued spawn token supplied through the environment.
+  // Authentication checks both peer PID and token; PID reuse alone cannot transfer grants.
   string token = 3;
 }
 
@@ -62,19 +51,12 @@ message Welcome {
   repeated Capability capabilities = 4;
   StateSnapshot state = 5;
 
-  // The settings the document gave this unit.
-  //
-  // Construction, not state: a plugin's fields are built out of these, so
-  // they arrive once, at the handshake, and change only by the unit being run
-  // again. A widget placed in a bar is configured where it is placed, and
-  // those settings arrive per instance on RenderWidget — laid over these, so
-  // configuring a plugin once does not have to be repeated at every
-  // placement.
+  // Construction settings supplied once per unit session. Changes restart the unit.
+  // RenderWidget carries instance settings layered over these unit defaults.
   map<string, Value> config = 6;
 }
 
-// A request in either direction, correlated by stream_id on the Frame.
-// v1: one in-flight request per stream; pipelining comes later if needed.
+// Bidirectional request, correlated by Frame.stream_id. One request per stream.
 message Invoke {
   oneof op {
     // ---- unit -> daemon: daemon services ----
@@ -119,12 +101,8 @@ message SetState {
 message Subscribe {
   repeated string topics = 1;
   repeated EventKind events = 2;
-  // Make `topics` the whole selection rather than an addition to it.
-  //
-  // The only way an observer can narrow: its ceiling is every topic the
-  // daemon holds, so there is no list for Unsubscribe to subtract from, and
-  // naming everything unwanted would let each new topic back in as the
-  // ontology grows. Unset is the additive behaviour a unit already has.
+  // Replace the complete subscription selection when true; otherwise add topics.
+  // Selection remains within the peer's authorization ceiling.
   bool replace = 3;
 }
 
@@ -142,13 +120,8 @@ message EmitEvent {
   CustomEvent event = 1;
 }
 
-// Push a widget surface's view tree to the shell (or answer RenderWidget).
-//
-// A surface can be instantiated more than once — two clocks in one bar, with
-// different formats — so a view is addressed by the module it belongs to as
-// well as the surface it renders. Empty module_id is the surface's single
-// instance: a unit that was never told about modules keeps publishing one
-// view, as it always did.
+// Publish a view for an explicit runtime instance.
+// The instance identity must belong to the sending plugin's current session.
 message PublishView {
   string surface_id = 1;
   ViewTree view = 2;
@@ -156,24 +129,14 @@ message PublishView {
   InstanceRef instance = 4;
 }
 
-// Cycle a unit's process. Not a change of intent: the document still says
-// the unit should run, and this asks only that it stop being this instance
-// of it. Operators only — a unit does not restart its neighbours.
+// Operator request to restart a unit without changing its desired enabled state.
 message RestartUnit {
   string unit = 1;
 }
 
-// Take a unit's place while it is being worked on.
-//
-// The daemon stops supervising the unit and answers with a token the caller
-// may hand to a process of its own. That process connects as the unit and is
-// granted exactly what the unit's manifest grants — no more, because the
-// manifest is still the ceiling.
-//
-// The adoption lasts as long as the operator connection that asked for it:
-// when that closes, the unit goes back to the supervisor and the built binary
-// runs again. Operators only, and it grants them nothing new — they already
-// own the state dir the built binary is copied from.
+// Adopt a unit for development. Stop supervision and return a spawn token with
+// the unit's existing manifest grants. Closing the operator connection releases
+// adoption and allows normal supervision to resume.
 message AdoptUnit {
   string unit = 1;
 }
@@ -184,9 +147,8 @@ message CallCommand {
   repeated Value args = 2;
 }
 
-// Ask a widget surface to render for a specific bar module instance. The
-// unit answers with a Result carrying the view, and pushes later updates for
-// that module through PublishView.
+// Request an explicit surface instance's initial view and construction settings.
+// The result carries its first view; subsequent updates use PublishView.
 message RenderWidget {
   string surface_id = 1;
   reserved 2;
@@ -257,7 +219,7 @@ message Pong {
   uint64 nonce = 1;
 }
 
-// End a placed instance. The anonymous instance is independent.
+// Remove the specified runtime instance from the plugin.
 message RemoveWidget {
   string surface_id = 1;
   reserved 2;

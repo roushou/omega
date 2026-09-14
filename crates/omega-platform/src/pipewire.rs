@@ -1,14 +1,5 @@
-//! The volume, from PipeWire — through `pactl`.
-//!
-//! **Why a subprocess.** Talking to PipeWire natively means `libpipewire`
-//! headers at build time, and a `cargo install omega-cli` that fails on a
-//! machine without them is not an answer — the same reasoning that has
-//! `build.rs` bundling protoc. `pactl` ships with pipewire-pulse, speaks
-//! `--format=json`, and is PipeWire's own tool: using it is not
-//! reimplementing PipeWire, which is what this daemon promises not to do.
-//!
-//! The cost is a process per reading. A volume is read when something changed
-//! and not otherwise, so that is a handful a day.
+//! Read and control the default audio sink through pactl.
+//! A persistent subscription triggers JSON queries after sink or server changes.
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -25,8 +16,7 @@ use crate::broker::{Broker, BrokerError, opaque_debug};
 pub struct Sink {
     pub name: String,
     pub mute: bool,
-    /// One entry per channel. They move together unless somebody has
-    /// deliberately unbalanced them.
+    /// Per-channel volume values.
     pub volume: std::collections::HashMap<String, Channel>,
 }
 
@@ -36,11 +26,7 @@ pub struct Channel {
     pub value: u32,
 }
 
-/// What `pactl` said, turned into the ontology.
-///
-/// Pure, and separate from running anything: the JSON is the part a test can
-/// hold, and the conversion out of PulseAudio's scale is the part that can be
-/// wrong.
+/// Decode pactl JSON and convert PulseAudio volume units.
 #[derive(Debug)]
 pub struct Sinks;
 
@@ -54,11 +40,7 @@ impl Sinks {
         Ok(Self::of(&sinks, default))
     }
 
-    /// The default sink's reading, or silence where there is no such sink.
-    ///
-    /// A machine with no default sink reports muted at zero rather than an
-    /// absent topic: PipeWire is answering, and "nothing is playing anywhere"
-    /// is a reading.
+    /// Read the default sink. If no sink exists, report zero volume and muted state.
     pub fn of(sinks: &[Sink], default: &str) -> AudioState {
         let Some(sink) = sinks.iter().find(|sink| sink.name == default) else {
             return AudioState {
@@ -75,12 +57,7 @@ impl Sinks {
         }
     }
 
-    /// The loudest channel, as a fraction.
-    ///
-    /// The loudest rather than the average: channels move together in
-    /// practice, and where they do not, one side at full volume is a machine
-    /// that is loud. Clamped at one — PulseAudio allows amplification past
-    /// unattenuated and the ontology does not.
+    /// Return the loudest channel as a fraction, clamped to 1.0.
     fn level(sink: &Sink) -> f64 {
         sink.volume
             .values()
@@ -93,15 +70,12 @@ impl Sinks {
 /// `pactl`, and the subscription held open to it.
 struct Link {
     events: tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
-    /// Kept so the subscription is killed when this broker is dropped rather
-    /// than outliving the daemon that started it.
+    /// Dropping the broker must terminate its subscription process.
     _child: Child,
 }
 
 impl Link {
-    /// The events worth re-reading for. `pactl subscribe` reports every
-    /// stream a browser opens; a broker that woke on all of them would run a
-    /// process per notification sound.
+    /// Refresh only for sink and server changes, not individual audio streams.
     const WATCHED: &'static [&'static str] = &["on sink", "on server"];
 
     async fn open() -> Result<Self, BrokerError> {
@@ -123,7 +97,7 @@ impl Link {
         })
     }
 
-    /// Wait for an event that changes what a volume widget draws.
+    /// Wait for a default-output state change.
     async fn wait(&mut self) -> Result<(), BrokerError> {
         loop {
             match self.events.next_line().await {
@@ -176,19 +150,14 @@ pub struct PipeWire {
 }
 
 impl PipeWire {
-    /// The sink every command names: whichever is default at the time, which
-    /// is what a user means by "the volume".
+    /// Resolve the default sink at command execution time.
     const DEFAULT: &'static str = "@DEFAULT_SINK@";
 
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// The `pactl` arguments for a volume change.
-    ///
-    /// Pure, because PulseAudio's spelling of a change and Omega's are not
-    /// the same: a signed fraction becomes a percentage with a sign on the
-    /// front, and getting the sign wrong turns every volume-down key up.
+    /// Convert a volume action to literal pactl arguments.
     pub fn arguments(change: &set_volume::Change) -> Vec<String> {
         match change {
             set_volume::Change::Absolute(level) => vec![

@@ -72,9 +72,7 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
         panic!("expected a CallCommand");
     };
     assert_eq!(called.command, "toggle");
-    // Not just the count: a button binds its arguments to say which row was
-    // pressed, and an argument replaced by a default would be a list of forty
-    // networks that all connect to the same one.
+    // Forward bound arguments without replacing their values.
     assert_eq!(
         called.args,
         vec![Value {
@@ -118,8 +116,7 @@ async fn a_command_the_unit_never_declared_is_refused_before_it_is_asked() {
     operator.recv().await.unwrap().unwrap(); // Welcome
     operator.send(call(1, "lamp", "togle")).await.unwrap();
 
-    // The daemon knows the manifest, so a typo is answered here — with what
-    // the unit does declare — rather than by the unit inventing an error.
+    // Validate command names against the manifest before routing.
     let refusal = expect_refusal(next_result(&mut operator).await);
     assert_eq!(refusal.code, ErrorCode::InvalidArgument);
     assert!(refusal.message.contains("toggle"), "{refusal}");

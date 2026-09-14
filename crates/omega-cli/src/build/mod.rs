@@ -36,8 +36,7 @@ impl Build {
             self.build_once(&self.layout, self.profile, ui).await
         }
     }
-    /// Rebuild whenever the config changes, which the kernel says rather
-    /// than a timer guesses.
+    /// Rebuild on settled filesystem changes.
     async fn watch_loop(
         &self,
         layout: &Layout,
@@ -142,8 +141,7 @@ impl Build {
         Ok(())
     }
 
-    /// What the config plane said, in one line: a document is the point of
-    /// the build, and "it ran" is not the same as knowing what it declared.
+    /// Summarize the evaluated document.
     fn describe(document: &StateDocument) -> String {
         let counts = [
             (document.units.len(), "unit"),

@@ -1,17 +1,8 @@
 .pragma library
 
-// Reading a node's props. GENERATED from `omega-proto`'s node table by
-// `omega_renderer::Props` — do not edit; add the prop there and regenerate
-// with `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
-//
-// A prop is a protobuf `Value`, which in JSON is a one-key object naming the
-// kind: `{"stringValue": "80%"}`, `{"boolValue": true}`. The one that catches
-// people is `intValue` — protobuf writes 64-bit integers as *strings*, so a
-// gap of 6 arrives as "6" and using it directly lays out a NaN. That is why
-// a number and a fraction have separate readers below, and why nothing here
-// takes a prop name from its caller: a shell that could spell a name could
-// spell it wrong, and an unread prop draws an empty string rather than
-// failing.
+// GENERATED property readers from `omega-proto` by `omega_renderer::Props`.
+// Edit the source table and run `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
+// Protobuf JSON encodes int64 values as strings; numeric readers must convert them.
 
 // ---- decoding one Value ----
 
@@ -37,9 +28,7 @@ function readFlag(node, name, fallback) {
     return value && value.boolValue !== undefined ? Boolean(value.boolValue) : fallback
 }
 
-// A run of numbers: a `Value` holding a `ListValue` of doubles, which
-// protobuf JSON writes as `{"list": {"values": [{"doubleValue": 1.0}, ...]}}`.
-// An entry that is not a double is dropped rather than laid out as NaN.
+// Decode a protobuf JSON list of doubles, skipping non-double entries.
 function readFractions(node, name, fallback) {
     var value = prop(node, name)
     if (!value || !value.list || !value.list.values) return fallback
@@ -274,25 +263,15 @@ function imageSource(node) {
 
 // ---- what a node is, besides its props ----
 
-// A node's binding for an event, or null. The shape is
-// `{"command": "connect", "args": [{"stringValue": "home"}]}` — and those
-// args are already protobuf JSON `Value`s, which is exactly what an
-// `InvokeUnit` carries, so they travel back untouched.
-//
-// Not generated: an event is not a prop. `ViewNode.events` is its own map on
-// the wire, so that a shell reads behaviour from one place rather than
-// sniffing prop names for it.
+// Return the node's event binding or null. Arguments retain protobuf JSON encoding.
 function bind(node, event) {
     if (!node || !node.events) return null
     var bound = node.events[event]
     return bound && (bound.command || (bound.local && bound.local !== "0")) ? bound : null
 }
 
-// A JS value as a protobuf JSON `Value`, for a control reporting what the
-// user did. Doubles and booleans travel as themselves; `intValue` is the one
-// protobuf JSON writes as a *string*, which is why a whole number is sent as
-// a double unless a caller asks otherwise — a control's value is a reading,
-// not a count.
+// Encode a JavaScript control value as a protobuf JSON Value.
+// Numbers use doubleValue; explicit int64 values require string encoding.
 function encode(value) {
     switch (typeof value) {
         case "boolean": return { "boolValue": value }

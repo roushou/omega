@@ -2,14 +2,13 @@ syntax = "proto3";
 
 package omega;
 
-// What the compositor is showing, and what has focus.
+// Workspace, focus, and session input state.
 
 message WorkspacesState {
   repeated WorkspaceInfo workspaces = 1;
 }
 
-// One workspace, as the compositor reports it. Distinct from the desired
-// Workspace in the state document: this is reality, that is intent.
+// Observed workspace state, distinct from desired Workspace configuration.
 message WorkspaceInfo {
   int32 id = 1;
   string name = 2;              // "1", or whatever it was named
@@ -24,40 +23,31 @@ message WindowState {
   WindowInfo focused = 1;
 }
 
-// One window. Shared by the topic and by the window events, so "the focused
-// window" and "a window was focused" are one shape rather than two that can
-// drift.
+// Window metadata shared by state topics and transition events.
 message WindowInfo {
   string app_id = 1;
   string title = 2;
   string workspace = 3;         // the workspace's name
-  // Left empty by the Hyprland broker: the compositor reports a numeric
-  // monitor here and the ontology carries names, and the workspace above
-  // already says which monitor it is on.
+  // Hyprland leaves this empty. Resolve the output through the workspace reading.
   string monitor_id = 4;
   uint32 pid = 5;
   bool floating = 6;
   bool fullscreen = 7;
 }
 
-// Whether anybody is using the machine.
+// Session idle and lock state.
 message IdleState {
-  // The session manager's own hint. What counts as idle is the manager's
-  // policy, not this daemon's to second-guess.
+  // Idle hint reported by the session manager.
   bool idle = 1;
-  // Unix seconds since it went idle, or 0 while it is not. Truncated to the
-  // second, which is all the manager reports.
+  // Unix seconds when idle began, or zero if no idle timestamp is available.
   uint64 idle_since = 2;
-  // Whether the session is locked. A locked session is not necessarily idle
-  // and an idle one is not necessarily locked.
+  // Lock state, independent of idle state.
   bool locked = 3;
 }
 
-// How the machine is being typed at.
+// Main keyboard and active layout.
 message InputState {
-  // The keyboard the compositor considers the main one. A laptop has half a
-  // dozen "keyboards" — a power button, a video bus — and only one of them is
-  // the one somebody types on.
+  // Keyboard marked as main by the compositor.
   string keyboard = 1;          // the device's name
   string layout = 2;            // "us", as xkb spells it
   string keymap = 3;            // "English (US)", as a person reads it

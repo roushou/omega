@@ -20,12 +20,8 @@ pub enum LinkError {
     Toml(#[from] TomlError),
 }
 
-/// An omega checkout on this machine.
-///
-/// Only ever a local override. A config's manifest names the published
-/// crates; this is what `[patch]` points them at instead, so somebody working
-/// on omega's internals builds their desktop against their own tree without
-/// that tree's path ever reaching a committed file.
+/// A local Omega checkout used for machine-local Cargo patches.
+/// Published dependency requirements remain in the config manifest.
 #[derive(Debug, Clone)]
 pub struct SourceTree {
     crates_dir: PathBuf,
@@ -36,9 +32,8 @@ impl SourceTree {
     /// this binary was built from.
     pub const ENV: &'static str = "OMEGA_SOURCE";
 
-    /// The checkout to build against: `$OMEGA_SOURCE`, else the tree this
-    /// binary was compiled from. Never a tree cargo owns — `cargo install
-    /// --git` unpacks into `$CARGO_HOME` and may delete it afterwards.
+    /// Resolve `$OMEGA_SOURCE`, falling back to the compile-time source tree.
+    /// Reject Cargo-managed directories, which may be deleted after installation.
     pub fn detect() -> Result<Option<Self>, LinkError> {
         if let Some(named) = std::env::var_os(Self::ENV) {
             return Self::at(named).map(Some);
@@ -52,7 +47,7 @@ impl SourceTree {
         })
     }
 
-    /// Whether a path is inside cargo's own storage, and so nobody's to keep.
+    /// Whether the path is inside Cargo-managed storage.
     fn is_cargos_own(path: &Path) -> bool {
         let home = std::env::var_os("CARGO_HOME")
             .map(PathBuf::from)
@@ -70,8 +65,7 @@ impl SourceTree {
             root.join("crates")
         };
 
-        // A path that is not an omega checkout would produce a patch that
-        // cargo rejects three commands later, naming a file nobody wrote.
+        // Validate checkout contents before constructing patch paths.
         if crates_dir.join("omega").join("Cargo.toml").exists() {
             Ok(Self { crates_dir })
         } else {
@@ -87,7 +81,7 @@ impl SourceTree {
             .to_path_buf()
     }
 
-    /// Where this checkout is, as a person reads it.
+    /// Display the checkout path.
     pub fn root(&self) -> &Path {
         self.crates_dir.parent().unwrap_or(&self.crates_dir)
     }
@@ -122,8 +116,7 @@ impl SourceTree {
         Ok(patched)
     }
 
-    /// An absolute, canonical path. Fails loudly rather than emitting a
-    /// relative path that would break the moment cargo resolves it.
+    /// Resolve an absolute canonical path or return an error.
     fn crate_path(&self, crate_name: &'static str) -> Result<String, LinkError> {
         let path = self.crates_dir.join(crate_name);
         let canonical = path

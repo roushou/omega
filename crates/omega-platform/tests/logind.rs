@@ -1,9 +1,4 @@
-//! The session broker: what it claims, and what it refuses.
-//!
-//! Everything logind actually does ends the session, so there is no live test
-//! here — one that passed would have suspended the machine running it. What
-//! is testable is the part that decides: which actions this broker says it
-//! serves, and that it refuses anything routed to it by mistake.
+//! logind action routing and refusal tests. Live power actions are excluded.
 
 mod common;
 
@@ -34,9 +29,7 @@ fn it_reports_whether_anybody_is_using_the_machine() {
 
 #[tokio::test]
 async fn an_action_it_never_claimed_is_refused() {
-    // The daemon routes by claim, so this is unreachable in practice. It is
-    // still a refusal rather than a silent success: a broker that answered
-    // `Ok` to something it did not do would report a machine that rebooted.
+    // Reject actions outside the broker's declared handlers.
     let refused = Logind::new()
         .act(&action::Kind::RunCommand(RunCommand {
             command: "true".into(),

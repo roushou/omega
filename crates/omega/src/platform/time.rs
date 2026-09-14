@@ -1,37 +1,25 @@
-//! What time it is.
+//! Local date and time readings with minute resolution.
 
 crate::wiring::reading! {
-    /// The wall clock, in the machine's own zone.
+    /// Local date and time with minute resolution.
     Clock: omega_proto::omega::TimeState
 }
 
 use std::fmt;
 
-/// The wall clock, in the machine's own zone.
-///
-/// The daemon applies the zone rules, so a unit draws the time without
-/// carrying a calendar:
+/// Local date and time, updated once per minute.
+/// Second-resolution updates are not supported.
 ///
 /// ```no_run
 /// # use omega::platform::time::Clock;
 /// # use omega::ui::Text;
 /// # use omega::{View, Surface};
 /// #[derive(omega::Surface)]
-/// struct Bar {
-///     clock: Clock,
-/// }
-///
-/// impl Surface for Bar {
-///     fn render(&self) -> View {
-///         Text::new(self.clock.time()).into()
-///     }
+/// struct ClockView { clock: Clock }
+/// impl Surface for ClockView {
+///     fn render(&self) -> View { Text::new(self.clock.time()).into() }
 /// }
 /// ```
-///
-/// **Minutes, not seconds.** The topic has minute resolution, so a widget
-/// holding this is asked to draw once a minute rather than sixty times to
-/// redraw the same two digits. A seconds display needs a granularity a unit
-/// can ask for, which the manifest cannot yet carry.
 impl Clock {
     /// The hour, 0..23.
     pub fn hour(&self) -> u32 {
@@ -61,16 +49,12 @@ impl Clock {
         Weekday::of(self.read().map(|time| time.weekday).unwrap_or(0))
     }
 
-    /// What zone the daemon read it in — the abbreviation the platform knows,
-    /// like `CEST`.
+    /// Time-zone abbreviation reported by the platform, such as `CEST`.
     pub fn zone(&self) -> String {
         self.read().map(|time| time.zone).unwrap_or_default()
     }
 
-    /// Prints itself as `14:32`.
-    ///
-    /// The two ready-made forms are here because a format string would be a
-    /// parser, and a bar wants one of these:
+    /// Return a display value formatted as `HH:MM` in 24-hour time.
     ///
     /// ```
     /// # use omega::platform::time::Clock;
@@ -85,7 +69,7 @@ impl Clock {
         }
     }
 
-    /// Prints itself as `2026-09-08`.
+    /// Return a display value formatted as `YYYY-MM-DD`.
     pub fn date(&self) -> impl fmt::Display + use<> {
         YearMonthDay {
             year: self.year(),
@@ -120,7 +104,7 @@ impl fmt::Display for YearMonthDay {
     }
 }
 
-/// A day of the week, so a bar can name one without a lookup table of its own.
+/// Day of the week with English display labels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weekday {
     Sunday,
@@ -133,9 +117,7 @@ pub enum Weekday {
 }
 
 impl Weekday {
-    /// From the wire's numbering, where zero is Sunday. A number outside the
-    /// week is Sunday rather than a panic: a widget should draw a wrong day,
-    /// not take the unit down.
+    /// Decode Sunday-based weekday numbers; unknown values default to Sunday.
     fn of(day: u32) -> Self {
         match day % 7 {
             1 => Self::Monday,
@@ -148,12 +130,12 @@ impl Weekday {
         }
     }
 
-    /// `Mon`.
+    /// Three-letter English label, such as `Mon`.
     pub fn short(self) -> &'static str {
         &self.long()[..3]
     }
 
-    /// `Monday`.
+    /// Full English label, such as `Monday`.
     pub fn long(self) -> &'static str {
         match self {
             Self::Sunday => "Sunday",

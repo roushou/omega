@@ -21,11 +21,7 @@ pub struct UnitControl {
     pub cycle: tokio::sync::watch::Sender<u64>,
 }
 
-/// One unit, and every fact about it that outlives a function call.
-///
-/// One record per unit rather than a map per fact: the manifest, the token,
-/// the supervision handle, the session and the phase are all keyed by the
-/// same name and describe the same thing.
+/// One unit's manifest, identity, supervision handles, session, and lifecycle state.
 #[derive(Debug)]
 pub struct UnitRecord {
     pub name: UnitName,
@@ -43,20 +39,16 @@ pub struct UnitRecord {
     pub(crate) session: Option<SessionLink>,
     pub(crate) instances:
         std::collections::BTreeMap<omega_proto::instance::InstanceId, super::instance::Instance>,
-    /// The settings the document gave it, as the running process was told
-    /// them. Construction rather than state: a plugin's fields are built out
-    /// of these, so changing them means running the unit again.
+    /// Settings supplied to the running process at handshake. Changes require restart.
     pub config: HashMap<String, Value>,
-    /// Somebody has taken this unit's place while they work on it. The
-    /// supervisor is not running it and must not start: the built binary and
-    /// the one being written would be two processes claiming one name.
+    /// Active adoption suppresses supervised spawning.
     pub adopted: bool,
     /// Spawns after the first.
     pub restarts: u32,
 }
 
 impl UnitRecord {
-    /// What a unit somebody is developing reports as its detail.
+    /// Status detail reported by an adopted development process.
     pub const ADOPTED: &'static str = "adopted for development";
 
     pub fn new(name: UnitName) -> Self {
@@ -83,16 +75,12 @@ impl UnitRecord {
         self.control.is_some()
     }
 
-    /// Whether anything is running this unit — the supervisor, or the person
-    /// who took it over. What the reconciler asks before starting one.
+    /// Whether supervision or development adoption currently owns the unit.
     pub fn is_held(&self) -> bool {
         self.is_supervised() || self.adopted
     }
 
-    /// Whether this unit may claim to be `token` from `pid`.
-    ///
-    /// A token that has never been used binds to the first process that
-    /// presents it; after that only that process is it.
+    /// Validate token ownership. First use binds the token to the presenting pid.
     pub fn claims(&mut self, pid: i32, token: &str) -> bool {
         if self
             .token
@@ -118,11 +106,7 @@ impl UnitRecord {
         self.lifecycle.apply(transition)
     }
 
-    /// What `omega status` and the `units` topic say about it.
-    ///
-    /// An adopted unit says so: the binary answering to this name is not the
-    /// one the last build produced, and a status that did not mention it
-    /// would be describing the wrong process.
+    /// Project lifecycle and adoption state into the units topic.
     pub fn status(&self) -> UnitStatus {
         UnitStatus {
             unit: self.name.to_string(),
@@ -137,14 +121,8 @@ impl UnitRecord {
         }
     }
 
-    /// What phase to report.
-    ///
-    /// An adopted unit's lifecycle describes the supervised process, which
-    /// was stopped to make room — so reporting it would describe a process
-    /// that no longer exists while another one serves under its name. What is
-    /// running is the developer's, and the rule for it is the rule for every
-    /// unit: it is running once it has completed the handshake, and starting
-    /// until then.
+    /// Report the adopted process's handshake state while adoption is active;
+    /// otherwise report the supervised lifecycle state.
     fn phase(&self) -> UnitPhase {
         if !self.adopted {
             return self.lifecycle.phase(self.is_connected());

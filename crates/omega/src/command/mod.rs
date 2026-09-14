@@ -3,13 +3,9 @@
 use crate::wiring::Wired;
 use omega_proto::IntoValue;
 
-/// Something to be asked to do.
-///
-/// Called by `omega run`, by a keybind, by a button in this plugin's own
-/// view, or by another plugin that was granted the right to. It runs with
-/// this plugin's capabilities and nobody else's.
-/// Commands run concurrently with socket processing. Shared mutable command
-/// state must synchronize its own access; record updates already do so.
+/// A typed operation callable from UI bindings, schedules, or `omega run`.
+/// Commands use the owning plugin's capabilities and run concurrently.
+/// Synchronize shared mutable state; record updates provide their own locking.
 ///
 /// ```no_run
 /// use omega::Command;

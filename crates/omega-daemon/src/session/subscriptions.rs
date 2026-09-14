@@ -1,9 +1,5 @@
-//! What a session is willing — and allowed — to receive.
-//!
-//! The manifest is the authorization: a unit reads the topics it declared,
-//! and nothing else. `Subscribe` is the runtime *selection* within that set,
-//! so a unit can narrow what it wakes up for without ever widening what it
-//! may see. Its own keyspace needs no declaration; it owns it.
+//! Apply runtime subscription selection within the manifest's authorization ceiling.
+//! A unit may always access its own keyspace.
 
 use std::collections::HashSet;
 
@@ -18,15 +14,9 @@ pub struct Subscriptions {
     owner: Option<UnitName>,
     /// Topics the manifest declared: the ceiling, fixed at admission.
     allowed: HashSet<String>,
-    /// Topics currently wanted, or `None` for everything the ceiling allows.
-    ///
-    /// `None` is not an empty set. It is a session that has never selected —
-    /// which is how a unit that never calls `Subscribe` behaves as its
-    /// manifest reads, and the only way to say "everything" for a watcher,
-    /// whose ceiling is every topic there is and cannot be listed.
+    /// Selected topics, or `None` for the complete authorized set.
     active: Option<HashSet<String>>,
-    /// A watcher sees every topic. Only a debug client the operator admitted
-    /// on purpose is one.
+    /// Create an all-topics subscription for an authorized observer.
     watches_all: bool,
     /// Event kinds the manifest declared, and the ones currently wanted —
     /// the same ceiling-and-selection rule as topics.
@@ -67,14 +57,9 @@ impl Subscriptions {
         }
     }
 
-    /// Add to the selection. Asking for a topic the manifest did not declare
-    /// is refused: subscribing is not a way to widen a grant.
-    ///
-    /// `replace` makes the named topics the *whole* selection rather than an
-    /// addition. That is the only way a watcher can narrow — its ceiling is
-    /// every topic there is, so there is no list for `Unsubscribe` to
-    /// subtract from — and it is stable as the ontology grows, where naming
-    /// everything unwanted would quietly let each new topic back in.
+    /// Add authorized topics to the selection, or replace the selection when requested.
+    /// Topics outside the manifest ceiling are refused. Replacement also allows
+    /// an all-topics observer to narrow its subscription.
     pub fn subscribe(&mut self, topics: &[String], replace: bool) -> Result<(), Refusal> {
         for topic in topics {
             Address::parse(topic).map_err(|error| Refusal::invalid(error.to_string()))?;
@@ -96,9 +81,7 @@ impl Subscriptions {
     }
 
     pub fn unsubscribe(&mut self, topics: &[String]) {
-        // A selection standing for "everything allowed" has no list to take a
-        // topic out of. `Subscribe` with `replace` is how such a session says
-        // what it wants instead.
+        // Narrow an unrestricted subscription with Subscribe replace, not individual removals.
         let Some(active) = self.active.as_mut() else {
             return;
         };
@@ -144,14 +127,8 @@ impl Subscriptions {
         self.watches_all || self.allowed.contains(topic) || self.owns(topic)
     }
 
-    /// Whether the session wants this topic right now.
-    ///
-    /// The selection, not the ceiling — which is the whole difference between
-    /// this and [`permits`]. `watches_all` was consulted here too, so a
-    /// watcher could never narrow however it asked, and every observer of the
-    /// shell socket was sent every topic the daemon held.
-    ///
-    /// [`permits`]: Self::permits
+    /// Whether the current selection includes this topic.
+    /// [`permits`](Self::permits) separately checks the authorization ceiling.
     pub fn wants(&self, topic: &str) -> bool {
         match &self.active {
             Some(active) => active.contains(topic) || self.owns(topic),
@@ -167,10 +144,7 @@ impl Subscriptions {
         parsed.owner() == Some(owner.as_str())
     }
 
-    /// The part of a snapshot this session should see. The mirror a unit is
-    /// handed at admission is bounded by the same rule as everything after
-    /// it: a unit that declared `battery` is not handed the machine's audio
-    /// and network state for free.
+    /// Filter the initial snapshot using the same grants as subsequent updates.
     pub fn filter_snapshot(&self, snapshot: StateSnapshot) -> StateSnapshot {
         StateSnapshot {
             topics: snapshot

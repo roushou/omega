@@ -1,8 +1,4 @@
-//! What registering a surface actually stored.
-//!
-//! A registration has to survive losing its type: the runtime holds a list of
-//! them and builds whichever one an instance calls for. Each entry keeps the
-//! two things the type knew — what it declares, and how to make one.
+//! Type-erased registrations retain dependency metadata and instance constructors.
 
 use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 
@@ -15,11 +11,10 @@ use crate::ui::View;
 use crate::wiring::Wired;
 use crate::{Args, Command, Reaction, Surface};
 
-/// What every entry can do, whatever it was registered as.
+/// Dependency declaration callback shared by registration kinds.
 type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mut BTreeSet<String>);
 
-/// A registered widget: which surface it draws, and how to make one per
-/// instance of it.
+/// Surface identity and per-instance constructor.
 pub(crate) struct SurfaceEntry {
     pub(crate) surface: String,
     pub(crate) unit: Option<&'static str>,
@@ -83,8 +78,7 @@ impl SurfaceEntry {
     }
 }
 
-/// A widget with its type forgotten. Only `render` survives, which is all the
-/// runtime ever wanted from it.
+/// Type-erased surface rendering and lifecycle interface.
 pub(crate) trait MountedSurface: Send {
     fn render(&mut self) -> View;
     fn lifecycle(&mut self, _: crate::surface::Lifecycle) -> Result<(), crate::Error> {
@@ -200,7 +194,7 @@ impl<R: Reaction> FiredReaction for R {
     }
 }
 
-/// What one registered type declares, recorded before its type is forgotten.
+/// Collect dependency metadata before erasing the registered type.
 struct DeclarationOf<T>(std::marker::PhantomData<T>);
 impl<T: Wired> DeclarationOf<T> {
     fn declare(

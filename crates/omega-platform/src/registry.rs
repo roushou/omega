@@ -1,7 +1,4 @@
-//! Which brokers a daemon runs.
-//!
-//! A list, and the only place there is one. `omega-cli` wires the daemon
-//! together; which subsystems that daemon brokers is this crate's to say.
+//! Default platform broker registry.
 
 use crate::broker::Broker;
 use crate::{
@@ -9,11 +6,7 @@ use crate::{
     Notifications, PipeWire, PowerProfiles, Procfs, UPower,
 };
 
-/// The brokers a daemon runs.
-///
-/// Boxed because the daemon holds them as one collection: it routes an
-/// action to whichever broker claims the kind, and that lookup cannot be
-/// monomorphised over a list that grows at the bottom of this file.
+/// Construct the daemon's platform brokers.
 pub struct Brokers;
 
 impl Brokers {

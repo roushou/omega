@@ -36,9 +36,7 @@ impl Dependency {
         }
     }
 
-    /// `{ package = "...", version = "..." }` — a registry crate the manifest
-    /// calls by a different name, which is how a config writes `omega` for a
-    /// crate published as `omega-rs`.
+    /// Registry dependency with a local alias, such as omega for package omega-rs.
     pub fn renamed(
         package: impl Into<String>,
         version: impl Into<String>,
@@ -61,8 +59,7 @@ impl Dependency {
         })
     }
 
-    /// `{ git = "...", tag = "..." }` — a dependency that resolves on any
-    /// machine, which a path into somebody's checkout does not.
+    /// Construct a Git dependency pinned to a tag.
     pub fn git(url: impl Into<String>, tag: impl Into<String>, features: &[&str]) -> Self {
         Self::Detailed(DependencyDetail {
             git: Some(url.into()),
@@ -193,9 +190,7 @@ impl DependencySpec {
         self
     }
 
-    /// The `{ workspace = true }` entry a member crate uses to inherit this
-    /// dependency. Derived, so a member's list can never drift from the
-    /// workspace's.
+    /// Construct a workspace-inherited dependency entry.
     pub fn inherited(&self) -> (&'static str, Dependency) {
         (self.name, Dependency::inherited())
     }

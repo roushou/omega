@@ -1,13 +1,4 @@
-//! Narrowing the generic data model.
-//!
-//! `Value` is the escape hatch the ontology leaves open — a unit's own
-//! keyspace, a widget's props, an instance's settings. It is a oneof, and
-//! matching one at a call site is how a typo becomes a silent default.
-//!
-//! This is the narrowing the schema asks for: a map with typed accessors, and
-//! [`Fields`] for the structs that *are* such a map. Two sides need it and
-//! neither is the daemon — a plugin reads its settings, the config plane
-//! writes them — so it lives here, with the type they are both made of.
+//! Typed access and conversion for protocol values, settings, and records.
 
 use std::collections::HashMap;
 
@@ -48,13 +39,7 @@ impl Values {
         self
     }
 
-    /// These values laid over `base`: everything both scopes said, with this
-    /// one winning key by key.
-    ///
-    /// A widget instance's settings over its unit's, so configuring a plugin
-    /// once is not repeated at every placement — and naming one key in a
-    /// placement does not silently reset the rest to their defaults, which is
-    /// what replacing rather than layering would do.
+    /// Merge over `base`, overriding matching keys and preserving all others.
     pub fn over(mut self, base: &Values) -> Self {
         for (name, value) in &base.entries {
             self.entries
@@ -126,15 +111,8 @@ scalar!(u64, IntValue, |number: u64| number as i64, |held: &i64| {
     u64::try_from(*held).ok()
 });
 
-/// A list of anything that is itself a value.
-///
-/// Without this a unit can hold a scalar in its keyspace and nothing else,
-/// which closes the escape hatch composition rests on: a workspace unit could
-/// not publish its workspaces, and a media unit could not publish a queue.
-///
-/// All or nothing on the way back. A list with one element the reader cannot
-/// make sense of is a list it does not understand, and quietly dropping the
-/// element would hand back a shorter list that looks complete.
+/// Encode or decode lists of values.
+/// Decoding fails for the entire list if any element cannot be decoded.
 impl<T: IntoValue> IntoValue for Vec<T> {
     fn into_value(self) -> Value {
         Value {
@@ -166,26 +144,14 @@ impl IntoValue for Value {
     }
 }
 
-/// A struct that is a map of values.
-///
-/// Derived at both ends of every boundary a map crosses: a plugin's settings
-/// are written by the config plane and read by the plugin, and a plugin's own
-/// state is written by it and read by anyone it lets. Deriving both directions
-/// from the same fields is what keeps the two ends spelling things the same
-/// way.
-///
-/// Reading is total: a field the map does not carry takes its default, so
-/// adding a field never breaks a writer that predates it.
+/// Bidirectional conversion between a struct and a values map.
+/// Derived settings/record readers use defaults for missing fields.
 pub trait Fields: Sized {
     fn read(values: &Values) -> Self;
     fn write(&self) -> Values;
 }
 
-/// A map is already its own fields.
-///
-/// For settings whose shape is not a type — a document configuring a unit
-/// whose settings type it cannot name, and every test that would otherwise
-/// write a `Fields` impl to say two keys.
+/// Use a values map directly as raw settings or record fields.
 impl Fields for Values {
     fn read(values: &Values) -> Self {
         values.clone()
@@ -196,7 +162,7 @@ impl Fields for Values {
     }
 }
 
-/// A type that is a whole map, for a value that has no fields to speak of.
+/// Conversion for types represented directly as a generic value map.
 impl Fields for () {
     fn read(_values: &Values) -> Self {}
 

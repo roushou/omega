@@ -1,4 +1,4 @@
-//! What the machine is doing about power.
+//! Combined battery and external power status.
 
 use omega_proto::SystemTopic;
 use omega_proto::omega::Capability;
@@ -8,29 +8,23 @@ use crate::units::{Percent, Remaining};
 use crate::wiring::{Reads, Wiring};
 use omega_proto::omega::{BatteryState, MainsState};
 
-/// The machine's power situation, in one word.
-///
-/// An enum rather than a string because these are states and not
-/// sentences: a widget may want to colour them, and a shell may want to
-/// translate them.
+/// Power source and battery charging status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// The charge is going up.
+    /// The battery is charging.
     Charging,
-    /// On the wall, and there is nothing left to put in.
+    /// External power is connected, the battery is not charging, and charge is at least 99%.
     FullyCharged,
-    /// On the wall, and not charging — which is not the same as full: a
-    /// machine can be held at 80% on purpose.
+    /// External power is connected; the battery is not charging or full.
     OnMains,
-    /// Running down.
+    /// The system is using battery power.
     OnBattery,
     /// Available readings do not establish the power source.
     Unknown,
 }
 
 impl Status {
-    /// What a bar would write. Separate from the enum so a unit can branch on
-    /// the state and still get the wording for free.
+    /// Return the default display label.
     pub fn label(self) -> &'static str {
         match self {
             Self::Charging => "Charging",
@@ -41,17 +35,14 @@ impl Status {
         }
     }
 
-    /// Whether this is a state somebody should do something about.
+    /// Whether the system is using battery power.
     pub fn is_draining(self) -> bool {
         self == Self::OnBattery
     }
 }
 
-/// The battery and the socket, read together.
-///
-/// Hold this instead of both when the question spans them. Holding `Battery`
-/// alone is still right for a widget that only draws a charge: this declares
-/// two topics and so wakes on either.
+/// Combined battery and external power readings.
+/// Subscribes to both topics and updates when either changes.
 #[derive(Debug)]
 pub struct Power {
     context: Context,
@@ -71,19 +62,15 @@ impl Wiring for Power {
 impl Reads for Power {}
 
 impl Power {
-    /// At what charge a battery on the wall counts as full.
-    ///
-    /// Not 100: a machine that stops charging at 99 to spare the cell would
-    /// otherwise read as "on mains" forever, which is true and unhelpful.
+    /// Treat a non-charging battery at 99% or higher as fully charged.
     const FULL: u8 = 99;
 
-    /// Whether this machine has a battery at all. False on a desktop, and
-    /// false while the broker that reports it is down.
+    /// Whether a battery reading is available.
     pub fn has_battery(&self) -> bool {
         self.context.read().get::<BatteryState>().is_some()
     }
 
-    /// Whether the cable is in.
+    /// Whether external power is connected.
     pub fn on_mains(&self) -> bool {
         self.context
             .read()
@@ -98,9 +85,7 @@ impl Power {
             .is_some_and(|battery| battery.charging)
     }
 
-    /// The charge, or `None` on a machine with no battery — which is not a
-    /// charge of nought, and a widget that drew it as one would colour a
-    /// desktop as flat.
+    /// Battery charge, or `None` when no battery reading is available.
     pub fn charge(&self) -> Option<Percent> {
         self.context
             .read()
@@ -108,7 +93,7 @@ impl Power {
             .map(|battery| Percent::of(battery.level))
     }
 
-    /// How long is left, whichever direction it is going.
+    /// Estimated time until full or empty, according to charging state.
     pub fn remaining(&self) -> Option<Remaining> {
         let state = self.context.read();
         let battery = state.get::<BatteryState>()?;

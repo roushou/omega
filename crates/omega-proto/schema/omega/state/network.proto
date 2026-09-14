@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package omega;
 
-// What the machine is connected through.
+// Network connection and interface state.
 
 message NetworkState {
   bool connected = 1;
@@ -20,11 +20,7 @@ enum NetworkType {
   NETWORK_TYPE_VPN = 4;
 }
 
-// What the machine could connect to, as the last scan found it.
-//
-// A topic of its own rather than a field on NetworkState: forty access points
-// whose signal jitters would bump the network revision every few seconds and
-// wake every indicator that only ever wanted the SSID.
+// Wi-Fi scan results and activation status, separate from primary connection state.
 message WifiState {
   repeated AccessPoint access_points = 1;
   WifiPhase phase = 2;
@@ -40,9 +36,7 @@ enum WifiPhase {
   WIFI_PHASE_FAILED = 4;
 }
 
-// One network on the air. Deduplicated by SSID — a single network is often
-// several radios, and a picker showing each of them is showing the hardware
-// rather than the choice.
+// Visible network, deduplicated by SSID.
 message AccessPoint {
   string ssid = 1;
   uint32 signal_percent = 2;
@@ -50,18 +44,8 @@ message AccessPoint {
   bool active = 4;              // the one the machine is on
 }
 
-// The Bluetooth adapter and the devices that belong to this machine.
-// How much is moving over each interface, per second.
-//
-// Its own topic rather than fields on NetworkState, for the reason topics are
-// granular at all: an SSID changes when somebody joins a network and a rate
-// changes on every sample, so a widget drawing the network's name should not
-// be woken twice a second by bytes it is not showing.
-//
-// Rates rather than counters. A counter is meaningless alone — it is the
-// change between two samples — and every widget that wanted a rate would
-// otherwise keep its own history and do its own subtraction, each with its
-// own idea of what to do when an interface disappears.
+// Per-interface transfer rates and counters.
+// Brokers derive rates from successive samples and handle counter resets.
 message ThroughputState {
   repeated Link links = 1;
 }
@@ -70,21 +54,19 @@ message Link {
   string interface = 1;         // "wlan0", "lo"
   uint64 rx_bytes_per_sec = 2;
   uint64 tx_bytes_per_sec = 3;
-  // Since boot, for anything that wants a total rather than a rate.
+  // Cumulative counters since interface initialization or reset.
   uint64 rx_bytes_total = 4;
   uint64 tx_bytes_total = 5;
 }
 
 message BluetoothState {
-  // Whether the machine has an adapter at all. A desktop without one reports
-  // false rather than an absent topic: BlueZ answering is a reading.
+  // Whether at least one Bluetooth adapter exists. A reachable service with
+  // no adapter reports false; service absence is an absent topic.
   bool available = 1;
   bool powered = 2;
   bool discovering = 3;
 
-  // Paired or connected — the machine's own devices, not everything on the
-  // air. Listing a scan would need discovery turned on, which is an action
-  // the ontology does not have.
+  // Paired or connected devices only. Discovery and pairing are not supported.
   repeated BluetoothDevice devices = 4;
 }
 
@@ -102,11 +84,7 @@ message BluetoothDevice {
 
 }
 
-// The tunnels the machine is running through.
-//
-// A topic of its own rather than another arm of NetworkType: a machine is on
-// Wi-Fi *and* a VPN, and an enum can only say one of those. More than one
-// tunnel at a time is unusual but not wrong, so this is the list.
+// Active tunnels, independent of the underlying network connection.
 message VpnState {
   repeated Tunnel tunnels = 1;
 }

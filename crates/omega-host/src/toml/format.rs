@@ -1,12 +1,7 @@
 use toml_edit::{DocumentMut, Item, Table, Value};
 
-/// Gives a serialized document the shape its schema declares.
-///
-/// `toml_edit`'s serializer emits every nested map as an inline table, which
-/// is unreadable for a document of any size. This promotes them to standard
-/// `[section]` tables — except the entry tables a schema declares inline,
-/// where `omega = { workspace = true }` is the shape everyone writes by
-/// hand and every tool emits.
+/// Apply schema-defined table formatting after serialization.
+/// Promote nested maps to sections except entries declared inline by the schema.
 pub(super) struct Formatter<'a> {
     inline_entries: &'a [&'static str],
 }

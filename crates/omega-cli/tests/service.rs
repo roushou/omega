@@ -1,11 +1,4 @@
-//! The service that makes the daemon part of a session.
-//!
-//! The unit file cannot be carried in the binary the way the renderer is: it
-//! names the binary's own path. So what these check is the consequence — that
-//! an installed service is readable back, and that a service running a
-//! *different* omega is told apart from one running this one, because on a
-//! machine with two of them that is the difference between a desktop that
-//! came back after a reboot and one that only looks like it did.
+//! Generated service paths, session binding, and executable mismatch detection.
 
 use std::path::{Path, PathBuf};
 
@@ -31,17 +24,13 @@ fn omega() -> PathBuf {
 fn a_service_runs_the_omega_that_installed_it() {
     let unit = Service::unit(&omega());
 
-    // The whole reason the unit file is generated rather than carried: it has
-    // to name a binary, and which binary is the question a person installing
-    // a service is answering.
+    // Generated service files must reference the installing executable.
     assert!(
         unit.contains("ExecStart=/usr/local/bin/omega daemon"),
         "{unit}"
     );
 
-    // It belongs to the session on both sides: the daemon binds sockets in
-    // $XDG_RUNTIME_DIR and draws through a shell that has one, so a daemon
-    // outliving the session has nothing left to serve.
+    // The service lifetime must match the user session.
     assert!(unit.contains("PartOf=graphical-session.target"), "{unit}");
     assert!(unit.contains("WantedBy=graphical-session.target"), "{unit}");
 }
@@ -50,9 +39,7 @@ fn a_service_runs_the_omega_that_installed_it() {
 fn systemd_outwaits_the_daemons_own_shutdown() {
     let unit = Service::unit(&omega());
 
-    // The daemon gives each unit five seconds to stop. A `TimeoutStopSec`
-    // under that is systemd killing the daemon in the middle of stopping
-    // them, every time, and it would look like a crash on shutdown.
+    // The service stop timeout must exceed plugin shutdown grace.
     let timeout: u64 = unit
         .lines()
         .find_map(|line| line.trim().strip_prefix("TimeoutStopSec="))
@@ -81,8 +68,7 @@ fn a_service_running_another_omega_says_which() {
     let path = unit_path("other");
     Service::install(&path, Path::new("/home/someone/.cargo/bin/omega")).unwrap();
 
-    // The failure that looks like every other failure: the service came back
-    // after the reboot, and came back as somebody else.
+    // Detect a service installed from a different executable.
     assert_eq!(
         Service::installed(&path, &omega()),
         Installed::Stale {
@@ -125,8 +111,7 @@ fn uninstall_takes_away_what_was_installed() {
 
 #[test]
 fn a_binary_in_a_build_directory_is_not_somewhere_to_point_a_service() {
-    // A service is a promise to run this again after a reboot, and cargo's
-    // build directory is not a promise anybody made.
+    // Service installation requires a durable executable outside Cargo build output.
     let target = std::env::temp_dir().join("omega-service-buildish/target");
     std::fs::create_dir_all(target.join("release")).unwrap();
     std::fs::write(target.join("CACHEDIR.TAG"), "Signature: 8a477f597d28d172").unwrap();

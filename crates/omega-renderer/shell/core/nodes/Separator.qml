@@ -1,11 +1,7 @@
 import QtQuick
 
-// A line between things: a rule in a column, a divider in a row.
-//
-// The axis comes from the stack, not from this item's geometry. Measuring
-// itself was circular — nought pixels thick along the way it lies means the
-// width it read to decide was the width it had not been given, which drew
-// every separator in a panel as a single pixel.
+// Draw a separator perpendicular to the parent stack axis.
+// Derive orientation from the parent, not this item's size, to avoid circular sizing.
 Rectangle {
     required property var host
 

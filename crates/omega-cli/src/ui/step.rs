@@ -2,12 +2,7 @@
 
 use anstyle::{AnsiColor, Effects, Style};
 
-/// One reported step, closed so that adding a verb is a decision made here
-/// rather than a string typed at a call site.
-///
-/// The labels are cargo's grammar on purpose: `omega build` runs cargo with
-/// inherited streams, so `Compiling` and `Built` scroll past in the same
-/// column of the same terminal. Two vocabularies would read as two programs.
+/// Closed set of CLI progress labels, aligned with Cargo output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     /// Accepted intent, before a host has necessarily made it visible.
@@ -87,9 +82,7 @@ impl Step {
         }
     }
 
-    /// Green finished it, cyan is doing it, red and yellow are the two ways
-    /// it went wrong. `Next` is deliberately uncoloured: the command it
-    /// points at carries the accent, and one accent per line is the rule.
+    /// Assign status colors; Next leaves the accent to the suggested command.
     pub fn style(self) -> Style {
         let color = match self {
             Self::Created

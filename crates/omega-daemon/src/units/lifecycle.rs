@@ -19,7 +19,7 @@ pub enum Lifecycle {
     Restarting { exit: i32, detail: String },
     /// It could not be spawned at all.
     Failed { detail: String },
-    /// It was stopped on purpose, and will not come back on its own.
+    /// Explicitly stopped; automatic restart is disabled.
     Stopped,
 }
 
@@ -63,9 +63,7 @@ impl Lifecycle {
         match self {
             Self::Idle => UnitPhase::Unspecified,
             Self::Starting => UnitPhase::Starting,
-            // Spawning a process is not the same as having a unit: until it
-            // completes the handshake the daemon has not vouched for it, and
-            // saying "running" would be claiming more than it knows.
+            // Report starting until the process completes its handshake.
             Self::Running if connected => UnitPhase::Running,
             Self::Running => UnitPhase::Starting,
             Self::Restarting { .. } => UnitPhase::Restarting,
@@ -108,9 +106,7 @@ impl Lifecycle {
                 *self = Self::Running;
                 moved
             }
-            // Anything else is a peer the supervisor is not running: its
-            // session is admitted on its own terms, and its lifecycle is not
-            // this daemon's to invent.
+            // Unsupervised peers do not acquire a supervised lifecycle.
             _ => false,
         }
     }

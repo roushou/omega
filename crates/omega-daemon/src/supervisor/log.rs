@@ -1,9 +1,4 @@
-//! Where a unit's output goes.
-//!
-//! A unit's stdout and stderr are handed straight to a file, so a panic
-//! survives the restart that follows it. Without this, the one message that
-//! explains a crash loop is interleaved into the daemon's own stderr and gone
-//! by the time anyone looks.
+//! Capture plugin stdout and stderr in persistent per-plugin log files.
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -16,9 +11,7 @@ pub struct UnitLog {
 }
 
 impl UnitLog {
-    /// How large a unit's log may grow before a restart starts it over. A
-    /// crash-looping unit writes the same message forever; it should not fill
-    /// the disk with it.
+    /// Maximum retained log size before truncation at process restart.
     pub const MAX_BYTES: u64 = 1024 * 1024;
 
     pub fn at(path: impl Into<PathBuf>) -> Self {

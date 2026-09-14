@@ -1,21 +1,11 @@
-//! TOML, spoken through declared schemas.
+//! Typed TOML document access.
 //!
-//! Four types, address to bytes:
-//!  - [`TomlSchema`]: a document kind — its name, and where instances live.
-//!    Implemented once per document; [`Layout::file`](crate::Layout::file)
-//!    turns a schema plus a key into a [`TomlFile`].
-//!  - [`TomlFile<S>`]: a typed address. Cheap and I/O-free until asked to
-//!    read, write, or edit. Writes are atomic.
-//!  - [`TomlDoc<S>`]: a loaded document that remembers where it came from,
-//!    for when a value has to outlive the call that loaded it. `TomlFile`
-//!    covers a read, a write, or a read-modify-write; `TomlDoc` covers
-//!    everything that happens across several steps before one save.
-//!  - [`Toml`]: the codec, and the only place `toml`/`toml_edit` are named.
+//! - [`TomlSchema`] declares document names, paths, and formatting.
+//! - [`TomlFile`] provides atomic read/write/edit operations at a typed path.
+//! - [`TomlDoc`] retains a loaded value for edits spanning multiple steps.
+//! - [`Toml`] encodes and decodes schema values.
 //!
-//! [`Toml::encode`] is the canonical form: the bytes written to disk and the
-//! bytes hashed by a manifest come from it, so a hash cannot disagree with
-//! the file it names. It writes through `toml_edit`, so a schema can declare
-//! the shape it wants — see [`TomlSchema::INLINE_ENTRIES`].
+//! [`Toml::encode`] applies [`TomlSchema::INLINE_ENTRIES`] for deterministic output.
 
 mod doc;
 mod error;

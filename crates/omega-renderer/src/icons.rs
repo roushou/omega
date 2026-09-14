@@ -1,11 +1,4 @@
-//! Generating the shell's icon set.
-//!
-//! The same bargain [`Props`] makes, for the same reason: the names a unit
-//! can ask for lived in three places — a rustdoc list, a hand-written
-//! `Icons.js`, and a test that scraped one to compare against the other.
-//! [`Glyph`] is the vocabulary now, and this emits the file from it.
-//!
-//! [`Props`]: crate::Props
+//! Generate the renderer's icon lookup from [`Glyph`].
 
 use std::fmt::Write as _;
 
@@ -19,7 +12,7 @@ impl Icons {
     /// Where the generated file belongs in the shell tree.
     pub const FILE: &'static str = "Icons.js";
 
-    /// The whole file.
+    /// Generate the complete JavaScript file.
     pub fn generate() -> String {
         let mut out = String::new();
         out.push_str(Self::PREAMBLE);
@@ -39,25 +32,9 @@ impl Icons {
 
     const PREAMBLE: &'static str = r#".pragma library
 
-// Icon names, and the glyphs a bar draws them as. GENERATED from
-// `omega-proto`'s icon table by `omega_renderer::Icons` — do not edit; add
-// the glyph there and regenerate with
-// `OMEGA_REGENERATE=1 cargo test -p omega-renderer`.
-//
-// Omarchy's shell draws icons as characters, not images: the bar's font is
-// the fontconfig alias `omarchy font set` writes, which resolves to a Nerd
-// Font. So an icon is a lookup from a name a unit can write to a codepoint
-// that font carries.
-//
-// These are the Font Awesome block (U+F000..U+F2FF), which is the oldest and
-// most widely present part of every Nerd Font patch — a glyph from here draws
-// under JetBrainsMono, CaskaydiaCove, Hack and the rest alike. Written as
-// escapes so this file stays ASCII and survives any encoding it is copied
-// through.
-//
-// A name that is not here is drawn as itself by `ViewNode.qml`, so a unit
-// asking for an icon this shell has never heard of shows a legible word
-// rather than a blank space or a replacement box.
+// GENERATED icon lookup from `omega-proto` by `omega_renderer::Icons`.
+// Edit the source table and run `OMEGA_REGENERATE=1 cargo test -p omega-omarchy --test renderer`.
+// Glyphs use the Nerd Font Font Awesome range; unknown names display as text.
 
 var GLYPHS = {"#;
 

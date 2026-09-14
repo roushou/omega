@@ -4,7 +4,7 @@ package omega;
 
 import "omega/event.proto";
 
-// Unit ontology: what a unit asks for, and the enums that grant it.
+// Plugin manifests, endpoint kinds, and capabilities.
 
 enum Capability {
   CAPABILITY_UNSPECIFIED = 0;
@@ -22,7 +22,7 @@ enum Capability {
   CAPABILITY_BLUETOOTH = 12;
 }
 
-// The kinds of surface a unit can expose ("one unit type, many surfaces").
+// Supported UI surface kinds.
 enum SurfaceKind {
   SURFACE_KIND_UNSPECIFIED = 0;
   SURFACE_KIND_WIDGET = 1;
@@ -30,19 +30,10 @@ enum SurfaceKind {
   reserved "SURFACE_KIND_COMMAND";
 }
 
-// What a unit asks for, and therefore what the daemon grants it.
-//
-// Not a file anyone writes: a manifest is what a plugin's own fields add up
-// to. The plugin prints it, the build stages it beside the binary, and the
-// daemon reads it back — so the grants a unit runs under are decided before
-// it is ever spawned, and never by the unit itself at runtime.
-//
-// It is also the thing a peer proves itself against at the handshake: Hello
-// carries the sha256 of this message's canonical encoding, and the daemon
-// recomputes that from its own copy. Canonical means every repeated field
-// sorted and deduplicated, then encoded in tag order — so two builds of the
-// same plugin, in any language, agree on the hash without agreeing on a
-// serializer.
+// Build-time plugin declarations and handshake identity.
+// The plugin emits its manifest; the daemon loads the staged copy before spawning.
+// Hello carries SHA-256 over canonical bytes: repeated fields sorted and
+// deduplicated, then protobuf-encoded in tag order.
 message Manifest {
   string name = 1;
   string version = 2;
@@ -50,15 +41,13 @@ message Manifest {
   repeated Surface surfaces = 4;
   repeated CommandEndpoint commands = 7;
 
-  // Topic addresses: a system topic by name, or `unit.<name>.<key>` for
-  // another unit's keyspace. A string rather than an enum because the second
-  // kind is open — see Address.
+  // Validated system-topic or plugin-record addresses.
   repeated string state_topics = 5;
 
   repeated EventKind events = 6;
 }
 
-// One face a unit exposes, and what kind of face it is.
+// One declared UI surface.
 message Surface {
   string id = 1;
   SurfaceKind kind = 2;

@@ -3,11 +3,7 @@ use std::collections::btree_map::{IntoIter, Iter};
 
 use serde::{Deserialize, Serialize};
 
-/// A TOML table of named entries — the generic `name -> value` shape under
-/// any schema-specific map, such as Cargo's `[dependencies]`.
-///
-/// Alphabetical order keeps generated files byte-identical regardless of
-/// insertion order, which is what makes a manifest hash meaningful.
+/// Named TOML entries sorted by key for deterministic serialization.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Table<V>(BTreeMap<String, V>);

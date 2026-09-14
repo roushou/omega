@@ -22,22 +22,16 @@ macro_rules! reading {
         impl $crate::wiring::Reads for $handle {}
 
         impl $handle {
-            /// Whether there is a reading right now.
-            ///
-            /// False on a machine that has no such device, and false while a
-            /// broker that reports it is down — a widget branches on having a
-            /// reading, not on why it has none. Required readings gate the
-            /// first render until a topic is reported, including explicit absence.
-            /// `Optional<R>` removes that gate and distinguishes pending state.
+            /// Whether a current reading is available. Returns `false` before the first
+            /// reading, after reported absence, or while the service is unavailable.
+            /// Required topics delay the first render until reported;
+            /// [`Optional`](crate::surface::Optional) allows rendering before that report.
             pub fn has_reading(&self) -> bool {
                 self.read().is_some()
             }
 
-            /// The whole reading, as the daemon published it.
-            ///
-            /// The floor under every handle. A topic with typed accessors has
-            /// better ways to be asked — `charge()` gives a `Percent` where
-            /// this gives the wire's `f64`.
+            /// Return the raw protocol reading, or `None` if unavailable.
+            /// Prefer the typed accessors for unit conversions and status interpretation.
             pub fn get(&self) -> Option<$value> {
                 self.read()
             }

@@ -19,9 +19,7 @@ fn every_action_states_what_it_costs() {
 
 #[test]
 fn every_action_is_named_once() {
-    // The table generates the enum, so `ALL` cannot miss a kind. Two rows
-    // sharing a name is the one collision it cannot catch, and a duplicate
-    // would make one of them unreachable to anything that reports by name.
+    // Action names must be unique for reverse lookup.
     let names: HashSet<&str> = ActionKind::ALL.iter().map(|kind| kind.name()).collect();
     assert_eq!(names.len(), ActionKind::ALL.len());
 }

@@ -1,4 +1,4 @@
-//! `omega clean`: remove what a build can make again.
+//! Remove build caches and unreferenced generations.
 
 use std::path::Path;
 
@@ -64,9 +64,7 @@ impl CleanCmd {
         Ok(())
     }
 
-    /// Measure before removing, because afterwards there is nothing to ask.
-    /// `None` when there was nothing there — not an error, since the point of
-    /// the command is that the directory should not exist.
+    /// Return the removed directory's previous size, or `None` if absent.
     fn remove(path: &Path) -> anyhow::Result<Option<u64>> {
         if !path.exists() {
             return Ok(None);
@@ -76,8 +74,7 @@ impl CleanCmd {
         Ok(Some(bytes))
     }
 
-    /// Bytes under a directory. Symlinks are measured, never followed: a
-    /// linked plugin's tree is somebody else's disk.
+    /// Measure directory contents without following symlinks.
     fn size(path: &Path) -> u64 {
         let Ok(entries) = std::fs::read_dir(path) else {
             return 0;

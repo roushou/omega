@@ -1,10 +1,8 @@
-//! Write a plugin.
+//! Build desktop surfaces, commands, and automations.
 //!
-//! A plugin is a program the daemon runs. It declares what it needs by
-//! holding it — a `Battery` field is a view onto the battery topic and the
-//! permission to read it — and offers what it does by registering it. There
-//! is no manifest to keep in step with the code, because the manifest *is*
-//! the code: `omega build` compiles a plugin and asks it what it declares.
+//! Declare state and control dependencies as struct fields. Derives collect their
+//! subscriptions and capabilities into the plugin manifest. Register surfaces,
+//! commands, and reactions with [`Plugin`].
 //!
 //! ```no_run
 //! use omega::platform::power::Battery;
@@ -68,28 +66,23 @@ pub use plugin::Plugin;
 pub use reaction::Reaction;
 pub use surface::{StatefulSurface, Surface};
 
-/// What `Surface::render` hands back. Part of the surface's contract, so it
-/// lives beside the trait rather than with the nodes it is built from.
+/// Declarative UI content returned by surfaces and components.
 pub use ui::{Ui, View};
 
-/// What a reaction is called with.
+/// State-transition events delivered to reactions.
 pub use omega_proto::omega::{Event, EventKind};
 
-/// The units a reading is in. At the root because they cross every
-/// boundary — a handle hands one back, a node draws one, a setting is
-/// compared against one.
+/// Measurement types with display formatting and unit conversions.
 pub use units::{Bytes, Percent, Rate, Remaining, Temperature, Uptime};
 
 pub use omega_derive::{Command, Config, Effects, Form, Input, Reaction, Surface, UnitState};
 
-/// Settings: the values a document hands an instance, and what
-/// `#[derive(Config)]` implements to read them.
+/// Construction settings and typed field serialization. Derive `Config` to read settings.
 pub mod config {
     pub use omega_proto::{Fields, FromValue, IntoValue, Values};
 }
 
-/// Internals the derives expand into. Not a stable surface: write
-/// `#[derive(Surface)]`, not this.
+/// Macro implementation support. Not a stable public API.
 #[doc(hidden)]
 pub mod internal {
     pub use crate::Command;

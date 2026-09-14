@@ -1,14 +1,6 @@
-//! Watching for changes, rather than asking whether anything changed.
-//!
-//! Polling a config tree means walking every file on a timer to learn what
-//! the kernel already knew. This is the kernel telling us instead — and the
-//! difference shows up as a rebuild that starts when you save the file.
-//!
-//! Two things make a naive watch wrong here. A build writes many files, so
-//! events are settled before they are reported: one save, one rebuild. And
-//! `omega build` replaces whole directories by renaming them into place,
-//! which destroys any watch on the directory itself — so a caller watches the
-//! parent too, and the watch survives what it is watching for.
+//! Settled filesystem change notifications.
+//! Ignore read events and build-output directories to prevent rebuild loops.
+//! Watch parent directories when targets can be replaced by atomic rename.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -44,9 +36,7 @@ impl std::fmt::Debug for Changes {
 }
 
 impl Changes {
-    /// Directories a config tree contains but does not consist of. A build
-    /// writing into `target/` is not a change to the config, and treating it
-    /// as one is how a watcher ends up rebuilding forever.
+    /// Ignore build outputs and metadata that must not trigger config rebuilds.
     pub const IGNORED: &'static [&'static str] = &["target", ".git", ".jj", "node_modules"];
 
     /// How long to wait for changes to stop arriving before reporting them.
@@ -62,8 +52,7 @@ impl Changes {
         recursive: RecursiveMode,
         settle: Duration,
     ) -> Result<Self, WatchError> {
-        // One slot: a full channel already means "something changed", which
-        // is the whole message.
+        // Coalesce pending notifications into one wakeup.
         let (changed, events) = mpsc::channel(1);
 
         let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
@@ -114,11 +103,7 @@ impl Changes {
         }
     }
 
-    /// Whether an event changed anything.
-    ///
-    /// Reading a file is an event too, and a rebuild reads the whole config —
-    /// so treating opens as changes makes a watcher rebuild because it built,
-    /// forever. Only what alters the tree counts.
+    /// Accept only events that mutate the filesystem; reads must not trigger rebuilds.
     fn is_change(kind: &EventKind) -> bool {
         match kind {
             EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_) => true,
@@ -136,5 +121,5 @@ impl Changes {
     }
 }
 
-/// Re-exported so callers say what they mean without depending on `notify`.
+/// Watch recursion mode for callers.
 pub use notify::RecursiveMode as Recursion;

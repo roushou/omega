@@ -2,9 +2,7 @@
 
 macro_rules! modifiers {
     ($visibility:vis, $output:ty) => {
-            /// A colour, by the part it plays. See [`Role`].
-            ///
-            /// [`Role`]: crate::ui::Role
+            /// Set a semantic theme color. See [`Role`](crate::ui::Role).
             $visibility fn color(self, role: $crate::ui::Role) -> $output {
                 self.map_node(|node| node.color(role))
             }
@@ -13,7 +11,7 @@ macro_rules! modifiers {
                 self.map_node(|node| node.bold())
             }
 
-            /// Draw it quieter than its neighbours.
+            /// Use muted foreground styling.
             $visibility fn muted(self) -> $output {
                 self.map_node(|node| node.emphasis($crate::ui::Emphasis::Muted))
             }
@@ -26,7 +24,7 @@ macro_rules! modifiers {
             $visibility fn primary(self) -> $output {
                 self.emphasis($crate::ui::Emphasis::Primary)
             }
-            /// A supporting action or reading.
+            /// Apply secondary emphasis.
             $visibility fn secondary(self) -> $output {
                 self.emphasis($crate::ui::Emphasis::Secondary)
             }
@@ -38,30 +36,26 @@ macro_rules! modifiers {
             $visibility fn warning(self) -> $output {
                 self.tone($crate::ui::Tone::Warning)
             }
-            /// Something failed.
+            /// Apply error feedback styling.
             $visibility fn error(self) -> $output {
                 self.tone($crate::ui::Tone::Error)
             }
-            /// Something succeeded.
+            /// Apply success feedback styling.
             $visibility fn success(self) -> $output {
                 self.tone($crate::ui::Tone::Success)
             }
 
-            /// Space around it, in the shell's units.
+            /// Set padding in logical pixels.
             $visibility fn padding(self, pad: u32) -> $output {
                 self.map_node(|node| node.padding(pad))
             }
 
-            /// Text to show when someone hovers it.
+            /// Set hover tooltip text.
             $visibility fn tooltip(self, tooltip: impl Into<String>) -> $output {
                 self.map_node(|node| node.tooltip(tooltip))
             }
 
-            /// Draw it, but do not let it be used.
-            ///
-            /// A control the unit cannot serve right now — a Wi-Fi row while
-            /// something else is connecting. Removing it instead would make
-            /// the list jump under the cursor.
+            /// Disable interaction while keeping the node visible.
             $visibility fn disabled(self) -> $output {
                 self.disabled_if(true)
             }
@@ -77,18 +71,12 @@ macro_rules! modifiers {
                 self.map_node(|node| node.flag("disabled", disabled))
             }
 
-            /// Something is happening to it.
-            ///
-            /// Also not usable, but for a different reason, and a shell may
-            /// say so differently — a spinner rather than a grey. The unit
-            /// knows which of the two it means; both would be `disabled` and
-            /// only one is waiting on an answer.
+            /// Mark the node as busy and disable interaction.
             $visibility fn busy(self) -> $output {
                 self.map_node(|node| node.flag("busy", true))
             }
 
-            /// How wide it is, in the shell's units. Unset, it is as wide as
-            /// what it draws.
+            /// Set an explicit width in logical pixels. Defaults to content width.
             $visibility fn width(self, width: u32) -> $output {
                 self.map_node(|node| node.number("width", width))
             }
@@ -97,29 +85,18 @@ macro_rules! modifiers {
                 self.map_node(|node| node.number("height", height))
             }
 
-            /// As wide as the room it is in, rather than as wide as what
-            /// it draws: in a row the width its neighbours left over, in a
-            /// column the column's own width.
-            ///
-            /// A node that asked for a [`width`] has one, and this does
-            /// nothing. For the nodes that do not span already — a [`Stack`]
-            /// in a column and a [`Separator`] do — so it marks a control or
-            /// a reading, or a stack in a row taking the slack.
-            ///
-            /// [`Stack`]: crate::ui::Stack
-            /// [`Separator`]: crate::ui::Separator
-            /// [`width`]: Self::width
+            /// Fill the available width. In a row, use the remaining horizontal space;
+            /// in a column, use the column width. An explicit [`width`](Self::width)
+            /// takes precedence.
             $visibility fn fill_width(self) -> $output {
                 self.map_node(|node| node.flag("fill", true))
             }
 
-            /// Name it, for a list whose items move.
+            /// Assign a stable identity to this node.
             ///
-            /// Positional keys are right until two renders disagree about
-            /// what is at a position. Then the identity belongs to the item,
-            /// and the shell keeps the node it already built for that key
-            /// rather than rebuilding it — which is what stops a slider
-            /// losing the drag in progress when its neighbours reorder.
+            /// Use keys for children that can be reordered, inserted, or removed to preserve
+            /// focus and in-progress edits across renders. Keys must be unique within the view
+            /// and stable across renders. Component boundaries scope their internal keys.
             $visibility fn key(self, key: impl Into<String>) -> $output {
                 self.map_node(|node| node.key(key))
             }

@@ -1,15 +1,9 @@
-//! State a plugin owns.
+//! Typed records shared through the daemon.
 //!
-//! The daemon replicates more than the machine's own topics: every plugin has
-//! a keyspace of its own, `unit.<name>.<key>`, which it writes and subscribing
-//! plugins may read. Typed consumers depend on the crate defining the record;
-//! the daemon mediates publication and observation.
-//!
-//! The topic's address comes from the type. A state type is defined in the
-//! crate that owns it, so `#[derive(UnitState)]` reads the unit's name from
-//! that crate and the key from the type — and a reader writes
-//! `Watch<lamp::Power>` rather than a string that a rename would quietly
-//! break.
+//! Use [`Own`] to update records in commands or behavior and [`Watch`] to read
+//! them in surfaces. `derive(UnitState)` uses the defining package as the owner
+//! and derives a key from the type name. Records survive plugin restarts while
+//! the daemon remains running; they are not persisted across daemon restarts.
 //!
 //! ```no_run
 //! # use omega::record::{Own, Watch};
@@ -29,10 +23,8 @@
 
 use omega_proto::{Address, Fields};
 
-/// A value that lives in a plugin's keyspace.
-///
-/// Derived. The unit is the crate that defines the type, and the key is the
-/// type's own name, so neither is a string anybody types.
+/// A record stored in a plugin keyspace.
+/// Derive `UnitState` to use the defining package name and the type-derived key.
 pub trait UnitState: Fields + Send + Sync + 'static {
     /// The plugin whose keyspace this is.
     const UNIT: &'static str;

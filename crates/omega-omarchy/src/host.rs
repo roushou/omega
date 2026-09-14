@@ -3,11 +3,7 @@
 use std::path::PathBuf;
 use std::process::Output;
 
-/// The shell that draws plugins on this machine.
-///
-/// A type rather than a path, because installing is more than copying: each
-/// shell has its own plugin directory, its own way of being told to look
-/// again, and its own words for putting a widget on screen.
+/// Omarchy host discovery, plugin paths, and installation commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostShell {
     /// Omarchy's Quickshell process, which hosts the bar.
@@ -44,11 +40,7 @@ impl HostShell {
         }
     }
 
-    /// Tell the shell to look again.
-    ///
-    /// Belt to the shell's own braces: it reloads when a file under its
-    /// plugin directory changes, so a shell that was not watching — or was
-    /// not running — is not a failed install, and this is allowed to fail.
+    /// Request a shell plugin rescan. Installation remains valid if the shell is unavailable.
     pub fn rescan(self) -> std::io::Result<Output> {
         match self {
             Self::Omarchy => std::process::Command::new("omarchy-shell")
@@ -57,9 +49,7 @@ impl HostShell {
         }
     }
 
-    /// Put the widget on screen. Only ever on request: `omega shell install`
-    /// prints the command instead, because rearranging somebody's bar unasked
-    /// is how a command stops being trusted. `omega init` is the exception.
+    /// Enable the widget in the host layout when explicitly requested.
     pub fn enable(self, id: &str) -> std::io::Result<Output> {
         match self {
             Self::Omarchy => std::process::Command::new("omarchy")
@@ -68,19 +58,14 @@ impl HostShell {
         }
     }
 
-    /// How a person puts the widget on screen, which omega does not do for
-    /// them: where a widget sits in the bar is their layout, not ours.
+    /// Return the command for enabling the widget in the host layout.
     pub fn enable_command(self, id: &str) -> String {
         match self {
             Self::Omarchy => format!("omarchy plugin enable {id} --section right"),
         }
     }
 
-    /// How a person makes the shell pick up changed plugin code.
-    ///
-    /// For a linked install, which the shell finds but does not watch: a
-    /// rescan re-reads manifests, and the widget already on screen keeps
-    /// running the code it was built with until the shell restarts.
+    /// Return the shell reload command for applying linked renderer edits.
     pub fn reload_command(self) -> &'static str {
         match self {
             Self::Omarchy => "omarchy restart shell",

@@ -64,16 +64,10 @@ fn called() -> BTreeSet<String> {
     names
 }
 
-/// Accessors that exist for the wire rather than for the vocabulary, so no
-/// prop declares them and nothing generates them.
+/// Wire-format helpers outside the node-property vocabulary.
 const HAND_WRITTEN: &[&str] = &["bind", "encode", "children", "prop"];
 
-/// Props declared in the vocabulary that no shell draws yet.
-///
-/// A hole is a line here, with a reason, or the test fails — the same bargain
-/// `omega-platform`' coverage test makes. An entry is not permission to leave
-/// it: a unit calling `.tooltip(…)` today is publishing a string on every
-/// render that nothing will ever show.
+/// Declared properties not consumed by the renderer. Each entry requires a reason.
 const NOT_DRAWN: &[&str] = &[];
 
 #[test]
@@ -100,9 +94,7 @@ fn the_checked_in_readers_are_what_the_table_generates() {
 
 #[test]
 fn every_accessor_a_shell_calls_is_one_that_exists() {
-    // The failure this replaces: a shell asking for a prop by a name nothing
-    // publishes read `undefined`, took the fallback, and drew an empty
-    // string. Now it is a name no generated function answers to.
+    // Every property accessor used by QML must exist in generated readers.
     let defined: BTreeSet<String> = Props::accessors()
         .into_iter()
         .chain(HAND_WRITTEN.iter().map(|name| name.to_string()))

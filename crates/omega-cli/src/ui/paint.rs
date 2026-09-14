@@ -5,11 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anstyle::{AnsiColor, Effects, Style};
 
-/// How the pieces of a message are dressed.
-///
-/// One accent per line: the thing the reader has to act on is bright, the
-/// context around it recedes. A path is not news — it is where the news
-/// happened — so paths are dim and never the brightest thing on their line.
+/// Shared CLI text styles. Use a single accent per line and dim contextual paths.
 #[derive(Debug)]
 pub struct Paint;
 
@@ -29,13 +25,12 @@ impl Paint {
         )
     }
 
-    /// A path, shortened against `$HOME`. `/home/you/.config/omega` is four
-    /// times as wide as `~/.config/omega` and says the same thing.
+    /// Format a path relative to `$HOME` where possible.
     pub fn path(path: impl AsRef<Path>) -> String {
         Self::dim(Self::abbreviate(path.as_ref()).display())
     }
 
-    /// Context: true, worth having on the line, not what the line is about.
+    /// Dim supporting context.
     pub fn dim(text: impl Display) -> String {
         Self::wrap(Style::new().effects(Effects::DIMMED), text)
     }
@@ -57,8 +52,7 @@ impl Paint {
         }
     }
 
-    /// `1 unit`, `3 units`, `2 capabilities`: a count nobody has to read as
-    /// `unit(s)`.
+    /// Format a count with the appropriate singular or plural noun.
     pub fn count(amount: usize, noun: &str) -> String {
         match amount {
             1 => format!("1 {noun}"),
@@ -66,8 +60,7 @@ impl Paint {
         }
     }
 
-    /// `1.0 GB`, `894 MB`, `12 kB`: what a directory was costing, in the
-    /// units a disk is sold in.
+    /// Format bytes in decimal units for disk usage.
     pub fn size(bytes: u64) -> String {
         const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
         let mut size = bytes as f64;
@@ -104,11 +97,7 @@ impl Paint {
     }
 }
 
-/// The marks used in lists, in the two alphabets a terminal might have.
-///
-/// Chosen by the same signal as colour: a stream that is not a terminal is
-/// being read by something, and something reading `✓` is being made to work
-/// for it.
+/// Unicode or ASCII status marks selected for the output stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Glyphs {
     Unicode,
@@ -116,7 +105,7 @@ pub enum Glyphs {
 }
 
 impl Glyphs {
-    /// What this terminal can be trusted with.
+    /// Select marks appropriate for terminal output.
     pub fn detect() -> Self {
         let dumb = std::env::var("TERM").is_ok_and(|term| term == "dumb");
         if dumb { Self::Ascii } else { Self::Unicode }

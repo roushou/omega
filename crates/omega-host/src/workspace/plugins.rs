@@ -1,8 +1,4 @@
-//! Runnable plugins declared by the config workspace.
-//!
-//! The workspace manifest is the source of truth: its `members` globs name
-//! the unit crates under `plugins/`. Plugins are derived from it, so there is no
-//! separate registry that can drift out of sync with the crates.
+//! Discover runnable plugins from config workspace members and globs.
 
 use crate::TomlError;
 use crate::workspace::cargo::{CargoManifest, CargoSlot};

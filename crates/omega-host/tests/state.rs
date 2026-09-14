@@ -1,10 +1,4 @@
-//! `units.toml`: what a build produced, written by one program and read by
-//! another.
-//!
-//! These exercise the TOML machinery too — reading, writing, editing, the
-//! long-lived document — but through the document that actually crosses the
-//! boundary, so the assertions are about a file both programs depend on
-//! rather than about a fixture.
+//! Built-unit index serialization and typed TOML edit tests.
 
 use std::path::{Path, PathBuf};
 
