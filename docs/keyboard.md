@@ -50,17 +50,21 @@ belongs to the host root; `Field::autofocus()` can place it in an editor.
 Navigation references are UI concepts, separate from shortcut matching:
 
 ```rust
-use omega::ui::{Column, Field, List, ListTarget};
-const RESULTS: ListTarget = ListTarget::new("results");
+use omega::ui::{Column, Field, List};
 
 Column::new()
-    .child(Field::new("Search").navigate(RESULTS))
-    .child(List::new().target(RESULTS))
+    .child(Field::new("Search").navigate("results"))
+    .child(List::new().id("results"))
 ```
 
-The field and list must share a parent scope. Components qualify their node
-identities, and each instance has its own navigation registry. A target names a
-list; it does not prove that the list is present in every conditional render.
+IDs are unique within a component instance. Layout containers share that scope,
+so the field and list can have different parents. Nested components keep internal
+IDs private and expose their root ID to the parent. IDs address controls;
+`.key()` independently preserves reconciliation identity.
+
+The completed view rejects empty or duplicate IDs, missing references, and
+navigation targets that are not lists. `View::try_into_tree()` exposes validation
+errors for tests and tooling; the runtime validates before publishing.
 Navigation waits for controlled edits to settle before activating a result.
 
 ## Boundaries

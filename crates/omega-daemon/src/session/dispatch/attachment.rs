@@ -146,6 +146,17 @@ impl Attachment {
                 "renderer does not support this presentation",
             ));
         }
+        if !self.features.contains(&RendererFeature::ResolvedNavigation) {
+            let mut nodes: Vec<_> = view.view.root.iter().collect();
+            while let Some(node) = nodes.pop() {
+                if !node.navigation_target.is_empty() {
+                    return Err(Refusal::unimplemented(
+                        "renderer does not support resolved navigation",
+                    ));
+                }
+                nodes.extend(&node.children);
+            }
+        }
         if !self.features.contains(&RendererFeature::KeyboardShortcuts) {
             let mut nodes: Vec<_> = view.view.root.iter().collect();
             while let Some(node) = nodes.pop() {
@@ -288,6 +299,12 @@ mod tests {
         });
         assert!(attachment.validate(&view).is_err());
         attachment.features.push(RendererFeature::KeyboardShortcuts);
+        assert!(attachment.validate(&view).is_ok());
+        view.view.root.as_mut().unwrap().children[0].navigation_target = "results".into();
+        assert!(attachment.validate(&view).is_err());
+        attachment
+            .features
+            .push(RendererFeature::ResolvedNavigation);
         assert!(attachment.validate(&view).is_ok());
     }
 }

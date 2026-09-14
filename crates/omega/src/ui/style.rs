@@ -101,6 +101,16 @@ macro_rules! modifiers {
                 self.map_node(|node| node.flag("fill", true))
             }
 
+            /// Address this node for references such as [`Field::navigate`](crate::ui::Field::navigate).
+            ///
+            /// IDs must be nonempty and unique within a component instance. Layouts
+            /// share their enclosing scope. A component's root ID is visible to its
+            /// parent; its descendants are private to that component.
+            /// IDs do not affect reconciliation; use `key` for moving children.
+            $visibility fn id(self, id: impl Into<String>) -> $output {
+                self.map_node(|node| node.id(id))
+            }
+
             /// Assign a stable identity to this node.
             ///
             /// Use keys for children that can be reordered, inserted, or removed to preserve

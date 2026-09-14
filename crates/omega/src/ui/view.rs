@@ -26,14 +26,28 @@ impl View {
     }
 
     /// Finalize keys and encode the complete widget. The daemon assigns revisions.
+    ///
+    /// # Panics
+    /// Panics if component IDs or navigation references are invalid.
+    /// Use [`Self::try_into_tree`] to handle validation errors.
     pub fn into_tree(self) -> ViewTree {
-        ViewTree {
-            root: self.root.map(|mut root| {
+        self.try_into_tree().expect("invalid view")
+    }
+
+    /// Validate component-scoped IDs and encode a complete view.
+    ///
+    /// Returns an error for empty or duplicate IDs, missing references, or
+    /// navigation references to controls other than lists.
+    pub fn try_into_tree(self) -> Result<ViewTree, super::ViewError> {
+        let root = self
+            .root
+            .map(|mut root| {
                 root.assign_keys();
-                root.into_wire()
-            }),
-            revision: 0,
-        }
+                super::navigation::References::resolve(&mut root)?;
+                Ok(root.into_wire())
+            })
+            .transpose()?;
+        Ok(ViewTree { root, revision: 0 })
     }
 
     pub(super) fn map_node(mut self, apply: impl FnOnce(Node) -> Node) -> Self {

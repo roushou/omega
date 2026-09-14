@@ -10,12 +10,15 @@ use crate::ui::bind::Bind;
 /// [`Text`](crate::ui::Text), [`Row`](crate::ui::Row), or [`Icon`](crate::ui::Icon).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
-    kind: &'static str,
+    pub(super) kind: &'static str,
     pub(super) scope: bool,
-    key: Option<String>,
+    pub(super) key: Option<String>,
+    pub(super) id: Option<String>,
+    pub(super) navigation: Option<String>,
+    pub(super) navigation_target: String,
     props: HashMap<String, Value>,
     events: HashMap<String, WireBind>,
-    children: Vec<Node>,
+    pub(super) children: Vec<Node>,
     shortcuts: Vec<omega_proto::omega::Shortcut>,
 }
 
@@ -25,6 +28,9 @@ impl Node {
             kind,
             scope: false,
             key: None,
+            id: None,
+            navigation: None,
+            navigation_target: String::new(),
             props: HashMap::new(),
             events: HashMap::new(),
             children: Vec::new(),
@@ -36,6 +42,12 @@ impl Node {
     /// Keys must be unique within the view and stable across renders.
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
+        self
+    }
+
+    /// Address this node within its component's ID scope.
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
         self
     }
 
@@ -189,6 +201,7 @@ impl Node {
             props: self.props,
             events: self.events,
             shortcuts: self.shortcuts,
+            navigation_target: self.navigation_target,
             children: self.children.into_iter().map(Self::into_wire).collect(),
         }
     }

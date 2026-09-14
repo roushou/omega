@@ -159,8 +159,8 @@ local while pending edits coalesce; delayed values cannot overwrite a newer draf
 Programmatic resets do not emit user edits, and composition defers both edits and
 incoming resets until the input method commits.
 
-`Field::autofocus()` requests initial focus. `Field::navigate(RESULTS)` with a shared `ListTarget` delegates
-Up/Down and Enter to a sibling `List::target(RESULTS)` without transferring text focus. Navigation is
+`Field::autofocus()` requests initial focus. `Field::navigate("results")` delegates
+Up/Down and Enter to `List::new().id("results")` in the same component scope without transferring text focus. Navigation is
 qualified by component and instance scope. `List::selected` / `on_select` support
 model-owned stable selection; disabled entries are skipped during navigation.
 
@@ -200,3 +200,7 @@ shortcut registration are not supported. See [keyboard APIs](../../../docs/keybo
 `tests/KeyboardCases.js` is generated from the Rust matcher by
 `OMEGA_REGENERATE=1 cargo test -p omega-renderer --test keyboard`; QML tests check
 adapter identities and matching against that corpus.
+
+Resolved navigation uses exact node keys in `ViewNode.navigation_target` and
+requires `RENDERER_FEATURE_RESOLVED_NAVIGATION`. The SDK validates ID references
+before publication; legacy navigation properties retain their relative lookup.

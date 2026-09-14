@@ -26,7 +26,8 @@ Item {
     property int resetRevision: 0
     property bool queuedEdit: false
     readonly property var navigation: host.session && host.session.navigation ? host.session.navigation : null
-    readonly property string navigationTarget: Props.fieldNavigation(host.model)
+    readonly property bool navigationResolved: !!(host.model && host.model.navigationTarget)
+    readonly property string navigationTarget: navigationResolved ? host.model.navigationTarget : Props.fieldNavigation(host.model)
     readonly property string registeredKey: host.model && host.model.key ? host.model.key : ""
     readonly property bool navigationReady: !composing && !queuedEdit && !host.pending && (!controlled || (Props.fieldEdit_revision(host.model) >= editRevision && Props.fieldReset_revision(host.model) === resetRevision))
     Component.onDestruction: if (navigation) navigation.forgetSource(registeredKey, field)
@@ -125,10 +126,10 @@ Item {
             onTextEdited: field.edited()
             Accessible.role: Accessible.EditableText
             Accessible.name: fieldLabel.text
-            Keys.onUpPressed: event => { if (!field.composing && field.host.session && field.host.session.navigation && Props.fieldNavigation(field.host.model)) field.host.session.navigation.move(field.host.model.key, Props.fieldNavigation(field.host.model), -1); else event.accepted = false }
-            Keys.onDownPressed: event => { if (!field.composing && field.host.session && field.host.session.navigation && Props.fieldNavigation(field.host.model)) field.host.session.navigation.move(field.host.model.key, Props.fieldNavigation(field.host.model), 1); else event.accepted = false }
+            Keys.onUpPressed: event => { if (!field.composing && field.host.session && field.host.session.navigation && field.navigationTarget) field.host.session.navigation.move(field.host.model.key, field.navigationTarget, -1); else event.accepted = false }
+            Keys.onDownPressed: event => { if (!field.composing && field.host.session && field.host.session.navigation && field.navigationTarget) field.host.session.navigation.move(field.host.model.key, field.navigationTarget, 1); else event.accepted = false }
             onAccepted: {
-                if (field.host.session && field.host.session.navigation && Props.fieldNavigation(field.host.model)) { if (!field.navigationReady) return; field.host.session.navigation.activate(field.host.model.key, Props.fieldNavigation(field.host.model)); return }
+                if (field.host.session && field.host.session.navigation && field.navigationTarget) { if (!field.navigationReady) return; field.host.session.navigation.activate(field.host.model.key, field.navigationTarget); return }
                 if (input.readOnly) return
                 if (field.host.form) { field.host.form.submit(); return }
                 if (field.bound === null) return

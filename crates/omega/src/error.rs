@@ -8,6 +8,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
+    View(#[from] crate::ui::ViewError),
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("effect failed: {0}")]
     Effect(#[from] crate::effect::EffectError),
@@ -68,7 +70,7 @@ impl Error {
             Self::Daemon(_) | Self::Transport(_) | Self::Io(_) => {
                 Refusal::unavailable(self.to_string())
             }
-            Self::Name(..) => Refusal::invalid(self.to_string()),
+            Self::View(_) | Self::Name(..) => Refusal::invalid(self.to_string()),
             Self::VersionMismatch { .. } | Self::Runtime(_) | Self::Describe(_) => {
                 Refusal::precondition(self.to_string())
             }

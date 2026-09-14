@@ -965,5 +965,6 @@ nodes. No keyboard event transport or additional surface lifecycle is introduced
 QML routes unconsumed keys from the focused control through ancestor view nodes.
 The selected binding uses the existing instance/revision interaction checks.
 A shared generated conformance corpus verifies Rust and QML matching. Typed
-`ListTarget` references reuse the component-scoped navigation registry.
+Component-scoped `.id()` references resolve to exact node keys before publication.
+Duplicate IDs, missing references, and non-list navigation targets fail view validation.
 See [keyboard APIs and boundaries](keyboard.md).

@@ -47,7 +47,7 @@ pub use content::{Metric, Section};
 pub use control::{Button, Choice, ChoiceValue, Field, Form, FormInput, List, Slider, Toggle};
 pub use display::{Graph, Image, Progress};
 pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
-pub use navigation::ListTarget;
+pub use navigation::ViewError;
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};
 

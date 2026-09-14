@@ -78,4 +78,28 @@ TestCase {
         view.model = model("a",1,0,2)
         tryVerify(function() { return field.navigationReady })
     }
+    function test_resolved_navigation_crosses_layouts_and_tracks_updated_destination() {
+        var input = model("", 0, 0, 1)
+        input.key = "search/editor"
+        input.navigationTarget = "results/items"
+        var tree = {type:"stack", key:"root", children:[
+            {type:"stack", key:"search", children:[input]},
+            {type:"stack", key:"results", children:[
+                {type:"list", key:"results/items", props:{}, events:{activate:{local:"2"}},
+                 children:[{type:"text",key:"first",props:{text:{stringValue:"First"}}}]}
+            ]}
+        ]}
+        var view = createTemporaryObject(factory, test, {model:tree})
+        var field = findChild(view, "query")
+        tryVerify(function() { return findChild(field, "editor").activeFocus })
+        compare(navigationState.resolve("search/editor", field.navigationTarget),
+                navigationState.controls["results/items"])
+        keyClick(Qt.Key_Down)
+        keyClick(Qt.Key_Return)
+        tryCompare(test, "calls", [{value:"first",event:"activate"}])
+        input.navigationTarget = "removed"
+        view.model = JSON.parse(JSON.stringify(tree))
+        compare(navigationState.resolve("search/editor", field.navigationTarget), null)
+    }
+
 }

@@ -38,19 +38,21 @@ impl Instance {
         })
     }
 
-    pub(super) fn view(&mut self, context: &Context) -> Option<ViewTree> {
+    pub(super) fn view(&mut self, context: &Context) -> Result<Option<ViewTree>, crate::Error> {
         if !context.holds(&self.topics) {
-            return None;
+            return Ok(None);
         }
         if self.dirty {
-            self.cached = Some(self.widget.render().into_tree());
+            self.cached = Some(self.widget.render().try_into_tree()?);
             self.dirty = false;
         }
-        self.cached.clone()
+        Ok(self.cached.clone())
     }
-    pub(super) fn changed(&mut self, context: &Context) -> Option<ViewTree> {
-        let view = self.view(context)?;
-        (self.sent.as_ref() != Some(&view)).then_some(view)
+    pub(super) fn changed(&mut self, context: &Context) -> Result<Option<ViewTree>, crate::Error> {
+        let Some(view) = self.view(context)? else {
+            return Ok(None);
+        };
+        Ok((self.sent.as_ref() != Some(&view)).then_some(view))
     }
     pub(super) fn invalidate(&mut self, patch: &omega_proto::omega::StatePatch) {
         if patch

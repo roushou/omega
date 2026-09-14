@@ -1,40 +1,110 @@
-/// A list navigation target, resolved within the current component instance.
-/// Attach it to a list with [`List::target`](crate::ui::List::target) and pass
-/// the same value to [`Field::navigate`](crate::ui::Field::navigate).
-/// The field and list must be siblings in the same component scope.
-///
-/// ```
-/// use omega::ui::{Column, Field, List, ListTarget};
-/// const RESULTS: ListTarget = ListTarget::new("results");
-/// let view = Column::new()
-///     .child(Field::new("query").navigate(RESULTS))
-///     .child(List::new().target(RESULTS));
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ListTarget(&'static str);
-impl ListTarget {
-    /// Declare a nonempty ASCII identifier using letters, digits, `_` and `-`.
-    /// Panics for invalid identifiers; const declarations fail during compilation.
-    pub const fn new(name: &'static str) -> Self {
-        assert!(!name.is_empty(), "list target must not be empty");
-        let bytes = name.as_bytes();
-        let mut index = 0;
-        while index < bytes.len() {
-            let b = bytes[index];
-            assert!(
-                b.is_ascii_alphanumeric() || b == b'_' || b == b'-',
-                "invalid list target"
-            );
-            index += 1;
-        }
-        Self(name)
-    }
-    pub const fn as_str(self) -> &'static str {
-        self.0
-    }
+//! Component-scoped node references.
+
+use std::collections::HashMap;
+
+use super::Node;
+
+/// Invalid IDs or references in a completed view.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ViewError {
+    #[error("node {node:?} has an empty ID")]
+    EmptyId { node: String },
+    #[error("duplicate ID {id:?} on nodes {first:?} and {second:?} in the same component scope")]
+    DuplicateId {
+        id: String,
+        first: String,
+        second: String,
+    },
+    #[error("node {node:?} references missing ID {id:?} in its component scope")]
+    MissingId { node: String, id: String },
+    #[error("node {node:?} navigates to ID {id:?}, which is {kind}, not a list")]
+    InvalidNavigation {
+        node: String,
+        id: String,
+        kind: String,
+    },
 }
-impl std::fmt::Display for ListTarget {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0)
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct Id(String);
+
+struct Destination {
+    key: String,
+    kind: &'static str,
+}
+
+#[derive(Default)]
+pub(super) struct References {
+    scopes: Vec<HashMap<Id, Destination>>,
+}
+
+impl References {
+    pub(super) fn resolve(root: &mut Node) -> Result<(), ViewError> {
+        let mut references = Self {
+            scopes: vec![HashMap::new()],
+        };
+        references.collect(root, 0)?;
+        references.bind(root, 0, &mut 0)
+    }
+
+    fn collect(&mut self, node: &Node, parent: usize) -> Result<(), ViewError> {
+        if let Some(id) = &node.id {
+            let key = node.key.clone().unwrap();
+            if id.is_empty() {
+                return Err(ViewError::EmptyId { node: key });
+            }
+            let destination = Destination {
+                key: key.clone(),
+                kind: node.kind,
+            };
+            if let Some(first) = self.scopes[parent].insert(Id(id.clone()), destination) {
+                return Err(ViewError::DuplicateId {
+                    id: id.clone(),
+                    first: first.key,
+                    second: key,
+                });
+            }
+        }
+        let scope = if node.scope {
+            self.scopes.push(HashMap::new());
+            self.scopes.len() - 1
+        } else {
+            parent
+        };
+        for child in &node.children {
+            self.collect(child, scope)?;
+        }
+        Ok(())
+    }
+
+    fn bind(&self, node: &mut Node, parent: usize, next: &mut usize) -> Result<(), ViewError> {
+        let scope = if node.scope {
+            *next += 1;
+            *next
+        } else {
+            parent
+        };
+        if let Some(id) = &node.navigation {
+            let key = node.key.clone().unwrap();
+            let target =
+                self.scopes[scope]
+                    .get(&Id(id.clone()))
+                    .ok_or_else(|| ViewError::MissingId {
+                        node: key.clone(),
+                        id: id.clone(),
+                    })?;
+            if target.kind != "list" {
+                return Err(ViewError::InvalidNavigation {
+                    node: key,
+                    id: id.clone(),
+                    kind: target.kind.into(),
+                });
+            }
+            node.navigation_target = target.key.clone();
+        }
+        for child in &mut node.children {
+            self.bind(child, scope, next)?;
+        }
+        Ok(())
     }
 }

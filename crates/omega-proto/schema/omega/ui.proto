@@ -22,6 +22,8 @@ message ViewNode {
   // Unknown event names are ignored. Properties and bindings use separate maps.
   map<string, Bind> events = 5;
   repeated Shortcut shortcuts = 6;
+  // Resolved navigation destination: an exact node key, independent of layout.
+  string navigation_target = 7;
 }
 
 // A declared command or instance-local message binding.

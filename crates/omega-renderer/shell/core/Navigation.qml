@@ -16,6 +16,7 @@ QtObject {
     function register(key, control) { var next = Object.assign({}, controls); next[key] = control; controls = next }
     function forget(key, control) { if (controls[key] !== control) return; var next = Object.assign({}, controls); delete next[key]; controls = next }
     function resolve(from, target) {
+        if (sources[from] && sources[from].navigationResolved) return controls[target] || null
         var split = from.lastIndexOf("/")
         var scoped = split < 0 ? target : from.substring(0, split + 1) + target.replace(/~/g, "~0").replace(/\//g, "~1")
         return controls[scoped] || null

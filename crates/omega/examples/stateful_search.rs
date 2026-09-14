@@ -1,5 +1,4 @@
 //! A fixture catalogue exercises local UI behavior without launching desktop apps.
-const RESULTS: omega::ui::ListTarget = omega::ui::ListTarget::new("results");
 
 use omega::{
     Surface, View,
@@ -61,11 +60,11 @@ impl Surface for Search {
                     .autofocus()
                     .controlled(&model.query)
                     .on_change(events.on(Message::Edited))
-                    .navigate(RESULTS),
+                    .navigate("results"),
             )
             .child(
                 List::new()
-                    .target(RESULTS)
+                    .id("results")
                     .selected(&model.selected)
                     .children(model.results.iter().map(|name| Text::new(name).key(name)))
                     .on_select(events.on(Message::Selected))
