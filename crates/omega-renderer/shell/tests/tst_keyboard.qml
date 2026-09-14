@@ -171,4 +171,81 @@ TestCase {
         keyClick(Qt.Key_Enter)
         compare(test.calls.length, 2)
     }
+    function shortcut(key, command, modifiers, repeat, release) {
+        return {key:key, modifiers:modifiers || 0, repeat:!!repeat, release:!!release, event:command}
+    }
+    function test_nearest_scope_consumes_even_when_refused_or_pending() {
+        var view = node({type:"stack",key:"outer", shortcuts:[shortcut("key:Escape", "outer")], events:{outer:{command:"outer"}}, children:[
+            {type:"button",key:"inner",props:{label:{stringValue:"Inner"}}, shortcuts:[shortcut("key:Escape", "inner")], events:{inner:{command:"inner"},press:{command:"press"}}}
+        ]})
+        keyClick(Qt.Key_Tab)
+        test.accept = false
+        keyClick(Qt.Key_Escape)
+        compare(test.calls.length, 0)
+        verify(!test.escaped)
+        test.accept = true
+        keyClick(Qt.Key_Escape)
+        compare(test.calls[0].command, "inner")
+        keyClick(Qt.Key_Escape)
+        compare(test.calls.length, 1)
+        verify(!test.escaped)
+    }
+    function test_native_editing_precedes_shortcuts_and_exact_modifiers() {
+        var view = node({type:"field",key:"query",props:{name:{stringValue:"query"}}, shortcuts:[
+            shortcut("char:a", "plain"), shortcut("char:k", "search", 1)
+        ], events:{plain:{command:"plain"},search:{command:"search"}}})
+        keyClick(Qt.Key_Tab)
+        keyClick(Qt.Key_A)
+        compare(findChild(view, "query").text, "a")
+        compare(test.calls.length, 0)
+        keyClick(Qt.Key_K, Qt.ControlModifier | Qt.ShiftModifier)
+        compare(test.calls.length, 0)
+        keyClick(Qt.Key_K, Qt.ControlModifier)
+        compare(test.calls[0].command, "search")
+    }
+    function test_disabled_scope_is_skipped_and_unbound_escape_reaches_host() {
+        var view = node({type:"stack",key:"outer",shortcuts:[shortcut("key:Escape","outer")],events:{outer:{command:"outer"}},children:[
+            {type:"button",key:"disabled",props:{disabled:{boolValue:true}},shortcuts:[shortcut("key:Escape","inner")],events:{inner:{command:"inner"},press:{command:"press"}}},
+            button("enabled",false)
+        ]})
+        keyClick(Qt.Key_Tab)
+        keyClick(Qt.Key_Escape)
+        compare(test.calls[0].command, "outer")
+        view.model = {type:"text",key:"outer"}
+        view.forceActiveFocus()
+        keyClick(Qt.Key_Escape)
+        verify(test.escaped)
+    }
+    function test_composition_does_not_invoke_shortcuts_or_host_fallback() {
+        var view = node({type:"field",key:"query",props:{name:{stringValue:"query"}},shortcuts:[shortcut("key:Escape","close")],events:{close:{command:"close"}}})
+        keyClick(Qt.Key_Tab)
+        var field = findChild(view, "query")
+        verify(field.composing !== undefined)
+        field.composing = true
+        keyClick(Qt.Key_Escape)
+        compare(test.calls.length, 0)
+        verify(!test.escaped)
+    }
+
+    function test_root_shortcut_release_has_no_press_side_effect() {
+        var view = node({type:"text",key:"root",shortcuts:[shortcut("char:k","released",1,false,true)],events:{released:{command:"released"}}})
+        keyPress(Qt.Key_K, Qt.ControlModifier)
+        compare(test.calls.length, 0)
+        keyRelease(Qt.Key_K, Qt.ControlModifier)
+        compare(test.calls[0].command, "released")
+    }
+    function test_focus_selects_only_its_own_sibling_scope() {
+        var view = node({type:"stack",key:"root",children:[
+            {type:"field",key:"left",props:{name:{stringValue:"left"}},shortcuts:[shortcut("char:k","search",1)],events:{search:{command:"left"}}},
+            {type:"field",key:"right",props:{name:{stringValue:"right"}},shortcuts:[shortcut("char:k","search",1)],events:{search:{command:"right"}}}
+        ]})
+        findChild(findChild(view, "left"), "editor").forceActiveFocus()
+        keyClick(Qt.Key_K, Qt.ControlModifier)
+        findChild(findChild(view, "right"), "editor").forceActiveFocus()
+        keyClick(Qt.Key_K, Qt.ControlModifier)
+        compare(test.calls.length, 2)
+        compare(test.calls[0].command, "left")
+        compare(test.calls[1].command, "right")
+    }
+
 }

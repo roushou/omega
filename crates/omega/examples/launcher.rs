@@ -1,4 +1,6 @@
 //! A standalone launcher. The same surface is tested with injected catalogues and effects.
+const RESULTS: omega::ui::ListTarget = omega::ui::ListTarget::new("results");
+
 use omega::{
     Surface, View,
     platform::applications::{Application, ApplicationId, Applications, Launcher as Activation},
@@ -96,7 +98,7 @@ impl Surface for Launcher {
             .map(ToString::to_string)
             .unwrap_or_default();
         let mut list = List::new()
-            .key("results")
+            .target(RESULTS)
             .height(420)
             .selected(selected)
             .on_select(events.on(Message::Selected))
@@ -145,7 +147,7 @@ impl Surface for Launcher {
                     .autofocus()
                     .controlled(&model.query)
                     .on_change(events.on(Message::Edited))
-                    .navigate("results"),
+                    .navigate(RESULTS),
             )
             .child(list)
             .child(Text::new(status).key("status").muted())

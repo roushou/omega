@@ -1,0 +1,15 @@
+[package]
+name = "omega-keyboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+homepage.workspace = true
+keywords = ["keyboard", "shortcuts", "input", "keymap"]
+categories = ["gui"]
+description = "Host-independent logical keyboard events and composable shortcut maps."
+
+[lints]
+workspace = true

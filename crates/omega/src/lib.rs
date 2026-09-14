@@ -67,6 +67,9 @@ pub mod record;
 pub mod testing;
 pub mod ui;
 
+/// Host-independent logical keys, chords and composable keymaps.
+pub use omega_keyboard as keyboard;
+
 pub use command::{Args, Command, Input};
 pub use error::{Error, Result};
 pub use plugin::Plugin;

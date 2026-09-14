@@ -159,8 +159,8 @@ local while pending edits coalesce; delayed values cannot overwrite a newer draf
 Programmatic resets do not emit user edits, and composition defers both edits and
 incoming resets until the input method commits.
 
-`Field::autofocus()` requests initial focus. `Field::navigate("results")` delegates
-Up/Down and Enter to a keyed list without transferring text focus. Navigation is
+`Field::autofocus()` requests initial focus. `Field::navigate(RESULTS)` with a shared `ListTarget` delegates
+Up/Down and Enter to a sibling `List::target(RESULTS)` without transferring text focus. Navigation is
 qualified by component and instance scope. `List::selected` / `on_select` support
 model-owned stable selection; disabled entries are skipped during navigation.
 
@@ -176,3 +176,27 @@ controls and a private development transport. `Viewport.qml` recreates its root
 when a case epoch changes, so reset/rebuild cannot retain another model's drafts.
 The inspector resolves captured effects explicitly. Captures use fixed software
 rendering and local fixture assets; see [the guide](../../../docs/previews.md).
+
+## Scoped shortcuts
+
+`View::shortcuts` and component/builder modifiers accept `Keymap<Bind<()>>`.
+The wire node carries logical chord declarations referencing its existing event
+bindings. Renderers advertise `RENDERER_FEATURE_KEYBOARD_SHORTCUTS`; hosts without
+it refuse views that require shortcuts.
+
+Focused controls process native keys first. Unconsumed events bubble through
+`ViewNode` ancestors; the nearest matching map consumes the event and invokes
+its binding through the instance's ordinary interaction route. Pending or refused
+admission never replays the event into an ancestor. Disabled/hidden subtrees are
+ineligible. Composition blocks shortcut and host fallback handling.
+
+Matching requires exact modifiers, ignores auto-repeat by default, and separates
+press from release. Qt Return and keypad Enter normalize to Enter; keypad location
+and lock state do not affect matching. AltGraph remains distinct from Control+Alt.
+Keys are logical layout-translated identities, separate from committed text.
+Physical scan codes, shortcut sequences, native-control overrides and compositor
+shortcut registration are not supported. See [keyboard APIs](../../../docs/keyboard.md).
+
+`tests/KeyboardCases.js` is generated from the Rust matcher by
+`OMEGA_REGENERATE=1 cargo test -p omega-renderer --test keyboard`; QML tests check
+adapter identities and matching against that corpus.

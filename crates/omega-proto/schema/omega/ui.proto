@@ -21,6 +21,7 @@ message ViewNode {
   // Bindings indexed by event name, such as press, change, submit, or activate.
   // Unknown event names are ignored. Properties and bindings use separate maps.
   map<string, Bind> events = 5;
+  repeated Shortcut shortcuts = 6;
 }
 
 // A declared command or instance-local message binding.
@@ -30,4 +31,14 @@ message Bind {
   string command = 1;
   repeated Value args = 2;
   uint64 local = 3; // mutually exclusive with command; opaque plugin-owned binding
+}
+
+// Logical shortcuts are matched locally, after focused controls decline the event.
+// key uses omega-keyboard canonical identities; modifiers uses its five-bit mask.
+message Shortcut {
+  string key = 1;
+  uint32 modifiers = 2;
+  bool release = 3;
+  bool repeat = 4;
+  string event = 5; // references this node's events map
 }

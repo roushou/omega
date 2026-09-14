@@ -953,3 +953,17 @@ uses a fixed software environment, asset readiness, and motion suppression.
 Decoded-pixel comparison is gated by environment metadata; baseline updates are
 explicit. Native icon providers require fixed local fixture images in software
 captures. The [preview guide](previews.md) records usage and environmental limits.
+
+## Keyboard primitives and routing
+
+`omega-keyboard` is a dependency-free crate for logical keyboard identities,
+exact-modifier chords and composable `Keymap<A>` values. It owns matching only;
+focus, native input and routing belong to hosts. The SDK adapts actions into
+existing `Bind<()>` values and serializes scoped shortcut declarations on view
+nodes. No keyboard event transport or additional surface lifecycle is introduced.
+
+QML routes unconsumed keys from the focused control through ancestor view nodes.
+The selected binding uses the existing instance/revision interaction checks.
+A shared generated conformance corpus verifies Rust and QML matching. Typed
+`ListTarget` references reuse the component-scoped navigation registry.
+See [keyboard APIs and boundaries](keyboard.md).

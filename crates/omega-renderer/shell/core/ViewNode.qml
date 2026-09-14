@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import "Keyboard.js" as Keyboard
 import "Props.js" as Props
 
 Item {
@@ -63,6 +65,22 @@ Item {
         var bound = Props.bind(node.model, event)
         if (!bound) return false
         return node.session.press(bound, value, node.model.key, event)
+    }
+
+    Keys.priority: Keys.AfterItem
+    Keys.onPressed: event => node.shortcut(event, false)
+    Keys.onReleased: event => node.shortcut(event, true)
+    function shortcut(event, release) {
+        if (!node.enabled || !node.visible || !node.model) return
+        if (Keyboard.composing(node.Window.window ? node.Window.window.activeFocusItem : null)) {
+            event.accepted = true
+            return
+        }
+        var binding = Keyboard.resolve(node.model.shortcuts || [], event, release)
+        if (!binding) return
+        // A selected binding owns the event even if admission is refused or pending.
+        event.accepted = true
+        node.invoke(binding.event, undefined)
     }
 
     readonly property int fixedWidth: node.space(Props.width(node.model))

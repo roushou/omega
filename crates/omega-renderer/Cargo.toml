@@ -19,3 +19,4 @@ omega-proto.workspace = true
 sha2 = "0.10"
 
 [dev-dependencies]
+omega-keyboard.workspace = true

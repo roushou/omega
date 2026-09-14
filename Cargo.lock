@@ -982,6 +982,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "omega-keyboard"
+version = "0.2.3"
+
+[[package]]
 name = "omega-omarchy"
 version = "0.2.3"
 dependencies = [
@@ -1051,6 +1055,7 @@ dependencies = [
 name = "omega-renderer"
 version = "0.2.3"
 dependencies = [
+ "omega-keyboard",
  "omega-proto",
  "sha2",
 ]
@@ -1060,6 +1065,7 @@ name = "omega-rs"
 version = "0.2.3"
 dependencies = [
  "omega-derive",
+ "omega-keyboard",
  "omega-proto",
  "rustix",
  "serde_json",

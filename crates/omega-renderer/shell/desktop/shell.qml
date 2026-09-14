@@ -39,7 +39,7 @@ ShellRoot {
                 onVisibleChanged: if (instance.presentation.window) instance.report(visible)
                 onClosed: link.report(instance.identity, "PRESENTATION_STATE_CLOSED")
                 Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: theme.urgent; wrapMode: Text.Wrap; z: 1 }
-                ViewNode { assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: desktopTheme; session: instance.session; Theme { id: desktopTheme } }
+                ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: desktopTheme; session: instance.session; Theme { id: desktopTheme } }
             }
             PanelWindow {
                 id: overlay
@@ -79,7 +79,7 @@ ShellRoot {
                     MouseArea { anchors.fill: parent }
                     Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: theme.urgent; wrapMode: Text.Wrap; z: 1 }
                     Keys.onEscapePressed: link.report(instance.identity, "PRESENTATION_STATE_CLOSED")
-                    ViewNode { assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: overlayTheme; session: instance.session; Theme { id: overlayTheme } }
+                    ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: overlayTheme; session: instance.session; Theme { id: overlayTheme } }
                 }
             }
         }

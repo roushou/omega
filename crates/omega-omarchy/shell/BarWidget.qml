@@ -87,6 +87,7 @@ BarWidget {
     }
 
     ViewNode {
+        focus: true
       assets: desktopAssets
       id: view
       anchors.centerIn: parent
@@ -112,7 +113,7 @@ BarWidget {
       owner: root
       bar: root.bar
       open: root.opened
-      focusTarget: viewport
+      focusTarget: panelView
       contentWidth: fittedContentWidth(
         Math.max(Style.space(320), panelView.implicitWidth + padding * 2), Style.space(480))
       contentHeight: fittedContentHeight(Math.max(Style.space(40), panelContents.implicitHeight))
@@ -140,6 +141,7 @@ BarWidget {
             wrapMode: Text.Wrap
           }
           ViewNode {
+              focus: true
       assets: desktopAssets
             id: panelView
             width: parent.width

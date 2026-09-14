@@ -39,6 +39,7 @@ Rectangle {
             contentHeight: view.implicitHeight
             clip: true
             ViewNode {
+                focus: true
                 id: view
                 width: parent.width
                 theme: fixtureTheme

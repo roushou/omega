@@ -20,6 +20,7 @@ mod content;
 mod control;
 mod display;
 mod layout;
+mod navigation;
 mod node;
 mod style;
 mod text;
@@ -32,6 +33,7 @@ pub use content::{Metric, Section};
 pub use control::{Button, Choice, ChoiceValue, Field, Form, FormInput, List, Slider, Toggle};
 pub use display::{Graph, Image, Progress};
 pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
+pub use navigation::ListTarget;
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};
 

@@ -16,6 +16,7 @@ pub struct Node {
     props: HashMap<String, Value>,
     events: HashMap<String, WireBind>,
     children: Vec<Node>,
+    shortcuts: Vec<omega_proto::omega::Shortcut>,
 }
 
 impl Node {
@@ -27,6 +28,7 @@ impl Node {
             props: HashMap::new(),
             events: HashMap::new(),
             children: Vec::new(),
+            shortcuts: Vec::new(),
         }
     }
 
@@ -68,6 +70,25 @@ impl Node {
     pub(crate) fn child(mut self, child: impl Into<crate::View>) -> Self {
         if let Some(child) = child.into().root {
             self.children.push(child);
+        }
+        self
+    }
+
+    pub(crate) fn shortcuts(mut self, keys: omega_keyboard::Keymap<Bind<()>>) -> Self {
+        // Replacing a map also removes its obsolete event bindings.
+        for shortcut in self.shortcuts.drain(..) {
+            self.events.remove(&shortcut.event);
+        }
+        for (index, (chord, binding)) in keys.into_bindings().enumerate() {
+            let event = format!("shortcut:{index}");
+            self.events.insert(event.clone(), binding.into_wire());
+            self.shortcuts.push(omega_proto::omega::Shortcut {
+                key: chord.key().identity(),
+                modifiers: u32::from(chord.modifiers().bits()),
+                release: chord.phase() == omega_keyboard::Phase::Release,
+                repeat: chord.allows_repeat(),
+                event,
+            });
         }
         self
     }
@@ -167,6 +188,7 @@ impl Node {
             r#type: self.kind.to_string(),
             props: self.props,
             events: self.events,
+            shortcuts: self.shortcuts,
             children: self.children.into_iter().map(Self::into_wire).collect(),
         }
     }
@@ -270,5 +292,44 @@ impl Tone {
             Self::Error => "error",
             Self::Success => "success",
         }
+    }
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use crate::{
+        View,
+        keyboard::{Chord, Key, Keymap},
+        surface::Events,
+        ui::{Column, Text},
+    };
+
+    #[test]
+    fn replacing_shortcuts_removes_old_bindings_and_preserves_child_scopes() {
+        let events = Events::new();
+        let old = Keymap::new()
+            .bind(Chord::new(Key::Escape), events.send(1))
+            .unwrap()
+            .bind(Chord::new(Key::Enter), events.send(2))
+            .unwrap();
+        let new = Keymap::new()
+            .bind(Chord::new(Key::Character('K')).ctrl(), events.send(3))
+            .unwrap();
+        let child = Keymap::new()
+            .bind(Chord::new(Key::Escape), events.send(4))
+            .unwrap();
+        let view: View = Column::new()
+            .shortcuts(old)
+            .shortcuts(new)
+            .child(Text::new("Child").shortcuts(child))
+            .into();
+        let node = view.into_tree().root.unwrap();
+        assert_eq!(node.events.len(), 1);
+        assert_eq!(node.shortcuts.len(), 1);
+        assert_eq!(node.shortcuts[0].key, "char:k");
+        assert_eq!(node.shortcuts[0].modifiers, 1);
+        let binding = &node.events[&node.shortcuts[0].event];
+        assert_ne!(binding.local, 0);
+        assert_ne!(binding.local, node.children[0].events["shortcut:0"].local);
     }
 }

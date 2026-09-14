@@ -2,6 +2,22 @@
 
 macro_rules! modifiers {
     ($visibility:vis, $output:ty) => {
+            /// Handle unconsumed keys while focus is inside this subtree.
+            /// Native controls take precedence; the nearest matching subtree wins.
+            /// Replaces any previously attached map. Disabled subtrees do not participate.
+            ///
+            /// ```
+            /// use omega::keyboard::{Chord, Key, Keymap};
+            /// use omega::ui::{Column, Component};
+            /// # fn view(events: &omega::surface::Events<()>) -> Result<omega::View, omega::keyboard::Conflict> {
+            /// let keys = Keymap::new().bind(Chord::new(Key::Escape), events.send(()))?;
+            /// Ok(Column::new().shortcuts(keys).into())
+            /// # }
+            /// ```
+            $visibility fn shortcuts(self, keys: $crate::keyboard::Keymap<$crate::ui::Bind<()>>) -> $output {
+                self.map_node(|node| node.shortcuts(keys))
+            }
+
             /// Set a semantic theme color. See [`Role`](crate::ui::Role).
             $visibility fn color(self, role: $crate::ui::Role) -> $output {
                 self.map_node(|node| node.color(role))

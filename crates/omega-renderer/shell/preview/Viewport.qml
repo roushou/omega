@@ -20,6 +20,7 @@ Rectangle {
         anchors.margins: 16
         sourceComponent: Component {
             ViewNode {
+                focus: true
                 model: viewport.view ? viewport.view.root || null : null
                 theme: viewport.theme
                 assets: viewport.assets

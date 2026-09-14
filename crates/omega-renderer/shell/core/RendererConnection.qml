@@ -124,7 +124,7 @@ Item {
     function attach() {
         if (!link.unit || (!link.standalone && (!link.surface || !link.module))) return
         link.attachmentStream = link.allocateStream()
-        var request = { features: ["RENDERER_FEATURE_INSTANCES", "RENDERER_FEATURE_SCOPED_INTERACTIONS", "RENDERER_FEATURE_LOCAL_MESSAGES", "RENDERER_FEATURE_CONTROLLED_INPUTS"] }
+        var request = { features: ["RENDERER_FEATURE_INSTANCES", "RENDERER_FEATURE_SCOPED_INTERACTIONS", "RENDERER_FEATURE_LOCAL_MESSAGES", "RENDERER_FEATURE_CONTROLLED_INPUTS", "RENDERER_FEATURE_KEYBOARD_SHORTCUTS"] }
         if (link.standalone) {
             request.unit = link.unit
             request.features.push("RENDERER_FEATURE_WINDOWS", "RENDERER_FEATURE_OVERLAYS")

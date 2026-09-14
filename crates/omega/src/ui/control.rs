@@ -101,7 +101,8 @@ pub struct Field {
 }
 
 impl Field {
-    /// Route Up/Down and Enter to a list in the same component/instance scope.
+    /// Route Up/Down and Enter to a sibling list in this component/instance scope.
+    /// Prefer a shared [`ListTarget`](crate::ui::ListTarget) declared with `List::target`.
     pub fn navigate(mut self, list: impl Display) -> Self {
         self.node = self.node.text_prop("navigation", list.to_string());
         self
@@ -181,6 +182,12 @@ pub struct List {
 }
 
 impl List {
+    /// Assign the identity used by a field's `navigate` binding.
+    pub fn target(mut self, target: crate::ui::ListTarget) -> Self {
+        self.node = self.node.key(target.as_str());
+        self
+    }
+
     /// Control selection by the row's stable domain key.
     pub fn selected(mut self, key: impl Display) -> Self {
         self.node = self.node.text_prop("selected", key.to_string());

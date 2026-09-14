@@ -146,6 +146,17 @@ impl Attachment {
                 "renderer does not support this presentation",
             ));
         }
+        if !self.features.contains(&RendererFeature::KeyboardShortcuts) {
+            let mut nodes: Vec<_> = view.view.root.iter().collect();
+            while let Some(node) = nodes.pop() {
+                if !node.shortcuts.is_empty() {
+                    return Err(Refusal::unimplemented(
+                        "renderer does not support keyboard shortcuts",
+                    ));
+                }
+                nodes.extend(&node.children);
+            }
+        }
         Ok(())
     }
     pub(crate) fn metadata(
@@ -216,5 +227,67 @@ impl InstancePermit {
                 "renderer attachment has been replaced",
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_proto::omega::{
+        InstanceRef, InstanceSnapshot, Presentation, Shortcut, ViewNode, WindowPresentation,
+        presentation,
+    };
+
+    #[test]
+    fn keyboard_features_are_required_only_for_views_using_them() {
+        let mut attachment = Attachment::parse(&AttachRenderer {
+            scope: Some(attach_renderer::Scope::Unit("example".into())),
+            features: [
+                RendererFeature::Instances,
+                RendererFeature::ScopedInteractions,
+                RendererFeature::LocalMessages,
+                RendererFeature::ControlledInputs,
+                RendererFeature::Windows,
+            ]
+            .map(|f| f as i32)
+            .to_vec(),
+            ..Default::default()
+        })
+        .unwrap();
+        let snapshot = InstanceSnapshot {
+            instance: Some(InstanceRef {
+                id: "window".into(),
+                incarnation: "one".into(),
+            }),
+            unit: "example".into(),
+            surface: "main".into(),
+            presentation: Some(Presentation {
+                kind: Some(presentation::Kind::Window(WindowPresentation {
+                    width: 400,
+                    height: 300,
+                    min_width: 1,
+                    min_height: 1,
+                    app_id: "org.omega.example".into(),
+                    ..Default::default()
+                })),
+            }),
+            ..Default::default()
+        };
+        let mut view = attachment.metadata(&snapshot).unwrap();
+        assert!(attachment.validate(&view).is_ok());
+        view.view.root = Some(ViewNode {
+            children: vec![ViewNode {
+                shortcuts: vec![Shortcut {
+                    key: "key:Escape".into(),
+                    event: "shortcut:0".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        assert!(attachment.validate(&view).is_err());
+        attachment.features.push(RendererFeature::KeyboardShortcuts);
+        assert!(attachment.validate(&view).is_ok());
     }
 }

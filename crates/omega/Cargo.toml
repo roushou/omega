@@ -19,6 +19,7 @@ workspace = true
 name = "omega"
 
 [dependencies]
+omega-keyboard.workspace = true
 omega-derive = { path = "../omega-derive", version = "0.2.3" }
 omega-proto.workspace = true
 thiserror.workspace = true

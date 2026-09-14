@@ -1,6 +1,9 @@
 //! A fixture catalogue exercises local UI behavior without launching desktop apps.
+const RESULTS: omega::ui::ListTarget = omega::ui::ListTarget::new("results");
+
 use omega::{
     Surface, View,
+    keyboard::{Chord, Key, Keymap},
     surface::{Events, Lifecycle, Task, TextEdit, TextValue},
     ui::{Button, Column, Field, List, Text},
 };
@@ -47,6 +50,10 @@ impl Surface for Search {
     }
     fn render(&self, model: &Model, events: &Events<Message>) -> View {
         Column::new()
+            .shortcuts(Keymap::single(
+                Chord::new(Key::Escape),
+                events.on(|()| Message::Clear),
+            ))
             .gap(12)
             .child(
                 Field::new("Search fixture applications")
@@ -54,11 +61,11 @@ impl Surface for Search {
                     .autofocus()
                     .controlled(&model.query)
                     .on_change(events.on(Message::Edited))
-                    .navigate("results"),
+                    .navigate(RESULTS),
             )
             .child(
                 List::new()
-                    .key("results")
+                    .target(RESULTS)
                     .selected(&model.selected)
                     .children(model.results.iter().map(|name| Text::new(name).key(name)))
                     .on_select(events.on(Message::Selected))
