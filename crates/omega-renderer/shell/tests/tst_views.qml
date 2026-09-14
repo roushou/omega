@@ -109,6 +109,34 @@ TestCase {
         }
         return null
     }
+    function test_remove_children_then_resize_data() {
+        return [{tag:"row",align:"row"}, {tag:"column",align:"column"}]
+    }
+    function test_remove_children_then_resize(data) {
+        failOnWarning(/.*/)
+        var model = {
+            type:"stack",key:"resizable",props:{align:{stringValue:data.align}},children:[
+                {type:"field",key:"kept",props:{name:{stringValue:"kept"}}},
+                {type:"text",key:"removed",props:{text:{stringValue:"Remove me"}}}
+            ]
+        }
+        var tree = createTemporaryObject(coloredTree, test, {model:model})
+        verify(tree !== null)
+        var field = findChild(tree, "kept")
+        verify(field !== null)
+        field.text = "Draft"
+        var next = JSON.parse(JSON.stringify(model))
+        next.children.pop()
+        tree.model = next
+        tree.width = 200
+        wait(0) // Process delegate deletion before the next resize.
+        tree.width = 360
+        wait(0)
+        compare(renderedNode(tree, "removed"), null)
+        compare(findChild(tree, "kept"), field)
+        compare(field.text, "Draft")
+        verify(field.width > 0)
+    }
     function test_children_follow_foreground_data() {
         return [{tag:"row",type:"stack",align:"row"},
                 {tag:"column",type:"stack",align:"column"},

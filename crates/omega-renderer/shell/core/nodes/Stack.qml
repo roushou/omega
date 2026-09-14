@@ -68,6 +68,8 @@ Loader {
         }
 
         while (rows.count > wanted.length) rows.remove(rows.count - 1)
+        // Refresh cached layout items before resize can access removed delegates (Qt 6.4).
+        if (stack.item) stack.item.ensurePolished()
     }
 
     Component {
