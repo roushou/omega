@@ -20,5 +20,3 @@ omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
 serde_json.workspace = true
 thiserror.workspace = true
-
-serde.workspace = true
