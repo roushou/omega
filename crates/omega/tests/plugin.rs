@@ -24,7 +24,18 @@ struct Charge {
 }
 
 impl Surface for Charge {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if self.battery.is_charging() {
             Text::new(format!("{} charging", self.battery.charge()))
         } else {
@@ -36,7 +47,7 @@ impl Surface for Charge {
 
 #[test]
 fn a_widget_is_a_function_from_state_to_a_tree() {
-    let drawn = Drawn::of::<Charge>(&State::new().battery(0.8, false));
+    let drawn = Drawn::of::<Charge>(&State::new().battery(0.8, false)).unwrap();
 
     assert_eq!(drawn.text(), "80%");
     assert_eq!(drawn.kinds(), vec!["text"]);
@@ -52,7 +63,7 @@ fn a_reading_prints_itself() {
     assert_eq!(Percent::whole(80), Percent::of(0.8));
     assert!(Percent::of(0.15) < 20);
 
-    let drawn = Drawn::of::<Charge>(&State::new().battery(0.5, true));
+    let drawn = Drawn::of::<Charge>(&State::new().battery(0.5, true)).unwrap();
     assert_eq!(drawn.text(), "50% charging");
 }
 
@@ -81,7 +92,18 @@ struct Signal {
 }
 
 impl Surface for Signal {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         Row::new()
             .gap(6)
             .child(Icon::new(Glyph::Wifi))
@@ -93,7 +115,7 @@ impl Surface for Signal {
 
 #[test]
 fn a_view_is_built_out_of_the_things_it_is_made_of() {
-    let drawn = Drawn::of::<Signal>(&State::new().network("home", 70));
+    let drawn = Drawn::of::<Signal>(&State::new().network("home", 70)).unwrap();
 
     assert_eq!(drawn.text(), "home");
     assert_eq!(drawn.kinds(), vec!["stack", "icon", "text", "progress"]);
@@ -154,7 +176,18 @@ struct Warned {
 }
 
 impl Surface for Warned {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if self.battery.charge() < self.settings.low_threshold {
             Text::new("low").warning()
         } else {
@@ -170,13 +203,18 @@ fn an_instance_is_configured_by_the_document() {
 
     // A setting the document did not set falls back to the field's default,
     // so adding one never breaks a document written before it existed.
-    assert_eq!(Drawn::of::<Warned>(&state).text(), "15%");
+    assert_eq!(Drawn::of::<Warned>(&state).unwrap().text(), "15%");
 
     // Written by the same fields that read it: `low_threshold` in Rust is
     // `low-threshold` in a document, decided once by the derive.
     let settings = Warning { low_threshold: 20 }.write();
     assert_eq!(settings.get::<u8>("low-threshold"), Some(20));
-    assert_eq!(Drawn::configured::<Warned>(&state, &settings).text(), "low");
+    assert_eq!(
+        Drawn::configured::<Warned>(&state, &settings)
+            .unwrap()
+            .text(),
+        "low"
+    );
 
     // And read back into the same value it was written from.
     assert_eq!(Warning::read(&settings), Warning { low_threshold: 20 });
@@ -253,7 +291,18 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
     }
 
     impl Surface for Labelled {
-        fn render(&self) -> Ui {
+        type Model = ();
+        type Message = std::convert::Infallible;
+        type Effects = ();
+        fn update(
+            &self,
+            _: &mut (),
+            message: Self::Message,
+            _: &(),
+        ) -> omega::surface::Task<Self::Message> {
+            match message {}
+        }
+        fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
             let charge = self.battery.charge();
             if charge < self.settings.low_threshold {
                 Text::new(format!("{} low", self.settings.label))
@@ -344,7 +393,18 @@ struct MaybeCharge {
 }
 
 impl Surface for MaybeCharge {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if self.battery.has_reading() {
             Text::new(self.battery.charge())
         } else {
@@ -476,7 +536,18 @@ struct Showing {
 }
 
 impl Surface for Showing {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if self.mode.get().focus {
             Text::new("focus").into()
         } else {
@@ -513,7 +584,7 @@ fn owning_state_declares_the_right_to_publish_it() {
 fn a_widget_reads_state_that_has_never_been_set() {
     // Nobody has published a mode, so the type's own default is what a
     // reader sees — there is no half-built state to guard against.
-    assert_eq!(Drawn::of::<Showing>(&State::new()).text(), "open");
+    assert_eq!(Drawn::of::<Showing>(&State::new()).unwrap().text(), "open");
 }
 
 #[tokio::test]
@@ -895,7 +966,18 @@ struct BarClock {
 }
 
 impl Surface for BarClock {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         Text::new(format!(
             "{} {}",
             self.clock.weekday().short(),
@@ -920,13 +1002,18 @@ fn a_clock_draws_the_time_without_carrying_a_calendar() {
         unix_seconds: 1_788_957_120,
     });
 
-    assert_eq!(Drawn::of::<BarClock>(&state).text(), "Tue 14:32");
+    assert_eq!(Drawn::of::<BarClock>(&state).unwrap().text(), "Tue 14:32");
 }
 
 #[test]
-fn a_clock_with_no_reading_draws_a_time_rather_than_a_panic() {
+fn a_reported_absent_clock_formats_default_values() {
     // Accessors return defaults for missing clock readings.
-    assert_eq!(Drawn::of::<BarClock>(&State::new()).text(), "Sun 00:00");
+    assert_eq!(
+        Drawn::of::<BarClock>(&State::new().absent(omega::testing::SystemTopic::Time))
+            .unwrap()
+            .text(),
+        "Sun 00:00"
+    );
 }
 
 // Raw topic access
@@ -938,7 +1025,18 @@ struct Devices {
 }
 
 impl Surface for Devices {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.bluetooth.has_reading() {
             return Ui::empty();
         }
@@ -974,8 +1072,11 @@ fn a_handle_reads_its_topic_through_the_types_it_carries() {
         }],
     });
 
-    assert_eq!(Drawn::of::<Devices>(&state).text(), "1 paired, 1 reporting");
-    assert!(Drawn::of::<Devices>(&State::new()).is_empty());
+    assert_eq!(
+        Drawn::of::<Devices>(&state).unwrap().text(),
+        "1 paired, 1 reporting"
+    );
+    assert!(Drawn::of::<Devices>(&State::new()).unwrap().is_empty());
 }
 
 #[test]
@@ -997,7 +1098,18 @@ struct Situation {
 }
 
 impl Surface for Situation {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         Text::new(self.power.status().label()).into()
     }
 }
@@ -1014,23 +1126,32 @@ fn a_composite_declares_every_topic_it_is_made_of() {
 fn a_full_battery_on_the_wall_is_neither_charging_nor_on_battery() {
     // The case every hand-written version of this got wrong.
     let full = State::new().battery(1.0, false).mains(true);
-    assert_eq!(Drawn::of::<Situation>(&full).text(), "Fully charged");
+    assert_eq!(
+        Drawn::of::<Situation>(&full).unwrap().text(),
+        "Fully charged"
+    );
 
     let held = State::new().battery(0.8, false).mains(true);
-    assert_eq!(Drawn::of::<Situation>(&held).text(), "On mains");
+    assert_eq!(Drawn::of::<Situation>(&held).unwrap().text(), "On mains");
 
     let charging = State::new().battery(0.8, true).mains(true);
-    assert_eq!(Drawn::of::<Situation>(&charging).text(), "Charging");
+    assert_eq!(
+        Drawn::of::<Situation>(&charging).unwrap().text(),
+        "Charging"
+    );
 
     let draining = State::new().battery(0.8, false).mains(false);
-    assert_eq!(Drawn::of::<Situation>(&draining).text(), "On battery");
+    assert_eq!(
+        Drawn::of::<Situation>(&draining).unwrap().text(),
+        "On battery"
+    );
 }
 
 #[test]
 fn a_machine_with_no_battery_is_on_mains_not_flat() {
     // Missing battery charge must remain None.
     let desktop = State::new().absent(SystemTopic::Battery).mains(true);
-    assert_eq!(Drawn::of::<Situation>(&desktop).text(), "On mains");
+    assert_eq!(Drawn::of::<Situation>(&desktop).unwrap().text(), "On mains");
 }
 
 #[derive(omega::UnitState, Default, Clone)]
@@ -1199,5 +1320,5 @@ async fn oversized_record_result_is_not_committed_and_releases_its_reservation()
 fn missing_mains_is_not_evidence_of_battery_operation() {
     use omega::testing::SystemTopic;
     let state = State::new().battery(0.5, false).absent(SystemTopic::Mains);
-    assert_eq!(Drawn::of::<Situation>(&state).text(), "Unknown");
+    assert_eq!(Drawn::of::<Situation>(&state).unwrap().text(), "Unknown");
 }

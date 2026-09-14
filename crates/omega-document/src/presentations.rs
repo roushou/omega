@@ -12,7 +12,14 @@ use omega_proto::{
 /// use omega_document::{Document, Presentations};
 /// #[derive(omega::Surface)]
 /// struct Example {}
-/// impl Surface for Example { fn render(&self) -> View { Text::new("Hello").into() } }
+/// impl Surface for Example {
+///     type Model = ();
+///     type Message = std::convert::Infallible;
+///     type Effects = ();
+///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+///         match message {}
+///     }
+///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View { Text::new("Hello").into() } }
 /// let document = Document::new().presentation(
 ///     Presentations::window("example", Example).title("Example").size(640, 480)
 /// );

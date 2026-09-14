@@ -37,7 +37,19 @@ impl<const KIND: u8> Wired for Probe<KIND> {
     }
 }
 impl<const KIND: u8> Surface for Probe<KIND> {
-    fn render(&self) -> View {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> crate::surface::Task<Self::Message> {
+        match message {}
+    }
+
+    fn render(&self, _: &(), _: &crate::surface::Events<Self::Message>) -> View {
         assert!(
             self.context.holds(&Self::topics()),
             "rendered before its inputs arrived"

@@ -1,14 +1,14 @@
 use super::task::{Execution, TaskKey};
 use super::{Decoder, Events, Task, Wired};
 use crate::plugin::registry::MountedSurface;
-use crate::{Args, Error, StatefulSurface, View};
+use crate::{Args, Error, Surface, View};
 use std::{
     collections::BTreeMap,
     sync::Arc,
     task::{Context as PollContext, Poll},
 };
 
-pub(crate) struct Stateful<S: StatefulSurface> {
+pub(crate) struct Instance<S: Surface> {
     surface: S,
     effects: S::Effects,
     model: S::Model,
@@ -24,7 +24,7 @@ struct Pending<M> {
     failed: Arc<dyn Fn(Error) -> M + Send + Sync>,
     abort: tokio::task::AbortHandle,
 }
-impl<S: StatefulSurface> Stateful<S> {
+impl<S: Surface> Instance<S> {
     pub(crate) fn model(&self) -> &S::Model {
         &self.model
     }
@@ -100,7 +100,7 @@ impl<S: StatefulSurface> Stateful<S> {
         self.schedule(task)
     }
 }
-impl<S: StatefulSurface> MountedSurface for Stateful<S> {
+impl<S: Surface> MountedSurface for Instance<S> {
     fn render(&mut self) -> View {
         let events = Events::new();
         let view = self.surface.render(&self.model, &events);
@@ -178,7 +178,7 @@ mod tests {
         ),
         Done(Result<(), Error>),
     }
-    impl StatefulSurface for Worker {
+    impl Surface for Worker {
         type Model = ();
         type Message = Message;
         type Effects = ();
@@ -208,7 +208,7 @@ mod tests {
         let (sender, _effects) = crate::effect::queue::Effects::channel();
         let context = crate::runtime::context::Context::new(&Default::default(), sender);
         let budget = context.task_budget();
-        let mut instance = Stateful::<Worker>::new(&context, &Default::default());
+        let mut instance = Instance::<Worker>::new(&context, &Default::default());
         let (release, wait) = std::sync::mpsc::channel();
         let (started, ready) = tokio::sync::oneshot::channel();
         instance.message(Message::Start(wait, started)).unwrap();

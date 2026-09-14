@@ -18,15 +18,17 @@ impl Drawn {
         self.node(key)?.events.get(event)
     }
 
-    /// Build a widget against some state and render it once.
-    pub fn of<W: Surface>(state: &State) -> Self {
-        Self::configured::<W>(state, &Values::new())
+    /// Construct and render a surface using the production initialization and readiness rules.
+    /// Use `SurfaceHarness` to retain local state and process task completions.
+    pub fn of<S: Surface>(state: &State) -> crate::Result<Self> {
+        Self::configured::<S>(state, &Values::new())
     }
 
-    /// Render a surface once using fixture state and explicit instance settings.
-    pub fn configured<W: Surface>(state: &State, settings: &Values) -> Self {
-        let (context, _effects) = state.context();
-        Self::of_view(W::build(&context, settings).render())
+    /// Render once with fixture readings and construction settings.
+    /// Required readings that have not reported produce an empty view.
+    /// Initialization that starts tasks requires a Tokio runtime.
+    pub fn configured<S: Surface>(state: &State, settings: &Values) -> crate::Result<Self> {
+        Ok(super::SurfaceHarness::<S>::configured(state, settings)?.draw())
     }
 
     /// Render a component, primitive or composed view without a daemon.

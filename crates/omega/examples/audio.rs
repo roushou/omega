@@ -10,7 +10,18 @@ pub struct Indicator {
     audio: Audio,
 }
 impl Surface for Indicator {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").muted().into();
         }
@@ -28,7 +39,18 @@ pub struct Panel {
     audio: Audio,
 }
 impl Surface for Panel {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
         }
@@ -104,7 +126,10 @@ mod tests {
     #[test]
     fn absent_audio_is_not_zero_volume() {
         let state = State::new().absent(omega::testing::SystemTopic::Audio);
-        assert_eq!(Drawn::of::<Panel>(&state).text(), "Audio unavailable");
+        assert_eq!(
+            Drawn::of::<Panel>(&state).unwrap().text(),
+            "Audio unavailable"
+        );
     }
     #[tokio::test]
     async fn invalid_volume_does_not_act() {

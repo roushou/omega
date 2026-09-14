@@ -1,6 +1,6 @@
 //! A fixture catalogue exercises local UI behavior without launching desktop apps.
 use omega::{
-    StatefulSurface, View,
+    Surface, View,
     surface::{Events, Lifecycle, Task, TextEdit, TextValue},
     ui::{Button, Column, Field, List, Text},
 };
@@ -38,7 +38,7 @@ impl Search {
         )
     }
 }
-impl StatefulSurface for Search {
+impl Surface for Search {
     type Model = Model;
     type Message = Message;
     type Effects = ();
@@ -114,5 +114,5 @@ impl StatefulSurface for Search {
     }
 }
 fn main() -> omega::Result<()> {
-    omega::plugin!().stateful(Search).run()
+    omega::plugin!().surface(Search).run()
 }

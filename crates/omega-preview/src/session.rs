@@ -252,7 +252,7 @@ impl Session {
 mod tests {
     use super::*;
     use omega::{
-        StatefulSurface, View,
+        Surface, View,
         platform::applications::{ApplicationId, Launcher},
         surface::{Events, Task},
         testing::State,
@@ -271,7 +271,7 @@ mod tests {
         Finished(omega::Result<()>),
         Dismissed(omega::Result<()>),
     }
-    impl StatefulSurface for Launch {
+    impl Surface for Launch {
         type Model = String;
         type Message = Message;
         type Effects = Effects;

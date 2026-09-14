@@ -99,7 +99,14 @@ impl Bluetooth {
     /// #[derive(omega::Surface)]
     /// struct Indicator { bluetooth: Bluetooth }
     /// impl Surface for Indicator {
-    ///     fn render(&self) -> View {
+    ///     type Model = ();
+    ///     type Message = std::convert::Infallible;
+    ///     type Effects = ();
+    ///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+    ///         match message {}
+    ///     }
+    ///
+    ///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
     ///         Text::new(match self.bluetooth.status() {
     ///             BluetoothStatus::Unavailable => "Bluetooth state unavailable",
     ///             BluetoothStatus::NoAdapter => "No Bluetooth adapter",

@@ -33,7 +33,18 @@ pub struct Indicator {
 }
 
 impl Surface for Indicator {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.network.has_reading() {
             return Ui::empty();
         }
@@ -91,7 +102,18 @@ pub struct Panel {
 }
 
 impl Surface for Panel {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         let state = match self.wifi.phase() {
             WifiPhase::Connecting => "Connecting…".to_string(),
             WifiPhase::Connected => format!("Connected to {}", self.wifi.ssid()),

@@ -38,7 +38,7 @@ mod previews {
 }
 ```
 
-`Cases::surface::<MySurface>("loading", State::new())` uses the actual stateful
+`Cases::surface::<MySurface>("loading", State::new())` uses the actual
 surface runtime with synthetic readings. `surface_with` accepts a factory returning
 `SurfaceHarness<MySurface>` when cases need construction settings, initial messages,
 or injected behavior dependencies. Reuse that factory in behavioral tests;

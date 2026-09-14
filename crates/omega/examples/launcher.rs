@@ -1,6 +1,6 @@
 //! A standalone launcher. The same surface is tested with injected catalogues and effects.
 use omega::{
-    StatefulSurface, View,
+    Surface, View,
     platform::applications::{Application, ApplicationId, Applications, Launcher as Activation},
     surface::{Events, Lifecycle, Optional, Presentation, Task, TextEdit, TextValue},
     ui::{Column, Field, Image, List, Row, Text},
@@ -81,7 +81,7 @@ impl Launcher {
         )
     }
 }
-impl StatefulSurface for Launcher {
+impl Surface for Launcher {
     type Model = Model;
     type Message = Message;
     type Effects = Effects;
@@ -197,7 +197,7 @@ impl StatefulSurface for Launcher {
     }
 }
 fn main() -> omega::Result<()> {
-    omega::plugin!().stateful(Launcher).run()
+    omega::plugin!().surface(Launcher).run()
 }
 
 #[cfg(test)]

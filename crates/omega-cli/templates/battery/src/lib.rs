@@ -3,8 +3,10 @@
 //! The system crate can depend on this library to configure its settings and placement.
 
 use omega::platform::power::Battery;
+use omega::surface::{Events, Task};
 use omega::ui::{Row, Text};
 use omega::{Plugin, Surface, View};
+use std::convert::Infallible;
 
 /// This plugin's name, for the config plane to refer to it by.
 pub const UNIT: &str = env!("CARGO_PKG_NAME");
@@ -30,7 +32,10 @@ pub struct BatteryWidget {
 }
 
 impl Surface for BatteryWidget {
-    fn render(&self) -> View {
+    type Model = ();
+    type Message = Infallible;
+    type Effects = ();
+    fn render(&self, _: &(), _: &Events<Infallible>) -> View {
         // Missing battery readings must not display as zero charge.
         if !self.battery.has_reading() {
             return View::empty();
@@ -56,6 +61,10 @@ impl Surface for BatteryWidget {
             None => label.into(),
         }
     }
+
+    fn update(&self, _: &mut (), message: Infallible, _: &()) -> Task<Infallible> {
+        match message {}
+    }
 }
 
 /// Everything this plugin offers. `main` runs it; a test can inspect it.
@@ -71,7 +80,7 @@ mod tests {
 
     #[test]
     fn it_shows_the_charge() {
-        let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.8, false));
+        let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.8, false)).unwrap();
         assert_eq!(drawn.text(), "80%");
     }
 
@@ -83,14 +92,14 @@ mod tests {
         // the same type the config plane writes them with.
         let strict = Settings { low: 20 }.write();
 
-        let drawn = Drawn::configured::<BatteryWidget>(&state, &strict);
+        let drawn = Drawn::configured::<BatteryWidget>(&state, &strict).unwrap();
         let figure = drawn.first("text").expect("the widget draws the charge");
         assert_eq!(drawn.prop(&figure, "tone").as_deref(), Some("warning"));
     }
 
     #[test]
     fn a_low_charge_on_the_wall_is_not_urgent() {
-        let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.1, true));
+        let drawn = Drawn::of::<BatteryWidget>(&State::new().battery(0.1, true)).unwrap();
         let figure = drawn.first("text").expect("the widget draws the charge");
         assert_eq!(drawn.prop(&figure, "tone"), None);
     }
@@ -98,7 +107,7 @@ mod tests {
     #[test]
     fn a_machine_with_no_battery_draws_nothing() {
         let state = State::new().absent(omega::testing::SystemTopic::Battery);
-        assert!(Drawn::of::<BatteryWidget>(&state).is_empty());
+        assert!(Drawn::of::<BatteryWidget>(&state).unwrap().is_empty());
     }
 
     #[test]

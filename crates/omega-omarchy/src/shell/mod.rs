@@ -268,7 +268,14 @@ impl PluginWidget {
     /// use omega_omarchy::shell::PluginWidget;
     /// #[derive(omega::Surface)]
     /// struct Indicator;
-    /// impl Surface for Indicator { fn render(&self) -> View { Text::new("Ready").into() } }
+    /// impl Surface for Indicator {
+    ///     type Model = ();
+    ///     type Message = std::convert::Infallible;
+    ///     type Effects = ();
+    ///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+    ///         match message {}
+    ///     }
+    ///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View { Text::new("Ready").into() } }
     /// let placement = PluginWidget::new("status", Indicator);
     /// ```
     ///

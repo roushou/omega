@@ -84,7 +84,7 @@ peripheral readings, and composite power status. `network`, `bluetooth`,
 its handles beside their accessors and controls. Native implementations stay in
 `omega-platform`; the SDK depends on neither it nor its native libraries.
 
-The root exposes `Surface`, `StatefulSurface`, `Command`, `Reaction`, `Plugin`,
+The root exposes `Surface`, `Command`, `Reaction`, `Plugin`,
 `View`, derives, errors, and shared values such as `Percent`. `surface` owns UI
 entry points, typed references, local messages, tasks, and lifecycle contracts.
 `command` owns public endpoints, input decoding, and typed command references;
@@ -364,14 +364,17 @@ All participants must negotiate a supported protocol version. Renderer attachmen
 also requires local-message and controlled-input features. Commands are separate manifest
 endpoints throughout; wire manifests cannot advertise them as UI surfaces.
 
-### Stateful surfaces
+### Surface instances
 
-The public read-only API is `Surface`, registered with `Plugin::surface`. Stateful
-behavior opts into `StatefulSurface`, registered with `Plugin::stateful`. Both
-use `derive(Surface)` to wire render-side readings and construction settings and
-produce typed `SurfaceRef`s. A stateful surface declares ordinary Rust `Model`
-and `Message` types, plus a separate `Effects: Wired` dependency set. Only behavior
-receives effects; rendering receives an immutable model and typed event builder.
+Every UI declaration implements `Surface` and registers with `Plugin::surface`.
+`derive(Surface)` wires read-only dependencies and construction settings and produces
+its typed `SurfaceRef`. The implementation declares `Model`, `Message`, and
+`Effects` associated types. Use `()` for unused model/effects and `Infallible` for
+no local messages, with an exhaustive empty match in the required `update` method.
+Only behavior receives effects; render receives an immutable model and event builder.
+All declarations use the same instance constructor, binding registry, and task scheduler.
+`SurfaceHarness` and surface previews support every surface. `Drawn::of` is a fallible
+one-shot helper using the same initialization and readiness checks.
 
 Each instance owns its model, current binding registry, tasks, and cached view.
 Local event IDs are process-unique and never reused across renders. The renderer

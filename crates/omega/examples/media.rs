@@ -54,7 +54,18 @@ pub struct Indicator {
     selection: Watch<Selection>,
 }
 impl Surface for Indicator {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.media.has_reading() {
             return Text::new("Media unavailable").muted().into();
         }
@@ -88,7 +99,18 @@ pub struct Panel {
     selection: Watch<Selection>,
 }
 impl Surface for Panel {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.media.has_reading() {
             return Section::new("Media")
                 .child(Text::new("Media service unavailable"))
@@ -283,11 +305,13 @@ mod tests {
     fn distinguishes_unavailable_and_empty() {
         assert!(
             Drawn::of::<Panel>(&State::new().absent(SystemTopic::Media))
+                .unwrap()
                 .text()
                 .contains("unavailable")
         );
         assert!(
             Drawn::of::<Panel>(&State::new().with(MediaState::default()))
+                .unwrap()
                 .text()
                 .contains("No media players")
         );
@@ -297,6 +321,7 @@ mod tests {
     fn automatic_prefers_playing_and_bar_title_is_bounded() {
         assert!(
             Drawn::of::<Indicator>(&Fixture::state())
+                .unwrap()
                 .text()
                 .contains("second track")
         );
@@ -346,7 +371,12 @@ mod tests {
                 }
                 .write(),
             );
-            assert!(Drawn::of::<Indicator>(&state).text().contains(expected));
+            assert!(
+                Drawn::of::<Indicator>(&state)
+                    .unwrap()
+                    .text()
+                    .contains(expected)
+            );
         }
     }
 }

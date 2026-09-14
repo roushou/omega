@@ -20,9 +20,9 @@
 //! ```
 mod scene;
 mod session;
-use omega::{StatefulSurface, View, testing::State};
+use omega::{Surface, View, testing::State};
 use omega_proto::preview::CaseId;
-use scene::{Component, Scene, Surface};
+use scene::{Component, Scene};
 use std::{collections::BTreeMap, rc::Rc};
 
 #[derive(Debug, thiserror::Error)]
@@ -71,25 +71,25 @@ impl Cases {
         );
         self
     }
-    /// Register a production stateful surface with synthetic readings.
+    /// Register a production surface with synthetic readings.
     /// Every external effect waits for explicit success/refusal in the preview.
-    pub fn surface<S: StatefulSurface + 'static>(mut self, name: &str, state: State) -> Self {
+    pub fn surface<S: Surface + 'static>(mut self, name: &str, state: State) -> Self {
         self.insert(
             name,
-            Box::new(move || Ok(Box::new(Surface::<S>::new(&state)?))),
+            Box::new(move || Ok(Box::new(scene::Surface::<S>::new(&state)?))),
         );
         self
     }
     /// Reuse a fixture factory that supplies settings, initial messages, or custom
     /// behavior dependencies through `SurfaceHarness`. The factory also serves tests.
-    pub fn surface_with<S: StatefulSurface + 'static>(
+    pub fn surface_with<S: Surface + 'static>(
         mut self,
         name: &str,
         build: impl Fn() -> omega::Result<omega::testing::SurfaceHarness<S>> + 'static,
     ) -> Self {
         self.insert(
             name,
-            Box::new(move || Ok(Box::new(Surface::<S>::from_harness(build()?)?))),
+            Box::new(move || Ok(Box::new(scene::Surface::<S>::from_harness(build()?)?))),
         );
         self
     }
@@ -107,7 +107,7 @@ impl Cases {
         }
     }
     /// Render a named case for structural assertions using the same fixture factory.
-    /// Stateful cases require a Tokio runtime when their initialization starts tasks.
+    /// Surface cases require a Tokio runtime when their initialization starts tasks.
     ///
     /// ```
     /// let cases = omega_preview::Cases::new().component("ready", || omega::ui::Text::new("Ready"));
@@ -163,7 +163,7 @@ mod previews {
     }
     #[derive(omega::Surface)]
     struct Counter {}
-    impl StatefulSurface for Counter {
+    impl Surface for Counter {
         type Model = u32;
         type Message = ();
         type Effects = ();
@@ -194,6 +194,39 @@ mod previews {
             .run()
             .unwrap();
     }
+    #[derive(omega::Surface)]
+    struct Charge {
+        battery: omega::platform::power::Battery,
+    }
+    impl Surface for Charge {
+        type Model = ();
+        type Message = std::convert::Infallible;
+        type Effects = ();
+        fn render(&self, _: &(), _: &Events<Self::Message>) -> View {
+            if self.battery.has_reading() {
+                Text::new(self.battery.charge()).into()
+            } else {
+                Text::new("Unavailable").into()
+            }
+        }
+        fn update(&self, _: &mut (), message: Self::Message, _: &()) -> Task<Self::Message> {
+            match message {}
+        }
+    }
+    #[test]
+    fn message_free_surface_cases_obey_readiness_without_tokio() {
+        let cases = Cases::new()
+            .surface::<Charge>("pending", State::new())
+            .surface::<Charge>("ready", State::new().battery(0.5, false))
+            .surface::<Charge>(
+                "absent",
+                State::new().absent(omega::testing::SystemTopic::Battery),
+            );
+        assert!(cases.draw("pending").unwrap().is_empty());
+        assert_eq!(cases.draw("ready").unwrap().text(), "50%");
+        assert_eq!(cases.draw("absent").unwrap().text(), "Unavailable");
+    }
+
     #[test]
     fn duplicate_registration_fails_loudly() {
         assert!(

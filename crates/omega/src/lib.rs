@@ -15,7 +15,14 @@
 //! }
 //!
 //! impl Surface for Charge {
-//!     fn render(&self) -> View {
+//!     type Model = ();
+//!     type Message = std::convert::Infallible;
+//!     type Effects = ();
+//!     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+//!         match message {}
+//!     }
+//!
+//!     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
 //!         if self.battery.is_charging() {
 //!             Text::new(format!("{} charging", self.battery.charge()))
 //!         } else {
@@ -36,8 +43,8 @@
 //! Build views with [`ui`], supply settings with [`config`], and share plugin
 //! memory through [`record`]. Shared units such as [`Percent`] live at the root.
 //!
-//! A [`Surface`] renders from readings; a [`StatefulSurface`] adds a local model
-//! and serialized messages with separate behavior effects. [`Command`] endpoints
+//! A [`Surface`] renders from readings and an instance-local model, with serialized
+//! messages and separate behavior effects. [`Command`] endpoints
 //! are explicitly callable, and [`Reaction`] runs when an event occurs.
 //! Render declarations accept only reading handles. Stateful behavior receives
 //! effects separately, keeping them out of ordinary render-side wiring.
@@ -64,7 +71,7 @@ pub use command::{Args, Command, Input};
 pub use error::{Error, Result};
 pub use plugin::Plugin;
 pub use reaction::Reaction;
-pub use surface::{StatefulSurface, Surface};
+pub use surface::Surface;
 
 /// Declarative UI content returned by surfaces and components.
 pub use ui::{Ui, View};

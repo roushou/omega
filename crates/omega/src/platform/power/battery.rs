@@ -19,7 +19,14 @@ use crate::units::{Percent, Remaining};
 /// }
 ///
 /// impl Surface for Charge {
-///     fn render(&self) -> View {
+///     type Model = ();
+///     type Message = std::convert::Infallible;
+///     type Effects = ();
+///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+///         match message {}
+///     }
+///
+///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
 ///         Text::new(self.battery.charge()).into()
 ///     }
 /// }

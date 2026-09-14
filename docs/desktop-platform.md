@@ -55,10 +55,11 @@ last-good built generations, and refuses ambiguous layouts.
 | Command      | Exposes a typed public plugin endpoint                           |
 | Reaction     | Handles an external transition                                   |
 
-`Surface` keeps read-only authoring short. `StatefulSurface` adds a local model,
-messages, lifecycle hooks, and a separate effect declaration. The render object
-receives readings; behavior receives effects. Derives enforce that separation
-through SDK wiring, rather than trusting every render method to avoid effects.
+`Surface` declares a per-instance model, local messages, and a separate effect set.
+Use `()` for an unused model or effect set, and `Infallible` when no local messages
+can occur. Every surface implements `render` and `update`; initialization and
+lifecycle hooks default to no work. Render receives readings and immutable model
+state; behavior receives effects. Derives enforce the render-side reading constraint.
 
 ```text
 UI message -> update model -> render View -> renderer

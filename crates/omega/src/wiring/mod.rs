@@ -71,3 +71,13 @@ pub trait Wired: Sized + Send + Sync + 'static {
     /// Construct one instance with its resolved settings.
     fn build(context: &Context, settings: &Values) -> Self;
 }
+
+impl Wired for () {
+    fn topics() -> Vec<omega_proto::SystemTopic> {
+        Vec::new()
+    }
+    fn capabilities() -> Vec<omega_proto::omega::Capability> {
+        Vec::new()
+    }
+    fn build(_: &crate::runtime::context::Context, _: &omega_proto::Values) -> Self {}
+}

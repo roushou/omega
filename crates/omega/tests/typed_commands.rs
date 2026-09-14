@@ -19,7 +19,18 @@ impl Command for SetVolume {
 #[derive(omega::Surface)]
 struct Controls {}
 impl Surface for Controls {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         Section::new("Audio")
             .child(Metric::new(Percent::whole(40)).label("Output volume"))
             .child(
@@ -56,7 +67,7 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
             .capabilities
             .is_empty()
     );
-    let drawn = Drawn::of::<Controls>(&State::new());
+    let drawn = Drawn::of::<Controls>(&State::new()).unwrap();
     let binding = &drawn.node("volume").unwrap().events["change"];
     assert_eq!(binding.command, "volume");
     assert!(binding.args.is_empty());

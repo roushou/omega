@@ -24,7 +24,13 @@ struct Charge {
 }
 
 impl Surface for Charge {
-    fn render(&self) -> View {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
         if !self.battery.has_reading() {
             return View::empty();
         }
@@ -42,7 +48,7 @@ Service domains own related state and controls under `omega::platform`:
 `power::{PowerProfiles, SetProfile}`.
 Controls bind to typed commands, such as `Slider::new(level).on_change(SetVolume)`.
 Commands and reactions may perform actions; render declarations only read state.
-`StatefulSurface` adds an instance-local model, typed messages, and managed tasks
+`Surface` declares an instance-local model, typed messages, and managed tasks
 with separate effect dependencies. Derives enforce that separation and declare
 the capabilities the plugin needs.
 

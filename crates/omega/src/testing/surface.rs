@@ -1,19 +1,19 @@
 use super::{Drawn, State};
 use crate::plugin::registry::MountedSurface;
-use crate::surface::instance::Stateful;
-use crate::{Args, Error, Input, StatefulSurface};
+use crate::surface::instance::Instance;
+use crate::{Args, Error, Input, Surface};
 
 /// The production model, binding and task runtime without a daemon or live services.
 ///
 /// Use a Tokio test runtime for tasks; paused Tokio time makes delays deterministic.
 /// Effects enter an isolated queue and never fall through to the live desktop.
-pub struct SurfaceHarness<S: StatefulSurface> {
-    instance: Stateful<S>,
+pub struct SurfaceHarness<S: Surface> {
+    instance: Instance<S>,
     context: crate::runtime::context::Context,
     effects: crate::effect::queue::Effects,
     revision: u64,
 }
-impl<S: StatefulSurface> SurfaceHarness<S> {
+impl<S: Surface> SurfaceHarness<S> {
     fn identity() -> omega_proto::instance::InstanceKey {
         omega_proto::instance::InstanceKey {
             id: omega_proto::instance::InstanceId::parse("fixture").expect("fixture id"),
@@ -27,7 +27,7 @@ impl<S: StatefulSurface> SurfaceHarness<S> {
     pub fn configured(state: &State, settings: &omega_proto::Values) -> Result<Self, Error> {
         let (context, effects) = state.context();
         let context = context.for_instance(Self::identity());
-        let mut instance = Stateful::<S>::new(&context, settings);
+        let mut instance = Instance::<S>::new(&context, settings);
         instance.mounted()?;
         Ok(Self {
             instance,
@@ -44,7 +44,7 @@ impl<S: StatefulSurface> SurfaceHarness<S> {
     ) -> Result<Self, Error> {
         let (context, queue) = state.context();
         let context = context.for_instance(Self::identity());
-        let mut instance = Stateful::<S>::new(&context, settings);
+        let mut instance = Instance::<S>::new(&context, settings);
         instance.replace_effects(effects);
         instance.mounted()?;
         Ok(Self {
@@ -125,7 +125,7 @@ impl<S: StatefulSurface> SurfaceHarness<S> {
             .apply(&omega_proto::omega::StatePatch { topics });
     }
 }
-impl<S: StatefulSurface> std::fmt::Debug for SurfaceHarness<S> {
+impl<S: Surface> std::fmt::Debug for SurfaceHarness<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SurfaceHarness").finish_non_exhaustive()
     }

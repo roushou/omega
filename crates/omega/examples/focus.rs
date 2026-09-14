@@ -119,7 +119,18 @@ pub struct Indicator {
     timer: Watch<Timer>,
 }
 impl Surface for Indicator {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         let timer = self.timer.get();
         let seconds = timer.remaining().div_ceil(1000);
         Text::new(format!("Focus {:02}:{:02}", seconds / 60, seconds % 60)).into()
@@ -130,7 +141,18 @@ pub struct Panel {
     timer: Watch<Timer>,
 }
 impl Surface for Panel {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         let timer = self.timer.get();
         let label = match timer {
             Timer::Idle => "Ready",

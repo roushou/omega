@@ -8,7 +8,14 @@
 //! # #[derive(omega::Surface)]
 //! # struct Charge { battery: Battery }
 //! # impl Surface for Charge {
-//! #     fn render(&self) -> View { Text::new(self.battery.charge()).into() }
+//! #     type Model = ();
+//! #     type Message = std::convert::Infallible;
+//! #     type Effects = ();
+//! #     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+//! #         match message {}
+//! #     }
+//! #
+//! #     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View { Text::new(self.battery.charge()).into() }
 //! # }
 //! fn main() -> omega::Result<()> {
 //!     omega::plugin!().surface(Charge).run()
@@ -54,18 +61,6 @@ impl std::fmt::Debug for Plugin {
 }
 
 impl Plugin {
-    /// Register a surface with an instance-owned model and local messages.
-    pub fn stateful<S: crate::StatefulSurface + crate::surface::SurfaceIdentity>(
-        mut self,
-        reference: impl Into<crate::surface::SurfaceRef<S>>,
-    ) -> Self {
-        let reference = reference.into();
-        let mut entry = SurfaceEntry::stateful::<S>(reference.surface().into());
-        entry.unit = Some(reference.unit());
-        self.surfaces.push(entry);
-        self
-    }
-
     /// Prefer [`plugin!`], which fills these in from the crate.
     pub fn named(name: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
@@ -83,7 +78,14 @@ impl Plugin {
     /// use omega::{View, Surface, ui::Text};
     /// #[derive(omega::Surface)]
     /// struct Indicator;
-    /// impl Surface for Indicator { fn render(&self) -> View { Text::new("Ready").into() } }
+    /// impl Surface for Indicator {
+    ///     type Model = ();
+    ///     type Message = std::convert::Infallible;
+    ///     type Effects = ();
+    ///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+    ///         match message {}
+    ///     }
+    ///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View { Text::new("Ready").into() } }
     /// let plugin = omega::plugin!().surface(Indicator);
     /// assert_eq!(plugin.manifest().unwrap().surfaces[0].id, "indicator");
     /// ```

@@ -1,5 +1,5 @@
 use omega::{
-    Args, StatefulSurface,
+    Args,
     testing::{CapturedEffect, Drawn, State, SurfaceHarness},
 };
 use omega_proto::omega::PreviewInteraction;
@@ -34,8 +34,8 @@ impl<F: Fn() -> omega::View> Scene for Component<F> {
     }
 }
 
-pub(crate) struct Surface<S: StatefulSurface>(SurfaceHarness<S>);
-impl<S: StatefulSurface> Surface<S> {
+pub(crate) struct Surface<S: omega::Surface>(SurfaceHarness<S>);
+impl<S: omega::Surface> Surface<S> {
     pub(crate) fn new(state: &State) -> omega::Result<Self> {
         Self::from_harness(SurfaceHarness::new(state)?)
     }
@@ -44,7 +44,7 @@ impl<S: StatefulSurface> Surface<S> {
         Ok(Self(harness))
     }
 }
-impl<S: StatefulSurface> Scene for Surface<S> {
+impl<S: omega::Surface> Scene for Surface<S> {
     fn draw(&mut self) -> Drawn {
         self.0.draw()
     }

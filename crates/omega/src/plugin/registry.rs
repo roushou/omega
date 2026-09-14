@@ -9,7 +9,7 @@ use crate::Input;
 use crate::runtime::context::Context;
 use crate::ui::View;
 use crate::wiring::Wired;
-use crate::{Args, Command, Reaction, Surface};
+use crate::{Args, Command, Reaction};
 
 /// Dependency declaration callback shared by registration kinds.
 type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mut BTreeSet<String>);
@@ -24,7 +24,7 @@ pub(crate) struct SurfaceEntry {
 }
 
 impl SurfaceEntry {
-    pub(crate) fn stateful<S: crate::StatefulSurface>(surface: String) -> Self {
+    pub(crate) fn of<S: crate::Surface>(surface: String) -> Self {
         Self {
             surface,
             unit: None,
@@ -34,20 +34,10 @@ impl SurfaceEntry {
             },
             required: S::required_topics,
             make: |context, settings| {
-                Box::new(crate::surface::instance::Stateful::<S>::new(
+                Box::new(crate::surface::instance::Instance::<S>::new(
                     context, settings,
                 ))
             },
-        }
-    }
-
-    pub(crate) fn of<W: Surface>(surface: String) -> Self {
-        Self {
-            surface,
-            unit: None,
-            declare: DeclarationOf::<W>::declare,
-            required: W::required_topics,
-            make: |context, settings| Box::new(W::build(context, settings)),
         }
     }
 
@@ -81,27 +71,13 @@ impl SurfaceEntry {
 /// Type-erased surface rendering and lifecycle interface.
 pub(crate) trait MountedSurface: Send {
     fn render(&mut self) -> View;
-    fn lifecycle(&mut self, _: crate::surface::Lifecycle) -> Result<(), crate::Error> {
-        Ok(())
-    }
-    fn mounted(&mut self) -> Result<(), crate::Error> {
-        Ok(())
-    }
-    fn event(&mut self, _: u64, _: Args) -> Result<(), crate::Error> {
-        Err(crate::Error::invalid("surface has no local messages"))
-    }
+    fn lifecycle(&mut self, event: crate::surface::Lifecycle) -> Result<(), crate::Error>;
+    fn mounted(&mut self) -> Result<(), crate::Error>;
+    fn event(&mut self, binding: u64, args: Args) -> Result<(), crate::Error>;
     fn poll(
         &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), crate::Error>> {
-        std::task::Poll::Pending
-    }
-}
-
-impl<W: Surface> MountedSurface for W {
-    fn render(&mut self) -> View {
-        Surface::render(self)
-    }
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), crate::Error>>;
 }
 
 /// A registered command.

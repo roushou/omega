@@ -251,9 +251,12 @@ omega-cli      the binary
 
 ## Stateful surfaces
 
-- `Surface` is read-only; `StatefulSurface` opts into instance-owned Model/Message
-  and a separate Effects declaration. `derive(Surface)` still requires Reads;
-  effects are passed only to updates/lifecycle hooks, never to render.
+- Every UI declaration implements Surface with Model, Message, and Effects associated
+  types. Use () for unused model/effects and Infallible for no local messages; update
+  remains required and handles Infallible with an empty match. Register all surfaces
+  with .surface. Derive(Surface) requires Reads; effects reach behavior, never render.
+- SurfaceHarness and previews use the production instance runtime for all surfaces.
+  Drawn::of is fallible and must respect initialization and required-reading gates.
 - Runtime instances serialize messages and own the current render's local binding
   registry. IDs are unique across the process; captures never cross the protocol.
   Stale or foreign-instance bindings are refused, never decoded with new captures.

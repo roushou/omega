@@ -1,5 +1,5 @@
 use omega::{
-    StatefulSurface, View,
+    Surface, View,
     surface::{Events, Lifecycle, Task, TextEdit, TextValue},
     testing::{State, SurfaceHarness},
     ui::{Button, Text},
@@ -16,7 +16,7 @@ enum Message {
     Work(u32, u64),
     Done(omega::Result<u32>),
 }
-impl StatefulSurface for Counter {
+impl Surface for Counter {
     type Model = Model;
     type Message = Message;
     type Effects = ();
@@ -104,7 +104,18 @@ struct Loading {
     battery: omega::surface::Optional<omega::platform::power::Battery>,
 }
 impl omega::Surface for Loading {
-    fn render(&self) -> View {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
         Text::new(if self.battery.is_pending() {
             "pending"
         } else if self.battery.has_reading() {
@@ -118,13 +129,20 @@ impl omega::Surface for Loading {
 #[test]
 fn optional_readings_distinguish_pending_absent_and_available() {
     use omega::testing::{Drawn, SystemTopic};
-    assert_eq!(Drawn::of::<Loading>(&State::new()).text(), "pending");
     assert_eq!(
-        Drawn::of::<Loading>(&State::new().absent(SystemTopic::Battery)).text(),
+        Drawn::of::<Loading>(&State::new()).unwrap().text(),
+        "pending"
+    );
+    assert_eq!(
+        Drawn::of::<Loading>(&State::new().absent(SystemTopic::Battery))
+            .unwrap()
+            .text(),
         "absent"
     );
     assert_eq!(
-        Drawn::of::<Loading>(&State::new().battery(0.5, false)).text(),
+        Drawn::of::<Loading>(&State::new().battery(0.5, false))
+            .unwrap()
+            .text(),
         "available"
     );
 }

@@ -10,7 +10,18 @@ pub struct Indicator {
     bluetooth: Bluetooth,
 }
 impl Surface for Indicator {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         let tooltip = match self.bluetooth.status() {
             BluetoothStatus::Unavailable => "Bluetooth state unavailable",
             BluetoothStatus::NoAdapter => "No Bluetooth adapter",
@@ -86,7 +97,18 @@ impl Panel {
     }
 }
 impl Surface for Panel {
-    fn render(&self) -> Ui {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         let panel = Section::new("Bluetooth");
         let panel = match self.bluetooth.status() {
             BluetoothStatus::Unavailable => {
@@ -182,11 +204,13 @@ mod tests {
     fn absence_power_and_empty_devices_are_distinct() {
         assert!(
             Drawn::of::<Panel>(&State::new().absent(SystemTopic::Bluetooth))
+                .unwrap()
                 .text()
                 .contains("state unavailable")
         );
         assert!(
             Drawn::of::<Panel>(&State::new().with(BluetoothState::default()))
+                .unwrap()
                 .text()
                 .contains("No Bluetooth adapter")
         );
@@ -194,7 +218,7 @@ mod tests {
             available: true,
             ..Default::default()
         });
-        let text = Drawn::of::<Panel>(&state).text();
+        let text = Drawn::of::<Panel>(&state).unwrap().text();
         assert!(text.contains("Bluetooth is off"));
         assert!(text.contains("No known devices"));
     }
@@ -229,7 +253,7 @@ mod tests {
                 "No connected devices",
             ),
         ] {
-            let drawn = Drawn::of::<Indicator>(&state);
+            let drawn = Drawn::of::<Indicator>(&state).unwrap();
             assert_eq!(drawn.prop("root", "tooltip").as_deref(), Some(tooltip));
         }
     }
@@ -241,7 +265,7 @@ mod tests {
             ..Fixture::device()
         };
         let state = Fixture::state(device);
-        let panel = Drawn::of::<Panel>(&state);
+        let panel = Drawn::of::<Panel>(&state).unwrap();
         assert!(panel.text().contains("0%"));
         assert!(panel.text().contains("Disconnected"));
         assert_eq!(
@@ -263,21 +287,21 @@ mod tests {
             connected: true,
             ..Fixture::device()
         });
-        let text = Drawn::of::<Panel>(&state).text();
+        let text = Drawn::of::<Panel>(&state).unwrap().text();
         assert!(!text.contains('%'));
-        let panel = Drawn::of::<Panel>(&state);
+        let panel = Drawn::of::<Panel>(&state).unwrap();
         assert_eq!(
             panel
                 .prop(&panel.first("button").unwrap(), "label")
                 .as_deref(),
             Some("Disconnect")
         );
-        assert!(Drawn::of::<Indicator>(&state).text().contains('1'));
+        assert!(Drawn::of::<Indicator>(&state).unwrap().text().contains('1'));
         let state = Fixture::state(WireDevice {
             can_connect: false,
             ..Fixture::device()
         });
-        let panel = Drawn::of::<Panel>(&state);
+        let panel = Drawn::of::<Panel>(&state).unwrap();
         assert_eq!(
             panel
                 .node(Fixture::ID)

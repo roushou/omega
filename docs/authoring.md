@@ -9,7 +9,7 @@ Use this guide to choose Omega APIs and compose reusable UI. See the
 | Requirement                                            | API                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------ |
 | Display system state                                   | `Surface` with `platform` reading handles              |
-| Keep selection, query text, or other per-window state  | `StatefulSurface`                                      |
+| Keep selection, query text, or other per-window state  | `Surface::Model` and local messages                    |
 | Reuse presentation across surfaces                     | `ui::Component`                                        |
 | Expose an operation to controls, schedules, or the CLI | `Command`                                              |
 | Respond to a system transition                         | `Reaction`                                             |
@@ -32,7 +32,13 @@ pub struct Charge {
 }
 
 impl Surface for Charge {
-    fn render(&self) -> View {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
         if !self.battery.has_reading() {
             return Text::new("Battery unavailable").muted().into();
         }
@@ -40,6 +46,11 @@ impl Surface for Charge {
     }
 }
 ```
+
+`Model = ()` and `Effects = ()` declare no local data or behavior dependencies.
+`Message = Infallible` declares that no local messages can occur; its empty match
+is exhaustive. Controls can still invoke registered commands. To add local behavior,
+choose a model and message type and implement their transitions in `update`.
 
 Register with `omega::plugin!().surface(Charge)`. Registration makes the surface
 available; placement in a bar or window is configured separately.
@@ -135,7 +146,7 @@ keys are scoped independently.
 For a `List`, keys also identify selection and activation values. `Choice<T>`
 separates its typed value from its display label.
 
-Use `StatefulSurface` for per-instance models and local messages. `update` changes
+Use `Surface` for per-instance models and local messages. `update` changes
 the model synchronously; return `Task` for asynchronous work. `Task::replace`
 invalidates earlier results under the same task key. Closing cancels managed result
 delivery; hiding retains work; destroying discards the model. Cancellation does
@@ -153,9 +164,11 @@ keys, and changes to unit settings restart the plugin. Store mutable application
 state in the instance model or records. Records survive plugin restarts while the
 daemon runs, but are not persisted across daemon restarts.
 
-Use `testing::Drawn` for content and property assertions, `testing::Called` for
-command results and effects, and `testing::SurfaceHarness` for local messages and
-managed tasks. Tests use synthetic readings and captured effects.
+Use `testing::SurfaceHarness` for any surface, including ones with no local messages.
+It retains the model, accepts fixture changes, and processes messages and tasks.
+`testing::Drawn::of::<S>(&state)?` constructs a temporary harness for a one-shot
+assertion; it runs initialization and respects readiness. Use `testing::Called`
+for command results and effects. Tests use synthetic readings and captured effects.
 
 For visual inspection, register component or surface cases with `omega-preview`
 and run `omega preview <package>`. Follow the [preview guide](previews.md) for
