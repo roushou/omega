@@ -2,6 +2,7 @@
 
 Maintainer reference for implemented subsystem boundaries and runtime contracts.
 For plugin development, start with the [authoring guide](authoring.md).
+The [architectural principles](principles.md) define rules for implementation and review.
 The [desktop platform decisions](desktop-platform.md) summarize composition rules;
 [open design questions](design.md) track limitations.
 

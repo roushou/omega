@@ -3,6 +3,7 @@
 Maintainer design reference for composition and ownership boundaries. [Architecture](architecture.md) describes
 current runtime contracts, the [completed plan](archive/desktop-platform-plan.md) records
 milestone validation, and [open questions](design.md) tracks remaining work.
+The [architectural principles](principles.md) govern primitives, layering, and review.
 
 ## Purpose
 

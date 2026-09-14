@@ -14,6 +14,25 @@ All five must pass; CI runs the same five. `protoc` is bundled — nothing to
 install. `cargo test -- --ignored` additionally runs `omega-cli/tests/e2e.rs`,
 which compiles a scaffolded config through the real binaries.
 
+## Architectural rules
+
+Apply [the architectural principles](docs/principles.md) to new code, refactors,
+and reviews. These rules also apply to AI coding tools working in this repository.
+
+- Build coherent primitives with explicit semantics and minimal dependencies.
+  Keep host integration and application policy in the layers that own them.
+- Separate pure decisions and state transitions from effect execution. Pass facts
+  into decisions explicitly; keep environment lookup and native APIs at boundaries.
+- Give each fact and policy one authoritative owner. Define identity, scope,
+  lifetime, ordering, cancellation, and failure where concerns compose.
+- Dependencies point toward contracts and logic, not concrete executors or hosts.
+  Use modules first; add traits, generics, or crates for a concrete boundary.
+- Provide concise, opinionated SDK defaults without requiring authors to assemble
+  internal layers. Keep underlying capabilities usable through explicit contracts.
+- Review complete behavior paths as well as modules. Test decisions in isolation
+  and verify their composition at integration boundaries. Report concrete coupling
+  or broken invariants before proposing structural changes.
+
 ## Style
 
 - No free functions: every operation hangs off a struct, enum, or trait.
