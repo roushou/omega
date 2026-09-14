@@ -10,10 +10,12 @@ impl Sources {
             if path.is_dir() {
                 Self::files(&path, root, found);
             } else {
-                found.insert(format!(
-                    "core/{}",
-                    path.strip_prefix(root).unwrap().display()
-                ));
+                found.insert(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
             }
         }
     }
@@ -23,7 +25,7 @@ impl Sources {
 fn every_core_asset_is_embedded_and_has_no_omarchy_imports() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("shell/core");
     let mut found = BTreeSet::new();
-    Sources::files(&root, &root, &mut found);
+    Sources::files(&root, root.parent().unwrap(), &mut found);
     assert_eq!(
         found,
         Core::FILES.iter().map(|a| a.name.to_owned()).collect()
@@ -42,14 +44,21 @@ fn every_core_asset_is_embedded_and_has_no_omarchy_imports() {
 
 #[test]
 fn preview_assets_are_embedded() {
-    let names: BTreeSet<_> = omega_renderer::Preview::FILES
-        .iter()
-        .map(|a| a.name)
-        .collect();
-    assert_eq!(
-        names,
-        BTreeSet::from(["shell.qml", "preview/Preview.qml", "preview/Viewport.qml"])
-    );
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("shell/preview");
-    assert_eq!(std::fs::read_dir(root).unwrap().count(), names.len());
+    let mut found = BTreeSet::new();
+    Sources::files(&root, &root, &mut found);
+    let mut embedded = BTreeSet::new();
+    for asset in omega_renderer::Preview::FILES {
+        let source = asset.name.strip_prefix("preview/").unwrap_or(asset.name);
+        assert!(
+            embedded.insert(source.to_string()),
+            "duplicate preview asset: {source}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join(source)).unwrap(),
+            asset.contents,
+            "preview asset {source}"
+        );
+    }
+    assert_eq!(found, embedded);
 }

@@ -135,29 +135,14 @@ fn a_doc_is_changed_across_steps_and_saved_once() {
             .push(BuiltUnit::new(&layout, unit(name)));
     }
 
+    assert_eq!(doc.path(), file.path());
+
     // Nothing has touched the file yet.
     assert!(file.read().unwrap().units.is_empty());
 
     doc.save().unwrap();
     assert_eq!(file.read().unwrap().units.len(), 3);
     assert_eq!(doc.value().units.len(), 3);
-}
-
-#[test]
-fn doc_saves_back_to_its_own_file() {
-    let tmp = TempDir::new("doc");
-    let layout = tmp.layout();
-    let file = layout.file::<StateConfig>(());
-    file.write(&StateConfig::default()).unwrap();
-
-    let mut doc = file.open().unwrap();
-    doc.value_mut()
-        .units
-        .push(BuiltUnit::new(&layout, unit("a-unit")));
-    doc.save().unwrap();
-
-    assert_eq!(doc.path(), file.path());
-    assert_eq!(file.read().unwrap().units.len(), 1);
 }
 
 #[test]

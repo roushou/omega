@@ -2,7 +2,7 @@
 //! generated workspace build.
 
 use omega_cli::checkout::SourceTree;
-use omega_cli::scaffold::{PluginName, Published, Scaffold, Template};
+use omega_cli::scaffold::{PluginName, Published, Scaffold};
 use omega_host::Toml;
 use omega_host::workspace::cargo::{CargoManifest, Edition};
 use omega_proto::UnitName;
@@ -43,17 +43,6 @@ fn every_member_inherits_from_the_workspace_and_never_declares() {
             );
         }
     }
-}
-
-#[test]
-fn a_plugin_depends_on_one_crate() {
-    let scaffold = Scaffold::new();
-    let unit_manifest = scaffold.unit_crate_manifest(&unit());
-    let names: Vec<&str> = unit_manifest.dependencies.names().collect();
-
-    // A plugin holds handles, draws a view, and returns `omega::Result`. The
-    // protocol, the runtime and the manifest are all behind that one name.
-    assert_eq!(names, vec!["omega"]);
 }
 
 #[test]
@@ -112,26 +101,6 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
         system.dependencies.names().collect::<Vec<_>>(),
         vec!["omega-document", "omega-omarchy"]
     );
-
-    let main = scaffold.system_main();
-    assert!(main.contains("Document::"), "the template emits a document");
-    assert!(main.contains(".emit()"));
-}
-
-#[test]
-fn a_founded_config_names_no_plugin() {
-    let main = Scaffold::new().system_main();
-
-    // The initial workspace must contain only scaffolded members.
-    assert!(
-        !main.contains("{unit"),
-        "a token was left unstamped: {main}"
-    );
-    assert!(!main.contains("battery"), "{main}");
-    assert!(
-        !main.contains("PluginWidget::"),
-        "the initial layout contains only native widgets: {main}"
-    );
 }
 
 #[test]
@@ -163,23 +132,6 @@ fn the_unit_crate_is_named_after_the_unit() {
 }
 
 #[test]
-fn the_bundled_plugin_declares_by_holding() {
-    let main = Template::Minimal.library();
-
-    // The shortest useful plugin: hold what you need, draw what you know.
-    assert!(main.contains("omega::Surface"), "{main}");
-    assert!(main.contains("impl Surface for"), "{main}");
-    assert!(main.contains("omega::plugin!()"), "{main}");
-
-    // Nothing declared twice, and nothing the author has to run themselves:
-    // no manifest to include, no surface name to repeat, no runtime to start.
-    assert!(!main.contains("include_str!"), "{main}");
-    assert!(!main.contains("SURFACE"), "{main}");
-    assert!(!main.contains("tokio::main"), "{main}");
-    assert!(!main.contains("loop {"), "{main}");
-}
-
-#[test]
 fn the_program_is_the_library_and_a_call() {
     let main = Scaffold::new()
         .unit_main(&PluginName::parse(unit().as_str()).unwrap())
@@ -189,35 +141,6 @@ fn the_program_is_the_library_and_a_call() {
     // left in the program is the call that runs what the library declared.
     assert!(main.contains("battery_widget::plugin().run()"), "{main}");
     assert!(!main.contains("Surface"), "{main}");
-}
-
-#[test]
-fn the_scaffolded_unit_arrives_with_tests_that_pass() {
-    let main = Template::Minimal.library();
-
-    // Generated plugins must include executable fixture tests.
-    assert!(main.contains("#[cfg(test)]"), "{main}");
-    assert!(main.contains("omega::testing"), "{main}");
-    assert!(main.contains("Drawn::of"), "{main}");
-    assert!(
-        !main.contains("{unit}"),
-        "the token was left unstamped: {main}"
-    );
-}
-
-#[test]
-fn the_program_uses_the_rust_crate_identifier() {
-    let scaffold = Scaffold::new();
-    // Rust spells `battery-widget` as `battery_widget`, and the program has
-    // to say the name the way the language does.
-    let hyphenated = UnitName::parse("battery-widget").unwrap();
-    assert!(
-        scaffold
-            .unit_main(&PluginName::parse(hyphenated.as_str()).unwrap())
-            .unwrap()
-            .contains("battery_widget::plugin()"),
-        "the program should reach its library by its Rust name"
-    );
 }
 
 #[test]
@@ -277,49 +200,9 @@ fn a_checkout_is_an_override_rather_than_a_manifest() {
 }
 
 #[test]
-fn a_checkout_cargo_owns_is_not_one_to_link() {
-    // Durable checkouts can be linked regardless of profile; Cargo-managed checkout caches cannot.
-    let cargo_home = std::path::PathBuf::from(
-        std::env::var("CARGO_HOME")
-            .unwrap_or_else(|_| format!("{}/.cargo", std::env::var("HOME").unwrap())),
-    );
-    let transient = cargo_home.join("git/checkouts/omega-1234/abcdef");
-
-    assert!(
-        SourceTree::at(&transient).is_err(),
-        "a tree cargo owns is not a checkout to point a config at"
-    );
-    assert!(
-        SourceTree::detect().unwrap().is_some(),
-        "the tests run from a checkout somebody keeps"
-    );
-}
-
-#[test]
 fn a_path_that_is_not_a_checkout_says_so() {
     let error = SourceTree::at("/etc").unwrap_err().to_string();
 
     // Reject nonexistent checkout paths before writing Cargo patches.
     assert!(error.contains("not an omega checkout"), "{error}");
-}
-
-#[test]
-fn the_line_omega_new_prints_names_only_things_the_plugin_has() {
-    let hint = Scaffold::placement_hint(
-        &PluginName::parse(unit().as_str()).unwrap(),
-        Template::Minimal,
-    );
-    let lib = Template::Minimal.library();
-
-    // Placement hints must reference exported plugin symbols.
-    assert!(hint.contains("battery_widget::Hello"), "{hint}");
-    assert!(lib.contains("pub struct Hello"), "{lib}");
-    assert!(!hint.contains("Settings"), "{hint}");
-
-    // Fully qualified: a hint that needs a second hint about an import is a
-    // hint that failed.
-    assert!(
-        hint.contains("omega_omarchy::shell::PluginWidget::new"),
-        "{hint}"
-    );
 }

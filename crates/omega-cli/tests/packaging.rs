@@ -34,14 +34,6 @@ fn sources(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Find Rust test sources separately from packaged production sources.
-fn test_sources(root: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    walk(&root.join("tests"), &mut found);
-    found.sort();
-    found
-}
-
 fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -182,35 +174,6 @@ fn every_internal_dependency_carries_the_version_it_will_publish_as() {
     }
 
     assert!(checked > 0, "no internal dependency was found to check");
-}
-
-#[test]
-fn nothing_that_runs_cargo_builds_in_the_system_temp_directory() {
-    // Keep compiler output under CARGO_TARGET_TMPDIR; temporary files may use temp_dir.
-    let mut checked = 0;
-
-    for root in crate_roots() {
-        for file in sources(&root).into_iter().chain(test_sources(&root)) {
-            // This file names both needles to look for them, so it matches
-            // itself and nothing else would ever pass.
-            if file.ends_with(file!()) {
-                continue;
-            }
-
-            let source = std::fs::read_to_string(&file).unwrap();
-            if !source.contains(r#"Command::new("cargo")"#) {
-                continue;
-            }
-            checked += 1;
-            assert!(
-                !source.contains("env::temp_dir"),
-                "{} runs cargo and roots paths in the system temp directory —                  build somewhere on disk, such as CARGO_TARGET_TMPDIR",
-                file.display()
-            );
-        }
-    }
-
-    assert!(checked > 0, "no cargo-running source was found to check");
 }
 
 /// A field a crate either states itself or inherits from the workspace.

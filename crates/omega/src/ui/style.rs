@@ -6,14 +6,7 @@ macro_rules! modifiers {
             /// Native controls take precedence; the nearest matching subtree wins.
             /// Replaces any previously attached map. Disabled subtrees do not participate.
             ///
-            /// ```
-            /// use omega::keyboard::{Chord, Key, Keymap};
-            /// use omega::ui::{Column, Component};
-            /// # fn view(events: &omega::surface::Events<()>) -> Result<omega::View, omega::keyboard::Conflict> {
-            /// let keys = Keymap::new().bind(Chord::new(Key::Escape), events.send(()))?;
-            /// Ok(Column::new().shortcuts(keys).into())
-            /// # }
-            /// ```
+            /// See the [shortcut example](crate::ui#keyboard-shortcuts).
             $visibility fn shortcuts(self, keys: $crate::keyboard::Keymap<$crate::ui::Bind<()>>) -> $output {
                 self.map_node(|node| node.shortcuts(keys))
             }

@@ -65,17 +65,21 @@ impl Machine {
     }
 
     /// Run cargo over the scaffolded workspace, the way its author would.
-    fn cargo(&self, args: &[&str]) -> String {
-        let output = Command::new("cargo")
+    fn cargo_command(&self, args: &[&str]) -> Command {
+        let mut command = Command::new("cargo");
+        command
             // Cargo discovers local patches relative to its working directory.
             .current_dir(self.root.join("config"))
             .args(args)
             .arg("--manifest-path")
             .arg(self.root.join("config").join("Cargo.toml"))
             .arg("--target-dir")
-            .arg(Self::build_cache())
-            .output()
-            .unwrap();
+            .arg(Self::build_cache());
+        command
+    }
+
+    fn cargo(&self, args: &[&str]) -> String {
+        let output = self.cargo_command(args).output().unwrap();
         assert!(
             output.status.success(),
             "cargo {args:?} failed in the scaffolded config: {}{}",
@@ -538,4 +542,21 @@ fn shell_only_configs_build_and_check_never_publishes() {
     std::fs::write(&main, original).unwrap();
     machine.run(&["check"]);
     assert_eq!(generations.recovery_ids().unwrap(), baseline_ids);
+}
+
+#[test]
+fn generated_workspace_builds_stay_in_cargo_target_scratch_space() {
+    let machine = Machine::new();
+    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    assert!(machine.root.starts_with(scratch));
+    assert!(Machine::build_cache().starts_with(scratch));
+    let command = machine.cargo_command(&["test", "--workspace"]);
+    assert_eq!(command.get_program(), "cargo");
+    assert_eq!(
+        command.get_current_dir(),
+        Some(machine.root.join("config").as_path())
+    );
+    let args: Vec<_> = command.get_args().collect();
+    let target = args.iter().position(|arg| *arg == "--target-dir").unwrap();
+    assert_eq!(Path::new(args[target + 1]), Machine::build_cache());
 }

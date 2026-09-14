@@ -57,8 +57,9 @@ impl Build {
             Recursion::Recursive,
         )?)
     }
-    pub(super) async fn compile(&self) -> anyhow::Result<PathBuf> {
-        let output = tokio::process::Command::new("cargo")
+    fn compile_command(&self) -> tokio::process::Command {
+        let mut command = tokio::process::Command::new("cargo");
+        command
             .current_dir(&self.directory)
             .args([
                 "test",
@@ -69,9 +70,12 @@ impl Build {
                 "--message-format=json",
             ])
             .stderr(std::process::Stdio::inherit())
-            .kill_on_drop(true)
-            .output()
-            .await?;
+            .kill_on_drop(true);
+        command
+    }
+
+    pub(super) async fn compile(&self) -> anyhow::Result<PathBuf> {
+        let output = self.compile_command().output().await?;
         let mut executable = None;
         let mut diagnostics = String::new();
         for line in output
@@ -105,5 +109,44 @@ impl Build {
         executable.context(
             "package has no library test target; register previews::preview in its library",
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    #[test]
+    fn preview_compilation_preserves_the_authors_workspace_and_cargo_configuration() {
+        let build = Build {
+            directory: "/desktop config".into(),
+            package: "application-launcher".into(),
+        };
+        let command = build.compile_command();
+        let command = command.as_std();
+        assert_eq!(command.get_program(), OsStr::new("cargo"));
+        assert_eq!(
+            command.get_current_dir(),
+            Some(Path::new("/desktop config"))
+        );
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            [
+                "test",
+                "--package",
+                "application-launcher",
+                "--lib",
+                "--no-run",
+                "--message-format=json"
+            ]
+            .map(OsStr::new)
+        );
+        assert!(
+            command
+                .get_envs()
+                .all(|(name, _)| name != "CARGO_TARGET_DIR")
+        );
     }
 }

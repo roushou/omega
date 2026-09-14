@@ -129,7 +129,8 @@ impl Observing {
             let mut line = String::new();
             match tokio::time::timeout(left, self.reader.read_line(&mut line)).await {
                 // No additional state is expected after subscription narrowing.
-                Err(_) | Ok(Ok(0)) => return None,
+                Err(_) => return None,
+                Ok(Ok(0)) => panic!("observer disconnected while checking topic filtering"),
                 Ok(Err(e)) => panic!("the observer connection broke: {e}"),
                 Ok(Ok(_)) => {
                     let line: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
@@ -183,6 +184,7 @@ async fn an_observer_can_decline_every_topic_and_still_draw() {
         None,
         "a topic reached an observer that asked for none"
     );
+    observing.subscribe_to(&[]).await;
 }
 
 #[tokio::test]
@@ -198,6 +200,7 @@ async fn an_observer_is_sent_the_topics_it_named_and_no_others() {
         None,
         "an unnamed topic reached an observer that named another"
     );
+    observing.subscribe_to(&["units"]).await;
 }
 
 #[tokio::test]

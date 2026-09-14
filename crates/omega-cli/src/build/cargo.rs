@@ -58,7 +58,7 @@ impl<'a> Cargo<'a> {
         Ok(metadata.packages)
     }
 
-    async fn run(&self, profile: Profile, extra: &[&str]) -> Result<(), CargoError> {
+    fn build_command(&self, profile: Profile, extra: &[&str]) -> tokio::process::Command {
         let mut command = tokio::process::Command::new("cargo");
         command
             // Cargo resolves local overrides from the working directory, not `--manifest-path`.
@@ -79,7 +79,11 @@ impl<'a> Cargo<'a> {
             command.arg(flag);
         }
 
-        let status = command.status().await?;
+        command
+    }
+
+    async fn run(&self, profile: Profile, extra: &[&str]) -> Result<(), CargoError> {
+        let status = self.build_command(profile, extra).status().await?;
         status.success().then_some(()).ok_or(CargoError::Failed)
     }
 }
@@ -96,4 +100,51 @@ pub(crate) struct Package {
     pub(crate) version: String,
     pub(crate) source: Option<String>,
     pub(crate) manifest_path: std::path::PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    #[test]
+    fn builds_use_config_local_overrides_and_target_directory_for_both_profiles() {
+        let layout = Layout::at("/desktop config", "/state", "/cache");
+        let cargo = Cargo::new(&layout);
+        for (profile, selection, suffix) in [
+            (Profile::Debug, vec![], vec!["--workspace"]),
+            (Profile::Release, vec![], vec!["--workspace", "--release"]),
+            (
+                Profile::Debug,
+                vec!["--package", "battery"],
+                vec!["--package", "battery"],
+            ),
+            (
+                Profile::Release,
+                vec!["--package", "battery"],
+                vec!["--package", "battery", "--release"],
+            ),
+        ] {
+            let command = cargo.build_command(profile, &selection);
+            let command = command.as_std();
+            assert_eq!(command.get_program(), OsStr::new("cargo"));
+            assert_eq!(
+                command.get_current_dir(),
+                Some(Path::new("/desktop config"))
+            );
+            let expected = [
+                "build",
+                "--manifest-path",
+                "/desktop config/Cargo.toml",
+                "--target-dir",
+                "/desktop config/target",
+            ]
+            .into_iter()
+            .chain(suffix)
+            .map(OsStr::new)
+            .collect::<Vec<_>>();
+            assert_eq!(command.get_args().collect::<Vec<_>>(), expected);
+        }
+    }
 }

@@ -39,21 +39,18 @@ impl SourceTree {
             return Self::at(named).map(Some);
         }
 
-        let built_from = Self::built_from();
-        Ok(if Self::is_cargos_own(&built_from) {
-            None
-        } else {
-            Self::at(built_from).ok()
-        })
-    }
-
-    /// Whether the path is inside Cargo-managed storage.
-    fn is_cargos_own(path: &Path) -> bool {
         let home = std::env::var_os("CARGO_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")));
+        Ok(Self::automatic(&Self::built_from(), home.as_deref()))
+    }
 
-        home.is_some_and(|home| path.starts_with(home))
+    fn automatic(built_from: &Path, cargo_home: Option<&Path>) -> Option<Self> {
+        if cargo_home.is_some_and(|home| built_from.starts_with(home)) {
+            None
+        } else {
+            Self::at(built_from).ok()
+        }
     }
 
     /// A checkout at a path, checked for actually being one.
@@ -123,5 +120,68 @@ impl SourceTree {
             .canonicalize()
             .map_err(|source| LinkError::CratePath { crate_name, source })?;
         Ok(canonical.display().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SourceTree;
+    use std::path::{Path, PathBuf};
+
+    struct CheckoutFixture(PathBuf);
+    impl CheckoutFixture {
+        fn new() -> Self {
+            let root = omega_host::fs::TempPath::sibling(
+                &std::env::temp_dir().join("omega-checkout-test"),
+                "sources",
+            );
+            std::fs::create_dir_all(&root).unwrap();
+            Self(root)
+        }
+        fn checkout(&self, name: &str) -> PathBuf {
+            let root = self.0.join(name);
+            std::fs::create_dir_all(root.join("crates/omega")).unwrap();
+            std::fs::write(
+                root.join("crates/omega/Cargo.toml"),
+                "[package]\nname = \"omega-rs\"\n",
+            )
+            .unwrap();
+            assert!(
+                SourceTree::at(&root).is_ok(),
+                "fixture must be a valid checkout"
+            );
+            root
+        }
+    }
+    impl Drop for CheckoutFixture {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn automatic_detection_skips_valid_cargo_managed_checkouts() {
+        let fixture = CheckoutFixture::new();
+        let cargo_home = fixture.0.join("cargo-home");
+        for location in [
+            "cargo-home/git/checkouts/omega/revision",
+            "cargo-home/registry/src/omega",
+        ] {
+            let root = fixture.checkout(location);
+            assert!(SourceTree::automatic(&root, Some(&cargo_home)).is_none());
+        }
+        for location in ["development/omega", "cargo-home-neighbor/omega"] {
+            let root = fixture.checkout(location);
+            assert_eq!(
+                SourceTree::automatic(&root, Some(&cargo_home))
+                    .unwrap()
+                    .root(),
+                root
+            );
+        }
+        assert!(
+            SourceTree::automatic(Path::new("/nonexistent/omega-checkout"), Some(&cargo_home))
+                .is_none()
+        );
     }
 }

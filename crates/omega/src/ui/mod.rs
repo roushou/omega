@@ -15,6 +15,20 @@
 //! Containers accept primitives, [`View`] values and user-defined [`Component`]s.
 //! Keys are finalized at publication; component instances scope their internal keys.
 
+//! # Keyboard shortcuts
+//!
+//! Attach a keymap to a view builder, `View`, or `Component`. Focused controls
+//! handle native editing first; unconsumed keys reach the nearest matching map.
+//!
+//! ```
+//! use omega::keyboard::{Chord, Key, Keymap};
+//! use omega::ui::Column;
+//! # fn view(events: &omega::surface::Events<()>) -> omega::View {
+//! let keys = Keymap::single(Chord::new(Key::Escape), events.send(()));
+//! Column::new().shortcuts(keys).into()
+//! # }
+//! ```
+
 pub(crate) mod bind;
 mod content;
 mod control;
