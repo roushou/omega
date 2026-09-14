@@ -52,6 +52,7 @@ impl Renderer {
             "manifest.json",
             "BarWidget.qml",
             "Connection.qml",
+            "PanelSession.qml",
             "OmarchyTheme.qml"
         ]
     );

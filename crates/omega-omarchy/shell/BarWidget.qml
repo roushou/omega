@@ -31,15 +31,12 @@ BarWidget {
     var observed = link.snapshot.observed
     if (observed !== state && observed !== (shown ? 2 : 1)) link.report(link.instance, state)
   }
-  property bool opened: false
-  onOpenedChanged: {
-    panelLink.change(root.opened ? "PRESENTATION_ACTION_PRESENT" : "PRESENTATION_ACTION_HIDE")
-    panelLink.report(panelLink.instance, root.opened ? "PRESENTATION_STATE_VISIBLE" : "PRESENTATION_STATE_HIDDEN")
-  }
+  PanelSession { id: panelState; connection: panelLink }
+  readonly property bool opened: panelState.opened
 
   // Bar.findPanelWidget requires open, close, and opened for shell toggle support.
-  function open() { root.opened = true }
-  function close() { root.opened = false }
+  function open() { panelState.setOpen(true) }
+  function close() { panelState.setOpen(false) }
 
   Connection {
     id: link
@@ -55,7 +52,6 @@ BarWidget {
   // module instance — the document placed one thing, which draws in two.
   Connection {
     id: panelLink
-    onViewUpdated: root.opened = panelLink.presented
     unit: root.unit
     surface: root.panel
     module: root.module
@@ -104,7 +100,7 @@ BarWidget {
     // Child controls must receive clicks before the popup trigger.
     // Parent `view` after WidgetButton's MouseArea; a sibling below it cannot receive clicks.
     onPressed: function (mouseButton) {
-      if (root.hasPanel && mouseButton === Qt.LeftButton) root.opened = !root.opened
+      if (root.hasPanel && mouseButton === Qt.LeftButton) panelState.toggle()
     }
   }
 

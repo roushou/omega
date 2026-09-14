@@ -181,9 +181,18 @@ Item {
         return true
     }
 
-    function change(action) {
-        if (!link.attached || !link.instance) return
-        link.send({ streamId: link.allocateStream(), invoke: { changePresentation: { instance: link.instance, action: action } } })
+    function change(action, key) {
+        if (!link.attached || !link.instance) {
+            requests.error = "Not attached; presentation was not sent."
+            return false
+        }
+        var stream = link.allocateStream()
+        if (!requests.begin(stream, key, Date.now())) return false
+        if (!link.send({ streamId: stream, invoke: { changePresentation: { instance: link.instance, action: action } } })) {
+            requests.finish(stream, { done: true, error: { message: "Disconnected; presentation was not sent." } })
+            return false
+        }
+        return true
     }
 
     function report(identity, state) {
