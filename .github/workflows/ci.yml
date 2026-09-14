@@ -62,7 +62,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Install qmllint
+      - name: Install QML tooling and runtime modules
         # `update`'s exit code is not the signal, for the same reason
         # qmllint's own is not: it reports on things we did not ask about.
         # The runner image carries third-party apt repos we have no use for —
@@ -76,7 +76,7 @@ jobs:
         # with an error about the package rather than about a browser.
         run: |
           sudo apt-get update || true
-          sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts
+          sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts qml6-module-qtquick-controls qml6-module-qtquick-templates
 
       - name: Lint the QML
         run: crates/omega-renderer/shell/lint.sh
