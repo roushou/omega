@@ -319,6 +319,7 @@ impl Wired for Forward {
     }
 }
 impl crate::command::CommandName for Forward {
+    const UNIT: &'static str = "test";
     const NAME: &'static str = "forward";
 }
 impl crate::Command for Forward {

@@ -213,6 +213,12 @@ Controls require matching inputs (`Percent`, `bool`, `String` or `()`), and
 command names are refused. A reference does not register the command: invoking an
 unregistered command remains a runtime refusal.
 
+The identity also carries the defining package for document actions.
+`Actions::invoke(focus::Tick)` requires a command with `Input = ()`;
+`Actions::invoke_with(audio::SetVolume, Percent::whole(50))` encodes its typed input.
+Schedules and keybindings consume the same action. Dynamic targets use
+`invoke_named` or `invoke_named_with`, with target and input validation at runtime.
+
 Scalar inputs consume exactly one argument; `()` consumes none. `derive(Input)`
 decodes a strict map. Missing, mistyped and unknown fields are refused before
 `call` runs, rather than defaulting as configuration and records do. `Args` remains

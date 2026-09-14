@@ -20,4 +20,10 @@ Omarchy shell layouts live in [omega-omarchy](../omega-omarchy), with
 payload; the Omarchy adapter validates it and its projected widget instances
 before delegating to core validation.
 
+Schedules and keybindings share typed command actions. With the plugin as a
+Rust dependency, `Actions::invoke(focus::Tick)` resolves its package and command
+name; `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` also checks the
+input type. The daemon still checks that the plugin registers the command.
+Dynamic targets use the explicit `invoke_named` / `invoke_named_with` methods.
+
 Licensed under MIT.

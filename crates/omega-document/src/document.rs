@@ -311,7 +311,7 @@ impl Schedules {
     /// Schedules::every(
     ///     "refresh-weather",
     ///     Cadence::minutes(10),
-    ///     Actions::invoke("weather", "refresh"),
+    ///     Actions::invoke_named("weather", "refresh"),
     /// );
     /// ```
     pub fn every(id: impl Into<String>, cadence: Cadence, action: Action) -> Schedule {
@@ -337,14 +337,84 @@ impl Schedules {
 pub struct Actions;
 
 impl Actions {
-    /// Call a unit's command surface. The daemon checks the unit declares it.
-    pub fn invoke(unit: impl Into<String>, command: impl Into<String>) -> Action {
-        Self::invoke_with(unit, command, Vec::<bool>::new())
+    /// Invoke a command that takes no input. Registration is checked by the daemon.
+    ///
+    /// ```
+    /// use omega::Command;
+    /// use omega_document::Actions;
+    /// #[derive(omega::Command)]
+    /// struct Refresh {}
+    /// impl Command for Refresh {
+    ///     type Input = ();
+    ///     type Output = ();
+    ///     async fn call(&self, _: ()) -> omega::Result<()> { Ok(()) }
+    /// }
+    /// let action = Actions::invoke(Refresh);
+    /// ```
+    /// Commands requiring input cannot be invoked without it:
+    ///
+    /// ```compile_fail
+    /// use omega::Command;
+    /// #[derive(omega::Command)]
+    /// struct SetLevel;
+    /// impl Command for SetLevel {
+    ///     type Input = u64;
+    ///     type Output = ();
+    ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
+    /// }
+    /// omega_document::Actions::invoke(SetLevel);
+    /// ```
+    pub fn invoke<C: ::omega::Command<Input = ()>>(
+        command: impl Into<::omega::command::CommandRef<C>>,
+    ) -> Action {
+        Self::invoke_with(command, ())
     }
 
-    /// The same, with arguments — the values the command reads with
-    /// `Args::get`.
-    pub fn invoke_with(
+    /// Invoke a command with its complete, typed input.
+    ///
+    /// ```
+    /// use omega::Command;
+    /// use omega_document::Actions;
+    /// #[derive(omega::Command)]
+    /// struct SetLevel {}
+    /// impl Command for SetLevel {
+    ///     type Input = u64;
+    ///     type Output = ();
+    ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
+    /// }
+    /// let action = Actions::invoke_with(SetLevel, 42);
+    /// ```
+    /// The input must match the command's declared type:
+    ///
+    /// ```compile_fail
+    /// use omega::Command;
+    /// #[derive(omega::Command)]
+    /// struct SetLevel;
+    /// impl Command for SetLevel {
+    ///     type Input = u64;
+    ///     type Output = ();
+    ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
+    /// }
+    /// omega_document::Actions::invoke_with(SetLevel, "loud");
+    /// ```
+    pub fn invoke_with<C: ::omega::Command>(
+        command: impl Into<::omega::command::CommandRef<C>>,
+        input: C::Input,
+    ) -> Action {
+        use ::omega::Input;
+        let command = command.into();
+        Self::invoke_named_with(command.unit(), command.name(), input.encode())
+    }
+
+    /// Invoke a dynamically named command without input. Prefer [`Self::invoke`]
+    /// when the defining plugin is a dependency.
+    pub fn invoke_named(unit: impl Into<String>, command: impl Into<String>) -> Action {
+        Self::invoke_named_with(unit, command, Vec::<bool>::new())
+    }
+
+    /// Invoke a dynamically named command with positional wire values.
+    /// The daemon validates the target and input against the plugin manifest.
+    pub fn invoke_named_with(
         unit: impl Into<String>,
         command: impl Into<String>,
         args: impl IntoIterator<Item = impl IntoValue>,

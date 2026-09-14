@@ -209,7 +209,7 @@ impl Command for Connect {
 /// whoever runs the machine, so the document says it.
 ///
 /// ```ignore
-/// Schedules::every("sample-wifi", Cadence::seconds(30), Actions::invoke(UNIT, "sample"))
+/// Schedules::every("sample-wifi", Cadence::seconds(30), Actions::invoke(Sample))
 /// ```
 #[derive(omega::Command, Debug)]
 pub struct Sample {

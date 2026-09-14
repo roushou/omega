@@ -522,7 +522,7 @@ fn shell_only_configs_build_and_check_never_publishes() {
         (
             r#"omega_document::Document::new().schedule(omega_document::Schedules::every(
             "tick", omega_document::Cadence::seconds(1),
-            omega_document::Actions::invoke("missing", "tick")
+            omega_document::Actions::invoke_named("missing", "tick")
         )).emit()"#,
             "unknown unit",
         ),
