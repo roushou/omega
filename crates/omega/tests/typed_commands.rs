@@ -16,6 +16,52 @@ impl Command for SetVolume {
     }
 }
 
+#[derive(omega::Command)]
+struct SetMuted {
+    volume: omega::platform::audio::Volume,
+}
+
+impl Command for SetMuted {
+    type Input = bool;
+    type Output = ();
+
+    async fn call(&self, muted: bool) -> omega::Result<()> {
+        self.volume.set_muted(muted).await
+    }
+}
+
+#[tokio::test]
+async fn absolute_mute_does_not_depend_on_observed_state() {
+    use omega::testing::{SystemTopic, topic::AudioState};
+    use omega_proto::omega::{action, invoke, set_volume};
+
+    for state in [
+        State::new().absent(SystemTopic::Audio),
+        State::new().with(AudioState {
+            muted: false,
+            ..Default::default()
+        }),
+        State::new().with(AudioState {
+            muted: true,
+            ..Default::default()
+        }),
+    ] {
+        for muted in [true, true, false, false] {
+            let called = Called::of::<SetMuted>(&state, muted).await;
+            assert!(called.answer.is_ok());
+            let [invoke::Op::Act(act)] = called.effects.as_slice() else {
+                panic!("expected one audio action");
+            };
+            let Some(action::Kind::SetVolume(volume)) =
+                act.action.as_ref().and_then(|a| a.kind.as_ref())
+            else {
+                panic!("expected a volume action");
+            };
+            assert_eq!(volume.change, Some(set_volume::Change::Muted(muted)));
+        }
+    }
+}
+
 #[derive(omega::Surface)]
 struct Controls {}
 impl Surface for Controls {

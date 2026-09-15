@@ -244,6 +244,25 @@ fn zero_values_deltas_and_implicit_focus_remain_valid() {
 }
 
 #[test]
+fn absolute_mute_preserves_false_through_binary_and_json() {
+    use prost::Message;
+
+    for muted in [false, true] {
+        let request = SetVolume {
+            change: Some(set_volume::Change::Muted(muted)),
+        };
+        let decoded = SetVolume::decode(request.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(decoded.change, Some(set_volume::Change::Muted(muted)));
+
+        let json = serde_json::to_value(request).unwrap();
+        assert_eq!(json["muted"], muted);
+        let decoded: SetVolume = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded.change, Some(set_volume::Change::Muted(muted)));
+        action::Kind::SetVolume(decoded).validate().unwrap();
+    }
+}
+
+#[test]
 fn wifi_requests_require_network_authority_and_validate_without_echoing_secrets() {
     use crate::omega::{ConnectWifi, DisconnectWifi};
     let request = action::Kind::ConnectWifi(ConnectWifi {

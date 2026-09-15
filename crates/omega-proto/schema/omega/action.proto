@@ -135,6 +135,7 @@ message SetVolume {
     double absolute = 1;        // 0.0 .. 1.0
     double delta = 2;           // signed
     bool toggle_mute = 3;       // must be true when selected
+    bool muted = 4;             // absolute mute state; false explicitly unmutes
   }
 }
 

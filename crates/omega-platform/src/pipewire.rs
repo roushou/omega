@@ -180,6 +180,11 @@ impl PipeWire {
                 Self::DEFAULT.into(),
                 "toggle".into(),
             ],
+            set_volume::Change::Muted(muted) => vec![
+                "set-sink-mute".into(),
+                Self::DEFAULT.into(),
+                if *muted { "1" } else { "0" }.into(),
+            ],
         }
     }
 

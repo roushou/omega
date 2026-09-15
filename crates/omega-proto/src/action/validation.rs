@@ -170,6 +170,7 @@ impl action::Kind {
                 Some(set_volume::Change::ToggleMute(toggle)) => {
                     input.require("change.toggle_mute", toggle, "must be true when selected")?
                 }
+                Some(set_volume::Change::Muted(_)) => {}
                 None => return input.invalid("change", "is required"),
             },
             Self::SetBacklight(set) => match set.change {

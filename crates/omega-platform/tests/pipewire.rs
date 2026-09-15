@@ -74,6 +74,14 @@ fn muting_names_the_default_sink_like_everything_else() {
     assert_eq!(toggle, vec!["set-sink-mute", "@DEFAULT_SINK@", "toggle"]);
 }
 
+#[test]
+fn absolute_mute_and_unmute_do_not_toggle() {
+    for (muted, argument) in [(true, "1"), (false, "0")] {
+        let arguments = PipeWire::arguments(&set_volume::Change::Muted(muted));
+        assert_eq!(arguments, ["set-sink-mute", "@DEFAULT_SINK@", argument]);
+    }
+}
+
 // ---- against the machine this is running on ----
 
 use omega_proto::omega::state_topic;

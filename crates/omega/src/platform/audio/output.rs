@@ -50,6 +50,23 @@ impl Volume {
         self.change(set_volume::Change::ToggleMute(true))
     }
 
+    /// Set the default output's mute state: `true` mutes and `false` unmutes.
+    ///
+    /// Sends an absolute state without consulting an audio reading. Repeating
+    /// the same value does not toggle the output. The backend resolves the default
+    /// output when executing the request; backend failures are returned by the effect.
+    ///
+    /// ```no_run
+    /// # async fn example(volume: &omega::platform::audio::Volume) -> omega::Result<()> {
+    /// volume.set_muted(true).await?;
+    /// volume.set_muted(false).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_muted(&self, muted: bool) -> crate::effect::Effect {
+        self.change(set_volume::Change::Muted(muted))
+    }
+
     fn change(&self, change: set_volume::Change) -> crate::effect::Effect {
         self.act(action::Kind::SetVolume(SetVolume {
             change: Some(change),
