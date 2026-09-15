@@ -178,6 +178,44 @@ fn normalized_workspace_package_collisions_are_refused() {
 }
 
 #[test]
+fn adding_a_glob_checks_previously_unlisted_package_names() {
+    let f = Fixture::new();
+    f.init();
+    let root = f.root_source();
+    let name = PluginName::parse("audio_output").unwrap();
+    f.write(
+        f.layout.unit_crate_manifest(name.unit()),
+        "[package]\nname = \"audio_output\"\nversion = \"0.1.0\"\n",
+    );
+    let error = f
+        .open()
+        .prepare_plugin(
+            PluginName::parse("audio-output").unwrap(),
+            Template::Minimal,
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("conflicts with audio-output"));
+    assert_eq!(f.root_source(), root);
+}
+
+#[test]
+fn excluded_libraries_are_refused_before_writing() {
+    let f = Fixture::new();
+    f.init();
+    let root = f.root_source().replace(
+        "[workspace]\n",
+        "[workspace]\nexclude = [\"libraries/*\"]\n",
+    );
+    f.write(f.layout.workspace_manifest(), &root);
+    let name = PluginName::parse("shared-types").unwrap();
+    let destination = f.layout.library_src_dir(&name);
+    let error = f.open().prepare_library(name, &[]).unwrap_err();
+    assert!(error.to_string().contains("excluded"));
+    assert_eq!(f.root_source(), root);
+    assert!(!destination.exists());
+}
+
+#[test]
 fn stale_preparation_does_not_overwrite_an_editors_changes() {
     let f = Fixture::new();
     f.init();
@@ -393,6 +431,7 @@ impl Fixture {
         ] {
             let source = std::fs::read_to_string(&path)
                 .unwrap()
+                .replace("plugins/*", "plugins/power")
                 .replace("plugins/", "units/");
             self.write(path, &source);
         }

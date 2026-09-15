@@ -40,7 +40,7 @@ impl ConfigWorkspace {
         }
         let mut editor = CargoEditor::parse(root.source())?;
         editor.workspace(&self.scaffold.workspace_manifest())?;
-        editor.member("system")?;
+        editor.member("system", "system")?;
         root.replace(editor.finish());
 
         let mut system = FileEdit::read(self.layout.system_manifest())?;

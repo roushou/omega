@@ -61,9 +61,15 @@ impl ConfigWorkspace {
                 .strip_prefix(&self.layout.config)?
                 .to_str()
                 .context("non-UTF-8 member path")?,
+            // Cargo rejects unmatched globs, so add each one with its first crate.
+            match template {
+                Some(_) => "plugins/*",
+                None => "libraries/*",
+            },
         )?;
+        let updated = editor.finish();
         // Discovery needs only workspace fields, not a model of user package inheritance.
-        let document: toml_edit::DocumentMut = root.source().parse()?;
+        let document: toml_edit::DocumentMut = updated.parse()?;
         let mut workspace_only = toml_edit::DocumentMut::new();
         workspace_only["workspace"] = document["workspace"].clone();
         let manifest = Toml::decode::<CargoManifest>(&workspace_only.to_string())?;
@@ -85,7 +91,7 @@ impl ConfigWorkspace {
                 );
             }
         }
-        root.replace(editor.finish());
+        root.replace(updated);
         let mut edits = vec![root];
         let mut seen = std::collections::BTreeSet::new();
         for consumer in consumers {

@@ -76,6 +76,11 @@ connect its consumers explicitly:
 omega new desktop-ui --lib --into plugins/audio --into system
 ```
 
+`omega new` adds `plugins/*` or `libraries/*` to workspace members when it creates
+the first crate in that directory. Later crates are covered automatically.
+`omega init` starts with only `system`: Cargo rejects a glob with no matches.
+Use Cargo's `workspace.exclude` to leave specific crates out.
+
 For a configuration using the old source layout, inspect with `omega migrate --check`, then run `omega migrate` to rename `units/` to `plugins/` and update Cargo
 paths. An interrupted migration can be retried. Omarchy shell imports now use
 `omega_omarchy::shell`; add `omega-omarchy` to the system dependencies and compose

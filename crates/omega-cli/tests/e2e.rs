@@ -89,6 +89,44 @@ impl Machine {
         String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
+    fn assert_members(&self, patterns: &[&str], packages: &[&str]) {
+        let source = std::fs::read_to_string(self.root.join("config/Cargo.toml")).unwrap();
+        let manifest: toml::Value = toml::from_str(&source).unwrap();
+        let members = manifest["workspace"]["members"].as_array().unwrap();
+        assert_eq!(
+            members
+                .iter()
+                .map(|m| m.as_str().unwrap())
+                .collect::<Vec<_>>(),
+            patterns
+        );
+        let output = Command::new("cargo")
+            .current_dir(self.root.join("config"))
+            .args([
+                "metadata",
+                "--no-deps",
+                "--offline",
+                "--format-version",
+                "1",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let mut actual: Vec<_> = metadata["packages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|package| package["name"].as_str().unwrap())
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(actual, packages);
+    }
+
     fn control(&self) -> PathBuf {
         self.root.join("omega.sock")
     }
@@ -138,6 +176,65 @@ fn listening(path: &Path, within: Duration) -> bool {
 }
 
 #[test]
+fn scaffolding_adds_membership_globs_as_each_directory_gets_its_first_crate() {
+    for library_first in [false, true] {
+        let machine = Machine::new();
+        machine.run(&["init", "--bare"]);
+        machine.assert_members(&["system"], &["system"]);
+        let (first, second, first_glob, second_glob, first_package) = if library_first {
+            (
+                vec!["new", "shared-types", "--lib"],
+                vec!["new", "hello-widget"],
+                "libraries/*",
+                "plugins/*",
+                "shared-types",
+            )
+        } else {
+            (
+                vec!["new", "hello-widget"],
+                vec!["new", "shared-types", "--lib"],
+                "plugins/*",
+                "libraries/*",
+                "hello-widget",
+            )
+        };
+        machine.run(&first);
+        machine.assert_members(&["system", first_glob], &[first_package, "system"]);
+        machine.run(&second);
+        machine.assert_members(
+            &["system", first_glob, second_glob],
+            &["hello-widget", "shared-types", "system"],
+        );
+        let manifest = machine.root.join("config/Cargo.toml");
+        let before = std::fs::read(&manifest).unwrap();
+        machine.run(&["new", "another-widget"]);
+        machine.run(&["new", "more-types", "--lib"]);
+        machine.run(&["init", "--bare"]);
+        assert_eq!(std::fs::read(&manifest).unwrap(), before);
+        machine.assert_members(
+            &["system", first_glob, second_glob],
+            &[
+                "another-widget",
+                "hello-widget",
+                "more-types",
+                "shared-types",
+                "system",
+            ],
+        );
+        let layout = omega_host::Layout::at(
+            machine.root.join("config"),
+            machine.root.join("state"),
+            machine.root.join("cache"),
+        );
+        let plugins = omega_host::workspace::Plugins::discover(&layout).unwrap();
+        assert_eq!(
+            plugins.iter().map(|name| name.as_str()).collect::<Vec<_>>(),
+            ["another-widget", "hello-widget"]
+        );
+    }
+}
+
+#[test]
 #[ignore = "compiles a scaffolded config with cargo; run with --ignored"]
 fn a_scaffolded_config_builds_and_runs() {
     let machine = Machine::new();
@@ -170,10 +267,8 @@ fn a_scaffolded_config_builds_and_runs() {
     .unwrap();
     machine.run(&["shell", "adopt"]);
     let workspace_path = machine.root.join("config/Cargo.toml");
-    let wildcard_workspace = std::fs::read_to_string(&workspace_path)
-        .unwrap()
-        .replace("plugins/battery-widget", "plugins/*");
-    std::fs::write(&workspace_path, &wildcard_workspace).unwrap();
+    let wildcard_workspace = std::fs::read_to_string(&workspace_path).unwrap();
+    assert!(wildcard_workspace.contains("\"plugins/*\""));
     let placed = machine.omega(&["new", "extra-widget"]).output().unwrap();
     assert_eq!(
         std::fs::read_to_string(&workspace_path).unwrap(),

@@ -89,7 +89,7 @@ impl CargoEditor {
         Ok(())
     }
 
-    pub(crate) fn member(&mut self, relative: &str) -> Result<()> {
+    pub(crate) fn member(&mut self, relative: &str, default_pattern: &str) -> Result<()> {
         let workspace = self
             .document
             .get_mut("workspace")
@@ -122,7 +122,7 @@ impl CargoEditor {
                 return Ok(());
             }
         }
-        members.push(relative);
+        members.push(default_pattern);
         Ok(())
     }
 
