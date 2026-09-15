@@ -45,6 +45,34 @@ TestCase {
         compare(test.calls.length,0)
         compare(findChild(view,"query").text,"reset")
     }
+    function test_host_focus_handoff_preserves_autofocused_editor() {
+        var view = createTemporaryObject(factory, test, {model:model("",0,0,1)})
+        var field = findChild(view, "query")
+        var editor = findChild(field, "editor")
+        tryVerify(function() { return editor.activeFocus })
+        // Popup hosts acquire focus after mapping their native window.
+        view.forceActiveFocus()
+        verify(editor.activeFocus)
+        keyClick(Qt.Key_A)
+        tryVerify(function() { return test.calls.length === 1 })
+        compare(test.calls[0].value.text, "a")
+    }
+    function test_refocusing_nested_view_restores_editor_after_reopen() {
+        var tree = {type:"stack",key:"root",children:[
+            {type:"stack",key:"nested",children:[model("",0,0,1)]}
+        ]}
+        var view = createTemporaryObject(factory, test, {model:tree})
+        var editor = findChild(view, "editor")
+        tryVerify(function() { return editor.activeFocus })
+        view.visible = false
+        test.forceActiveFocus()
+        view.visible = true
+        view.forceActiveFocus()
+        verify(editor.activeFocus)
+        keyClick(Qt.Key_B)
+        tryVerify(function() { return test.calls.length === 1 })
+        compare(test.calls[0].value.text, "b")
+    }
     function test_composition_defers_edits_and_applies_a_queued_reset_once() {
         var view = createTemporaryObject(factory,test,{model:model("",0,0,1)})
         var field = findChild(view,"query")

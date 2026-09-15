@@ -3,7 +3,7 @@ import QtQuick.Window
 import "Keyboard.js" as Keyboard
 import "Props.js" as Props
 
-Item {
+FocusScope {
     id: node
 
     required property var model
