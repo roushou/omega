@@ -85,6 +85,12 @@ handles its own press; the surrounding slot opens the panel only for unhandled
 presses. Bar width must account for the rendered content because the host button
 has no text label to size itself from.
 
+Bar replicas on multiple monitors share one connection for each socket and
+placement scope (unit, surface, and module). The Omarchy adapter retains that
+connection until the last replica releases it, so adding or removing a monitor
+does not replace another monitor's attachment. Each replica retains its own
+controls and input drafts; views and pending transport requests are shared.
+
 `ViewNode.qml` dispatches each node to a delegate under `nodes/`. Recursive children
 are loaded by URL to avoid QML's recursive-component restriction. Unknown node
 kinds draw nothing. Delegates read the current model and shared presentation from

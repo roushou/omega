@@ -15,7 +15,7 @@ QtObject {
         function busy(key) { return session.prefix !== "" && session.connection.requests.busy(session.prefix + key) }
     }
     property Connections completions: Connections {
-        target: session.connection.requests
+        target: session.connection ? session.connection.requests : null
         function onSettled(key, success) {
             if (!session.prefix || key.indexOf(session.prefix) !== 0) return
             feedback.error = success ? "" : session.connection.requests.error

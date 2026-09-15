@@ -3,23 +3,28 @@ import QtQuick
 QtObject {
     id: panel
     required property var connection
-    readonly property bool opened: connection.connected && connection.instance !== null && connection.presented
+    readonly property bool opened: connection !== null && connection.connected && connection.instance !== null && connection.presented
     readonly property string requestKey: "presentation"
     property bool pending: false
     property bool acknowledged: false
     property bool seen: false
     property bool target: false
     property var queued: null
+    onConnectionChanged: {
+        pending = false
+        queued = null
+    }
 
     // Only daemon intent drives visibility; observations never issue commands.
     onOpenedChanged: {
-        if (connection.instance)
+        if (connection && connection.instance)
             connection.report(connection.instance, opened ? "PRESENTATION_STATE_VISIBLE" : "PRESENTATION_STATE_HIDDEN")
     }
 
     function toggle() { setOpen(!(queued !== null ? queued : pending ? target : opened)) }
 
     function setOpen(shown) {
+        if (!connection) return
         if (pending) { queued = shown; return }
         if (shown === opened) return
         target = shown
@@ -58,7 +63,7 @@ QtObject {
 
     // Results and snapshots use separate streams and may arrive in either order.
     property Connections completion: Connections {
-        target: panel.connection.requests
+        target: panel.connection ? panel.connection.requests : null
         function onSettled(key, success) {
             if (key !== panel.requestKey || !panel.pending) return
             if (!success) {

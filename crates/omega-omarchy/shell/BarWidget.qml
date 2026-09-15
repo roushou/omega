@@ -11,8 +11,8 @@ BarWidget {
   id: root
   OmarchyTheme { id: desktopTheme }
   Assets { id: desktopAssets; iconResolver: name => Quickshell.iconPath(name, "application-x-executable") }
-  InstanceSession { id: indicatorSession; connection: link; snapshot: link.snapshot }
-  InstanceSession { id: panelSession; connection: panelLink; snapshot: panelLink.snapshot }
+  InstanceSession { id: indicatorSession; connection: link; snapshot: link ? link.snapshot : null }
+  InstanceSession { id: panelSession; connection: panelLink; snapshot: panelLink ? panelLink.snapshot : null }
   moduleName: "omega.view"
 
   readonly property string unit: setting("unit", "")
@@ -22,10 +22,10 @@ BarWidget {
   readonly property string socketPath: setting("socket", "")
 
   readonly property bool hasPanel: root.panel !== ""
-  visible: link.instance === null || link.presented
+  visible: !link || link.instance === null || link.presented
   onVisibleChanged: reportIndicator()
   function reportIndicator() {
-    if (!link.instance || !link.snapshot) return
+    if (!link || !link.instance || !link.snapshot) return
     var shown = root.visible && link.presented
     var state = shown ? "PRESENTATION_STATE_VISIBLE" : "PRESENTATION_STATE_HIDDEN"
     var observed = link.snapshot.observed
@@ -38,24 +38,30 @@ BarWidget {
   function open() { panelState.setOpen(true) }
   function close() { panelState.setOpen(false) }
 
-  Connection {
-    id: link
-    onViewUpdated: root.reportIndicator()
+  readonly property var link: indicatorConnection.connection
+  readonly property var panelLink: panelConnection.connection
+  Connections {
+    target: root.link
+    function onViewUpdated() { root.reportIndicator() }
+  }
+
+  PlacementConnection {
+    id: indicatorConnection
     unit: root.unit
     surface: root.surface
     module: root.module
     // An empty socket path selects the shared transport default.
-    socketPath: root.socketPath !== "" ? root.socketPath : link.defaultSocketPath
+    socketPath: root.socketPath
   }
 
   // The popout's own view. A second surface of the same unit and the same
   // module instance — the document placed one thing, which draws in two.
-  Connection {
-    id: panelLink
+  PlacementConnection {
+    id: panelConnection
     unit: root.unit
     surface: root.panel
     module: root.module
-    socketPath: link.socketPath
+    socketPath: root.socketPath
   }
 
   implicitWidth: button.implicitWidth
@@ -68,8 +74,8 @@ BarWidget {
     // The tree draws itself; the button is the bar's chrome around it.
     labelVisible: false
     // Expose the root node tooltip through the host bar tooltip window.
-    tooltipText: link.requests.error || link.status || (link.tree ? Props.tooltip(link.tree) : "")
-    hasVisualContent: link.tree !== null || fallback.visible
+    tooltipText: link ? link.requests.error || link.status || (link.tree ? Props.tooltip(link.tree) : "") : ""
+    hasVisualContent: (link !== null && link.tree !== null) || fallback.visible
     // A button with no label is a button with no width, and the bar lays out
     // by implicit size — so the slot has to follow the tree instead.
     fixedWidth: view.implicitWidth > 0 || fallback.visible
@@ -79,9 +85,9 @@ BarWidget {
     Text {
       id: fallback
       anchors.centerIn: parent
-      visible: link.tree === null && (link.status !== "" || link.requests.error !== "")
-      text: link.requests.error !== "" ? "!" : "…"
-      color: link.requests.error !== "" ? Color.urgent : button.foreground
+      visible: link !== null && link.tree === null && (link.status !== "" || link.requests.error !== "")
+      text: link && link.requests.error !== "" ? "!" : "…"
+      color: link && link.requests.error !== "" ? Color.urgent : button.foreground
       font.family: Style.font.family
       font.pixelSize: Style.font.body
     }
@@ -92,9 +98,9 @@ BarWidget {
       id: view
       anchors.centerIn: parent
       theme: desktopTheme
-      model: link.tree
+      model: link ? link.tree : null
       foreground: button.foreground
-      visible: link.tree !== null
+      visible: link !== null && link.tree !== null
       session: indicatorSession
     }
 
@@ -134,8 +140,8 @@ BarWidget {
           Text {
             width: parent.width
             visible: text !== ""
-            text: panelLink.requests.error || panelLink.status
-            color: panelLink.requests.error !== "" ? Color.urgent : Color.popups.text
+            text: panelLink ? panelLink.requests.error || panelLink.status : ""
+            color: panelLink && panelLink.requests.error !== "" ? Color.urgent : Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             wrapMode: Text.Wrap
@@ -146,9 +152,9 @@ BarWidget {
             id: panelView
             width: parent.width
             theme: desktopTheme
-            model: panelLink.tree
+            model: panelLink ? panelLink.tree : null
             foreground: Color.popups.text
-            visible: panelLink.tree !== null
+            visible: panelLink !== null && panelLink.tree !== null
             session: panelSession
           }
         }

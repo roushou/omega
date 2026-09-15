@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "Props.js" as Props
 
-Item {
+QtObject {
     id: link
 
     // Replaced with the complete bundle fingerprint during installation.
@@ -67,8 +67,7 @@ Item {
     // Track inbound activity to detect stale connections even without a socket close signal.
     property double lastHeard: 0
     property int nextStream: 1
-    readonly property alias requests: requests
-    Requests { id: requests }
+    readonly property Requests requests: Requests { id: requests }
 
     function onLine(line) {
         link.lastHeard = Date.now()
@@ -203,7 +202,7 @@ Item {
         link.send({ streamId: link.allocateStream(), invoke: { reportPresentation: { instance: identity, observed: state } } })
     }
 
-    Component {
+    property Component socketFactory: Component {
         id: socketComponent
 
         Socket {
@@ -247,7 +246,7 @@ Item {
     // Reconnect after the heartbeat silence deadline.
     // Replace the Socket object after failure; toggling a failed socket can leave it
     // disconnected. Defer reactivation so destruction and creation cannot coalesce.
-    Timer {
+    property Timer heartbeat: Timer {
         interval: 5000
         running: true
         repeat: true
