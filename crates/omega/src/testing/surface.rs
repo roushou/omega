@@ -1,6 +1,5 @@
 use super::{Drawn, State};
-use crate::plugin::registry::MountedSurface;
-use crate::surface::instance::Instance;
+use crate::surface::instance::{Instance, MountedSurface};
 use crate::{Args, Error, Input, Surface};
 
 /// The production model, binding and task runtime without a daemon or live services.
@@ -69,7 +68,9 @@ impl<S: Surface> SurfaceHarness<S> {
     pub fn send(&mut self, message: S::Message) -> Result<(), Error> {
         self.instance.message(message)
     }
-    /// Dispatch a binding from the supplied render; obsolete renders are refused.
+    /// Dispatch a local binding from the supplied render; obsolete and foreign bindings
+    /// are refused. Disabled/busy ancestors block interaction. Ambiguous node keys,
+    /// missing events, and mixed local/command bindings are refused before dispatch.
     pub fn interact<I: Input>(
         &mut self,
         drawn: &Drawn,
@@ -77,14 +78,14 @@ impl<S: Surface> SurfaceHarness<S> {
         event: &str,
         input: I,
     ) -> Result<(), Error> {
-        let binding = drawn
-            .binding(key, event)
-            .ok_or_else(|| Error::invalid("missing interaction binding"))?;
-        if binding.local == 0 {
-            return Err(Error::invalid("expected a local binding"));
+        match omega_proto::Interaction::resolve(drawn.tree(), key, event)? {
+            omega_proto::Interaction::Local(binding) => self
+                .instance
+                .event(binding.get(), Args::new(input.encode())),
+            omega_proto::Interaction::Command { .. } => {
+                Err(Error::invalid("expected a local binding"))
+            }
         }
-        self.instance
-            .event(binding.local, Args::new(input.encode()))
     }
     /// Complete the next queued external effect with an explicit fixture outcome.
     /// Returns the operation for assertions; no real backend is contacted.

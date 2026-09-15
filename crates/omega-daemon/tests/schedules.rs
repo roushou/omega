@@ -137,15 +137,11 @@ async fn a_schedule_that_changed_is_replaced_rather_than_doubled() {
 
 #[test]
 fn a_document_that_declares_a_schedule_plans_to_start_it() {
-    let (_hub, schedules) = schedules();
-    let provider = ScheduleProvider::new(schedules);
-
-    let plan = provider
-        .plan(&document([Schedule::announcing(
-            "refresh",
-            Cadence::minutes(10),
-        )]))
-        .unwrap();
+    let plan = ScheduleProvider::plan(
+        &document([Schedule::announcing("refresh", Cadence::minutes(10))]),
+        &[],
+    )
+    .unwrap();
 
     assert_eq!(plan.len(), 1);
     assert_eq!(
@@ -157,37 +153,69 @@ fn a_document_that_declares_a_schedule_plans_to_start_it() {
     );
 }
 
-#[tokio::test]
-async fn a_schedule_that_did_not_change_is_left_alone() {
-    // Unrelated convergence must not reset existing timer deadlines.
-    let (_hub, schedules) = schedules();
-    let document = document([Schedule::announcing("refresh", Cadence::minutes(10))]);
+#[test]
+fn schedule_comparison_uses_captured_contents_and_orders_changes() {
+    let added = Schedule::announcing("added", Cadence::seconds(2));
+    let changed = Schedule::announcing("changed", Cadence::seconds(2));
+    let removed = Schedule::announcing("removed", Cadence::seconds(2));
+    let unchanged = Schedule::announcing("unchanged", Cadence::seconds(2));
+    let mut replacement = changed.clone();
+    replacement.action = Some(omega_document::Actions::run("true"));
+    let installed = [removed.clone(), unchanged.clone(), changed];
+    let desired = document([unchanged, replacement.clone(), added.clone()]);
+    assert_eq!(
+        ScheduleProvider::plan(&desired, &installed).unwrap(),
+        vec![
+            ScheduleChange::Set(added),
+            ScheduleChange::Set(replacement),
+            ScheduleChange::Remove(removed.id),
+        ]
+    );
+    assert!(
+        ScheduleProvider::plan(&desired, &desired.schedules)
+            .unwrap()
+            .is_empty()
+    );
+}
 
-    let provider = ScheduleProvider::new(schedules);
+#[tokio::test(start_paused = true)]
+async fn a_schedule_that_did_not_change_is_left_alone() {
+    let (hub, schedules) = schedules();
+    let mut events = hub.subscribe_events();
+    let document = document([Schedule::announcing("refresh", Cadence::seconds(10))]);
+
+    let provider = ScheduleProvider::new(schedules.clone());
     provider
-        .apply(&provider.plan(&document).unwrap())
+        .apply(&ScheduleProvider::plan(&document, &schedules.declared()).unwrap())
         .await
         .unwrap();
+    assert_eq!(fired(&mut events).await, "refresh");
+    tokio::time::advance(Duration::from_secs(6)).await;
 
-    assert!(
-        provider.plan(&document).unwrap().is_empty(),
-        "a converged document still planned work"
-    );
+    let installed = schedules.declared();
+    let plan = ScheduleProvider::plan(&document, &installed).unwrap();
+    assert!(plan.is_empty(), "a converged document still planned work");
+    provider.apply(&plan).await.unwrap();
+    tokio::task::yield_now().await;
+    assert!(matches!(events.try_recv(), Err(TryRecvError::Empty)));
+    tokio::time::advance(Duration::from_secs(4)).await;
+    assert_eq!(fired(&mut events).await, "refresh");
+    schedules.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_schedule_whose_cadence_changed_is_planned_as_an_update() {
     let (_hub, schedules) = schedules();
-    let provider = ScheduleProvider::new(schedules);
+    let provider = ScheduleProvider::new(schedules.clone());
 
     let before = document([Schedule::announcing("refresh", Cadence::minutes(10))]);
     provider
-        .apply(&provider.plan(&before).unwrap())
+        .apply(&ScheduleProvider::plan(&before, &schedules.declared()).unwrap())
         .await
         .unwrap();
 
     let after = document([Schedule::announcing("refresh", Cadence::minutes(30))]);
-    let plan = provider.plan(&after).unwrap();
+    let plan = ScheduleProvider::plan(&after, &schedules.declared()).unwrap();
 
     assert_eq!(plan.len(), 1);
     assert_eq!(
@@ -202,20 +230,24 @@ async fn a_schedule_whose_cadence_changed_is_planned_as_an_update() {
 #[tokio::test]
 async fn a_schedule_the_document_stops_declaring_is_planned_away() {
     let (_hub, schedules) = schedules();
-    let provider = ScheduleProvider::new(schedules);
+    let provider = ScheduleProvider::new(schedules.clone());
 
     let before = document([Schedule::announcing("refresh", Cadence::minutes(10))]);
     provider
-        .apply(&provider.plan(&before).unwrap())
+        .apply(&ScheduleProvider::plan(&before, &schedules.declared()).unwrap())
         .await
         .unwrap();
 
-    let plan = provider.plan(&StateDocument::default()).unwrap();
+    let plan = ScheduleProvider::plan(&StateDocument::default(), &schedules.declared()).unwrap();
     assert_eq!(plan.len(), 1);
     assert_eq!(plan, vec![ScheduleChange::Remove("refresh".into())]);
 
     provider.apply(&plan).await.unwrap();
-    assert!(provider.plan(&StateDocument::default()).unwrap().is_empty());
+    assert!(
+        ScheduleProvider::plan(&StateDocument::default(), &schedules.declared())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -252,15 +284,20 @@ async fn a_schedule_performs_the_action_the_document_gave_it() {
 async fn provider_reports_failure_instead_of_claiming_convergence() {
     let (_, schedules) = schedules();
     schedules.shutdown().await;
-    let provider = ScheduleProvider::new(schedules);
+    let provider = ScheduleProvider::new(schedules.clone());
     let document = document([Schedule::announcing("tick", Cadence::seconds(1))]);
     assert!(
         provider
-            .apply(&provider.plan(&document).unwrap())
+            .apply(&ScheduleProvider::plan(&document, &schedules.declared()).unwrap())
             .await
             .is_err()
     );
-    assert_eq!(provider.plan(&document).unwrap().len(), 1);
+    assert_eq!(
+        ScheduleProvider::plan(&document, &schedules.declared())
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -293,18 +330,19 @@ async fn malformed_action_replacement_preserves_the_running_schedule() {
 #[tokio::test(start_paused = true)]
 async fn invalid_schedule_plan_leaves_running_timers_untouched() {
     let (hub, schedules) = schedules();
-    let provider = ScheduleProvider::new(schedules.clone());
     let original = Schedule::announcing("tick", Cadence::seconds(2));
     let mut events = hub.subscribe_events();
     schedules.start(&original).await.unwrap();
     assert_eq!(fired(&mut events).await, "tick");
     let mut invalid = original.clone();
     invalid.cadence = "0 9 * * *".into();
-    assert!(provider.plan(&document([invalid])).is_err());
+    assert!(ScheduleProvider::plan(&document([invalid]), &schedules.declared()).is_err());
     assert!(
-        provider
-            .plan(&document([original.clone(), original.clone()]))
-            .is_err()
+        ScheduleProvider::plan(
+            &document([original.clone(), original.clone()]),
+            &schedules.declared()
+        )
+        .is_err()
     );
     assert_eq!(schedules.declared(), vec![original]);
     tokio::time::advance(Duration::from_secs(2)).await;
@@ -318,7 +356,7 @@ async fn schedule_plan_carries_the_declaration_to_apply() {
     let provider = ScheduleProvider::new(schedules.clone());
     let original = Schedule::announcing("tick", Cadence::seconds(2));
     let mut document = document([original.clone()]);
-    let plan = provider.plan(&document).unwrap();
+    let plan = ScheduleProvider::plan(&document, &schedules.declared()).unwrap();
     document.schedules.clear();
     provider.apply(&plan).await.unwrap();
     assert_eq!(schedules.declared(), vec![original]);

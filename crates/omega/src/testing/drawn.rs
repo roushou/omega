@@ -14,10 +14,6 @@ pub struct Drawn {
 }
 
 impl Drawn {
-    pub(super) fn binding(&self, key: &str, event: &str) -> Option<&omega_proto::omega::Bind> {
-        self.node(key)?.events.get(event)
-    }
-
     /// Construct and render a surface using the production initialization and readiness rules.
     /// Use `SurfaceHarness` to retain local state and process task completions.
     pub fn of<S: Surface>(state: &State) -> crate::Result<Self> {

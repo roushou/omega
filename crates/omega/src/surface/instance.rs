@@ -1,12 +1,23 @@
 use super::task::{Execution, TaskKey};
 use super::{Decoder, Events, Task, Wired};
-use crate::plugin::registry::MountedSurface;
 use crate::{Args, Error, Surface, View};
 use std::{
     collections::BTreeMap,
     sync::Arc,
     task::{Context as PollContext, Poll},
 };
+
+/// Type-erased surface rendering and lifecycle interface.
+pub(crate) trait MountedSurface: Send {
+    fn render(&mut self) -> View;
+    fn lifecycle(&mut self, event: crate::surface::Lifecycle) -> Result<(), crate::Error>;
+    fn mounted(&mut self) -> Result<(), crate::Error>;
+    fn event(&mut self, binding: u64, args: Args) -> Result<(), crate::Error>;
+    fn poll(
+        &mut self,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), crate::Error>>;
+}
 
 pub(crate) struct Instance<S: Surface> {
     surface: S,

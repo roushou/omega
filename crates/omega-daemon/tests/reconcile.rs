@@ -3,60 +3,20 @@
 
 mod common;
 
-use common::{TempDir, widget_manifest};
-use omega_daemon::Shutdown;
-use omega_daemon::hub::Hub;
-use omega_daemon::manifest::ManifestStore;
+use common::TempDir;
 use omega_daemon::reconcile::units::UnitChange;
 use omega_daemon::reconcile::{EnvironmentProvider, UnitProvider};
-use omega_daemon::supervisor::Supervisor;
-use omega_daemon::units::UnitTable;
 use omega_document::{Document, Units};
-use omega_proto::Socket;
 use omega_proto::UnitName;
-
-impl TempDir {
-    fn generation(&self) -> omega_host::Generation {
-        let store = omega_host::Generations::new(&self.layout());
-        store.stage().unwrap().commit().unwrap();
-        store.pin_current().unwrap().unwrap()
-    }
-}
-
-/// Seed the supervisor’s authoritative table with the test manifests.
-fn table_with(manifests: ManifestStore) -> UnitTable {
-    let units = UnitTable::detached(Hub::new());
-    units.adopt(&manifests);
-    units
-}
-
-fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
-}
-
-fn supervisor(tag: &str) -> Supervisor {
-    Supervisor::new(
-        Socket::at(format!("/tmp/omega-reconcile-{tag}.sock")),
-        table_with(ManifestStore::from_manifests([widget_manifest(
-            "battery-widget",
-            "battery",
-        )])),
-        Shutdown::new(),
-    )
-}
+use std::collections::BTreeSet;
 
 #[test]
 fn a_built_unit_the_document_never_mentions_still_runs() {
-    let tmp = TempDir::new("default-on");
-    let provider = UnitProvider::new(
-        supervisor("default-on"),
-        tmp.generation(),
-        [unit("battery-widget")],
-    );
+    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
 
     // Putting a crate in the workspace is already a declaration; the document
     // exists to override that, not to repeat it.
-    let plan = provider.plan(&Document::new().into_inner()).unwrap();
+    let plan = UnitProvider::plan(&Document::new().into_inner(), &built, &BTreeSet::new()).unwrap();
 
     assert_eq!(plan.len(), 1);
     assert!(matches!(plan[0], UnitChange::Start(_)));
@@ -65,17 +25,15 @@ fn a_built_unit_the_document_never_mentions_still_runs() {
 
 #[test]
 fn a_document_can_turn_one_unit_off() {
-    let tmp = TempDir::new("disable");
-    let provider = UnitProvider::new(
-        supervisor("disable"),
-        tmp.generation(),
-        [unit("battery-widget"), unit("clock")],
-    );
+    let built = BTreeSet::from([
+        UnitName::parse("battery-widget").unwrap(),
+        UnitName::parse("clock").unwrap(),
+    ]);
 
     let document = Document::new()
         .unit(Units::disabled("battery-widget"))
         .into_inner();
-    let plan = provider.plan(&document).unwrap();
+    let plan = UnitProvider::plan(&document, &built, &BTreeSet::new()).unwrap();
 
     // The blast radius of the change is the unit it names.
     assert_eq!(plan.len(), 1);
@@ -85,18 +43,48 @@ fn a_document_can_turn_one_unit_off() {
 
 #[test]
 fn a_document_naming_an_unbuilt_unit_is_reported() {
-    let tmp = TempDir::new("unknown");
-    let provider = UnitProvider::new(
-        supervisor("unknown"),
-        tmp.generation(),
-        [unit("battery-widget")],
-    );
+    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
 
     let document = Document::new()
         .unit(Units::enabled("does-not-exist"))
         .into_inner();
-    let error = provider.plan(&document).unwrap_err();
+    let error = UnitProvider::plan(&document, &built, &BTreeSet::new()).unwrap_err();
     assert!(error.to_string().contains("does-not-exist"));
+}
+
+#[test]
+fn unit_planning_preserves_held_units_and_orders_starts_and_stops() {
+    let [added, disabled, held, removed] =
+        ["added", "disabled", "held", "removed"].map(|name| UnitName::parse(name).unwrap());
+    let built = BTreeSet::from([added.clone(), disabled.clone(), held.clone()]);
+    let running = BTreeSet::from([disabled.clone(), held.clone(), removed.clone()]);
+    let document = Document::new()
+        .unit(Units::disabled("disabled"))
+        .into_inner();
+    assert_eq!(
+        UnitProvider::plan(&document, &built, &running).unwrap(),
+        vec![
+            UnitChange::Start(added.clone()),
+            UnitChange::Stop(disabled),
+            UnitChange::Stop(removed),
+        ]
+    );
+    assert!(
+        UnitProvider::plan(&document, &built, &BTreeSet::from([added, held]))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn duplicate_and_invalid_unit_declarations_fail_with_literal_inputs() {
+    let built = BTreeSet::from([UnitName::parse("clock").unwrap()]);
+    let mut document = Document::new().unit(Units::enabled("clock")).into_inner();
+    document.units.push(document.units[0].clone());
+    assert!(UnitProvider::plan(&document, &built, &BTreeSet::new()).is_err());
+    document.units.truncate(1);
+    document.units[0].name = "invalid/name".into();
+    assert!(UnitProvider::plan(&document, &built, &BTreeSet::new()).is_err());
 }
 
 #[tokio::test]
@@ -111,7 +99,10 @@ async fn the_environment_converges_to_the_document() {
         .env("EDITOR", "hx")
         .into_inner();
 
-    let plan = provider.plan(&document).unwrap();
+    let plan = EnvironmentProvider::plan(
+        EnvironmentProvider::prepare(&document).unwrap(),
+        provider.installed().unwrap().as_deref(),
+    );
     assert!(plan.is_some());
 
     provider.apply(plan.as_ref().unwrap()).unwrap();
@@ -119,11 +110,20 @@ async fn the_environment_converges_to_the_document() {
     assert_eq!(written, "EDITOR=hx\nOMEGA_HOST=laptop\n");
 
     // Converged: nothing left to do.
-    assert!(provider.plan(&document).unwrap().is_none());
+    assert!(
+        EnvironmentProvider::plan(
+            EnvironmentProvider::prepare(&document).unwrap(),
+            provider.installed().unwrap().as_deref(),
+        )
+        .is_none()
+    );
 
     // Removing a declaration removes the variable.
     let smaller = Document::new().env("EDITOR", "hx").into_inner();
-    let plan = provider.plan(&smaller).unwrap();
+    let plan = EnvironmentProvider::plan(
+        EnvironmentProvider::prepare(&smaller).unwrap(),
+        provider.installed().unwrap().as_deref(),
+    );
     assert!(plan.is_some());
 
     provider.apply(plan.as_ref().unwrap()).unwrap();
@@ -136,17 +136,23 @@ async fn the_environment_converges_to_the_document() {
 #[test]
 fn a_machine_that_matches_its_document_plans_nothing() {
     let tmp = TempDir::new("converged");
-    let units = UnitProvider::new(
-        supervisor("converged"),
-        tmp.generation(),
-        [unit("battery-widget")],
-    );
+    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
     let environment = EnvironmentProvider::new(&tmp.layout());
     let document = Document::new()
         .unit(Units::disabled("battery-widget"))
         .into_inner();
-    assert!(units.plan(&document).unwrap().is_empty());
-    assert!(environment.plan(&document).unwrap().is_none());
+    assert!(
+        UnitProvider::plan(&document, &built, &BTreeSet::new())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        EnvironmentProvider::plan(
+            EnvironmentProvider::prepare(&document).unwrap(),
+            environment.installed().unwrap().as_deref(),
+        )
+        .is_none()
+    );
 }
 
 #[tokio::test]
@@ -156,9 +162,21 @@ async fn environment_values_are_literal_shell_data() {
     let value = "a 'quoted' value\n$(printf executed) $HOME `printf executed`";
     let document = Document::new().env("OMEGA_VALUE", value).into_inner();
     provider
-        .apply(&provider.plan(&document).unwrap().unwrap())
+        .apply(
+            &EnvironmentProvider::plan(
+                EnvironmentProvider::prepare(&document).unwrap(),
+                provider.installed().unwrap().as_deref(),
+            )
+            .unwrap(),
+        )
         .unwrap();
-    assert!(provider.plan(&document).unwrap().is_none());
+    assert!(
+        EnvironmentProvider::plan(
+            EnvironmentProvider::prepare(&document).unwrap(),
+            provider.installed().unwrap().as_deref(),
+        )
+        .is_none()
+    );
     let output = std::process::Command::new("sh")
         .args(["-c", ". \"$1\"; printf %s \"$OMEGA_VALUE\"", "test"])
         .arg(provider.path())
@@ -173,7 +191,11 @@ fn environment_plan_retains_validated_contents_and_reports_read_failures() {
     let tmp = TempDir::new("environment-plan");
     let provider = EnvironmentProvider::new(&tmp.layout());
     let mut document = Document::new().env("EDITOR", "hx").into_inner();
-    let change = provider.plan(&document).unwrap().unwrap();
+    let change = EnvironmentProvider::plan(
+        EnvironmentProvider::prepare(&document).unwrap(),
+        provider.installed().unwrap().as_deref(),
+    )
+    .unwrap();
     document.environment[0].value = "changed".into();
     provider.apply(&change).unwrap();
     assert_eq!(
@@ -182,7 +204,7 @@ fn environment_plan_retains_validated_contents_and_reports_read_failures() {
     );
     std::fs::remove_file(provider.path()).unwrap();
     std::fs::create_dir(provider.path()).unwrap();
-    assert!(provider.plan(&Document::new().into_inner()).is_err());
+    assert!(provider.installed().is_err());
 }
 
 #[test]
@@ -190,6 +212,6 @@ fn invalid_environment_is_rejected_during_planning() {
     let tmp = TempDir::new("environment-invalid");
     let provider = EnvironmentProvider::new(&tmp.layout());
     let document = Document::new().env("INVALID;KEY", "value").into_inner();
-    assert!(provider.plan(&document).is_err());
+    assert!(EnvironmentProvider::prepare(&document).is_err());
     assert!(!provider.path().exists());
 }

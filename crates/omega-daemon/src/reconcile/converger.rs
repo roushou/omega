@@ -278,11 +278,7 @@ impl Worker {
             return Ok(());
         };
 
-        let units = UnitProvider::new(
-            self.context.supervisor.clone(),
-            build.generation.clone(),
-            build.config.names().cloned(),
-        );
+        let units = UnitProvider::new(self.context.supervisor.clone(), build.generation.clone());
         let environment = EnvironmentProvider::new(&self.context.layout);
         let schedules = ScheduleProvider::new(self.context.schedules.clone());
         let presentations =
@@ -290,10 +286,18 @@ impl Worker {
 
         // Validate every plan before the first effect. A failed application
         // stops the pass; the retry plans again against actual ownership.
-        let unit_changes = units.plan(&build.document)?;
-        let environment_change = environment.plan(&build.document)?;
-        let schedule_changes = schedules.plan(&build.document)?;
-        let instance_changes = presentations.plan(&build.document)?;
+        let built_units = build.config.names().cloned().collect();
+        let running_units = self.context.supervisor.running().into_iter().collect();
+        let unit_changes = UnitProvider::plan(&build.document, &built_units, &running_units)?;
+        let desired_environment = EnvironmentProvider::prepare(&build.document)?;
+        let installed_environment = environment.installed()?;
+        let environment_change =
+            EnvironmentProvider::plan(desired_environment, installed_environment.as_deref());
+        let installed_schedules = self.context.schedules.declared();
+        let schedule_changes = ScheduleProvider::plan(&build.document, &installed_schedules)?;
+        let desired_instances = presentations.prepare(&build.document)?;
+        let installed_instances = self.context.units.installed_presentations();
+        let instance_changes = PresentationProvider::plan(&desired_instances, &installed_instances);
 
         units.apply(&unit_changes).await?;
         if let Some(change) = environment_change {

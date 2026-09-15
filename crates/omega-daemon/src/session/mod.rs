@@ -22,7 +22,8 @@ use crate::supervisor::Supervisor;
 use crate::units::{DaemonStreams, Request, UnitTable};
 use omega_proto::CodecError;
 
-pub use admission::{Peer, Role};
+pub use crate::authorization::Role;
+pub use admission::Peer;
 pub use dispatch::{Dispatcher, OpKind, Response};
 pub use liveness::{Health, Liveness};
 pub use subscriptions::Subscriptions;

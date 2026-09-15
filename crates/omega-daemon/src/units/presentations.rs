@@ -1,3 +1,4 @@
+use super::presentation_state::Visibility;
 use super::{UnitTable, instance::Instance, session::SessionLink};
 use crate::hub::SurfaceRef;
 use crate::refusal::{Refusable, RefusableResult};
@@ -14,7 +15,53 @@ pub(super) struct RendererLease {
     description: omega::AttachRenderer,
 }
 
+/// Construction facts captured together for one configured, ready instance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstalledInstance {
+    pub config: HashMap<String, Value>,
+    pub presentation: PresentationSpec,
+    pub anchor: Option<SurfaceRef>,
+}
+
 impl UnitTable {
+    /// Snapshot configured instances and retained anchor addresses under the unit lock.
+    /// Transient and still-starting instances do not participate in reconciliation.
+    pub fn installed_presentations(&self) -> BTreeMap<SurfaceRef, InstalledInstance> {
+        let records = self.lock();
+        let views: BTreeMap<_, _> = self
+            .inner
+            .hub
+            .view_snapshot()
+            .into_iter()
+            .map(|view| (view.instance.clone(), view.surface.clone()))
+            .collect();
+        let mut installed = BTreeMap::new();
+        for record in records.values() {
+            for instance in record.instances.values().filter(|instance| instance.ready) {
+                let Some(address) = &instance.placement else {
+                    continue;
+                };
+                let anchor = match &instance.presentation.wire().kind {
+                    Some(presentation::Kind::Popup(popup)) => {
+                        Self::instance_key(popup.anchor.as_ref())
+                            .ok()
+                            .and_then(|key| views.get(&key).cloned())
+                    }
+                    _ => None,
+                };
+                installed.insert(
+                    address.clone(),
+                    InstalledInstance {
+                        config: instance.config.clone(),
+                        presentation: instance.presentation.clone(),
+                        anchor,
+                    },
+                );
+            }
+        }
+        installed
+    }
+
     pub fn instances(&self) -> BTreeMap<SurfaceRef, HashMap<String, Value>> {
         self.lock()
             .values()
@@ -227,15 +274,6 @@ impl UnitTable {
             .snapshot())
     }
 
-    pub fn anchor_at(&self, address: &SurfaceRef) -> Option<SurfaceRef> {
-        let presentation = self.presentation_at(address)?;
-        let Some(presentation::Kind::Popup(popup)) = &presentation.wire().kind else {
-            return None;
-        };
-        let key = Self::instance_key(popup.anchor.as_ref()).ok()?;
-        self.inner.hub.view(&key).map(|view| view.surface.clone())
-    }
-
     pub async fn configure_popup(
         &self,
         address: &SurfaceRef,
@@ -261,15 +299,6 @@ impl UnitTable {
         .or_refuse()?;
         self.configure_presentation(address, config, presentation)
             .await
-    }
-
-    pub fn presentation_at(&self, address: &SurfaceRef) -> Option<PresentationSpec> {
-        self.lock()
-            .get(&address.unit)?
-            .instances
-            .values()
-            .find(|instance| instance.placement.as_ref() == Some(address))
-            .map(|instance| instance.presentation.clone())
     }
 
     pub async fn configure_presentation(
@@ -385,7 +414,7 @@ impl UnitTable {
     pub(crate) async fn change_presentation(
         &self,
         request: &omega::ChangePresentation,
-        permit: Option<&crate::session::dispatch::attachment::InstancePermit>,
+        permit: Option<&crate::attachment::InstancePermit>,
     ) -> Result<(), Refusal> {
         let key = Self::instance_key(request.instance.as_ref())?;
         let action = PresentationAction::try_from(request.action)
@@ -400,17 +429,10 @@ impl UnitTable {
     pub(crate) async fn report_presentation(
         &self,
         request: &omega::ReportPresentation,
-        permit: &crate::session::dispatch::attachment::InstancePermit,
+        permit: &crate::attachment::InstancePermit,
     ) -> Result<(), Refusal> {
         let key = Self::instance_key(request.instance.as_ref())?;
-        let observed = match PresentationState::try_from(request.observed) {
-            Ok(
-                state @ (PresentationState::Visible
-                | PresentationState::Hidden
-                | PresentationState::Closed),
-            ) => state,
-            _ => return Err(Refusal::invalid("unknown presentation state")),
-        };
+        let observed = Visibility::observed(request.observed)?;
         self.transition_presentation(&key, Some(permit), PresentationUpdate::Observed(observed))
             .await
     }
@@ -434,7 +456,7 @@ impl UnitTable {
     async fn transition_presentation(
         &self,
         key: &InstanceKey,
-        permit: Option<&crate::session::dispatch::attachment::InstancePermit>,
+        permit: Option<&crate::attachment::InstancePermit>,
         update: PresentationUpdate,
     ) -> Result<(), Refusal> {
         // Intent publication and its acknowledgement must retain their order per instance.
@@ -458,16 +480,13 @@ impl UnitTable {
                 .get_mut(&key.id)
                 .expect("resolved instance");
             let mut next = instance.clone();
-            match update {
-                PresentationUpdate::Request(action) => next.change(action)?,
-                PresentationUpdate::Observed(state) => {
-                    next.observed = state;
-                    if state == PresentationState::Closed {
-                        next.requested = state;
-                    }
+            next.state = match update {
+                PresentationUpdate::Request(action) => {
+                    next.state.request(Visibility::requested(action)?)
                 }
-            }
-            let changed = next.requested != instance.requested;
+                PresentationUpdate::Observed(state) => next.state.report(state),
+            };
+            let changed = next.state.requested() != instance.state.requested();
             let view = self.inner.hub.view(key).expect("ready instance");
             self.inner
                 .hub
@@ -478,7 +497,7 @@ impl UnitTable {
                 record
                     .session
                     .clone()
-                    .map(|session| (record.name.clone(), session, instance.requested))
+                    .map(|session| (record.name.clone(), session, instance.state.requested()))
             } else {
                 None
             }
@@ -490,7 +509,7 @@ impl UnitTable {
                 &unit,
                 invoke::Op::SurfaceLifecycle(omega::SurfaceLifecycle {
                     instance: Some(key.wire()),
-                    state: state as i32,
+                    state: state.wire(),
                 }),
             )
             .await;
@@ -574,9 +593,9 @@ impl Drop for Creation {
 impl UnitTable {
     pub(crate) async fn interact(
         &self,
-        permit: &crate::session::dispatch::attachment::InstancePermit,
+        permit: &crate::attachment::InstancePermit,
         event: &omega::Interact,
-    ) -> Result<crate::session::dispatch::Response, Refusal> {
+    ) -> Result<omega_proto::CommandAnswer, Refusal> {
         let key = &permit.key;
         let (unit, session, call) = {
             let records = self.lock();
@@ -603,67 +622,37 @@ impl UnitTable {
             if view.requested != PresentationState::Visible as i32 {
                 return Err(Refusal::precondition("presentation is not visible"));
             }
-            let root = view
-                .view
-                .root
-                .as_ref()
-                .ok_or_else(|| Refusal::precondition("instance has no content"))?;
-            let mut stack = vec![(root, true)];
-            let mut binding = None;
-            while let Some((node, enabled)) = stack.pop() {
-                let enabled = enabled
-                    && !["disabled", "busy"].iter().any(|prop| {
-                        node.props.get(*prop).is_some_and(|value| {
-                            matches!(value.kind, Some(omega::value::Kind::BoolValue(true)))
-                        })
-                    });
-                if node.key == event.node {
-                    if binding.is_some() {
-                        return Err(Refusal::invalid("view has ambiguous node keys"));
+            let op = match omega_proto::Interaction::resolve(&view.view, &event.node, &event.event)?
+            {
+                omega_proto::Interaction::Local(binding) => {
+                    invoke::Op::SurfaceEvent(omega::SurfaceEvent {
+                        instance: Some(key.wire()),
+                        binding: binding.get(),
+                        value: event.value.clone(),
+                    })
+                }
+                omega_proto::Interaction::Command { command, args } => {
+                    let manifest = record
+                        .manifest
+                        .as_ref()
+                        .ok_or_else(|| Refusal::precondition("unit has no manifest"))?;
+                    if !manifest
+                        .manifest
+                        .commands
+                        .iter()
+                        .any(|declared| declared.id == command)
+                    {
+                        return Err(Refusal::denied("binding targets an undeclared command"));
                     }
-                    if !enabled {
-                        return Err(Refusal::precondition("control is disabled"));
+                    let mut args = args.to_vec();
+                    if let Some(value) = &event.value {
+                        args.push(value.clone());
                     }
-                    binding =
-                        Some(node.events.get(&event.event).cloned().ok_or_else(|| {
-                            Refusal::invalid("node has no binding for this event")
-                        })?);
+                    invoke::Op::CallCommand(omega::CallCommand {
+                        command: command.to_owned(),
+                        args,
+                    })
                 }
-                stack.extend(node.children.iter().map(|child| (child, enabled)));
-            }
-            let binding = binding.ok_or_else(|| Refusal::invalid("unknown interaction node"))?;
-            let op = if binding.local != 0 {
-                if !binding.command.is_empty() || !binding.args.is_empty() {
-                    return Err(Refusal::invalid(
-                        "local binding cannot carry command arguments",
-                    ));
-                }
-                invoke::Op::SurfaceEvent(omega::SurfaceEvent {
-                    instance: Some(key.wire()),
-                    binding: binding.local,
-                    value: event.value.clone(),
-                })
-            } else {
-                let manifest = record
-                    .manifest
-                    .as_ref()
-                    .ok_or_else(|| Refusal::precondition("unit has no manifest"))?;
-                if !manifest
-                    .manifest
-                    .commands
-                    .iter()
-                    .any(|command| command.id == binding.command)
-                {
-                    return Err(Refusal::denied("binding targets an undeclared command"));
-                }
-                let mut args = binding.args;
-                if let Some(value) = &event.value {
-                    args.push(value.clone());
-                }
-                invoke::Op::CallCommand(omega::CallCommand {
-                    command: binding.command,
-                    args,
-                })
             };
             (
                 record.name.clone(),
@@ -674,11 +663,9 @@ impl UnitTable {
                 op,
             )
         };
-        match Self::request_on(&session, &unit, call).await.or_refuse()? {
-            result::Outcome::Value(value) => Ok(crate::session::dispatch::Response::Value(value)),
-            result::Outcome::Ok(_) => Ok(crate::session::dispatch::Response::Ok),
-            _ => Err(Refusal::invalid("command returned an unexpected outcome")),
-        }
+        omega_proto::CommandAnswer::try_from(
+            Self::request_on(&session, &unit, call).await.or_refuse()?,
+        )
     }
 }
 
@@ -728,10 +715,7 @@ impl UnitTable {
             .collect()
     }
 
-    pub(crate) fn claim_renderer(
-        &self,
-        attachment: &crate::session::dispatch::attachment::Attachment,
-    ) {
+    pub(crate) fn claim_renderer(&self, attachment: &crate::attachment::Attachment) {
         let _records = self.lock();
         let mut slots = self
             .inner
@@ -767,7 +751,7 @@ impl UnitTable {
                     .get_mut(&key.id)
                     .filter(|instance| &instance.key == key && instance.ready)
                 {
-                    instance.observed = PresentationState::Unspecified;
+                    instance.state = instance.state.disconnected();
                     if let Some(view) = self.inner.hub.view(key)
                         && let Err(error) = self
                             .inner
@@ -784,7 +768,7 @@ impl UnitTable {
 
 enum PresentationUpdate {
     Request(PresentationAction),
-    Observed(PresentationState),
+    Observed(Visibility),
 }
 
 enum Admission {

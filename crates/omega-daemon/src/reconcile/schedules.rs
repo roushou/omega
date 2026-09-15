@@ -30,7 +30,11 @@ impl ScheduleProvider {
         Self { schedules }
     }
 
-    pub fn plan(&self, document: &StateDocument) -> Result<Vec<ScheduleChange>, ProviderError> {
+    /// Plan against captured declarations without reading or changing timer tasks.
+    pub fn plan(
+        document: &StateDocument,
+        installed: &[Schedule],
+    ) -> Result<Vec<ScheduleChange>, ProviderError> {
         let mut declared = BTreeMap::new();
         for schedule in &document.schedules {
             schedule.parsed().map_err(Self::error)?;
@@ -41,15 +45,13 @@ impl ScheduleProvider {
                 return Err(Self::error("empty or duplicate schedule id"));
             }
         }
-        let running: BTreeMap<_, _> = self
-            .schedules
-            .declared()
-            .into_iter()
+        let running: BTreeMap<_, _> = installed
+            .iter()
             .map(|schedule| (schedule.id.clone(), schedule))
             .collect();
         let mut changes: Vec<_> = declared
             .iter()
-            .filter(|(id, schedule)| running.get(**id) != Some(*schedule))
+            .filter(|(id, schedule)| running.get(**id).copied() != Some(*schedule))
             .map(|(_, schedule)| ScheduleChange::Set((*schedule).clone()))
             .chain(
                 running

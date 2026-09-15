@@ -1,5 +1,6 @@
 //! Plan and apply desired-state changes per domain.
-//! Planning is pure; applying an empty plan leaves runtime state unchanged.
+//! Presentation comparison uses explicit facts; other providers acquire inputs while planning.
+//! Applying an empty plan leaves runtime state unchanged.
 
 mod build;
 pub mod converger;

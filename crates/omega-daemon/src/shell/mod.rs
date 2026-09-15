@@ -157,7 +157,7 @@ struct ShellConnection<S> {
     /// Peer authorization result. Reading is open; operations require authorization.
     peer: Result<Arc<Peer>, Refusal>,
     gateway: Option<Gateway>,
-    attachment: crate::session::dispatch::attachment::RendererAttachment,
+    attachment: crate::attachment::RendererAttachment,
     sent_views: std::collections::BTreeMap<omega_proto::instance::InstanceKey, Arc<ViewUpdate>>,
 }
 

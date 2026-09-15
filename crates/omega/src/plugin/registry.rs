@@ -7,7 +7,7 @@ use omega_proto::{IntoValue, SystemTopic, Values};
 
 use crate::Input;
 use crate::runtime::context::Context;
-use crate::ui::View;
+use crate::surface::instance::MountedSurface;
 use crate::wiring::Wired;
 use crate::{Args, Command, Reaction};
 
@@ -66,18 +66,6 @@ impl SurfaceEntry {
     pub(crate) fn build(&self, context: &Context, settings: &Values) -> Box<dyn MountedSurface> {
         (self.make)(context, settings)
     }
-}
-
-/// Type-erased surface rendering and lifecycle interface.
-pub(crate) trait MountedSurface: Send {
-    fn render(&mut self) -> View;
-    fn lifecycle(&mut self, event: crate::surface::Lifecycle) -> Result<(), crate::Error>;
-    fn mounted(&mut self) -> Result<(), crate::Error>;
-    fn event(&mut self, binding: u64, args: Args) -> Result<(), crate::Error>;
-    fn poll(
-        &mut self,
-        context: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), crate::Error>>;
 }
 
 /// A registered command.

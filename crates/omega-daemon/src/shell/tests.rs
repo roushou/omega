@@ -541,15 +541,13 @@ struct RendererFixture;
 impl RendererFixture {
     fn attach<S>(connection: &ShellConnection<S>, unit: &str) {
         *connection.attachment.lock().unwrap() = Some(
-            crate::session::dispatch::attachment::Attachment::parse(
-                &omega_proto::omega::AttachRenderer {
-                    build_fingerprint: String::new(),
-                    scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
-                        unit.into(),
-                    )),
-                    features: vec![1, 2, 3, 4, 5, 6, 7, 8],
-                },
-            )
+            crate::attachment::Attachment::parse(&omega_proto::omega::AttachRenderer {
+                build_fingerprint: String::new(),
+                scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
+                    unit.into(),
+                )),
+                features: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            })
             .unwrap(),
         );
     }

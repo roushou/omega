@@ -2,10 +2,12 @@ pub mod action;
 pub mod bluetooth;
 pub mod client;
 pub mod codec;
+pub mod command;
 pub mod handshake;
 pub mod icons;
 pub mod ident;
 pub mod instance;
+pub mod interaction;
 pub mod manifest;
 #[cfg(feature = "json")]
 pub mod observation;
@@ -27,9 +29,11 @@ pub use action::ActionKind;
 pub use bluetooth::{BluetoothDeviceId, BluetoothDeviceIdError};
 pub use client::{Client, ClientError};
 pub use codec::{CodecError, FrameCodec, MAX_FRAME_LEN};
+pub use command::CommandAnswer;
 pub use handshake::{Handshake, HandshakeError};
 pub use icons::Glyph;
 pub use ident::{IdentError, ModuleId, SurfaceId, UnitName};
+pub use interaction::Interaction;
 pub use manifest::ManifestError;
 #[cfg(feature = "json")]
 pub use observation::Observation;

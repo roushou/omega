@@ -56,6 +56,12 @@ impl Fixture {
         }
     }
     fn connect_unit(units: &UnitTable) -> SessionGuard {
+        Self::connect_unit_answering(units, None)
+    }
+    fn connect_unit_answering(
+        units: &UnitTable,
+        command_answer: Option<result::Outcome>,
+    ) -> SessionGuard {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<omega_daemon::units::Request>(16);
         tokio::spawn(async move {
             while let Some(request) = rx.recv().await {
@@ -75,7 +81,9 @@ impl Fixture {
                     invoke::Op::RemoveWidget(_) => result::Outcome::Ok(Default::default()),
                     invoke::Op::CallCommand(call) => {
                         assert_eq!(call.command, "activate");
-                        result::Outcome::Value(call.args[0].clone())
+                        command_answer
+                            .clone()
+                            .unwrap_or_else(|| result::Outcome::Value(call.args[0].clone()))
                     }
                     other => panic!("unexpected unit request {other:?}"),
                 };
@@ -242,7 +250,26 @@ async fn independent_settings_singleton_reuse_and_dismissal_share_one_registry()
         .find(|instance| instance.instance == first.instance)
         .unwrap();
     assert_eq!(closed.requested, omega::PresentationState::Closed as i32);
+    assert_eq!(closed.observed, omega::PresentationState::Closed as i32);
     drop(renderer);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let snapshot = fixture
+                .units
+                .inspect_instances(None)
+                .instances
+                .into_iter()
+                .find(|instance| instance.instance == first.instance)
+                .unwrap();
+            assert_eq!(snapshot.requested, omega::PresentationState::Closed as i32);
+            if snapshot.observed == omega::PresentationState::Unspecified as i32 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("disconnect must clear observation without reopening");
     let mut recovered = fixture.observer().await;
     let result::Outcome::Instances(attached) = recovered
         .ask(Fixture::attachment(vec![1, 2, 5, 6, 7, 8]))
@@ -262,6 +289,10 @@ async fn independent_settings_singleton_reuse_and_dismissal_share_one_registry()
     let reopened = owner.create("main", "one").await;
     assert_eq!(reopened.instance, first.instance);
     assert_eq!(reopened.requested, omega::PresentationState::Visible as i32);
+    assert_eq!(
+        reopened.observed,
+        omega::PresentationState::Unspecified as i32
+    );
 }
 
 #[tokio::test]
@@ -307,6 +338,109 @@ async fn renderer_interactions_resolve_retained_bindings_and_reject_stale_revisi
         renderer.ask(invoke::Op::Interact(event)).await,
         omega::ErrorCode::FailedPrecondition,
     );
+}
+
+#[tokio::test]
+async fn retained_interactions_share_eligibility_but_keep_command_authorization() {
+    let fixture = Fixture::new("instances-eligibility");
+    let mut owner = fixture.observer().await;
+    let first = owner.create("", "argument").await;
+    let mut renderer = fixture.observer().await;
+    renderer.ask(Fixture::attachment(vec![1, 2, 5, 7, 8])).await;
+    for case in ["disabled", "busy", "duplicate", "mixed", "undeclared"] {
+        let mut target = Fixture::view("argument".into_value()).root.unwrap();
+        match case {
+            "mixed" => target.events.get_mut("press").unwrap().local = 991,
+            "undeclared" => target.events.get_mut("press").unwrap().command = "missing".into(),
+            _ => {}
+        }
+        let children = if case == "duplicate" {
+            vec![target.clone(), target]
+        } else {
+            vec![target]
+        };
+        let mut parent = omega::ViewNode {
+            r#type: "stack".into(),
+            key: "parent".into(),
+            children,
+            ..Default::default()
+        };
+        if matches!(case, "disabled" | "busy") {
+            parent.props.insert(case.into(), true.into_value());
+        }
+        fixture
+            .units
+            .publish_instance(
+                &common::unit_name("example"),
+                &omega::PublishView {
+                    instance: first.instance.clone(),
+                    surface_id: "panel".into(),
+                    view: Some(omega::ViewTree {
+                        root: Some(parent),
+                        revision: 0,
+                    }),
+                },
+            )
+            .unwrap();
+        let current = fixture.units.inspect_instances(None).instances.remove(0);
+        let code = match case {
+            "disabled" | "busy" => omega::ErrorCode::FailedPrecondition,
+            "undeclared" => omega::ErrorCode::PermissionDenied,
+            _ => omega::ErrorCode::InvalidArgument,
+        };
+        Fixture::refusal(
+            renderer
+                .ask(invoke::Op::Interact(omega::Interact {
+                    instance: current.instance,
+                    revision: current.view.unwrap().revision,
+                    node: "button".into(),
+                    event: "press".into(),
+                    value: None,
+                }))
+                .await,
+            code,
+        );
+    }
+}
+
+#[tokio::test]
+async fn renderer_command_answers_preserve_refusals_and_reject_unexpected_outcomes() {
+    for (outcome, code) in [
+        (
+            result::Outcome::View(Default::default()),
+            omega::ErrorCode::InvalidArgument,
+        ),
+        (
+            result::Outcome::Error(omega::Error {
+                code: omega::ErrorCode::PermissionDenied as i32,
+                message: "command denied".into(),
+            }),
+            omega::ErrorCode::PermissionDenied,
+        ),
+    ] {
+        let mut fixture = Fixture::new("instances-command-answer");
+        drop(fixture.guard.take());
+        fixture.guard = Some(Fixture::connect_unit_answering(
+            &fixture.units,
+            Some(outcome),
+        ));
+        let mut owner = fixture.observer().await;
+        let first = owner.create("", "argument").await;
+        let mut renderer = fixture.observer().await;
+        renderer.ask(Fixture::attachment(vec![1, 2, 5, 7, 8])).await;
+        Fixture::refusal(
+            renderer
+                .ask(invoke::Op::Interact(omega::Interact {
+                    instance: first.instance,
+                    revision: first.view.unwrap().revision,
+                    node: "button".into(),
+                    event: "press".into(),
+                    value: None,
+                }))
+                .await,
+            code,
+        );
+    }
 }
 
 #[tokio::test]
@@ -385,6 +519,14 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
         fixture.units.clone(),
         std::sync::Arc::new(ManifestStore::from_manifests([manifest])),
     );
+    let plan = |document: &omega::StateDocument| {
+        provider.prepare(document).map(|desired| {
+            omega_daemon::reconcile::PresentationProvider::plan(
+                &desired,
+                &fixture.units.installed_presentations(),
+            )
+        })
+    };
     let create = Fixture::request("", "configured");
     let document = omega::StateDocument {
         presentations: vec![omega::ConfiguredPresentation {
@@ -396,10 +538,7 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
         }],
         ..Default::default()
     };
-    provider
-        .apply(&provider.plan(&document).unwrap())
-        .await
-        .unwrap();
+    provider.apply(&plan(&document).unwrap()).await.unwrap();
     let snapshot = fixture.units.inspect_instances(None).instances.remove(0);
     let mut owner = fixture.observer().await;
     owner
@@ -408,10 +547,10 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
             action: omega::PresentationAction::Close as i32,
         }))
         .await;
-    assert!(provider.plan(&document).unwrap().is_empty());
+    assert!(plan(&document).unwrap().is_empty());
     let transient = owner.create("", "transient").await;
     provider
-        .apply(&provider.plan(&omega::StateDocument::default()).unwrap())
+        .apply(&plan(&omega::StateDocument::default()).unwrap())
         .await
         .unwrap();
     assert_eq!(

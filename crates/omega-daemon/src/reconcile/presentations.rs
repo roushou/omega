@@ -9,7 +9,7 @@ use omega_proto::{ModuleId, SurfaceId, UnitName};
 use crate::hub::SurfaceRef;
 use crate::manifest::ManifestStore;
 use crate::reconcile::{Action, ProviderError};
-use crate::units::UnitTable;
+use crate::units::{InstalledInstance, UnitTable};
 
 #[derive(Debug, Clone)]
 pub struct InstanceChange {
@@ -18,6 +18,14 @@ pub struct InstanceChange {
     pub config: HashMap<String, Value>,
     pub presentation: Option<omega_proto::instance::PresentationSpec>,
     pub anchor: Option<SurfaceRef>,
+}
+
+/// Desired construction facts. An absent presentation leaves bar/popup policy to apply.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DesiredInstance {
+    config: HashMap<String, Value>,
+    presentation: Option<omega_proto::instance::PresentationSpec>,
+    anchor: Option<SurfaceRef>,
 }
 
 #[derive(Debug)]
@@ -31,10 +39,11 @@ impl PresentationProvider {
         Self { units, manifests }
     }
 
-    fn declared(
+    /// Compile the host projection once and resolve declared surfaces against stored manifests.
+    pub fn prepare(
         &self,
         document: &StateDocument,
-    ) -> Result<BTreeMap<SurfaceRef, HashMap<String, Value>>, ProviderError> {
+    ) -> Result<BTreeMap<SurfaceRef, DesiredInstance>, ProviderError> {
         let mut instances = BTreeMap::new();
         let compiled = omega_omarchy::shell::CompiledShell::of(document).map_err(Self::error)?;
         let shell_bars: Vec<_> = compiled
@@ -56,12 +65,25 @@ impl PresentationProvider {
                 };
                 let unit = UnitName::parse(&widget.unit).map_err(Self::error)?;
                 let module = ModuleId::parse(&module.id).map_err(Self::error)?;
+                let primary = self.surface_of(&unit, &widget.surface)?;
                 for named in std::iter::once(widget.surface.as_str())
                     .chain((!widget.panel.is_empty()).then_some(widget.panel.as_str()))
                 {
                     let surface = self.surface_of(&unit, named)?;
-                    let address = SurfaceRef::module(unit.clone(), surface, module.clone());
-                    if instances.insert(address, widget.config.clone()).is_some() {
+                    let address = SurfaceRef::module(unit.clone(), surface.clone(), module.clone());
+                    let anchor = (surface != primary)
+                        .then(|| SurfaceRef::module(unit.clone(), primary.clone(), module.clone()));
+                    if instances
+                        .insert(
+                            address,
+                            DesiredInstance {
+                                config: widget.config.clone(),
+                                presentation: None,
+                                anchor,
+                            },
+                        )
+                        .is_some()
+                    {
                         return Err(Self::error("duplicate view instance"));
                     }
                 }
@@ -75,7 +97,24 @@ impl PresentationProvider {
                 surface,
                 ModuleId::parse(&entry.id).map_err(Self::error)?,
             );
-            if instances.insert(address, entry.config.clone()).is_some() {
+            let presentation = omega_proto::instance::PresentationSpec::parse(
+                entry
+                    .presentation
+                    .clone()
+                    .ok_or_else(|| Self::error("presentation is required"))?,
+            )
+            .map_err(Self::error)?;
+            if instances
+                .insert(
+                    address,
+                    DesiredInstance {
+                        config: entry.config.clone(),
+                        presentation: Some(presentation),
+                        anchor: None,
+                    },
+                )
+                .is_some()
+            {
                 return Err(Self::error("duplicate presentation instance"));
             }
         }
@@ -90,66 +129,22 @@ impl PresentationProvider {
         omega_document::DocumentValidation::surface(&entry.manifest, named).map_err(Self::error)
     }
 
-    pub fn plan(&self, document: &StateDocument) -> Result<Vec<InstanceChange>, ProviderError> {
-        let desired = self.declared(document)?;
-        let installed = self.units.instances();
-        let compiled = omega_omarchy::shell::CompiledShell::of(document).map_err(Self::error)?;
-        let shell_bars = compiled
-            .as_ref()
-            .map(|shell| shell.bar().clone())
-            .into_iter()
-            .collect::<Vec<_>>();
-        let mut anchors = BTreeMap::new();
-        for bar in document.bars.iter().chain(&shell_bars) {
-            for entry in &bar.modules {
-                if let Some(module::Kind::Widget(widget)) = &entry.kind
-                    && !widget.panel.is_empty()
-                {
-                    let unit = UnitName::parse(&widget.unit).map_err(Self::error)?;
-                    let placement = ModuleId::parse(&entry.id).map_err(Self::error)?;
-                    anchors.insert(
-                        SurfaceRef::module(
-                            unit.clone(),
-                            self.surface_of(&unit, &widget.panel)?,
-                            placement.clone(),
-                        ),
-                        SurfaceRef::module(
-                            unit.clone(),
-                            self.surface_of(&unit, &widget.surface)?,
-                            placement,
-                        ),
-                    );
-                }
-            }
-        }
+    /// Compare supplied facts without reading runtime state or interpreting host payloads.
+    pub fn plan(
+        desired: &BTreeMap<SurfaceRef, DesiredInstance>,
+        installed: &BTreeMap<SurfaceRef, InstalledInstance>,
+    ) -> Vec<InstanceChange> {
         let mut changes = Vec::new();
-        for (address, config) in &desired {
-            let anchor = anchors.get(address).cloned();
-            let presentation = document
-                .presentations
-                .iter()
-                .find(|entry| {
-                    address
-                        .module
+        for (address, declaration) in desired {
+            let current = installed.get(address);
+            if current.is_none_or(|current| {
+                current.anchor != declaration.anchor
+                    || current.config != declaration.config
+                    || declaration
+                        .presentation
                         .as_ref()
-                        .is_some_and(|module| module.as_str() == entry.id)
-                })
-                .map(|entry| {
-                    omega_proto::instance::PresentationSpec::parse(
-                        entry
-                            .presentation
-                            .clone()
-                            .ok_or_else(|| Self::error("presentation is required"))?,
-                    )
-                    .map_err(Self::error)
-                })
-                .transpose()?;
-            if self.units.anchor_at(address) != anchor
-                || installed.get(address) != Some(config)
-                || presentation
-                    .as_ref()
-                    .is_some_and(|spec| self.units.presentation_at(address).as_ref() != Some(spec))
-            {
+                        .is_some_and(|spec| &current.presentation != spec)
+            }) {
                 changes.push(InstanceChange {
                     action: if installed.contains_key(address) {
                         Action::Update
@@ -157,9 +152,9 @@ impl PresentationProvider {
                         Action::Create
                     },
                     address: address.clone(),
-                    config: config.clone(),
-                    presentation,
-                    anchor,
+                    config: declaration.config.clone(),
+                    presentation: declaration.presentation.clone(),
+                    anchor: declaration.anchor.clone(),
                 });
             }
         }
@@ -176,7 +171,7 @@ impl PresentationProvider {
             });
         }
         changes.sort_by_key(|change| change.anchor.is_some());
-        Ok(changes)
+        changes
     }
 
     pub async fn apply(&self, changes: &[InstanceChange]) -> Result<(), ProviderError> {
@@ -223,5 +218,147 @@ impl PresentationProvider {
 
     fn error(error: impl std::fmt::Display) -> ProviderError {
         ProviderError::new("presentations", error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_proto::{IntoValue, instance::PresentationSpec, omega};
+
+    struct Fixture;
+    impl Fixture {
+        fn address(surface: &str) -> SurfaceRef {
+            SurfaceRef::module(
+                UnitName::parse("wifi").unwrap(),
+                SurfaceId::parse(surface).unwrap(),
+                ModuleId::parse("slot").unwrap(),
+            )
+        }
+        fn embedded() -> PresentationSpec {
+            PresentationSpec::parse(omega::Presentation {
+                kind: Some(omega::presentation::Kind::Embedded(
+                    omega::EmbeddedPresentation {
+                        placement: "slot".into(),
+                    },
+                )),
+            })
+            .unwrap()
+        }
+        fn window() -> PresentationSpec {
+            PresentationSpec::parse(omega::Presentation {
+                kind: Some(omega::presentation::Kind::Window(
+                    omega::WindowPresentation {
+                        app_id: "org.omega.wifi".into(),
+                        width: 100,
+                        height: 100,
+                        min_width: 1,
+                        min_height: 1,
+                        ..Default::default()
+                    },
+                )),
+            })
+            .unwrap()
+        }
+        fn desired() -> DesiredInstance {
+            DesiredInstance {
+                config: HashMap::new(),
+                presentation: None,
+                anchor: None,
+            }
+        }
+        fn installed() -> InstalledInstance {
+            InstalledInstance {
+                config: HashMap::new(),
+                presentation: Self::embedded(),
+                anchor: None,
+            }
+        }
+    }
+
+    #[test]
+    fn unchanged_facts_produce_no_work_and_each_changed_fact_requires_an_update() {
+        let address = Fixture::address("indicator");
+        let desired = BTreeMap::from([(address.clone(), Fixture::desired())]);
+        let installed = BTreeMap::from([(address.clone(), Fixture::installed())]);
+        assert!(PresentationProvider::plan(&desired, &installed).is_empty());
+        let mut configured = Fixture::desired();
+        configured
+            .config
+            .insert("label".into(), "changed".into_value());
+        let mut anchored = Fixture::desired();
+        anchored.anchor = Some(Fixture::address("other"));
+        let mut window = Fixture::desired();
+        window.presentation = Some(Fixture::window());
+        for declaration in [configured, anchored, window] {
+            let changes = PresentationProvider::plan(
+                &BTreeMap::from([(address.clone(), declaration.clone())]),
+                &installed,
+            );
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].action, Action::Update);
+            assert_eq!(changes[0].config, declaration.config);
+            assert_eq!(changes[0].anchor, declaration.anchor);
+            assert_eq!(changes[0].presentation, declaration.presentation);
+        }
+        let specified = Fixture::window();
+        let desired = BTreeMap::from([(
+            address.clone(),
+            DesiredInstance {
+                presentation: Some(specified.clone()),
+                ..Fixture::desired()
+            },
+        )]);
+        let installed = BTreeMap::from([(
+            address,
+            InstalledInstance {
+                presentation: specified,
+                ..Fixture::installed()
+            },
+        )]);
+        assert!(PresentationProvider::plan(&desired, &installed).is_empty());
+    }
+
+    #[test]
+    fn anchors_precede_popups_and_removed_addresses_are_deleted() {
+        let anchor = Fixture::address("z-indicator");
+        let popup = Fixture::address("a-panel");
+        let removed = Fixture::address("removed");
+        let desired = BTreeMap::from([
+            (
+                popup.clone(),
+                DesiredInstance {
+                    anchor: Some(anchor.clone()),
+                    ..Fixture::desired()
+                },
+            ),
+            (anchor.clone(), Fixture::desired()),
+        ]);
+        let installed = BTreeMap::from([(removed.clone(), Fixture::installed())]);
+        let changes = PresentationProvider::plan(&desired, &installed);
+        assert_eq!(changes.len(), 3);
+        assert_eq!(changes.last().unwrap().address, popup);
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.address == anchor && change.action == Action::Create)
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.address == removed && change.action == Action::Delete)
+        );
+        // Anchor readiness is checked by apply, not assumed by pure planning.
+        let desired = BTreeMap::from([(
+            popup,
+            DesiredInstance {
+                anchor: Some(anchor),
+                ..Fixture::desired()
+            },
+        )]);
+        assert_eq!(
+            PresentationProvider::plan(&desired, &BTreeMap::new()).len(),
+            1
+        );
     }
 }

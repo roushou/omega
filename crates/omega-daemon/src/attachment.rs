@@ -1,3 +1,5 @@
+//! Renderer scopes, negotiated features, and revocable instance permits.
+
 use crate::hub::ViewUpdate;
 use crate::refusal::RefusableResult;
 use omega_proto::instance::{InstanceKey, PlacementId, PresentationSpec};
@@ -181,7 +183,13 @@ impl Attachment {
             }
         };
         Ok(ViewUpdate {
-            instance: crate::units::UnitTable::instance_key(snapshot.instance.as_ref())?,
+            instance: InstanceKey::parse(
+                snapshot
+                    .instance
+                    .as_ref()
+                    .ok_or_else(|| Refusal::invalid("instance identity is required"))?,
+            )
+            .or_refuse()?,
             surface: crate::hub::SurfaceRef {
                 unit: UnitName::parse(&snapshot.unit).or_refuse()?,
                 surface: SurfaceId::parse(&snapshot.surface).or_refuse()?,

@@ -78,6 +78,45 @@ async fn replacement_and_close_invalidate_task_delivery() {
             .is_err()
     );
 }
+
+#[derive(omega::Surface)]
+struct Blocked;
+impl Surface for Blocked {
+    type Model = bool;
+    type Message = bool;
+    type Effects = ();
+    fn render(&self, busy: &bool, events: &Events<bool>) -> View {
+        let parent = omega::ui::Column::new().child(
+            Button::new("Blocked")
+                .key("blocked")
+                .on_press(events.on(|()| false)),
+        );
+        if *busy {
+            parent.busy().into()
+        } else {
+            parent.disabled().into()
+        }
+    }
+    fn update(&self, busy: &mut bool, message: bool, _: &()) -> Task<bool> {
+        *busy = message;
+        Task::none()
+    }
+}
+
+#[test]
+fn harness_respects_disabled_and_busy_ancestors() {
+    let mut harness = SurfaceHarness::<Blocked>::new(&State::new()).unwrap();
+    for busy in [false, true] {
+        harness.send(busy).unwrap();
+        let drawn = harness.draw();
+        let error = harness
+            .interact(&drawn, "blocked", "press", ())
+            .unwrap_err();
+        assert!(matches!(error, omega::Error::Refused(refusal)
+            if refusal.code == omega_proto::omega::ErrorCode::FailedPrecondition));
+        assert_eq!(*harness.model(), busy);
+    }
+}
 #[test]
 fn text_resets_reject_old_edits_and_reordered_updates() {
     let mut value = TextValue::default();

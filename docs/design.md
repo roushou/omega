@@ -1,9 +1,8 @@
 # Open design questions
 
-The [architecture](architecture.md) describes the implemented contracts. The
-[desktop platform design](desktop-platform.md) and its
-[completed implementation plan](archive/desktop-platform-plan.md) record its decisions
-and validation. This file tracks remaining limitations and future work.
+The [architecture](architecture.md) describes the implemented contracts, and the
+[desktop platform design](desktop-platform.md) records composition decisions.
+This file tracks remaining limitations and future work.
 
 ## Persistence and recovery
 
@@ -35,21 +34,13 @@ and validation. This file tracks remaining limitations and future work.
   cancellation would need to distinguish queued work from external effects that
   have already started.
 
-## Planning and interaction boundaries
+## Placement identity
 
-- **Planning inputs:** provider plans precede application, but their inputs are not
-  all explicit. The [presentation provider](../crates/omega-daemon/src/reconcile/presentations.rs)
-  reads live unit state and compiles the Omarchy payload during planning; the
-  [environment provider](../crates/omega-daemon/src/reconcile/environment.rs) reads
-  its output file. Move observations to callers before treating these entry points
-  as pure decisions. Preserve execution-time checks for ownership changes after planning.
-- **Interaction parity:** the [daemon](../crates/omega-daemon/src/units/presentations.rs)
-  and [preview scene](../crates/omega-preview/src/scene.rs) separately inspect
-  duplicate node keys and inherited disabled/busy state. The direct
-  [surface harness](../crates/omega/src/testing/surface.rs) looks up a binding without
-  those checks. Sharing model and task execution does not yet establish identical
-  interaction admission. These paths should agree on tree and binding validity;
-  renderer authorization remains a daemon responsibility.
+Placed and unplaced surfaces share metadata with an optional placement ID. The
+relationship between presentation kind and placement is enforced at runtime.
+Revisit this representation when a feature needs that relationship enforced by
+types; preserve the distinction between an indicator and its panel even when
+they share a placement ID.
 
 ## Feature boundaries
 

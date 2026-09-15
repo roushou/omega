@@ -4,7 +4,7 @@
 use omega_proto::omega::{
     Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value,
 };
-use omega_proto::{Client, ClientError, Socket};
+use omega_proto::{Client, ClientError, CommandAnswer, Socket};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
@@ -100,10 +100,12 @@ impl Operator {
             }))
             .await?;
 
-        Ok(match outcome {
-            result::Outcome::Value(value) => Some(value),
-            _ => None,
-        })
+        Ok(
+            match CommandAnswer::try_from(outcome).map_err(ClientError::from)? {
+                CommandAnswer::Value(value) => Some(value),
+                CommandAnswer::Acknowledged => None,
+            },
+        )
     }
 
     /// Open a persistent operator connection for session-scoped operations.

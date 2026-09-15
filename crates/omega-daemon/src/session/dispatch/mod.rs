@@ -4,21 +4,22 @@
 use omega_proto::omega::{
     Empty, Frame, Invoke, StatePatch, StateTopic, Value, invoke, result, state_topic,
 };
-use omega_proto::{Address, Refusal};
+use omega_proto::{Address, CommandAnswer, Refusal};
 use omega_proto::{SurfaceId, UnitName};
 
 use crate::action::Actions;
+use crate::attachment;
 use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
 
+use crate::authorization::{Grants, Role};
 use crate::hub::Hub;
-use crate::session::admission::{Grants, Peer, Role};
+use crate::session::admission::Peer;
 use crate::session::subscriptions::Subscriptions;
 use crate::supervisor::Supervisor;
 use crate::units::UnitTable;
 
 mod adoption;
-pub(crate) mod attachment;
 mod policy;
 
 use adoption::Adoptions;
@@ -37,6 +38,15 @@ pub enum Response {
     /// Whatever a unit answered with, for an op that asked it something.
     Value(Value),
     Deployment(omega_proto::omega::DeploymentStatus),
+}
+
+impl From<CommandAnswer> for Response {
+    fn from(answer: CommandAnswer) -> Self {
+        match answer {
+            CommandAnswer::Acknowledged => Self::Ok,
+            CommandAnswer::Value(value) => Self::Value(value),
+        }
+    }
 }
 
 impl Response {
@@ -289,7 +299,10 @@ impl Dispatcher {
             }
             invoke::Op::Interact(interact) => {
                 let key = self.authorize_instance(interact.instance.as_ref())?;
-                self.units.interact(&key, interact).await
+                self.units
+                    .interact(&key, interact)
+                    .await
+                    .map(Response::from)
             }
             invoke::Op::PublishView(publish) => {
                 let unit = peer
@@ -332,6 +345,7 @@ impl Dispatcher {
                 Actions::new(self.units.clone(), self.brokers.clone())
                     .perform(action)
                     .await
+                    .map(Response::from)
             }
 
             invoke::Op::EmitEvent(emit) => {

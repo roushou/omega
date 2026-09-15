@@ -14,30 +14,28 @@ use crate::supervisor::{Supervisor, UnitLog, UnitSpec};
 pub struct UnitProvider {
     supervisor: Supervisor,
     generation: Generation,
-    /// Every unit the build produced.
-    built: BTreeSet<UnitName>,
 }
 
 impl UnitProvider {
-    pub fn new(
-        supervisor: Supervisor,
-        generation: Generation,
-        built: impl IntoIterator<Item = UnitName>,
-    ) -> Self {
+    pub fn new(supervisor: Supervisor, generation: Generation) -> Self {
         Self {
             supervisor,
             generation,
-            built: built.into_iter().collect(),
         }
     }
 
-    pub fn plan(&self, document: &StateDocument) -> Result<Vec<UnitChange>, ProviderError> {
-        let mut desired = self.built.clone();
+    /// Plan enabled built units against captured supervision ownership.
+    pub fn plan(
+        document: &StateDocument,
+        built: &BTreeSet<UnitName>,
+        running: &BTreeSet<UnitName>,
+    ) -> Result<Vec<UnitChange>, ProviderError> {
+        let mut desired = built.clone();
         let mut configured = BTreeSet::new();
         for unit in &document.units {
             let name = UnitName::parse(&unit.name)
                 .map_err(|error| ProviderError::new("units", error.to_string()))?;
-            if !self.built.contains(&name) || !configured.insert(name.clone()) {
+            if !built.contains(&name) || !configured.insert(name.clone()) {
                 return Err(ProviderError::new(
                     "units",
                     format!("unknown or duplicate unit {name}"),
@@ -47,9 +45,8 @@ impl UnitProvider {
                 desired.remove(&name);
             }
         }
-        let running: BTreeSet<_> = self.supervisor.running().into_iter().collect();
         let mut changes: Vec<_> = desired
-            .difference(&running)
+            .difference(running)
             .cloned()
             .map(UnitChange::Start)
             .chain(running.difference(&desired).cloned().map(UnitChange::Stop))

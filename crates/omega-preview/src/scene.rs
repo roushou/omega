@@ -49,33 +49,6 @@ impl<S: omega::Surface> Scene for Surface<S> {
         self.0.draw()
     }
     fn interact(&mut self, drawn: &Drawn, event: PreviewInteraction) -> omega::Result<()> {
-        let mut stack = drawn
-            .tree()
-            .root
-            .iter()
-            .map(|node| (node, true))
-            .collect::<Vec<_>>();
-        let mut target = None;
-        while let Some((node, enabled)) = stack.pop() {
-            let enabled = enabled
-                && !["disabled", "busy"].iter().any(|prop| {
-                    node.props.get(*prop).is_some_and(|v| {
-                        matches!(
-                            v.kind,
-                            Some(omega_proto::omega::value::Kind::BoolValue(true))
-                        )
-                    })
-                });
-            if node.key == event.node && target.replace(enabled).is_some() {
-                return Err(omega::Error::invalid("ambiguous preview node key"));
-            }
-            stack.extend(node.children.iter().map(|child| (child, enabled)));
-        }
-        if target != Some(true) {
-            return Err(omega::Error::invalid(
-                "preview control is missing or disabled",
-            ));
-        }
         self.0.interact(
             drawn,
             &event.node,

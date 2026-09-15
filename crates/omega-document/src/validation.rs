@@ -82,6 +82,7 @@ impl DocumentValidation {
             }
             for entry in &bar.modules {
                 ModuleId::parse(&entry.id).map_err(Self::cause)?;
+                omega_proto::instance::PlacementId::parse(&entry.id).map_err(Self::cause)?;
                 if !modules.insert(&entry.id) {
                     return Err(Self::error("module ids must be unique across bars"));
                 }

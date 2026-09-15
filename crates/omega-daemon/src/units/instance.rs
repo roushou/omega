@@ -1,12 +1,13 @@
 //! Instance ownership and presentation state live under the unit table's lock.
 
 use super::UnitToken;
+use super::presentation_state::{Observation, PresentationState, Visibility};
 use crate::hub::{SurfaceRef, ViewUpdate};
 use omega_proto::instance::{
     IncarnationId, InstanceId, InstanceKey, PresentationSpec, SingletonId,
 };
-use omega_proto::omega::{self, PresentationState, Value, ViewTree};
-use omega_proto::{Refusal, SurfaceId, UnitName};
+use omega_proto::omega::{self, Value, ViewTree};
+use omega_proto::{SurfaceId, UnitName};
 use prost::Message;
 use std::collections::HashMap;
 
@@ -19,8 +20,7 @@ pub(crate) struct Instance {
     pub singleton: Option<SingletonId>,
     pub config: HashMap<String, Value>,
     pub presentation: PresentationSpec,
-    pub requested: PresentationState,
-    pub observed: PresentationState,
+    pub(super) state: PresentationState,
     pub ready: bool,
 }
 
@@ -36,9 +36,9 @@ impl Instance {
             presentation.wire().kind,
             Some(omega::presentation::Kind::Popup(_))
         ) {
-            PresentationState::Hidden
+            Visibility::Hidden
         } else {
-            PresentationState::Visible
+            Visibility::Visible
         };
         Self {
             lifecycle: Default::default(),
@@ -53,8 +53,7 @@ impl Instance {
             presentation,
             singleton,
             placement,
-            requested,
-            observed: PresentationState::Hidden,
+            state: PresentationState::new(requested, Observation::Known(Visibility::Hidden)),
             ready: false,
         }
     }
@@ -75,22 +74,10 @@ impl Instance {
                 .clone()
                 .unwrap_or_else(|| SurfaceRef::new(unit.clone(), self.surface.clone())),
             presentation: self.presentation.wire().clone(),
-            requested: self.requested as i32,
-            observed: self.observed as i32,
+            requested: self.state.requested().wire(),
+            observed: self.state.observed().wire(),
             view,
         }
-    }
-
-    pub(crate) fn change(&mut self, action: omega::PresentationAction) -> Result<(), Refusal> {
-        self.requested = match action {
-            omega::PresentationAction::Present => PresentationState::Visible,
-            omega::PresentationAction::Hide => PresentationState::Hidden,
-            omega::PresentationAction::Close => PresentationState::Closed,
-            omega::PresentationAction::Destroy | omega::PresentationAction::Unspecified => {
-                return Err(Refusal::invalid("invalid presentation transition"));
-            }
-        };
-        Ok(())
     }
 }
 

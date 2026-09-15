@@ -3,6 +3,7 @@
 
 mod instance;
 pub mod lifecycle;
+mod presentation_state;
 mod presentations;
 pub mod record;
 pub mod session;
@@ -25,6 +26,7 @@ use crate::manifest::{ManifestStore, UnitManifest};
 
 pub use lifecycle::{Lifecycle, Transition};
 pub use omega_proto::DaemonStreams;
+pub use presentations::InstalledInstance;
 pub use record::{UnitControl, UnitRecord};
 pub use session::{Request, RequestError, SessionGuard};
 pub use token::UnitToken;
@@ -37,8 +39,7 @@ pub struct UnitTable {
 #[derive(Debug)]
 struct Inner {
     units: Mutex<BTreeMap<UnitName, UnitRecord>>,
-    renderers:
-        Mutex<BTreeMap<crate::session::dispatch::attachment::Scope, presentations::RendererLease>>,
+    renderers: Mutex<BTreeMap<crate::attachment::Scope, presentations::RendererLease>>,
     request_bytes: Arc<tokio::sync::Semaphore>,
     hub: Hub,
     /// Notify waiters when a unit becomes reachable.

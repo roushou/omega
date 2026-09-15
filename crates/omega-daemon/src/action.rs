@@ -1,15 +1,14 @@
 //! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
-use omega_proto::Refusal;
 use omega_proto::UnitName;
-use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke, result};
+use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke};
+use omega_proto::{CommandAnswer, Refusal};
 
 use crate::refusal::Refusable;
 
+use crate::authorization::Grants;
 use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
-use crate::session::admission::Grants;
-use crate::session::dispatch::Response;
 use crate::units::UnitTable;
 
 pub use omega_proto::ActionKind;
@@ -41,7 +40,7 @@ impl Actions {
     }
 
     /// Carry out an authorized action.
-    pub async fn perform(&self, action: &action::Kind) -> Result<Response, Refusal> {
+    pub async fn perform(&self, action: &action::Kind) -> Result<CommandAnswer, Refusal> {
         action.validate().or_refuse()?;
         match action {
             // The daemon's own: spawning a process is not brokering a
@@ -54,19 +53,19 @@ impl Actions {
 
     /// Dispatch to the responsible broker. Return Unimplemented when no broker claims
     /// the action; propagate execution failures from a registered broker.
-    async fn broker(&self, action: &action::Kind) -> Result<Response, Refusal> {
+    async fn broker(&self, action: &action::Kind) -> Result<CommandAnswer, Refusal> {
         match self.brokers.act(action).await {
             None => Err(Refusal::unimplemented(format!(
                 "{} is not performed by this daemon",
                 ActionKind::of(action).name()
             ))),
-            Some(Ok(())) => Ok(Response::Ok),
+            Some(Ok(())) => Ok(CommandAnswer::Acknowledged),
             Some(Err(error)) => Err(error.refusal()),
         }
     }
 
     /// Validate the target command against the manifest before dispatching it.
-    async fn invoke_unit(&self, call: &InvokeUnit) -> Result<Response, Refusal> {
+    async fn invoke_unit(&self, call: &InvokeUnit) -> Result<CommandAnswer, Refusal> {
         let unit =
             UnitName::parse(call.unit.clone()).map_err(|e| Refusal::invalid(e.to_string()))?;
 
@@ -84,12 +83,7 @@ impl Actions {
             .await
             .or_refuse()?;
 
-        Ok(match outcome {
-            // A command that answers with something hands it back; one that
-            // just did its job says so.
-            result::Outcome::Value(value) => Response::Value(value),
-            _ => Response::Ok,
-        })
+        CommandAnswer::try_from(outcome)
     }
 
     /// A unit serves the commands its manifest declares, and no others.
@@ -120,7 +114,7 @@ impl Actions {
     }
 
     /// Spawn a shell command without waiting for its exit.
-    fn run(run: &RunCommand) -> Result<Response, Refusal> {
+    fn run(run: &RunCommand) -> Result<CommandAnswer, Refusal> {
         let command = run.command.clone();
         tokio::spawn(async move {
             match tokio::process::Command::new("/bin/sh")
@@ -137,6 +131,6 @@ impl Actions {
             }
         });
 
-        Ok(Response::Ok)
+        Ok(CommandAnswer::Acknowledged)
     }
 }

@@ -34,6 +34,20 @@ impl Fixture {
         }
     }
 
+    fn plan(
+        &self,
+        document: &StateDocument,
+    ) -> Result<
+        Vec<omega_daemon::reconcile::presentations::InstanceChange>,
+        omega_daemon::reconcile::ProviderError,
+    > {
+        let desired = self.provider.prepare(document)?;
+        Ok(PresentationProvider::plan(
+            &desired,
+            &self.units.installed_presentations(),
+        ))
+    }
+
     fn name() -> UnitName {
         UnitName::parse("wifi").unwrap()
     }
@@ -76,10 +90,10 @@ async fn both_surfaces_are_configured_updated_and_removed() {
     let _guard = fixture.units.connected(&Fixture::name(), requests);
     let responder = tokio::spawn(Fixture::answer(inbox, 8));
     let mut document = Fixture::document();
-    let plan = fixture.provider.plan(&document).unwrap();
+    let plan = fixture.plan(&document).unwrap();
     assert_eq!(plan.len(), 2);
     fixture.provider.apply(&plan).await.unwrap();
-    assert!(fixture.provider.plan(&document).unwrap().is_empty());
+    assert!(fixture.plan(&document).unwrap().is_empty());
     assert_eq!(fixture.hub.view_snapshot().len(), 2);
 
     let module::Kind::Widget(widget) = document.bars[0].modules[0].kind.as_mut().unwrap() else {
@@ -88,13 +102,13 @@ async fn both_surfaces_are_configured_updated_and_removed() {
     widget
         .config
         .insert("expanded".into(), omega_proto::IntoValue::into_value(true));
-    let plan = fixture.provider.plan(&document).unwrap();
+    let plan = fixture.plan(&document).unwrap();
     assert_eq!(plan.len(), 2);
     assert!(plan.iter().all(|change| change.action == Action::Update));
     fixture.provider.apply(&plan).await.unwrap();
 
     let (_, mut views) = fixture.hub.subscribe_views();
-    let plan = fixture.provider.plan(&StateDocument::default()).unwrap();
+    let plan = fixture.plan(&StateDocument::default()).unwrap();
     fixture.provider.apply(&plan).await.unwrap();
     assert!(fixture.units.instances().is_empty());
     assert!(fixture.hub.view_snapshot().is_empty());
@@ -120,12 +134,9 @@ async fn both_surfaces_are_configured_updated_and_removed() {
 #[tokio::test]
 async fn disconnected_instances_remain_pending() {
     let fixture = Fixture::new();
-    let plan = fixture.provider.plan(&Fixture::document()).unwrap();
+    let plan = fixture.plan(&Fixture::document()).unwrap();
     assert!(fixture.provider.apply(&plan).await.is_err());
-    assert_eq!(
-        fixture.provider.plan(&Fixture::document()).unwrap().len(),
-        2
-    );
+    assert_eq!(fixture.plan(&Fixture::document()).unwrap().len(), 2);
 }
 
 #[test]
@@ -137,7 +148,47 @@ fn ambiguous_surface_is_a_validation_error() {
             vec![Modules::plain_widget("slot", "wifi")],
         ))
         .into_inner();
-    assert!(fixture.provider.plan(&document).is_err());
+    assert!(fixture.plan(&document).is_err());
+}
+
+#[tokio::test]
+async fn a_missing_anchor_is_retried_and_captured_facts_survive_disconnect() {
+    let fixture = Fixture::new();
+    let (requests, inbox) = tokio::sync::mpsc::channel(8);
+    let guard = fixture.units.connected(&Fixture::name(), requests);
+    let responder = tokio::spawn(Fixture::answer(inbox, 2));
+    let changes = fixture.plan(&Fixture::document()).unwrap();
+    let popup = changes
+        .iter()
+        .find(|change| change.anchor.is_some())
+        .unwrap();
+    assert!(
+        fixture
+            .provider
+            .apply(std::slice::from_ref(popup))
+            .await
+            .is_err()
+    );
+    assert!(fixture.units.installed_presentations().is_empty());
+
+    let changes = fixture.plan(&Fixture::document()).unwrap();
+    fixture.provider.apply(&changes).await.unwrap();
+    responder.await.unwrap();
+    let captured = fixture.units.installed_presentations();
+    assert_eq!(captured.len(), 2);
+    let popup = changes
+        .iter()
+        .find(|change| change.anchor.is_some())
+        .unwrap();
+    assert_eq!(captured[&popup.address].anchor, popup.anchor);
+    let desired = fixture.provider.prepare(&Fixture::document()).unwrap();
+    assert!(PresentationProvider::plan(&desired, &captured).is_empty());
+    drop(guard);
+    assert!(fixture.units.installed_presentations().is_empty());
+    assert!(PresentationProvider::plan(&desired, &captured).is_empty());
+    let retry = PresentationProvider::plan(&desired, &fixture.units.installed_presentations());
+    assert_eq!(retry.len(), 2);
+    assert!(retry.iter().all(|change| change.action == Action::Create));
 }
 
 #[tokio::test]
@@ -145,11 +196,7 @@ async fn an_old_render_cannot_install_into_a_new_session() {
     let fixture = Fixture::new();
     let (requests, mut inbox) = tokio::sync::mpsc::channel(1);
     let old = fixture.units.connected(&Fixture::name(), requests);
-    let change = fixture
-        .provider
-        .plan(&Fixture::document())
-        .unwrap()
-        .remove(0);
+    let change = fixture.plan(&Fixture::document()).unwrap().remove(0);
     let units = fixture.units.clone();
     let configure = tokio::spawn(async move {
         units
@@ -175,5 +222,5 @@ fn unsupported_modules_are_refused_instead_of_omitted() {
     let fixture = Fixture::new();
     let mut document = Fixture::document();
     document.bars[0].modules[0].kind = Some(module::Kind::Clock(Default::default()));
-    assert!(fixture.provider.plan(&document).is_err());
+    assert!(fixture.plan(&document).is_err());
 }

@@ -267,6 +267,7 @@ mod tests {
         presentation: omega::surface::Presentation,
     }
     enum Message {
+        Availability(String),
         Launch,
         Finished(omega::Result<()>),
         Dismissed(omega::Result<()>),
@@ -276,17 +277,20 @@ mod tests {
         type Message = Message;
         type Effects = Effects;
         fn render(&self, model: &String, events: &Events<Message>) -> View {
-            Column::new()
-                .child(Text::new(model))
-                .child(
-                    Button::new("Launch")
-                        .key("launch")
-                        .on_press(events.on(|(): ()| Message::Launch)),
-                )
-                .into()
+            let parent = Column::new().child(Text::new(model)).child(
+                Button::new("Launch")
+                    .key("launch")
+                    .on_press(events.on(|(): ()| Message::Launch)),
+            );
+            match model.as_str() {
+                "disabled" => parent.disabled().into(),
+                "busy" => parent.busy().into(),
+                _ => parent.into(),
+            }
         }
         fn update(&self, model: &mut String, message: Message, effects: &Effects) -> Task<Message> {
             match message {
+                Message::Availability(availability) => *model = availability,
                 Message::Launch => {
                     *model = "waiting".into();
                     return Task::perform(
@@ -359,6 +363,24 @@ mod tests {
             .unwrap()
         }
     }
+    #[tokio::test]
+    async fn unavailable_ancestors_refuse_before_a_preview_effect_is_started() {
+        for availability in ["disabled", "busy"] {
+            let mut session = Fixture::session();
+            let mut harness = omega::testing::SurfaceHarness::<Launch>::new(&State::new()).unwrap();
+            harness
+                .send(Message::Availability(availability.into()))
+                .unwrap();
+            session.scene = Box::new(crate::scene::Surface::from_harness(harness).unwrap());
+            session.redraw();
+            let press = Fixture::press(&session);
+            let error = Fixture::request(&mut session, press).unwrap_err();
+            assert!(error.to_string().contains("FAILED_PRECONDITION"));
+            assert!(session.scene.effect().is_none());
+            assert!(session.drawn.text().contains(availability));
+        }
+    }
+
     #[tokio::test]
     async fn effects_wait_for_an_explicit_outcome_and_cannot_be_resolved_twice() {
         let mut session = Fixture::session();

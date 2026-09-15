@@ -96,6 +96,11 @@ entry points, typed references, local messages, tasks, and lifecycle contracts.
 interaction bindings. `plugin` owns registration and Omega supervision readings,
 separate from the machine resource readings in `platform::system`.
 
+The private `MountedSurface` execution contract lives with the production surface
+instance runtime. Registration constructs implementations; runtime publication and
+the harness consume the same contract. Surface execution does not depend on the
+registration module. Derive-facing contracts continue through `omega::internal`.
+
 `record` separates the shared record contract from its read-only and writing
 handles. `effect` owns generic completion, receipts, and queue admission; concrete
 controls belong to their service domains. Private `wiring` generates field
@@ -269,6 +274,14 @@ Grants are read from the daemon's copy of the manifest, never from a frame.
 Capabilities cannot be self-declared at runtime: a unit's manifest is
 extracted at build time from the binary itself.
 
+`authorization` owns role and manifest-grant values. Session admission owns peer
+credentials and operator authentication; the dispatch policy table consumes these
+facts to authorize operations. The sibling `attachment` module owns renderer
+scopes, negotiated features, and revocable instance permits. `UnitTable` owns
+renderer claims and coordinates revocation with instance mutations under its
+existing locks. Attachment metadata parses protocol identity directly and does
+not depend on the unit table or session dispatch.
+
 Native units run as the owner’s uid. Manifest grants constrain authenticated unit
 sessions; they do not sandbox hostile code, prevent another operator connection,
 or restrict that uid's filesystem access. A manifest hash verifies declaration
@@ -282,6 +295,13 @@ A widget surface renders: the daemon creates each instance with construction
 settings and pulls its first tree; the unit pushes subsequent trees. A command
 endpoint is invoked by `omega run`, a retained UI binding, or another unit with
 `CAPABILITY_SPAWN`. Commands are not UI instances.
+
+`omega-proto::CommandAnswer` defines terminal command and interaction answers:
+an acknowledgement or a value, including an empty value. Daemon action routing,
+retained-binding interactions, and CLI command decoding share this boundary.
+Other reply kinds, including streaming output, are refused as `INVALID_ARGUMENT`;
+peer refusals retain their declared code and message. An acknowledgement retains
+the operation's semantics: detached shell actions acknowledge admission, not exit.
 
 Both directions of the protocol are used, with stream ids split by parity so
 each side answers only what it asked.
@@ -320,6 +340,12 @@ is an interaction capability. There are no automatically created unplaced widget
 `PresentationProvider` reconciles bar indicators, anchored popups, and configured
 standalone presentations through the same instance registry under `UnitTable`.
 
+Document validation limits bar placement IDs to 128 bytes, matching embedded
+presentation creation and configured standalone placement IDs. Omarchy-projected
+bars use the same validation. General `ModuleId` parsing remains unbounded; the
+length rule applies when an identifier declares a presentation placement. Oversized
+bar IDs fail build/check validation before publication, rather than convergence.
+
 ### Independent presentations
 
 `Presentations::window` and `Presentations::overlay` in `omega-document` accept
@@ -336,6 +362,15 @@ Native dismissal records closed intent, so reconciliation and renderer recovery
 keep it closed. A plugin restart expires all its identities; configured instances
 are reconstructed and transient instances are lost. An uncertain creation/removal
 terminates the affected plugin session rather than keeping untracked instances.
+
+The private `units::presentation_state` value owns request, report, and disconnect
+decisions. Intent can only be visible, hidden, or closed; observation additionally
+allows unknown. Closed reports set both facts to closed, other reports update only
+observation, and disconnect preserves intent. Explicit reopen can therefore leave
+visible intent with a last observation of closed until the renderer reports again.
+Instance construction chooses the initial values. UnitTable retains lifecycle
+serialization, publication-before-commit for request/report transitions, and plugin
+acknowledgement/cancellation guards; the value owns no locks, tasks, or session state.
 
 One supervised Quickshell host per plugin renders its windows and overlays from
 embedded shared assets. Hosts restart with bounded backoff and reattach to live
@@ -362,6 +397,16 @@ it rejects stale revisions, hidden instances, disabled/busy ancestry, duplicate
 keys, undeclared commands, and instances outside the attachment. Per-instance QML
 sessions isolate busy state, failures, and form completion even when windows share
 one transport. Pending interactions are never automatically retried after disconnect.
+
+`omega-proto::Interaction::resolve` owns tree-level eligibility for daemon
+interactions, `SurfaceHarness`, and surface previews. It returns a nonzero local
+binding or borrowed command/arguments, without executing behavior. Duplicate target
+keys are rejected before availability or event lookup, independent of traversal
+order; unrelated duplicate keys do not affect the selected interaction. Disabled
+or busy ancestors block their descendants, and local bindings cannot also carry
+command names or arguments. Daemon scope, revision, visibility, and command-grant
+checks remain outside this resolver. The SDK instance runtime retains ownership
+of local captures and rejects stale or foreign binding IDs.
 
 Limits include 256 instances per plugin, 4096 globally, 128 KiB construction settings
 per instance and 8 MiB in aggregate, 64 observation connections, bounded request
@@ -419,10 +464,28 @@ catalogue data and does not launch desktop applications.
 
 ## Reconciliation
 
-Domain providers compute plans before applying changes. Planning currently reads
-live ownership and timer declarations, and the environment provider reads its
-output file. These entry points are not pure functions of supplied facts; separating
-observation from decisions remains an [architectural gap](design.md#planning-and-interaction-boundaries).
+Domain providers compute plans before applying changes. Presentation preparation
+compiles the Omarchy payload once and resolves declarations against stored
+manifests. The convergence caller captures `UnitTable::installed_presentations`,
+then passes desired and installed maps to the pure `PresentationProvider::plan`.
+The snapshot copies configs, presentation specifications, and retained anchor
+addresses while holding the unit lock; transient and starting instances are
+excluded. Requested/observed visibility is not a construction input, so planning
+does not reopen dismissed windows. Apply still resolves live anchors and sessions.
+
+Environment preparation validates and renders the document before the caller
+reads the installed file. Its pure plan compares those captured bytes with the
+prepared contents; apply writes the retained contents through `AtomicFile`. An
+absent or empty file already satisfies an empty declaration. Other read failures
+abort planning before any provider applies changes.
+
+Unit planning takes the build's unit-name set and a captured set of supervised or
+adopted names. Schedule planning takes captured timer declarations. Both validate
+the desired document and compare only explicit inputs. The caller captures each
+provider's facts separately; these snapshots are not an atomic system-wide view.
+Unit application retains the handover lock and live ownership checks. `Schedules`
+retains task ownership, shutdown checks, and unchanged timers; planning does not
+claim that a future application will succeed.
 Convergence runs
 in one task, one pass at a time, with changes keyed by entity ID. The daemon owns the convergence task, cancels
 an in-progress pass on shutdown and joins it before draining schedules. Dropping

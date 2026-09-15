@@ -3,7 +3,7 @@
 
 use omega_proto::omega::{Capability, SurfaceKind, invoke};
 
-use crate::session::admission::Role;
+use crate::authorization::Role;
 
 /// Every op in `wire.proto`. Exhaustive by construction: adding an op to the
 /// schema fails to compile here until its kind is named.

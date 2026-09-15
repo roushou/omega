@@ -42,6 +42,42 @@ fn widget_resolution_is_identical_at_publication_and_adoption() {
 }
 
 #[test]
+fn bar_placement_ids_obey_the_embedded_presentation_limit() {
+    let manifest = Fixture::manifest();
+    for length in [128, 129] {
+        let id = "a".repeat(length);
+        let document = Document::new()
+            .bar(Bars::top(
+                "main",
+                vec![Modules::panel(
+                    Modules::surface(Modules::plain_widget(id.clone(), "clock"), "time"),
+                    "calendar",
+                )],
+            ))
+            .into_inner();
+        let embedded =
+            omega_proto::instance::PresentationSpec::parse(omega_proto::omega::Presentation {
+                kind: Some(omega_proto::omega::presentation::Kind::Embedded(
+                    omega_proto::omega::EmbeddedPresentation {
+                        placement: id.clone(),
+                    },
+                )),
+            });
+        let validation = DocumentValidation::validate(&document, [&manifest]);
+        assert_eq!(validation.is_ok(), embedded.is_ok(), "length {length}");
+        if length == 129 {
+            assert!(
+                validation
+                    .unwrap_err()
+                    .to_string()
+                    .contains("placement id exceeds 128 bytes")
+            );
+        }
+        assert!(omega_proto::ModuleId::parse(id).is_ok());
+    }
+}
+
+#[test]
 fn unsupported_domains_fail_instead_of_being_accepted_without_a_provider() {
     let mut document = omega_document::StateDocument::default();
     document.monitors.push(Default::default());

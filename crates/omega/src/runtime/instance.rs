@@ -1,8 +1,9 @@
 use omega_proto::omega::ViewTree;
 use omega_proto::{SystemTopic, Values};
 
-use crate::plugin::registry::{MountedSurface, SurfaceEntry};
+use crate::plugin::registry::SurfaceEntry;
 use crate::runtime::context::Context;
+use crate::surface::instance::MountedSurface;
 
 /// Readiness and publication history belong to the configured instance's lifetime.
 pub(super) struct Instance {

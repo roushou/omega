@@ -48,21 +48,28 @@ impl EnvironmentProvider {
             })
             .collect()
     }
-    pub fn plan(
-        &self,
-        document: &StateDocument,
-    ) -> Result<Option<EnvironmentChange>, ProviderError> {
+
+    /// Validate environment declarations and retain their shell-sourceable contents.
+    pub fn prepare(document: &StateDocument) -> Result<EnvironmentChange, ProviderError> {
         omega_document::DocumentValidation::environment(document)
             .map_err(|error| ProviderError::new("environment", error.to_string()))?;
-        let contents = Self::render(&Self::desired(document));
+        Ok(EnvironmentChange {
+            contents: Self::render(&Self::desired(document)),
+        })
+    }
+
+    /// Read installed bytes. Only a missing file is absence; other read errors propagate.
+    pub fn installed(&self) -> Result<Option<Vec<u8>>, ProviderError> {
         match std::fs::read(&self.path) {
-            Ok(actual) if actual == contents.as_bytes() => Ok(None),
-            Ok(_) => Ok(Some(EnvironmentChange { contents })),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok((!contents.is_empty()).then_some(EnvironmentChange { contents }))
-            }
+            Ok(actual) => Ok(Some(actual)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(ProviderError::new("environment", error.to_string())),
         }
+    }
+
+    /// Compare prepared contents with captured bytes. Absence satisfies empty contents.
+    pub fn plan(desired: EnvironmentChange, installed: Option<&[u8]>) -> Option<EnvironmentChange> {
+        (installed.unwrap_or_default() != desired.contents.as_bytes()).then_some(desired)
     }
 
     pub fn apply(&self, change: &EnvironmentChange) -> Result<(), ProviderError> {
@@ -77,4 +84,43 @@ impl EnvironmentProvider {
 #[derive(Debug)]
 pub struct EnvironmentChange {
     contents: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_document::Document;
+
+    #[test]
+    fn comparison_preserves_absence_empty_files_and_arbitrary_bytes() {
+        for (installed, expected) in [
+            (None, false),
+            (Some(b"".as_slice()), false),
+            (Some(b"EDITOR=hx\n".as_slice()), true),
+            (Some(b"\xff".as_slice()), true),
+        ] {
+            let desired = EnvironmentProvider::prepare(&StateDocument::default()).unwrap();
+            let change = EnvironmentProvider::plan(desired, installed);
+            assert_eq!(change.is_some(), expected);
+            if let Some(change) = change {
+                assert_eq!(change.contents, "");
+            }
+        }
+
+        let document = Document::new().env("EDITOR", "hx").into_inner();
+        for (installed, expected) in [
+            (None, true),
+            (Some(b"".as_slice()), true),
+            (Some(b"EDITOR=hx\n".as_slice()), false),
+            (Some(b"EDITOR=hx".as_slice()), true),
+            (Some(b"\xff".as_slice()), true),
+        ] {
+            let desired = EnvironmentProvider::prepare(&document).unwrap();
+            let change = EnvironmentProvider::plan(desired, installed);
+            assert_eq!(change.is_some(), expected);
+            if let Some(change) = change {
+                assert_eq!(change.contents, "EDITOR=hx\n");
+            }
+        }
+    }
 }

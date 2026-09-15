@@ -104,6 +104,45 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
 }
 
 #[tokio::test]
+async fn unexpected_command_replies_are_refused_on_the_callers_stream() {
+    let manifest = command_manifest("lamp", "toggle");
+    let harness = Harness::new(
+        "command-answer-kind",
+        ManifestStore::from_manifests([manifest.clone()]),
+    );
+    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut operator = harness.connect("operator", "").await;
+    operator.recv().await.unwrap().unwrap();
+    for (index, outcome) in [
+        result::Outcome::State(Default::default()),
+        result::Outcome::View(Default::default()),
+        result::Outcome::Output(Default::default()),
+        result::Outcome::Deployment(Default::default()),
+        result::Outcome::Instances(Default::default()),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let stream = 1 + 2 * index as u64;
+        operator.send(call(stream, "lamp", "toggle")).await.unwrap();
+        let request = tokio::time::timeout(Duration::from_secs(2), unit.recv())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        unit.send(Frame::reply(request.stream_id, outcome))
+            .await
+            .unwrap();
+        let answer = next_result(&mut operator).await.unwrap();
+        assert_eq!(answer.stream_id, stream);
+        assert_eq!(
+            expect_refusal(Some(answer)).code,
+            ErrorCode::InvalidArgument
+        );
+    }
+}
+
+#[tokio::test]
 async fn a_command_the_unit_never_declared_is_refused_before_it_is_asked() {
     let manifest = command_manifest("lamp", "toggle");
     let harness = Harness::new(
