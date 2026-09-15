@@ -1,3 +1,9 @@
+## What's Changed in 0.3.3
+* feat(desktop): add typed workspace controls and focus tracking
+* fix(cli): use workspace globs when scaffolding crates
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.2...v0.3.3
+
 ## What's Changed in 0.3.2
 * feat(audio): support absolute output mute control
 * fix(renderer): preserve input focus when opening popups
