@@ -20,10 +20,11 @@ A failed build leaves the last accepted generation active.
 | Crate                | Responsibility                                                             |
 | -------------------- | -------------------------------------------------------------------------- |
 | `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts          |
+| `omega-keyboard`     | Logical keyboard events, chords and conflict-checked keymaps               |
 | `omega-host`         | Layout, durable files, generations, workspace documents and discovery      |
 | `omega-document`     | Desired-state builders and shared validation                               |
 | `omega-derive`       | Field-based SDK derives                                                    |
-| `omega` (`omega-rs`) | Unit-author SDK; depends on proto and derive, not host or daemon           |
+| `omega` (`omega-rs`) | Unit-author SDK; depends on proto, derive and keyboard, not host or daemon |
 | `omega-platform`     | External subsystem connections, readings and actions                       |
 | `omega-daemon`       | Sessions, supervision, state, action routing and convergence               |
 | `omega-renderer`     | Host-independent QML controls and generated readers                        |
@@ -67,7 +68,9 @@ not own a second source-workspace model.
 Settled filesystem watching lives in `omega-host::fs` behind the optional `watch`
 feature, enabled by CLI and daemon. Document-only consumers do not enable native
 watching. The daemon’s `watch` module selects the generation paths to observe;
-the shared watcher owns event filtering and settlement.
+the shared watcher owns event filtering and settlement. It coalesces create,
+modify and remove notifications into wakeups; callers re-read state rather than
+receiving typed filesystem events.
 
 The CLI’s `build` module owns Cargo execution, manifest extraction, document
 evaluation, staged publication, and generation-specific activation waits. Its
@@ -259,6 +262,9 @@ Three kinds of peer on the control socket:
 | operator    | the daemon's own uid            | lifecycle, actions and subscriptions |
 | anyone else | —                               | refused                              |
 
+Unit supervision operations require the operator. Presentation changes also
+accept scoped renderers; plugins may only hide or close their own instances.
+
 Grants are read from the daemon's copy of the manifest, never from a frame.
 Capabilities cannot be self-declared at runtime: a unit's manifest is
 extracted at build time from the binary itself.
@@ -413,7 +419,11 @@ catalogue data and does not launch desktop applications.
 
 ## Reconciliation
 
-Domain providers compute pure plans before applying changes. Convergence runs
+Domain providers compute plans before applying changes. Planning currently reads
+live ownership and timer declarations, and the environment provider reads its
+output file. These entry points are not pure functions of supplied facts; separating
+observation from decisions remains an [architectural gap](design.md#planning-and-interaction-boundaries).
+Convergence runs
 in one task, one pass at a time, with changes keyed by entity ID. The daemon owns the convergence task, cancels
 an in-progress pass on shutdown and joins it before draining schedules. Dropping
 the owner also cancels convergence.
@@ -612,15 +622,17 @@ do not rerender it. Identical trees are not republished. The daemon retains its
 own deduplication boundary for all clients. Closing clears bindings and cancels
 task delivery; destroying discards the instance and its cache.
 
-Positional key assignment retains its formatted string and borrows parent keys;
-explicit keys remain unchanged. Incremental wire updates require a measured
-workload and a snapshot recovery contract.
+Positional keys identify fixed layout positions. Explicit local keys inside
+components are escaped and qualified by their parent path; moving component
+instances need stable caller-supplied keys. Incremental wire updates require a
+measured workload and a snapshot recovery contract.
 
-Observation connections retain only address/revision pairs for deletion repair
-after lag, and release initial snapshots after sending them. Views and state
-topics serialize by reference into a line owned by the pending write. The hub
-owns authoritative trees; an observer does not need an additional full-tree cache
-to remember which surfaces it has drawn. Each connection keeps its existing write
+Observation connections retain instance identity, surface and presentation metadata,
+visibility and revision for deletion repair after lag, with the retained tree root
+cleared. They release initial snapshots after sending them. Views and state topics
+serialize by reference into a line owned by the pending write. The hub owns
+authoritative trees; connections keep metadata rather than a second full-tree cache.
+Each connection keeps its existing write
 deadline and bounded input draining while other observers progress independently.
 
 After assigning a revision, the hub wraps a view publication in `Arc`. Registry,

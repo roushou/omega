@@ -32,6 +32,8 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Review complete behavior paths as well as modules. Test decisions in isolation
   and verify their composition at integration boundaries. Report concrete coupling
   or broken invariants before proposing structural changes.
+- Distinguish implemented contracts from intended architecture. State inspection
+  scope and trace behavior before proposing abstractions.
 
 ## Style
 
@@ -65,7 +67,9 @@ and reviews. These rules also apply to AI coding tools working in this repositor
   `EventKind::from_str_name`).
 - The observation socket uses the same Frame/Invoke schema and policy as the control
   socket, encoded as JSON. State reading is open; private views require a scoped
-  renderer attachment. Bootstrap and lifecycle operations require the operator.
+  renderer attachment. Bootstrap and unit supervision operations require the operator.
+  Presentation changes also accept scoped renderers; plugins may only hide or close
+  their own instances.
 
 ## Trust
 
@@ -109,8 +113,9 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Cadence syntax is `every <n><s|m|h|d>`. Reject unsupported cron expressions.
 - Long-lived tasks select on `Shutdown`. Units are asked to exit (SIGTERM,
   then a deadline), never only killed.
-- `Changes` emits settled Create/Modify/Remove events, excluding reads. Watch parent
-  directories to detect watched directories replaced by rename.
+- `Changes` coalesces Create/Modify/Remove notifications into settled wakeups,
+  excluding reads. Watch parent directories to detect watched directories replaced
+  by rename.
 - Use tokio::time::Instant for deadlines and paused Tokio time for pacing tests.
 - Pass both socket paths into `Daemon::builder`; do not resolve them from process
   environment inside the daemon. Session tests use UnixStream::pair.
@@ -136,8 +141,8 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 ## Units and settings
 
 - Settings construct plugin fields and arrive in Welcome. Unit setting changes
-  restart the plugin. Run ConfigProvider before UnitProvider and compare all built
-  units, including those whose settings were removed.
+  restart the plugin. Build activation installs settings before unit convergence;
+  compare settings across builds, including units whose settings were removed.
 - Settings layer, they do not replace: `Units::configured` sets a unit's,
   `Modules::widget` sets one placement's, and an instance is the second over
   the first (`Values::over`). A command or reaction is never placed, so its
@@ -158,8 +163,8 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Render declarations hold only readings. Commands, reactions, and stateful
   behavior may hold effects. The `Reads` bound enforces the render-side rule;
   dependency/model invalidation controls rendering, and identical trees are dropped.
-- Derive Fields for typed map boundaries. Missing fields use Default for forward
-  compatibility with older writers.
+- Derive Config to implement Fields for typed map boundaries. Missing fields use
+  Default for forward compatibility with older writers.
 - Prefer short typed APIs and measurement values such as Percent over raw scalars.
 - `omega dev <unit>` uses operator-only AdoptUnit to replace the supervised process
   for the connection lifetime. Hold supervision during adoption and retain manifest
@@ -189,6 +194,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 
 ```
 omega-proto    wire format, manifest, identifiers — what crosses a socket
+omega-keyboard logical keyboard events, chords, and conflict-checked keymaps
 omega-host     files, generations, Cargo workspace documents, discovery, watching
 omega          the SDK — what a unit is written against
 omega-document the desired-state document
@@ -204,8 +210,8 @@ omega-cli      the binary
 - Name crates by responsibility. omega is the authoring SDK; omega-document owns
   desired configuration.
 - Keep host dependencies out of plugin builds. omega may depend on shared protocol
-  and derive crates, but not host infrastructure. Put wire contracts in omega-proto
-  and filesystem/build machinery in omega-host.
+  and derive crates and omega-keyboard, but not host infrastructure. Put wire
+  contracts in omega-proto and filesystem/build machinery in omega-host.
 - Keep protobuf JSON implementations behind omega-proto's json feature. Host clients
   enable it; plugin authors must not need it.
 - Hash Manifest::canonical protobuf bytes: repeated fields sorted and deduplicated,
@@ -282,6 +288,8 @@ omega-cli      the binary
 - Runtime instances serialize messages and own the current render's local binding
   registry. IDs are unique across the process; captures never cross the protocol.
   Stale or foreign-instance bindings are refused, never decoded with new captures.
+- Production, previews, and harness interaction APIs must agree on ambiguous node
+  keys, inherited disabled/busy state, and binding validity.
 - Cache views between dependency/model invalidations. Publication acknowledgments
   must not rebuild local bindings and trigger an endless publication loop.
 - Task keys replace generations immediately. Close cancels delivery; hide retains

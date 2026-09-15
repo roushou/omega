@@ -93,7 +93,8 @@ one value, bind the input first: `Button::new("Half").on_press(SetVolume.with(Pe
 
 Effect methods submit work when called. Await the returned effect to handle its
 result. A timeout does not undo an operation already submitted. Unobserved effect
-failures terminate the plugin, so handle or explicitly detach effect receipts.
+failures terminate the plugin. Await or poll a receipt to handle failure; explicitly
+detaching it leaves failure reporting to the runtime and does not suppress that policy.
 
 From `system/`, use `Actions::invoke(focus::Tick)` for a command with `Input = ()`
 or `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` for typed input.
@@ -158,6 +159,10 @@ replacement. This preserves newer typing when rendered values arrive late.
 See the [stateful search example](../crates/omega/examples/stateful_search.rs).
 
 ## Configure and test
+
+Derive `omega::Config` on settings types that implement `Default`. It implements
+`config::Fields` and value conversion; missing fields use the settings type's
+declared defaults. `Fields` is the serialization trait, not a derive macro.
 
 Unit settings are construction inputs. Placement settings override only matching
 keys, and changes to unit settings restart the plugin. Store mutable application

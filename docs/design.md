@@ -35,6 +35,22 @@ and validation. This file tracks remaining limitations and future work.
   cancellation would need to distinguish queued work from external effects that
   have already started.
 
+## Planning and interaction boundaries
+
+- **Planning inputs:** provider plans precede application, but their inputs are not
+  all explicit. The [presentation provider](../crates/omega-daemon/src/reconcile/presentations.rs)
+  reads live unit state and compiles the Omarchy payload during planning; the
+  [environment provider](../crates/omega-daemon/src/reconcile/environment.rs) reads
+  its output file. Move observations to callers before treating these entry points
+  as pure decisions. Preserve execution-time checks for ownership changes after planning.
+- **Interaction parity:** the [daemon](../crates/omega-daemon/src/units/presentations.rs)
+  and [preview scene](../crates/omega-preview/src/scene.rs) separately inspect
+  duplicate node keys and inherited disabled/busy state. The direct
+  [surface harness](../crates/omega/src/testing/surface.rs) looks up a binding without
+  those checks. Sharing model and task execution does not yet establish identical
+  interaction admission. These paths should agree on tree and binding validity;
+  renderer authorization remains a daemon responsibility.
+
 ## Feature boundaries
 
 `SetSetting` and `ToggleSetting` have no handler. Settings currently construct
