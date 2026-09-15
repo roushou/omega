@@ -1,3 +1,9 @@
+## What's Changed in 0.3.2
+* feat(audio): support absolute output mute control
+* fix(renderer): preserve input focus when opening popups
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.1...v0.3.2
+
 ## What's Changed in 0.3.1
 * fix(omarchy): keep popups open on the selected monitor
 
