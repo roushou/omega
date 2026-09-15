@@ -331,6 +331,19 @@ are checked at execution; Hyprland refuses unsafe dispatcher delimiters and
 non-focused monitor moves rather than ignoring their selectors. Payload validation
 does not replace process argument encoding or shell quoting.
 
+Workspace controls use validated `WorkspaceIndex` and `WorkspaceName` values.
+The SDK effect has no reading dependency and queues the existing `SwitchWorkspace`
+action; `ActionKind` remains the authority for its capability cost. Focus is
+observed through `Workspaces`, never inferred from a dispatch acknowledgement.
+
+The Hyprland adapter selects legacy or Lua dispatch syntax from `j/status` before
+each action. An older compositor's explicit `unknown request` response selects
+legacy mode; unknown providers and malformed replies fail. The pure dispatcher
+encodes arguments as data, and the transport sends an action once without fallback
+replay. Monitor-focus changes invalidate monitor, workspace, and window readings.
+Workspace focus is joined by compositor ID; malformed focus replies fail the read,
+while an empty object explicitly means no focused workspace.
+
 A session registration is a lease. Replacing it cancels the previous session;
 its guard cannot disconnect the replacement. Adoption cleanup also checks the
 issued token. Views and installed instance specifications end with the lease.

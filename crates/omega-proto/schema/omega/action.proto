@@ -64,8 +64,11 @@ message ToggleSetting {
 
 message SwitchWorkspace {
   oneof target {
+    // Numbered workspace in 1..=2147483647; need not currently exist.
     uint32 index = 1;
+    // Literal name, without compositor selector prefixes.
     string name = 2;
+    // Traverse existing workspaces in compositor order, wrapping at the ends.
     Direction direction = 3;
   }
 }

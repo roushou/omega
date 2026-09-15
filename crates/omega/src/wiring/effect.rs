@@ -1,9 +1,9 @@
 /// Declare an effect handle's capability and context construction.
 macro_rules! does {
-    ($handle:ident, $capability:ident) => {
+    ($handle:ident $(, $capability:ident)*) => {
         impl $crate::wiring::Wiring for $handle {
             const CAPABILITIES: &'static [omega_proto::omega::Capability] =
-                &[omega_proto::omega::Capability::$capability];
+                &[$(omega_proto::omega::Capability::$capability),*];
 
             fn build(context: &$crate::runtime::context::Context) -> Self {
                 Self {

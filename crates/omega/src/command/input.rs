@@ -62,6 +62,7 @@ scalar_input!(
     omega_proto::ApplicationId,
     omega_proto::PlayerId,
     omega_proto::BluetoothDeviceId,
+    omega_proto::WorkspaceName,
     Option<omega_proto::PlayerId>
 );
 
@@ -112,6 +113,11 @@ macro_rules! text_input {
     };
 }
 text_input!(bool, "true or false", |text| text.parse().ok());
+text_input!(
+    omega_proto::WorkspaceIndex,
+    "a workspace index from 1 to 2147483647",
+    |text| { omega_proto::WorkspaceIndex::new(text.parse().ok()?).ok() }
+);
 text_input!(i64, "a signed 64-bit integer", |text| text.parse().ok());
 text_input!(u64, "an unsigned 64-bit integer", |text| text.parse().ok());
 text_input!(f64, "a number", |text| text.parse().ok());

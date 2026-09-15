@@ -45,7 +45,7 @@ macro_rules! actions {
                 }
             }
 
-            /// Required capability, or `None` for operations scoped to the caller's own surfaces.
+            /// Additional required capability, or `None` when no action capability is needed.
             /// Scope and handler checks still apply.
             pub fn cost(self) -> Option<Capability> {
                 match self {

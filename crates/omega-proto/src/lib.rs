@@ -24,6 +24,8 @@ pub mod topic;
 mod transport;
 pub mod ui;
 pub mod values;
+mod workspace;
+pub use workspace::{WorkspaceIndex, WorkspaceIndexError, WorkspaceName, WorkspaceNameError};
 
 pub use action::ActionKind;
 pub use bluetooth::{BluetoothDeviceId, BluetoothDeviceIdError};

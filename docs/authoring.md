@@ -101,6 +101,19 @@ or `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` for typed input.
 These examples require dependencies on plugins exporting those commands.
 The daemon also checks that the target plugin registered the command.
 
+## Workspace controls
+
+`platform::desktop::Workspaces` reports workspace IDs, names, output assignments,
+window counts, and global focus. `WorkspaceControl` belongs in commands or surface
+effects. Use `switch_to(WorkspaceIndex)` for a numbered workspace and
+`switch_to_named(&WorkspaceName)` for a literal name. The types validate command
+inputs; a `WorkspaceIndex` command also accepts decimal text from `omega run`.
+Destinations need not already exist, so an empty workspace button can create one.
+
+`next()` and `previous()` traverse existing workspaces in compositor order,
+including other outputs on Hyprland. Completion acknowledges the compositor;
+use the reading to highlight observed focus. Calls are never retried automatically.
+
 ## Compose reusable UI
 
 A component takes ordinary values and `Bind<T>` inputs. It has no subscriptions,

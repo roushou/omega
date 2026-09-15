@@ -96,6 +96,36 @@ TestCase {
         verify(button.interactive)
     }
 
+    function buttonDelegate(item) {
+        if (item.pressable !== undefined && item.host !== undefined) return item
+        var children = item.children || []
+        for (var i = 0; i < children.length; ++i) {
+            var found = buttonDelegate(children[i])
+            if (found !== null) return found
+        }
+        return null
+    }
+
+    function test_flat_buttons_keep_keyboard_focus_feedback() {
+        failOnWarning(/.*/)
+        mouseMove(test, 390, 290)
+        var view = createTemporaryObject(statusView, test)
+        verify(view !== null)
+        view.theme.motion = false
+        view.model = {type:"button",key:"flat",props:{label:{stringValue:"1"},flat:{boolValue:true}},events:{press:{command:"select"}}}
+        var button = buttonDelegate(view)
+        verify(button !== null)
+        tryVerify(function() { return Qt.colorEqual(button.color, "transparent") })
+        compare(button.border.width, 0)
+        verify(button.pressable)
+        button.forceActiveFocus()
+        tryCompare(button, "activeFocus", true)
+        verify(button.border.width > 0)
+        verify(Qt.colorEqual(button.border.color, view.ink))
+        view.model = {type:"button",key:"flat",props:{label:{stringValue:"1"}},events:{press:{command:"select"}}}
+        tryVerify(function() { return !Qt.colorEqual(button.color, "transparent") })
+    }
+
     Component {
         id: coloredTree
         Renderer.ViewNode { width: 360; foreground: "gray" }

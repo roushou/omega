@@ -35,6 +35,18 @@ impl Button {
         self
     }
 
+    /// Hide the idle background and border, retaining hover and keyboard focus feedback.
+    /// Padding and dimensions are unchanged. Useful for compact toolbar actions.
+    ///
+    /// ```
+    /// use omega::ui::Button;
+    /// let workspace = Button::new("1").flat().width(20).height(24);
+    /// ```
+    pub fn flat(mut self) -> Self {
+        self.node = self.node.flag("flat", true);
+        self
+    }
+
     /// Bind activation to a local message or a command registered by this plugin.
     /// Accepts a binding with no input or with all command input already bound.
     pub fn on_press(mut self, press: impl Into<Bind<()>>) -> Self {

@@ -9,13 +9,15 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use omega_proto::omega::{
-    Direction, InputState, MonitorInfo, MonitorsState, StatePatch, StateTopic, WindowInfo,
-    WindowSelector, WindowState, WorkspaceInfo, WorkspacesState, action, move_to_workspace,
-    state_topic, switch_workspace, window_selector,
+    InputState, MonitorInfo, MonitorsState, StatePatch, StateTopic, WindowInfo, WindowState,
+    WorkspaceInfo, WorkspacesState, action, state_topic,
 };
 use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, opaque_debug};
+
+mod dispatch;
+pub use dispatch::{Dispatch, DispatchMode};
 
 /// Monitor fields used by the protocol projection.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -110,7 +112,7 @@ pub struct FocusedWorkspace {
 pub struct Session;
 
 impl Session {
-    pub fn workspaces(json: &str, active: &str) -> Result<WorkspacesState, BrokerError> {
+    pub fn workspaces(json: &str, active: Option<i32>) -> Result<WorkspacesState, BrokerError> {
         let mut found: Vec<Workspace> = Self::parse(json)?;
         // Sort workspaces by ID for stable output.
         found.sort_by_key(|workspace| workspace.id);
@@ -120,7 +122,7 @@ impl Session {
                 .into_iter()
                 .map(|workspace| WorkspaceInfo {
                     id: workspace.id,
-                    active: workspace.name == active,
+                    active: Some(workspace.id) == active,
                     name: workspace.name,
                     monitor_id: workspace.monitor,
                     windows: workspace.windows,
@@ -147,11 +149,21 @@ impl Session {
         })
     }
 
-    /// Extract the active workspace name.
-    pub fn active_name(json: &str) -> String {
-        Self::parse::<Workspace>(json)
-            .map(|workspace| workspace.name)
-            .unwrap_or_default()
+    /// Read focused workspace identity; an empty object means no active workspace.
+    pub fn active_id(json: &str) -> Result<Option<i32>, BrokerError> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum ActiveWorkspace {
+            Present { id: i32 },
+            Absent(Empty),
+        }
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Empty {}
+        Ok(match Self::parse::<ActiveWorkspace>(json)? {
+            ActiveWorkspace::Present { id } => Some(id),
+            ActiveWorkspace::Absent(_) => None,
+        })
     }
 
     fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, BrokerError> {
@@ -199,103 +211,6 @@ impl Session {
     }
 }
 
-/// Map a protocol action to a Hyprland dispatcher command.
-#[derive(Debug)]
-pub struct Dispatch;
-
-impl Dispatch {
-    /// Return the mapped dispatcher or None for unsupported selectors/actions.
-    /// Do not guess dispatch strings: unknown dispatchers can receive an ok response.
-    pub fn of(action: &action::Kind) -> Option<String> {
-        action.validate().ok()?;
-        match action {
-            action::Kind::SwitchWorkspace(switch) => Some(format!(
-                "workspace {}",
-                Self::workspace(switch.target.as_ref()?)?
-            )),
-            action::Kind::MoveToWorkspace(move_to) => Some(format!(
-                "movetoworkspace {},{}",
-                Self::destination(move_to.target.as_ref()?)?,
-                Self::window(move_to.window.as_ref())?
-            )),
-            action::Kind::MoveToMonitor(move_to) => {
-                if !Self::is_focused(move_to.window.as_ref()) {
-                    return None;
-                }
-                Some(format!(
-                    "movewindow mon:{}",
-                    Self::named(&move_to.monitor_id)?
-                ))
-            }
-            action::Kind::CloseWindow(close) => {
-                Some(if Self::is_focused(close.window.as_ref()) {
-                    // The focused window has its own dispatcher, and it is the
-                    // one that works when nothing matches a selector.
-                    "killactive".to_string()
-                } else {
-                    format!("closewindow {}", Self::window(close.window.as_ref())?)
-                })
-            }
-            action::Kind::ToggleFloating(toggle) => Some(format!(
-                "togglefloating {}",
-                Self::window(toggle.window.as_ref())?
-            )),
-            // Fullscreen supports only the focused window; reject explicit other targets.
-            action::Kind::ToggleFullscreen(toggle) => {
-                Self::is_focused(toggle.window.as_ref()).then(|| "fullscreen 1".to_string())
-            }
-            _ => None,
-        }
-    }
-
-    fn workspace(target: &switch_workspace::Target) -> Option<String> {
-        match target {
-            switch_workspace::Target::Index(index) => Some(index.to_string()),
-            switch_workspace::Target::Name(name) => Some(format!("name:{}", Self::named(name)?)),
-            switch_workspace::Target::Direction(direction) => match Direction::try_from(*direction)
-            {
-                Ok(Direction::Next) => Some("e+1".into()),
-                Ok(Direction::Previous) => Some("e-1".into()),
-                Ok(Direction::Unspecified) | Err(_) => None,
-            },
-        }
-    }
-
-    fn destination(target: &move_to_workspace::Target) -> Option<String> {
-        match target {
-            move_to_workspace::Target::Index(index) => Some(index.to_string()),
-            move_to_workspace::Target::Name(name) => Some(format!("name:{}", Self::named(name)?)),
-        }
-    }
-
-    /// Convert a window selector; absence selects the focused window.
-    fn window(selector: Option<&WindowSelector>) -> Option<String> {
-        match selector.and_then(|selector| selector.target.as_ref()) {
-            None | Some(window_selector::Target::Focused(_)) => Some("activewindow".to_string()),
-            Some(window_selector::Target::AppId(id)) => Some(format!("class:{}", Self::named(id)?)),
-            Some(window_selector::Target::Title(title)) => {
-                Some(format!("title:{}", Self::named(title)?))
-            }
-        }
-    }
-
-    fn is_focused(selector: Option<&WindowSelector>) -> bool {
-        matches!(
-            selector.and_then(|selector| selector.target.as_ref()),
-            None | Some(window_selector::Target::Focused(_))
-        )
-    }
-
-    /// Reject empty identifiers and line breaks in dispatcher arguments.
-    fn named(name: &str) -> Option<&str> {
-        if name.is_empty() || name.contains(['\0', '\n', '\r', ';', ',']) {
-            None
-        } else {
-            Some(name)
-        }
-    }
-}
-
 /// Where Hyprland listens, and the event stream held open to it.
 struct Link {
     dir: PathBuf,
@@ -305,7 +220,11 @@ struct Link {
 impl Link {
     /// Map compositor events to the topics that need refreshing.
     fn affected(event: &str) -> &'static [SystemTopic] {
-        const DISPLAY: &[SystemTopic] = &[SystemTopic::Monitors];
+        const FOCUS: &[SystemTopic] = &[
+            SystemTopic::Monitors,
+            SystemTopic::Workspaces,
+            SystemTopic::Window,
+        ];
         const WORKSPACES: &[SystemTopic] = &[SystemTopic::Workspaces];
         const WINDOW: &[SystemTopic] = &[SystemTopic::Window];
         const INPUT: &[SystemTopic] = &[SystemTopic::Input];
@@ -324,10 +243,10 @@ impl Link {
         match event {
             "monitoradded" | "monitoraddedv2" | "monitorremoved" | "monitorremovedv2"
             | "configreloaded" => EVERYTHING,
-            "focusedmon" | "focusedmonv2" => DISPLAY,
-            "workspace" | "workspacev2" | "createworkspace" | "createworkspacev2"
-            | "destroyworkspace" | "destroyworkspacev2" | "moveworkspace" | "moveworkspacev2"
-            | "renameworkspace" => WORKSPACES,
+            "focusedmon" | "focusedmonv2" => FOCUS,
+            "workspace" | "workspacev2" => BOTH,
+            "createworkspace" | "createworkspacev2" | "destroyworkspace" | "destroyworkspacev2"
+            | "moveworkspace" | "moveworkspacev2" | "renameworkspace" => WORKSPACES,
             "openwindow" | "closewindow" | "movewindow" | "movewindowv2" => BOTH,
             "activewindow" | "activewindowv2" | "windowtitle" | "windowtitlev2" | "fullscreen"
             | "changefloatingmode" => WINDOW,
@@ -365,11 +284,10 @@ impl Link {
                     state_topic::Value::Monitors(Monitors::parse(&self.ask("j/monitors").await?)?)
                 }
                 SystemTopic::Workspaces => {
-                    // Read active workspace identity separately.
-                    let active = Session::active_name(&self.ask("j/activeworkspace").await?);
+                    let active = Session::active_id(&self.ask("j/activeworkspace").await?)?;
                     state_topic::Value::Workspaces(Session::workspaces(
                         &self.ask("j/workspaces").await?,
-                        &active,
+                        active,
                     )?)
                 }
                 SystemTopic::Window => {
@@ -549,43 +467,18 @@ impl Broker for Hyprland {
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
-        let Some(command) = Dispatch::of(action) else {
+        let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
+        let mode = DispatchMode::from_status(&link.ask("j/status").await?)?;
+        let Some(command) = Dispatch::for_mode(action, mode) else {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
 
-        self.link
-            .as_ref()
-            .ok_or_else(BrokerError::gone)?
-            .dispatch(&command)
-            .await?;
+        link.dispatch(&command).await?;
 
-        // Moving a window changes no display. What did change arrives on the
-        // event socket if it is anything this broker reports.
+        // Acknowledgement is not observed state. The event stream drives readings.
         Ok(None)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    #[tokio::test(start_paused = true)]
-    async fn event_wait_is_idle_until_a_complete_relevant_event_and_survives_cancellation() {
-        let (mut source, receiver) = UnixStream::pair().unwrap();
-        let mut link = Link {
-            dir: PathBuf::new(),
-            events: BufReader::new(receiver).lines(),
-        };
-        let pause = Duration::from_millis(500);
-        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
-        source
-            .write_all(b"unrelated>>ignored\nactivewin")
-            .await
-            .unwrap();
-        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
-        source.write_all(b"dow>>terminal,title\n").await.unwrap();
-        assert_eq!(link.wait().await.unwrap(), &[SystemTopic::Window]);
-        assert!(tokio::time::timeout(pause, link.wait()).await.is_err());
-    }
-}
+mod tests;

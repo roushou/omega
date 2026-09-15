@@ -155,6 +155,10 @@ function buttonIcon(node) {
     return readText(node, "icon", "")
 }
 
+function buttonFlat(node) {
+    return readFlag(node, "flat", false)
+}
+
 // ---- slider ----
 
 function sliderValue(node) {

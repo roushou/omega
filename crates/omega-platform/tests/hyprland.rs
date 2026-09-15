@@ -118,7 +118,7 @@ const WORKSPACES: &str = r#"[
 
 #[test]
 fn workspaces_come_back_in_order_with_the_active_one_marked() {
-    let state = Session::workspaces(WORKSPACES, "3").expect("valid workspaces");
+    let state = Session::workspaces(WORKSPACES, Some(3)).expect("valid workspaces");
     let ids: Vec<i32> = state.workspaces.iter().map(|w| w.id).collect();
 
     // Hyprland answers in whatever order it holds them. A bar shows them in
@@ -131,10 +131,11 @@ fn workspaces_come_back_in_order_with_the_active_one_marked() {
 }
 
 #[test]
-fn the_active_workspace_is_read_by_name() {
+fn the_active_workspace_is_read_by_id() {
     assert_eq!(
-        Session::active_name(r#"{"id": 1, "name": "mail", "monitor": "eDP-1", "windows": 0}"#),
-        "mail"
+        Session::active_id(r#"{"id": 1, "name": "mail", "monitor": "eDP-1", "windows": 0}"#)
+            .unwrap(),
+        Some(1)
     );
 }
 
@@ -190,6 +191,106 @@ fn a_session_with_no_main_keyboard_is_a_reading() {
 // ---- dispatching ----
 
 use omega_platform::hyprland::Dispatch;
+use omega_platform::hyprland::DispatchMode;
+
+#[test]
+fn dispatcher_provider_selection_is_explicit() {
+    assert_eq!(
+        DispatchMode::from_status("unknown request").unwrap(),
+        DispatchMode::Legacy
+    );
+    assert_eq!(
+        DispatchMode::from_status(r#"{"configProvider":"hyprlang"}"#).unwrap(),
+        DispatchMode::Legacy
+    );
+    assert_eq!(
+        DispatchMode::from_status(r#"{"configProvider":"lua"}"#).unwrap(),
+        DispatchMode::Lua
+    );
+    for reply in ["", "not json", "{}", r#"{"configProvider":"future"}"#] {
+        assert!(DispatchMode::from_status(reply).is_err());
+    }
+}
+
+#[test]
+fn lua_workspace_targets_are_quoted_literals() {
+    let encode = |target| {
+        Dispatch::for_mode(
+            &action::Kind::SwitchWorkspace(SwitchWorkspace {
+                target: Some(target),
+            }),
+            DispatchMode::Lua,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        encode(switch_workspace::Target::Index(3)),
+        "hl.dsp.focus({ workspace = \"3\" })"
+    );
+    assert_eq!(
+        encode(switch_workspace::Target::Name("work \"notes\" \\".into())),
+        r#"hl.dsp.focus({ workspace = "name:work \"notes\" \\" })"#
+    );
+    assert_eq!(
+        encode(switch_workspace::Target::Direction(Direction::Next as i32)),
+        "hl.dsp.focus({ workspace = \"e+1\" })"
+    );
+    assert_eq!(
+        encode(switch_workspace::Target::Direction(
+            Direction::Previous as i32
+        )),
+        "hl.dsp.focus({ workspace = \"e-1\" })"
+    );
+}
+
+#[test]
+fn lua_window_actions_preserve_targets_and_restrictions() {
+    let cases = [
+        (
+            action::Kind::CloseWindow(CloseWindow { window: None }),
+            "hl.dsp.window.close({ window = \"activewindow\" })",
+        ),
+        (
+            action::Kind::ToggleFloating(ToggleFloating {
+                window: named("kitty"),
+            }),
+            "hl.dsp.window.float({ window = \"class:kitty\", action = \"toggle\" })",
+        ),
+        (
+            action::Kind::ToggleFullscreen(ToggleFullscreen { window: None }),
+            "hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"toggle\" })",
+        ),
+        (
+            action::Kind::MoveToWorkspace(MoveToWorkspace {
+                target: Some(move_to_workspace::Target::Index(2)),
+                window: named("kitty"),
+            }),
+            "hl.dsp.window.move({ workspace = \"2\", window = \"class:kitty\", follow = true })",
+        ),
+        (
+            action::Kind::MoveToMonitor(MoveToMonitor {
+                monitor_id: "DP-1".into(),
+                window: None,
+            }),
+            "hl.dsp.window.move({ monitor = \"DP-1\", follow = true })",
+        ),
+    ];
+    for (action, expected) in cases {
+        assert_eq!(
+            Dispatch::for_mode(&action, DispatchMode::Lua).as_deref(),
+            Some(expected)
+        );
+    }
+    assert!(
+        Dispatch::for_mode(
+            &action::Kind::ToggleFullscreen(ToggleFullscreen {
+                window: named("kitty")
+            }),
+            DispatchMode::Lua
+        )
+        .is_none()
+    );
+}
 use omega_proto::omega::{
     CloseWindow, Direction, MoveToMonitor, MoveToWorkspace, SwitchWorkspace, ToggleFloating,
     ToggleFullscreen, WindowSelector, action, move_to_workspace, switch_workspace, window_selector,
@@ -223,7 +324,7 @@ fn a_workspace_is_switched_to_by_number_name_or_direction() {
         switch(switch_workspace::Target::Name("mail".into())).unwrap(),
         "workspace name:mail"
     );
-    // Hyprland's relative form, which wraps within the monitor.
+    // Hyprland's existing-workspace traversal includes all monitors.
     assert_eq!(
         switch(switch_workspace::Target::Direction(Direction::Next as i32)).unwrap(),
         "workspace e+1"

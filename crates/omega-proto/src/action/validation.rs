@@ -92,7 +92,7 @@ impl action::Kind {
             Self::ToggleSetting(toggle) => input.text("setting_id", &toggle.setting_id)?,
             Self::SwitchWorkspace(switch) => match &switch.target {
                 Some(switch_workspace::Target::Index(index)) => input.index(*index)?,
-                Some(switch_workspace::Target::Name(name)) => input.text("target.name", name)?,
+                Some(switch_workspace::Target::Name(name)) => input.workspace_name(name)?,
                 Some(switch_workspace::Target::Direction(direction)) => input.require(
                     "target.direction",
                     matches!(
@@ -106,9 +106,7 @@ impl action::Kind {
             Self::MoveToWorkspace(moving) => {
                 match &moving.target {
                     Some(move_to_workspace::Target::Index(index)) => input.index(*index)?,
-                    Some(move_to_workspace::Target::Name(name)) => {
-                        input.text("target.name", name)?
-                    }
+                    Some(move_to_workspace::Target::Name(name)) => input.workspace_name(name)?,
                     None => return input.invalid("target", "is required"),
                 }
                 input.window(moving.window.as_ref())?;
@@ -241,7 +239,18 @@ impl Input {
         self.require(field, !value.trim().is_empty(), "must not be blank")
     }
     fn index(&self, value: u32) -> Result<(), ActionError> {
-        self.require("target.index", value > 0, "must be positive")
+        self.require(
+            "target.index",
+            crate::WorkspaceIndex::new(value).is_ok(),
+            "must be between 1 and 2147483647",
+        )
+    }
+    fn workspace_name(&self, value: &str) -> Result<(), ActionError> {
+        self.require(
+            "target.name",
+            crate::WorkspaceName::parse(value).is_ok(),
+            "must be nonblank and contain no control characters",
+        )
     }
     fn window(&self, window: Option<&WindowSelector>) -> Result<(), ActionError> {
         match window.and_then(|window| window.target.as_ref()) {

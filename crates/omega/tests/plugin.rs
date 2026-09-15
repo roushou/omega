@@ -681,7 +681,12 @@ fn every_node() -> Ui {
         .child(Text::new("80%").bold().warning())
         .child(Icon::new(Glyph::Battery))
         .child(Progress::new(Percent::of(0.7)))
-        .child(Button::new("toggle").icon(Glyph::Play).on_press(UiToggle))
+        .child(
+            Button::new("toggle")
+                .icon(Glyph::Play)
+                .flat()
+                .on_press(UiToggle),
+        )
         .child(Button::new("Connect").on_press(UiConnect.with("home".to_string())))
         .child(Slider::new(Percent::whole(60)).on_change(UiVolume))
         .child(Toggle::new(true).on_change(UiMute))
