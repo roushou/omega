@@ -74,6 +74,23 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "workspace version"):
             Release(self.root, "v0.2.3")
 
+    def test_relocated_renderer_is_validated_without_breaking_older_tags(self):
+        original = self.git("rev-parse", "HEAD")
+        old_path = "crates/omega-renderer/shell/plugins/omega.view/manifest.json"
+        new_path = "crates/omega-omarchy/shell/manifest.json"
+        self.write(new_path, (self.root / old_path).read_text())
+        self.git("rm", old_path)
+        self.commit()
+        self.git("tag", "-f", "v0.2.2")
+        self.assertEqual(Release(self.root, "v0.2.2").commit, self.git("rev-parse", "HEAD"))
+        self.write(new_path, '{"version":"0.2.1"}')
+        self.commit()
+        self.git("tag", "-f", "v0.2.2")
+        with self.assertRaisesRegex(ValueError, "renderer version"):
+            Release(self.root, "v0.2.2")
+        self.git("tag", "-f", "v0.2.2", original)
+        self.assertEqual(Release(self.root, "v0.2.2").commit, original)
+
     def test_renderer_and_crate_versions_must_match(self):
         for path, text in [
             ("crates/omega-renderer/shell/plugins/omega.view/manifest.json", '{"version":"0.2.1"}'),

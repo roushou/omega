@@ -21,11 +21,14 @@ class Release:
         workspace = tomllib.loads(self.read("Cargo.toml"))["workspace"]
         if workspace["package"]["version"] != self.version:
             raise ValueError("tag does not match the workspace version")
-        renderer = json.loads(self.read("crates/omega-renderer/shell/plugins/omega.view/manifest.json"))
+        paths = self.git("ls-tree", "-r", "--name-only", self.commit, "crates").splitlines()
+        renderer_path = "crates/omega-omarchy/shell/manifest.json"
+        if renderer_path not in paths:
+            renderer_path = "crates/omega-renderer/shell/plugins/omega.view/manifest.json"
+        renderer = json.loads(self.read(renderer_path))
         if renderer["version"] != self.version:
             raise ValueError("renderer version does not match the tag")
         self.crates = []
-        paths = self.git("ls-tree", "-r", "--name-only", self.commit, "crates").splitlines()
         for path in paths:
             if not re.fullmatch(r"crates/[^/]+/Cargo.toml", path):
                 continue
