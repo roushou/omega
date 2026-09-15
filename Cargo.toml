@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 homepage = "https://github.com/roushou/omega"
 license = "MIT"
@@ -21,14 +21,14 @@ unimplemented = "warn"
 dbg_macro = "warn"
 
 [workspace.dependencies]
-omega-derive = { path = "crates/omega-derive", version = "0.3.0" }
-omega-document = { path = "crates/omega-document", version = "0.3.0" }
-omega-host = { path = "crates/omega-host", version = "0.3.0" }
-omega-keyboard = { path = "crates/omega-keyboard", version = "0.3.0" }
-omega-omarchy = { path = "crates/omega-omarchy", version = "0.3.0" }
-omega-platform = { path = "crates/omega-platform", version = "0.3.0" }
-omega-proto = { path = "crates/omega-proto", version = "0.3.0" }
-omega-renderer = { path = "crates/omega-renderer", version = "0.3.0" }
+omega-derive = { path = "crates/omega-derive", version = "0.3.1" }
+omega-document = { path = "crates/omega-document", version = "0.3.1" }
+omega-host = { path = "crates/omega-host", version = "0.3.1" }
+omega-keyboard = { path = "crates/omega-keyboard", version = "0.3.1" }
+omega-omarchy = { path = "crates/omega-omarchy", version = "0.3.1" }
+omega-platform = { path = "crates/omega-platform", version = "0.3.1" }
+omega-proto = { path = "crates/omega-proto", version = "0.3.1" }
+omega-renderer = { path = "crates/omega-renderer", version = "0.3.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

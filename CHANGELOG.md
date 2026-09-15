@@ -1,3 +1,8 @@
+## What's Changed in 0.3.1
+* fix(omarchy): keep popups open on the selected monitor
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.0...v0.3.1
+
 ## What's Changed in 0.3.0
 * fix(release): validate relocated renderer manifests
 * fix: bar attachment churn across multiple monitors
