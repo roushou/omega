@@ -31,12 +31,22 @@ BarWidget {
     var observed = link.snapshot.observed
     if (observed !== state && observed !== (shown ? 2 : 1)) link.report(link.instance, state)
   }
-  PanelSession { id: panelState; connection: panelLink }
-  readonly property bool opened: panelState.opened
+  readonly property var panelState: panelLink ? panelLink.panelSession : null
+  property var registeredPanel: null
+  function registerPanel() {
+    if (registeredPanel === panelState) return
+    if (registeredPanel) registeredPanel.releaseHost(root)
+    registeredPanel = panelState
+    if (registeredPanel) registeredPanel.registerHost(root)
+  }
+  onPanelStateChanged: registerPanel()
+  Component.onCompleted: registerPanel()
+  Component.onDestruction: if (registeredPanel) registeredPanel.releaseHost(root)
+  readonly property bool opened: panelState !== null && panelState.owner === root && panelState.opened
 
   // Bar.findPanelWidget requires open, close, and opened for shell toggle support.
-  function open() { panelState.setOpen(true) }
-  function close() { panelState.setOpen(false) }
+  function open() { if (panelState) panelState.setOpen(true, root) }
+  function close() { if (panelState && panelState.owner === root) panelState.setOpen(false) }
 
   readonly property var link: indicatorConnection.connection
   readonly property var panelLink: panelConnection.connection
@@ -107,7 +117,7 @@ BarWidget {
     // Child controls must receive clicks before the popup trigger.
     // Parent `view` after WidgetButton's MouseArea; a sibling below it cannot receive clicks.
     onPressed: function (mouseButton) {
-      if (root.hasPanel && mouseButton === Qt.LeftButton) panelState.toggle()
+      if (root.panelState && mouseButton === Qt.LeftButton) root.panelState.toggle(root)
     }
   }
 

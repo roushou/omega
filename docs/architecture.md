@@ -391,6 +391,13 @@ individual scoped view updates. Lag repairs use an atomic snapshot/history bound
 destroyed or expired instances produce tombstones. Disconnect invalidates observed
 visibility without changing requested intent.
 
+Omarchy bar replicas share one connection and presentation transaction per placement.
+The adapter's `PanelSession` selects one native popup owner: clicking a replica
+opens the panel on that output, and clicking another replica transfers ownership
+without hiding the instance. Only the owner may dismiss it. Removing that owner
+requests a hide; a remote present without an owner selects the first registered
+replica. Observations describe the shared presentation, not each inactive replica.
+
 Interactions carry identity, retained revision, node key, event name, and optional
 control value. The daemon resolves the binding and arguments from its retained tree;
 it rejects stale revisions, hidden instances, disabled/busy ancestry, duplicate

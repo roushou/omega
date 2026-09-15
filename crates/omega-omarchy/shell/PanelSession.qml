@@ -10,6 +10,21 @@ QtObject {
     property bool seen: false
     property bool target: false
     property var queued: null
+    property var hosts: []
+    property var owner: null
+
+    function registerHost(host) {
+        if (hosts.indexOf(host) !== -1) return
+        hosts = hosts.concat([host])
+        if (opened && !owner && !pending) owner = host
+    }
+
+    function releaseHost(host) {
+        hosts = hosts.filter(candidate => candidate !== host)
+        if (owner !== host) return
+        setOpen(false)
+        owner = null
+    }
     onConnectionChanged: {
         pending = false
         queued = null
@@ -17,14 +32,20 @@ QtObject {
 
     // Only daemon intent drives visibility; observations never issue commands.
     onOpenedChanged: {
+        if (opened && !owner && hosts.length > 0 && !pending) owner = hosts[0]
         if (connection && connection.instance)
             connection.report(connection.instance, opened ? "PRESENTATION_STATE_VISIBLE" : "PRESENTATION_STATE_HIDDEN")
     }
 
-    function toggle() { setOpen(!(queued !== null ? queued : pending ? target : opened)) }
+    function toggle(host) {
+        // Clicking this placement on another output transfers its native popup.
+        if (host && owner !== host) { setOpen(true, host); return }
+        setOpen(!(queued !== null ? queued : pending ? target : opened), host)
+    }
 
-    function setOpen(shown) {
+    function setOpen(shown, host) {
         if (!connection) return
+        if (shown && host) owner = host
         if (pending) { queued = shown; return }
         if (shown === opened) return
         target = shown
