@@ -81,6 +81,9 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
+    // Omarchy's drag overlay forwards registered clicks before child controls.
+    // Only popup triggers consume that forwarding; other trees receive the click.
+    pressable: root.hasPanel
     // The tree draws itself; the button is the bar's chrome around it.
     labelVisible: false
     // Expose the root node tooltip through the host bar tooltip window.

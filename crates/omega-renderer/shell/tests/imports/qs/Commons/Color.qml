@@ -6,4 +6,5 @@ QtObject {
     readonly property color accent: "blue"
     readonly property color urgent: "red"
     readonly property color muted: "gray"
+    readonly property var popups: ({text:"white"})
 }
