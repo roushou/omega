@@ -9,7 +9,7 @@ bundled renderer manifest. Use `cliff.toml` to prepend the new release's notes,
 then review and commit the result. For example:
 
 ```sh
-git cliff --offline --github-repo roushou/omega --unreleased --tag v0.2.3 --prepend CHANGELOG.md
+git cliff --offline --github-repo roushou/omega --unreleased --tag v0.3.0 --prepend CHANGELOG.md
 cargo publish --workspace --dry-run
 ```
 
@@ -17,9 +17,9 @@ After the checks pass, publish the crates and push the release commit and tag:
 
 ```sh
 cargo publish --workspace
-git tag -a v0.2.3 -m "Release v0.2.3"
+git tag -a v0.3.0 -m "Release v0.3.0"
 git push origin main
-git push origin v0.2.3
+git push origin v0.3.0
 ```
 
 The `release` workflow validates the tag against the committed workspace, crate,

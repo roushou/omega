@@ -1,3 +1,35 @@
+## What's Changed in 0.3.0
+* fix(release): validate relocated renderer manifests
+* fix: bar attachment churn across multiple monitors
+* refactor: clarify runtime contracts and reconciliation boundaries
+* docs: update stale docs
+* docs: define architectural principles and review rules
+* feat: add component-scoped UI references
+* test: strengthen behavioral coverage and remove redundant checks
+* feat: add composable keyboard primitives and scoped shortcuts
+* feat: verify running renderer builds after installation
+* fix: prevent panel visibility feedback loops
+* refactor!: unify surface contracts and instance runtime
+* fix: refresh stack layouts before resizing
+* docs: clarify authoring APIs and technical guidance
+* fix: install QML controls dependencies in CI
+* chore: clean dependencies and update license policy
+* feat: add typed command actions
+* feat: establish composable desktop platform
+* fix(cli): decode typed command arguments from text
+* fix(backlight): fall back to logind for denied writes
+* feat(sdk): add typed widget surface references
+* feat(ui): add composable views and components
+* fix(system): harden resource sampling
+* feat(bluetooth)!: add typed device controls and status
+* feat(ui): add typed choices and conditional disabling
+* fix(renderer): keep inherited colors reactive
+* feat(audio)!: add targeted media controls
+* feat(ui): add playback icons
+* fix(cli): preserve user files and validate scaffold changes before writing
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.2.3...v0.3.0
+
 ## What's Changed in 0.2.3
 * feat(cli): inherit scaffolded Rust edition from the workspace
 * fix(renderer): create sockets in their bound QML context
