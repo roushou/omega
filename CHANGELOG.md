@@ -1,3 +1,10 @@
+## What's Changed in 0.3.5
+* docs: update README
+* chore(dev): add mise tooling and shared CI tasks
+* fix(renderer): show button focus outlines only for keyboard navigation
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.4...v0.3.5
+
 ## What's Changed in 0.3.4
 * fix(omarchy): pass bar clicks through to embedded controls
 
