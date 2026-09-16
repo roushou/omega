@@ -55,10 +55,10 @@ fn workspace(layout: &Layout, members: &[&str], exclude: &[&str]) {
 fn only_plugins_are_runnable_members() {
     let tmp = TempDir::new("discover");
     let layout = tmp.layout();
-    for dir in ["plugins/battery", "plugins/clock", "libraries/shared"] {
+    for dir in ["plugins/battery", "plugins/clock", "crates/shared"] {
         std::fs::create_dir_all(layout.config.join(dir)).unwrap();
     }
-    workspace(&layout, &["plugins/*", "libraries/*"], &[]);
+    workspace(&layout, &["plugins/*", "crates/*"], &[]);
 
     let units = Plugins::discover(&layout).unwrap();
     assert_eq!(

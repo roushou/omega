@@ -15,7 +15,7 @@ pub struct NewCmd {
     /// Create a shared Rust library, which Omega never supervises.
     #[arg(long, conflicts_with = "template")]
     pub lib: bool,
-    /// Add the library as a dependency of a member (system, plugins/name, libraries/name).
+    /// Add the library as a dependency of a member (system, plugins/name, crates/name).
     #[arg(long, requires = "lib", value_name = "MEMBER")]
     pub into: Vec<std::path::PathBuf>,
     /// Choose the plugin's starting point.

@@ -202,10 +202,9 @@ fn adding_a_glob_checks_previously_unlisted_package_names() {
 fn excluded_libraries_are_refused_before_writing() {
     let f = Fixture::new();
     f.init();
-    let root = f.root_source().replace(
-        "[workspace]\n",
-        "[workspace]\nexclude = [\"libraries/*\"]\n",
-    );
+    let root = f
+        .root_source()
+        .replace("[workspace]\n", "[workspace]\nexclude = [\"crates/*\"]\n");
     f.write(f.layout.workspace_manifest(), &root);
     let name = PluginName::parse("shared-types").unwrap();
     let destination = f.layout.library_src_dir(&name);
@@ -398,22 +397,22 @@ fn shared_libraries_have_no_program_and_only_explicit_consumers() {
     assert!(
         f.layout
             .config
-            .join("libraries/desktop-ui/src/lib.rs")
+            .join("crates/desktop-ui/src/lib.rs")
             .is_file()
     );
     assert!(
         !f.layout
             .config
-            .join("libraries/desktop-ui/src/main.rs")
+            .join("crates/desktop-ui/src/main.rs")
             .exists()
     );
     let names = omega_host::workspace::Plugins::discover(&f.layout).unwrap();
     assert_eq!(names.len(), 1);
     assert_eq!(names.iter().next().unwrap().as_str(), "power");
     let system = std::fs::read_to_string(f.layout.system_manifest()).unwrap();
-    assert!(system.contains("../libraries/desktop-ui"));
+    assert!(system.contains("../crates/desktop-ui"));
     let power = std::fs::read_to_string(f.layout.config.join("plugins/power/Cargo.toml")).unwrap();
-    assert!(power.contains("../../libraries/desktop-ui"));
+    assert!(power.contains("../../crates/desktop-ui"));
 }
 
 impl Fixture {

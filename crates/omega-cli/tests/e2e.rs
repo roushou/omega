@@ -185,7 +185,7 @@ fn scaffolding_adds_membership_globs_as_each_directory_gets_its_first_crate() {
             (
                 vec!["new", "shared-types", "--lib"],
                 vec!["new", "hello-widget"],
-                "libraries/*",
+                "crates/*",
                 "plugins/*",
                 "shared-types",
             )
@@ -194,7 +194,7 @@ fn scaffolding_adds_membership_globs_as_each_directory_gets_its_first_crate() {
                 vec!["new", "hello-widget"],
                 vec!["new", "shared-types", "--lib"],
                 "plugins/*",
-                "libraries/*",
+                "crates/*",
                 "hello-widget",
             )
         };
@@ -293,7 +293,7 @@ fn a_scaffolded_config_builds_and_runs() {
         "system",
     ]);
     std::fs::write(
-        machine.root.join("config/libraries/desktop-ui/src/lib.rs"),
+        machine.root.join("config/crates/desktop-ui/src/lib.rs"),
         "pub struct Desktop; impl Desktop { pub const NAME: &str = \"my desktop\"; }\n",
     )
     .unwrap();

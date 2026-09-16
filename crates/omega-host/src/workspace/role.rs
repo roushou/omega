@@ -28,7 +28,7 @@ impl WorkspaceRole {
         if directory.parent() == Some(layout.plugins_dir().as_path()) {
             return Ok(Self::Plugin(PackageName::parse(name)?));
         }
-        if directory.parent() == Some(layout.libraries_dir().as_path()) {
+        if directory.parent() == Some(layout.crates_dir().as_path()) {
             return Ok(Self::Library(PackageName::parse(name)?));
         }
         Err(WorkspaceError::Location(directory.into()))
@@ -53,7 +53,7 @@ pub enum WorkspaceError {
     Legacy,
     #[error("workspace migration was interrupted; run omega migrate to recover")]
     Interrupted,
-    #[error("{} is outside system/, plugins/<name>/, or libraries/<name>/", .0.display())]
+    #[error("{} is outside system/, plugins/<name>/, or crates/<name>/", .0.display())]
     Location(PathBuf),
     #[error(transparent)]
     Name(#[from] crate::package::PackageNameError),

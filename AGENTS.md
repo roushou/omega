@@ -264,7 +264,7 @@ omega-cli      the binary
 
 ## Desktop workspace foundations
 
-- Config members are `system/`, `plugins/<name>/`, or `libraries/<name>/`.
+- Config members are `system/`, `plugins/<name>/`, or `crates/<name>/`.
   Only plugins are queried for manifests and supervised. Libraries never imply
   execution. Runtime generation paths remain `units/`.
 - `omega migrate` journals source edits before moving `units/` to `plugins/`.

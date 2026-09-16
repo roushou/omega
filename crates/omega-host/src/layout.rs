@@ -205,12 +205,12 @@ impl Layout {
         self.config.join("units")
     }
 
-    pub fn libraries_dir(&self) -> PathBuf {
-        self.config.join("libraries")
+    pub fn crates_dir(&self) -> PathBuf {
+        self.config.join("crates")
     }
 
     pub fn library_src_dir(&self, name: &crate::package::PackageName) -> PathBuf {
-        self.libraries_dir().join(name.package())
+        self.crates_dir().join(name.package())
     }
 
     pub fn migration_journal(&self) -> PathBuf {

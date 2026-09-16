@@ -90,12 +90,12 @@ serde = { path = "vendor/serde" }
             .as_mut()
             .unwrap()
             .members
-            .push("libraries/shared".into())
+            .push("crates/shared".into())
     })
     .unwrap();
 
     let rewritten = std::fs::read_to_string(file.path()).unwrap();
-    assert!(rewritten.contains("libraries/shared"), "{rewritten}");
+    assert!(rewritten.contains("crates/shared"), "{rewritten}");
     assert!(rewritten.contains("patch.crates-io"), "{rewritten}");
     assert!(rewritten.contains("vendor/serde"), "{rewritten}");
     assert!(rewritten.contains("license"), "{rewritten}");
@@ -182,13 +182,13 @@ fn workspace_members_expand_globs_and_honour_exclude() {
         "plugins/alpha",
         "plugins/beta",
         "plugins/.hidden",
-        "libraries/shared",
+        "crates/shared",
     ] {
         std::fs::create_dir_all(tmp.path().join(dir)).unwrap();
     }
 
     let workspace = Workspace {
-        members: vec!["plugins/*".into(), "libraries/shared".into()],
+        members: vec!["plugins/*".into(), "crates/shared".into()],
         exclude: vec!["plugins/beta".into()],
         ..Default::default()
     };
@@ -197,7 +197,7 @@ fn workspace_members_expand_globs_and_honour_exclude() {
     assert_eq!(
         dirs,
         vec![
-            tmp.path().join("libraries/shared"),
+            tmp.path().join("crates/shared"),
             tmp.path().join("plugins/.hidden"),
             tmp.path().join("plugins/alpha"),
         ]

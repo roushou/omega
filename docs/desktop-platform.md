@@ -24,7 +24,7 @@ with real platform services; a full file explorer remains a future workload.
   plugins/                   independently runnable features
     power/
     launcher/
-  libraries/                 reusable Rust crates
+  crates/                 reusable Rust crates
     desktop-ui/
 ```
 

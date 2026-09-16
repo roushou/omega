@@ -608,7 +608,7 @@ when less than one maximum-sized payload remains.
   Cargo.toml Cargo.lock   workspace; members are system/ and registered plugins/
   system/                 → document.json, one entry point, no side effects
   plugins/                independent runnable packages
-  libraries/              reusable Rust libraries, never supervised
+  crates/              reusable Rust libraries, never supervised
   target/                 cargo's, at cargo's default path; gitignored
 
 ~/.local/state/omega/
@@ -978,7 +978,7 @@ falls back to node keys for views without that property.
 ### Workspace and renderer boundaries
 
 Source members have validated roles: `system/`, direct children of `plugins/`, or
-of `libraries/`. Library crates build with the workspace but are never queried for
+of `crates/`. Library crates build with the workspace but are never queried for
 unit manifests. Builds and source mutations share the workspace lock. Migration
 journals original manifest contents before editing; recovery refuses external edits
 and restores originals before retrying. Published generations keep their runtime

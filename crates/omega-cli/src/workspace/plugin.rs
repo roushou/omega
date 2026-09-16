@@ -64,7 +64,7 @@ impl ConfigWorkspace {
             // Cargo rejects unmatched globs, so add each one with its first crate.
             match template {
                 Some(_) => "plugins/*",
-                None => "libraries/*",
+                None => "crates/*",
             },
         )?;
         let updated = editor.finish();

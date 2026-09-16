@@ -31,8 +31,8 @@ impl ConfigWorkspace {
         );
         let mut manifests = vec![layout.workspace_manifest(), layout.system_manifest()];
         Migration::manifests(&old, &mut manifests)?;
-        if layout.libraries_dir().try_exists()? {
-            Migration::manifests(&layout.libraries_dir(), &mut manifests)?;
+        if layout.crates_dir().try_exists()? {
+            Migration::manifests(&layout.crates_dir(), &mut manifests)?;
         }
         if layout.cargo_config().try_exists()? {
             manifests.push(layout.cargo_config());
