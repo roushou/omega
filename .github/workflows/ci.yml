@@ -37,22 +37,36 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Format
-        run: cargo fmt --all --check
+      - uses: jdx/mise-action@v3
+        if: hashFiles('mise.toml') != ''
+        with:
+          version: 2026.9.1
 
-      - name: Lint
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust checks
+        if: hashFiles('mise.toml') != ''
+        run: mise run check:rust
 
-      - name: Build
-        run: cargo build --workspace --all-targets
+      - name: Document and configuration formatting
+        if: hashFiles('mise.toml') != ''
+        run: mise run check:format
 
-      - name: Test
-        run: cargo test --workspace
+      # Release backfills can target tags that predate mise.toml.
+      - name: Rust checks for older tags
+        if: hashFiles('mise.toml') == ''
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo build --workspace --all-targets
+          cargo test --workspace
 
       - name: Minimum supported Rust
         run: |
           rustup toolchain install 1.88.0 --profile minimal
-          cargo +1.88.0 check --workspace --all-targets --locked
+          if [[ -f mise.toml ]]; then
+            mise run check:msrv
+          else
+            cargo +1.88.0 check --workspace --all-targets --locked
+          fi
 
   renderer:
     runs-on: ubuntu-latest
@@ -69,13 +83,24 @@ jobs:
           sudo apt-get update || true
           sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts qml6-module-qtquick-controls qml6-module-qtquick-templates
 
-      - name: Lint the QML
-        run: crates/omega-renderer/shell/lint.sh
+      - uses: jdx/mise-action@v3
+        if: hashFiles('mise.toml') != ''
+        with:
+          version: 2026.9.1
+
+      - name: Renderer checks
+        if: hashFiles('mise.toml') != ''
+        run: mise run check:renderer
         env:
           QMLLINT: /usr/lib/qt6/bin/qmllint
 
-      - name: Test renderer interactions
-        run: crates/omega-renderer/shell/test.sh
+      - name: Renderer checks for older tags
+        if: hashFiles('mise.toml') == ''
+        run: |
+          crates/omega-renderer/shell/lint.sh
+          crates/omega-renderer/shell/test.sh
+        env:
+          QMLLINT: /usr/lib/qt6/bin/qmllint
 
   supply-chain:
     runs-on: ubuntu-latest
@@ -85,15 +110,23 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@v3
+        if: hashFiles('mise.toml') != ''
         with:
-          tool: cargo-shear
+          version: 2026.9.1
 
-      - name: Unused dependencies
-        run: cargo shear
+      - name: Dependency checks
+        if: hashFiles('mise.toml') != ''
+        run: mise run check:dependencies
 
-      - name: Licenses, advisories, bans, sources
-        uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: taiki-e/install-action@v2
+        if: hashFiles('mise.toml') == ''
+        with:
+          tool: cargo-shear@1.13.4
+      - run: cargo shear
+        if: hashFiles('mise.toml') == ''
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        if: hashFiles('mise.toml') == ''
 
   release-tooling:
     runs-on: ubuntu-latest
@@ -105,10 +138,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python3 -m unittest discover -s .github -p 'test_release.py'
-      - name: Install actionlint
-        env:
-          GOBIN: ${{ runner.temp }}/actionlint-bin
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-      - name: Lint workflows
-        run: '"$RUNNER_TEMP/actionlint-bin/actionlint"'
+      - uses: jdx/mise-action@v3
+        if: hashFiles('mise.toml') != ''
+        with:
+          version: 2026.9.1
+
+      - name: Workflow checks
+        run: mise run check:workflows

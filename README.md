@@ -239,7 +239,7 @@ provide explicit visual comparisons. See [the preview guide](docs/previews.md).
 - [Keyboard input](docs/keyboard.md): shortcuts, scoped routing, and list navigation.
 - [CLI guide](crates/omega-cli/README.md): build, inspect, and develop a config.
 
-For maintainers: [architecture](docs/architecture.md),
+For maintainers: [development setup](docs/development.md), [architecture](docs/architecture.md),
 [architectural principles](docs/principles.md),
 [design decisions](docs/desktop-platform.md), [open questions](docs/design.md),
 [contribution rules](AGENTS.md), and [release process](docs/releasing.md).

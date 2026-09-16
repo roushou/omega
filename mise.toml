@@ -1,0 +1,82 @@
+[tools]
+dprint = "0.56.1"
+"aqua:EmbarkStudios/cargo-deny" = "0.20.2"
+"cargo:cargo-shear" = "1.13.4"
+actionlint = "1.7.7"
+
+[tasks.check]
+description = "Run Rust, renderer, formatting, dependency, and workflow checks"
+run = [
+  { task = "check:rust" },
+  { task = "check:renderer" },
+  { task = "check:format" },
+  { task = "check:dependencies" },
+  { task = "check:workflows" },
+]
+
+[tasks."check:rust"]
+description = "Check Rust formatting, lint, build, and tests"
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets --locked -- -D warnings",
+  "cargo build --workspace --all-targets --locked",
+  "cargo test --workspace --locked",
+]
+
+[tasks."check:renderer"]
+description = "Lint QML and run headless renderer interaction tests"
+run = ["crates/omega-renderer/shell/lint.sh", "crates/omega-renderer/shell/test.sh"]
+
+[tasks."check:format"]
+description = "Check Markdown, JSON, and TOML formatting"
+run = "dprint check"
+
+[tasks."check:dependencies"]
+description = "Check unused dependencies, advisories, licenses, and sources"
+run = ["cargo shear", "cargo deny check"]
+
+[tasks."check:workflows"]
+description = "Lint GitHub Actions workflows and test release tooling"
+run = ["actionlint", "python3 -m unittest discover -s .github -p 'test_release.py'"]
+
+[tasks."check:msrv"]
+description = "Check with Rust 1.88.0 (install through rustup first)"
+run = "cargo +1.88.0 check --workspace --all-targets --locked"
+
+[tasks."test:e2e"]
+description = "Run ignored CLI tests that compile scaffolded configurations"
+run = "cargo test -p omega-cli --test e2e --locked -- --ignored"
+
+[tasks.regenerate]
+description = "Regenerate checked-in renderer properties, keyboard cases, and icons"
+env.OMEGA_REGENERATE = "1"
+run = [
+  "cargo test -p omega-renderer --test props --test keyboard --locked",
+  "cargo test -p omega-omarchy --test renderer --locked the_checked_in_icon_set_is_what_the_table_generates",
+]
+
+[vars]
+dev_root = "{{ config_root }}/target/dev"
+
+[task_templates.dev]
+env.OMEGA_CONFIG_DIR = "{{ vars.dev_root }}/config"
+env.OMEGA_STATE_DIR = "{{ vars.dev_root }}/state"
+env.OMEGA_CACHE_DIR = "{{ vars.dev_root }}/cache"
+env.OMEGA_SOCKET = "{{ vars.dev_root }}/control.sock"
+env.OMEGA_SHELL_SOCKET = "{{ vars.dev_root }}/observation.sock"
+env.OMEGA_SHELL_CONFIG = "{{ vars.dev_root }}/omarchy/shell.json"
+
+[tasks."dev:daemon"]
+description = "Run a foreground daemon with development paths and sockets"
+extends = "dev"
+run = 'mkdir -p "{{ vars.dev_root }}" && cargo run -p omega-cli --locked -- daemon run'
+
+[tasks."dev:status"]
+description = "Inspect the development daemon"
+extends = "dev"
+run = "cargo run -p omega-cli --locked -- status"
+
+[tasks."dev:init"]
+description = "Create a development config without installing services or renderers"
+extends = "dev"
+run = "cargo run -p omega-cli --locked -- init --bare"
