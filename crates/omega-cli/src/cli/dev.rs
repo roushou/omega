@@ -29,7 +29,6 @@ impl DevCmd {
         let name = UnitName::parse(&self.unit)?;
         let layout = Layout::resolve();
 
-        omega_host::workspace::WorkspaceRole::check_layout(&layout)?;
         let source = layout.unit_src_dir(&name);
         if !source.exists() {
             bail!(
@@ -117,7 +116,6 @@ impl DevCmd {
 
     async fn build(layout: &Layout, cargo: &Cargo<'_>, name: &UnitName) -> anyhow::Result<()> {
         let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
-        omega_host::workspace::WorkspaceRole::check_layout(layout)?;
         cargo.build_unit(Self::PROFILE, name).await?;
         Ok(())
     }

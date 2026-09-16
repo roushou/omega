@@ -979,10 +979,8 @@ falls back to node keys for views without that property.
 
 Source members have validated roles: `system/`, direct children of `plugins/`, or
 of `crates/`. Library crates build with the workspace but are never queried for
-unit manifests. Builds and source mutations share the workspace lock. Migration
-journals original manifest contents before editing; recovery refuses external edits
-and restores originals before retrying. Published generations keep their runtime
-`units/` paths and identities.
+unit manifests. Builds and source mutations share the workspace lock. Published
+generations use `units/` paths for runtime binaries.
 
 `omega-document` owns core desired state and the `DocumentExtension` composition
 contract. `omega-omarchy` owns shell authoring, compilation, validation of its

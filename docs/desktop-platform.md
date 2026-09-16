@@ -41,8 +41,7 @@ belong in the ignored `.cargo/config.toml` written by `omega link`.
 
 Scaffolding creates workspace membership and requested dependencies. It prints
 placement suggestions because deciding where a surface appears belongs to the
-configuration author. Legacy source migration preserves package identities and
-last-good built generations, and refuses ambiguous layouts.
+configuration author.
 
 ## Content, state, and behavior
 

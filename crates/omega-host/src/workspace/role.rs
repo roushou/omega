@@ -33,26 +33,10 @@ impl WorkspaceRole {
         }
         Err(WorkspaceError::Location(directory.into()))
     }
-
-    /// An interrupted migration must be repaired before any build or scaffold.
-    pub fn check_layout(layout: &Layout) -> Result<(), WorkspaceError> {
-        if layout.migration_journal().try_exists()? {
-            return Err(WorkspaceError::Interrupted);
-        }
-        match std::fs::symlink_metadata(layout.legacy_plugins_dir()) {
-            Ok(_) => Err(WorkspaceError::Legacy),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
-    #[error("legacy units/ directory found; run omega migrate --check, then omega migrate")]
-    Legacy,
-    #[error("workspace migration was interrupted; run omega migrate to recover")]
-    Interrupted,
     #[error("{} is outside system/, plugins/<name>/, or crates/<name>/", .0.display())]
     Location(PathBuf),
     #[error(transparent)]

@@ -267,9 +267,7 @@ omega-cli      the binary
 - Config members are `system/`, `plugins/<name>/`, or `crates/<name>/`.
   Only plugins are queried for manifests and supervised. Libraries never imply
   execution. Runtime generation paths remain `units/`.
-- `omega migrate` journals source edits before moving `units/` to `plugins/`.
-  Recovery preserves external edits and refuses ambiguous mixed layouts. Source
-  mutations and builds hold the same workspace lock.
+- Source mutations and builds hold the same workspace lock.
 - `Document::with` composes a `DocumentExtension`. Core document validation never
   interprets Omarchy payloads: `omega-omarchy` handles and projects them first.
 - QML controls live in `omega-renderer/shell/core`, without `qs.*` imports.

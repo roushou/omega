@@ -17,7 +17,6 @@ impl Plugins {
     /// Read the workspace manifest and derive its units: member directories
     /// directly under `plugins/`, minus `exclude`.
     pub fn discover(layout: &Layout) -> Result<Self, PluginsError> {
-        WorkspaceRole::check_layout(layout)?;
         let manifest = layout.file::<CargoManifest>(CargoSlot::Workspace).read()?;
         let workspace = manifest.workspace.unwrap_or_default();
         let mut names = Vec::new();

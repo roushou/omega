@@ -39,7 +39,6 @@ impl ConfigWorkspace {
         consumers: &[std::path::PathBuf],
     ) -> Result<PreparedPlugin<'_>> {
         use omega_host::workspace::WorkspaceRole;
-        WorkspaceRole::check_layout(&self.layout)?;
         let destination = match template {
             Some(_) => self.layout.unit_src_dir(name.unit()),
             None => self.layout.library_src_dir(&name),

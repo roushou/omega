@@ -106,7 +106,7 @@ fn a_missing_workspace_manifest_is_reported_as_such() {
 }
 
 #[test]
-fn misplaced_members_and_legacy_layout_fail_loudly() {
+fn misplaced_members_fail_loudly() {
     let tmp = TempDir::new("roles");
     let layout = tmp.layout();
     for member in ["plugins/nested/deep", "shared", "../external"] {
@@ -118,12 +118,4 @@ fn misplaced_members_and_legacy_layout_fail_loudly() {
                 .contains("outside")
         );
     }
-    std::fs::create_dir_all(layout.legacy_plugins_dir()).unwrap();
-    workspace(&layout, &["plugins/*"], &[]);
-    assert!(
-        Plugins::discover(&layout)
-            .unwrap_err()
-            .to_string()
-            .contains("omega migrate")
-    );
 }

@@ -201,20 +201,12 @@ impl Layout {
         self.unit_src_dir(name).join("src").join("main.rs")
     }
 
-    pub fn legacy_plugins_dir(&self) -> PathBuf {
-        self.config.join("units")
-    }
-
     pub fn crates_dir(&self) -> PathBuf {
         self.config.join("crates")
     }
 
     pub fn library_src_dir(&self, name: &crate::package::PackageName) -> PathBuf {
         self.crates_dir().join(name.package())
-    }
-
-    pub fn migration_journal(&self) -> PathBuf {
-        self.config.join(".cargo/workspace-migration.json")
     }
 
     // ---- build output ----
