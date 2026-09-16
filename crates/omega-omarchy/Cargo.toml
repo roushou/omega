@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 anyhow = "1"
-omega = { package = "omega-rs", path = "../omega", version = "0.3.3" }
+omega = { package = "omega-rs", path = "../omega", version = "0.3.4" }
 omega-document.workspace = true
 omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }

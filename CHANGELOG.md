@@ -1,3 +1,8 @@
+## What's Changed in 0.3.4
+* fix(omarchy): pass bar clicks through to embedded controls
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.3...v0.3.4
+
 ## What's Changed in 0.3.3
 * feat(desktop): add typed workspace controls and focus tracking
 * fix(cli): use workspace globs when scaffolding crates
