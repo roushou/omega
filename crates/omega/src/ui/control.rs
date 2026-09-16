@@ -36,6 +36,7 @@ impl Button {
     }
 
     /// Hide the idle background and border, retaining hover and keyboard focus feedback.
+    /// Mouse clicks do not leave a focus border; keyboard navigation does.
     /// Padding and dimensions are unchanged. Useful for compact toolbar actions.
     ///
     /// ```

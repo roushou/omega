@@ -115,15 +115,28 @@ TestCase {
         view.model = {type:"button",key:"flat",props:{label:{stringValue:"1"},flat:{boolValue:true}},events:{press:{command:"select"}}}
         var button = buttonDelegate(view)
         verify(button !== null)
-        tryVerify(function() { return Qt.colorEqual(button.color, "transparent") })
-        compare(button.border.width, 0)
+        tryVerify(function() { return Qt.colorEqual(button.background.color, "transparent") })
+        compare(button.background.border.width, 0)
         verify(button.pressable)
-        button.forceActiveFocus()
+        button.forceActiveFocus(Qt.TabFocusReason)
         tryCompare(button, "activeFocus", true)
-        verify(button.border.width > 0)
-        verify(Qt.colorEqual(button.border.color, view.ink))
+        verify(button.background.border.width > 0)
+        verify(Qt.colorEqual(button.background.border.color, view.ink))
+        mouseClick(button, button.width / 2, button.height / 2)
+        verify(button.activeFocus)
+        compare(button.background.border.width, 0)
+        // A reading update may change selection while retaining the clicked node.
+        view.model = {type:"button",key:"flat",props:{label:{stringValue:"2"},flat:{boolValue:true},emphasis:{stringValue:"primary"}},events:{press:{command:"select"}}}
+        compare(buttonDelegate(view), button)
+        compare(button.background.border.width, 0)
+        test.forceActiveFocus()
+        button.forceActiveFocus(Qt.BacktabFocusReason)
+        verify(button.background.border.width > 0)
         view.model = {type:"button",key:"flat",props:{label:{stringValue:"1"}},events:{press:{command:"select"}}}
-        tryVerify(function() { return !Qt.colorEqual(button.color, "transparent") })
+        tryVerify(function() { return !Qt.colorEqual(button.background.color, "transparent") })
+        mouseClick(button, button.width / 2, button.height / 2)
+        verify(button.background.border.width > 0)
+        verify(Qt.colorEqual(button.background.border.color, view.rule))
     }
 
     Component {
