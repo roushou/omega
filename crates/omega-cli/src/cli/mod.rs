@@ -9,7 +9,7 @@ mod logs;
 mod new;
 mod present;
 mod preview;
-mod renderer;
+mod recovery;
 mod restart;
 mod rollback;
 mod run;
@@ -84,6 +84,7 @@ pub enum Command {
     Logs(logs::LogsCmd),
     New(new::NewCmd),
     Restart(restart::RestartCmd),
+    Recovery(recovery::RecoveryCmd),
     Rollback(rollback::RollbackCmd),
     Run(run::RunCmd),
     Present(present::PresentCmd),
@@ -100,11 +101,12 @@ impl Command {
             Self::Clean(cmd) => cmd.run(ui),
             Self::Daemon(cmd) => cmd.run(ui).await,
             Self::Dev(cmd) => cmd.run(ui).await,
-            Self::Init(cmd) => cmd.run(ui),
+            Self::Init(cmd) => cmd.run(ui).await,
             Self::Link(cmd) => cmd.run(ui).await,
             Self::Logs(cmd) => cmd.run(ui).await,
             Self::New(cmd) => cmd.run(ui),
             Self::Restart(cmd) => cmd.run(ui).await,
+            Self::Recovery(cmd) => cmd.run(ui),
             Self::Rollback(cmd) => cmd.run(ui),
             Self::Run(cmd) => cmd.run(ui).await,
             Self::Present(cmd) => cmd.run(ui).await,

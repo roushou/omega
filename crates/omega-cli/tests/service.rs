@@ -59,14 +59,14 @@ fn a_fresh_install_is_current() {
         "nothing is installed until something installs it"
     );
 
-    Service::install(&path, &omega()).unwrap();
+    TestInstallation::install(&path, &omega()).unwrap();
     assert_eq!(Service::installed(&path, &omega()), Installed::Current);
 }
 
 #[test]
 fn a_service_running_another_omega_says_which() {
     let path = unit_path("other");
-    Service::install(&path, Path::new("/home/someone/.cargo/bin/omega")).unwrap();
+    TestInstallation::install(&path, Path::new("/home/someone/.cargo/bin/omega")).unwrap();
 
     // Detect a service installed from a different executable.
     assert_eq!(
@@ -80,7 +80,7 @@ fn a_service_running_another_omega_says_which() {
 #[test]
 fn a_hand_edited_unit_is_not_mistaken_for_this_one() {
     let path = unit_path("edited");
-    Service::install(&path, &omega()).unwrap();
+    TestInstallation::install(&path, &omega()).unwrap();
 
     let edited = std::fs::read_to_string(&path)
         .unwrap()
@@ -100,7 +100,7 @@ fn a_hand_edited_unit_is_not_mistaken_for_this_one() {
 #[test]
 fn uninstall_takes_away_what_was_installed() {
     let path = unit_path("gone");
-    Service::install(&path, &omega()).unwrap();
+    TestInstallation::install(&path, &omega()).unwrap();
 
     assert!(Service::uninstall(&path).unwrap());
     assert_eq!(Service::installed(&path, &omega()), Installed::Missing);
@@ -118,4 +118,22 @@ fn a_binary_in_a_build_directory_is_not_somewhere_to_point_a_service() {
 
     assert!(Service::is_a_build_artifact(&target.join("release/omega")));
     assert!(!Service::is_a_build_artifact(&omega()));
+}
+
+struct TestInstallation;
+
+impl TestInstallation {
+    fn install(
+        path: &Path,
+        program: &Path,
+    ) -> anyhow::Result<omega_host::recovery::InstalledReplacement> {
+        let root = path.parent().unwrap();
+        let layout =
+            omega_host::Layout::at(root.join("config"), root.join("state"), root.join("cache"));
+        Service::install(
+            path,
+            program,
+            &omega_host::recovery::RecoveryStore::new(&layout),
+        )
+    }
 }

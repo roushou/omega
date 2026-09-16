@@ -83,7 +83,11 @@ impl<'a> Cargo<'a> {
     }
 
     async fn run(&self, profile: Profile, extra: &[&str]) -> Result<(), CargoError> {
-        let status = self.build_command(profile, extra).status().await?;
+        let status = self
+            .build_command(profile, extra)
+            .kill_on_drop(true)
+            .status()
+            .await?;
         status.success().then_some(()).ok_or(CargoError::Failed)
     }
 }

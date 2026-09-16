@@ -70,7 +70,7 @@ fn a_fresh_install_is_current() {
     let renderer = &Renderer::VIEW;
 
     assert_eq!(renderer.installed(&plugins), Installed::Missing);
-    renderer.install(&plugins).unwrap();
+    TestInstallation::install(renderer, &plugins).unwrap();
     assert_eq!(renderer.installed(&plugins), Installed::Current);
 }
 
@@ -78,7 +78,7 @@ fn a_fresh_install_is_current() {
 fn installing_takes_away_what_an_older_renderer_left() {
     let plugins = plugins("strays");
     let renderer = &Renderer::VIEW;
-    let dir = renderer.install(&plugins).unwrap();
+    let dir = TestInstallation::install(renderer, &plugins).unwrap();
 
     // A file an earlier version shipped. The shell loads the directory, not
     // omega's list, so leaving it behind leaves it running.
@@ -88,7 +88,7 @@ fn installing_takes_away_what_an_older_renderer_left() {
         Installed::Stale { .. }
     ));
 
-    renderer.install(&plugins).unwrap();
+    TestInstallation::install(renderer, &plugins).unwrap();
     assert!(!dir.join("Legacy.qml").exists());
     assert_eq!(renderer.installed(&plugins), Installed::Current);
 }
@@ -97,7 +97,7 @@ fn installing_takes_away_what_an_older_renderer_left() {
 fn an_install_this_binary_did_not_write_reads_as_stale() {
     let plugins = plugins("edited");
     let renderer = &Renderer::VIEW;
-    let dir = renderer.install(&plugins).unwrap();
+    let dir = TestInstallation::install(renderer, &plugins).unwrap();
 
     std::fs::write(dir.join("Props.js"), "// somebody's own\n").unwrap();
 
@@ -129,7 +129,7 @@ fn installing_over_a_link_leaves_no_link_behind() {
     let renderer = &Renderer::VIEW;
 
     renderer.link(&plugins, &checkout()).unwrap();
-    let dir = renderer.install(&plugins).unwrap();
+    let dir = TestInstallation::install(renderer, &plugins).unwrap();
 
     assert!(!dir.is_symlink());
     assert_eq!(renderer.installed(&plugins), Installed::Current);
@@ -161,7 +161,7 @@ fn uninstall_leaves_a_plugin_that_is_not_ours_alone() {
 fn uninstall_takes_away_what_omega_installed() {
     let plugins = plugins("gone");
     let renderer = &Renderer::VIEW;
-    renderer.install(&plugins).unwrap();
+    TestInstallation::install(renderer, &plugins).unwrap();
 
     assert!(renderer.uninstall(&plugins).unwrap().is_some());
     assert_eq!(renderer.installed(&plugins), Installed::Missing);
@@ -174,7 +174,7 @@ fn uninstall_takes_away_what_omega_installed() {
 fn a_copy_that_claims_the_right_version_still_says_what_is_wrong() {
     let plugins = plugins("phrasing");
     let renderer = &Renderer::VIEW;
-    let dir = renderer.install(&plugins).unwrap();
+    let dir = TestInstallation::install(renderer, &plugins).unwrap();
 
     // Equal versions with different contents must report a content mismatch.
     std::fs::write(dir.join("Props.js"), "// somebody's own\n").unwrap();
@@ -204,7 +204,7 @@ fn what_matches_has_no_difference_to_report() {
 
     // A missing optional renderer is not a version mismatch.
     assert_eq!(renderer.installed(&plugins).difference(), None);
-    renderer.install(&plugins).unwrap();
+    TestInstallation::install(renderer, &plugins).unwrap();
     assert_eq!(renderer.installed(&plugins).difference(), None);
     renderer.link(&plugins, &checkout()).unwrap();
     assert_eq!(renderer.installed(&plugins).difference(), None);
@@ -252,7 +252,7 @@ fn the_shell_carries_the_icon_set_the_table_declares() {
 fn installed_connection_embeds_the_full_bundle_identity_and_linked_sources_do_not() {
     let plugins = tempfile::tempdir().unwrap();
     let renderer = Renderer::VIEW;
-    let directory = renderer.install(plugins.path()).unwrap();
+    let directory = TestInstallation::install(&renderer, plugins.path()).unwrap();
     let connection =
         std::fs::read_to_string(directory.join("core/RendererConnection.qml")).unwrap();
     assert!(connection.contains(renderer.build().fingerprint()));
@@ -261,4 +261,22 @@ fn installed_connection_embeds_the_full_bundle_identity_and_linked_sources_do_no
     let connection =
         std::fs::read_to_string(directory.join("core/RendererConnection.qml")).unwrap();
     assert!(connection.contains("readonly property string buildFingerprint: \"\""));
+}
+
+struct TestInstallation;
+
+impl TestInstallation {
+    fn install(
+        renderer: &omega_omarchy::Renderer,
+        plugins: &std::path::Path,
+    ) -> anyhow::Result<std::path::PathBuf> {
+        let layout = omega_host::Layout::at(
+            plugins.join("config"),
+            plugins.join("state"),
+            plugins.join("cache"),
+        );
+        renderer
+            .install(plugins, &omega_host::recovery::RecoveryStore::new(&layout))
+            .map(|installed| installed.target)
+    }
 }

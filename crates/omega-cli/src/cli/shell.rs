@@ -73,12 +73,12 @@ impl ShellCmd {
         match action {
             Action::Install(install) => {
                 let before = if install.no_restart {
-                    Ok(super::renderer::Snapshot {
+                    Ok(crate::renderer::Snapshot {
                         active: Vec::new(),
                         placements: Vec::new(),
                     })
                 } else {
-                    super::renderer::RendererStatus::read().await
+                    crate::renderer::RendererStatus::read().await
                 };
                 let no_restart = install.no_restart;
                 let linked = install.link.is_some();
@@ -89,7 +89,7 @@ impl ShellCmd {
                 } else {
                     Self::restart(shell, ui).await?;
                     match before {
-                        Ok(before) if !linked => super::renderer::RendererStatus::verify_activation(&before, ui).await?,
+                        Ok(before) if !linked => crate::renderer::RendererStatus::verify_activation(&before, ui).await?,
                         Ok(_) => ui.warn("linked renderer restarted; source build identity is unverified"),
                         Err(error) => ui.warn(format!("shell restarted; running renderer unverified because daemon status was unavailable: {error}")),
                     }
@@ -100,8 +100,8 @@ impl ShellCmd {
             }
             Action::Status => {
                 Self::status(shell, ui)?;
-                match super::renderer::RendererStatus::read().await {
-                    Ok(attachments) => super::renderer::RendererStatus::show(
+                match crate::renderer::RendererStatus::read().await {
+                    Ok(attachments) => crate::renderer::RendererStatus::show(
                         &attachments.active,
                         &attachments.placements,
                         ui,
@@ -171,27 +171,6 @@ impl ShellCmd {
         Ok(())
     }
 
-    /// Install the renderer during initialization if a supported host shell is available.
-    pub(crate) fn setup(ui: &mut Ui) -> anyhow::Result<()> {
-        let Some(shell) = HostShell::detect() else {
-            ui.warn("no host shell here — nothing will be drawn until there is one");
-            return Ok(());
-        };
-
-        Self::install(
-            Install {
-                link: None,
-                no_restart: true,
-            },
-            shell,
-            ui,
-        )?;
-        Self::rescan(shell, ui);
-
-        ui.next("declare widget placements in your Rust shell layout, then run omega build");
-        Ok(())
-    }
-
     fn install(install: Install, shell: HostShell, ui: &mut Ui) -> anyhow::Result<()> {
         let plugins = shell.plugins();
 
@@ -216,9 +195,26 @@ impl ShellCmd {
                     )));
                 }
                 None => {
-                    let dir = renderer.install(&plugins)?;
+                    let recovery =
+                        omega_host::recovery::RecoveryStore::new(&omega_host::Layout::resolve());
+                    let installed = renderer.install(&plugins, &recovery)?;
+                    if let Some(recovery) = &installed.recovery {
+                        ui.detail(format!(
+                            "Recovery record: {}",
+                            Paint::path(&recovery.record)
+                        ));
+                    } else {
+                        ui.detail(
+                            "Installed files already match; no backup or replacement needed.",
+                        );
+                    }
+                    let dir = installed.target;
                     ui.step(
-                        Step::Installed,
+                        if installed.recovery.is_some() {
+                            Step::Installed
+                        } else {
+                            Step::Checked
+                        },
                         format!(
                             "{} {} in {}",
                             Paint::name(renderer.id),
@@ -234,21 +230,7 @@ impl ShellCmd {
     }
 
     async fn restart(shell: HostShell, ui: &mut Ui) -> anyhow::Result<()> {
-        use std::time::Duration;
-        let output = tokio::time::timeout(
-            Duration::from_secs(45),
-            tokio::process::Command::from(shell.restart_command())
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await
-        .context("renderer installed, but shell restart timed out")?
-        .context("renderer installed, but the shell restart command could not run")?;
-        anyhow::ensure!(
-            output.status.success(),
-            "renderer installed, but shell restart failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+        crate::renderer::RendererStatus::restart(shell).await?;
         ui.step(
             Step::Restarted,
             "Omarchy shell; QML component cache cleared",

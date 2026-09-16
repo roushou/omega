@@ -1,0 +1,15 @@
+[package]
+name = "omega-base"
+version.workspace = true
+categories = ["rust-patterns"]
+edition.workspace = true
+homepage.workspace = true
+keywords = ["omega", "primitives", "execution"]
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+description = "Shared host-independent primitives for Omega."
+
+[lints]
+workspace = true

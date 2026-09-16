@@ -6,6 +6,7 @@ pub mod fs;
 pub mod generation;
 pub mod layout;
 pub mod package;
+pub mod recovery;
 pub mod state;
 pub mod toml;
 pub mod workspace;

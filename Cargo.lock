@@ -898,6 +898,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "omega-base"
+version = "0.3.5"
+
+[[package]]
 name = "omega-cli"
 version = "0.3.5"
 dependencies = [
@@ -906,6 +910,7 @@ dependencies = [
  "anyhow",
  "clap",
  "miette",
+ "omega-base",
  "omega-daemon",
  "omega-document",
  "omega-host",
@@ -974,6 +979,7 @@ dependencies = [
  "notify",
  "omega-proto",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "toml",

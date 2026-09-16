@@ -25,6 +25,7 @@ impl<'a> System<'a> {
 
         let program = self.layout.compiled_system(profile);
         let output = tokio::process::Command::new(&program)
+            .kill_on_drop(true)
             .output()
             .await
             .with_context(|| format!("cannot run {}", program.display()))?;

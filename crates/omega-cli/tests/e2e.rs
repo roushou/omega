@@ -559,14 +559,21 @@ fn shell_only_configs_build_and_check_never_publishes() {
     machine.run(&["init", "--bare"]);
     let main = machine.root.join("config/system/src/main.rs");
     let original = std::fs::read_to_string(&main).unwrap();
+    let state = machine.root.join("state");
+    let initialized = omega_host::recovery::Snapshot::read(&state).unwrap();
     machine.run(&["check"]);
-    assert!(!machine.root.join("state").exists());
-    machine.run(&["build", "--debug"]);
+    assert_eq!(
+        omega_host::recovery::Snapshot::read(&state).unwrap(),
+        initialized,
+        "checking must preserve initialization recovery records without publishing"
+    );
     let layout = omega_host::Layout::at(
         machine.root.join("config"),
-        machine.root.join("state"),
+        state,
         machine.root.join("cache"),
     );
+    assert!(!layout.generations_dir().exists());
+    machine.run(&["build", "--debug"]);
     let generations = omega_host::Generations::new(&layout);
     let baseline = generations.pin_current().unwrap().unwrap();
     let baseline_document = omega_document::DocumentFile::of(baseline.layout())

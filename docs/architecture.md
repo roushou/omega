@@ -19,6 +19,7 @@ A failed build leaves the last accepted generation active.
 
 | Crate                | Responsibility                                                             |
 | -------------------- | -------------------------------------------------------------------------- |
+| `omega-base`         | Shared mechanisms: typed pipeline execution and observation                |
 | `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts          |
 | `omega-keyboard`     | Logical keyboard events, chords and conflict-checked keymaps               |
 | `omega-host`         | Layout, durable files, generations, workspace documents and discovery      |
@@ -1062,3 +1063,23 @@ A shared generated conformance corpus verifies Rust and QML matching. Typed
 Component-scoped `.id()` references resolve to exact node keys before publication.
 Duplicate IDs, missing references, and non-list navigation targets fail view validation.
 See [keyboard APIs and boundaries](keyboard.md).
+
+## Declarative installation pipelines
+
+`omega-cli::initialize::pipeline` declares initialization in one place, then runs
+that composition through `omega-base::execution`. Steps bind typed inputs/outputs
+to explicit operations and stable identities. Test implementations replace slots
+without reconstructing the sequence; isolated slots have no production fallback.
+Progress and failures come from one runner. Intermediate artifacts never execute
+the next action implicitly.
+
+Initialization and `omega build` share compilation, validation, and publication
+operations. A validated build owns the source lock and unpublished generation.
+Initialization verifies the daemon before publication, then waits for the exact
+generation's shell application and verifies renderer attachment after restart.
+
+Filesystem recovery stays in `omega-host`, which has no execution dependency.
+`SavedChange` owns durable intent and postcondition checks; `Replacement::install`
+is a single domain operation, including the unchanged-target case. Shell ownership
+and service activation retain their own contracts. See [pipelines and recovery](workflows.md)
+for lifecycle rules, test replacement examples, and recovery boundaries.

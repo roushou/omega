@@ -51,7 +51,7 @@ impl StatusCmd {
                 .as_ref()
                 .map(|generation| generation.id().as_str()),
         );
-        super::renderer::RendererStatus::show(&status.renderers, &status.renderer_placements, ui);
+        crate::renderer::RendererStatus::show(&status.renderers, &status.renderer_placements, ui);
         let units = status.units;
 
         if units.is_empty() {

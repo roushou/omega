@@ -193,6 +193,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 ## Crates
 
 ```
+omega-base     host-independent mechanisms with minimal dependencies
 omega-proto    wire format, manifest, identifiers — what crosses a socket
 omega-keyboard logical keyboard events, chords, and conflict-checked keymaps
 omega-host     files, generations, Cargo workspace documents, discovery, watching
@@ -207,6 +208,9 @@ omega-preview  development cases and isolated surface sessions
 omega-cli      the binary
 ```
 
+- `omega-base` owns reusable mechanisms, currently pipeline execution and observation.
+  Keep host integration, filesystem recovery, protocol contracts, and application
+  policy in their owning crates. Base has no dependencies beyond the standard library.
 - Name crates by responsibility. omega is the authoring SDK; omega-document owns
   desired configuration.
 - Keep host dependencies out of plugin builds. omega may depend on shared protocol
@@ -230,8 +234,14 @@ omega-cli      the binary
   to stdout. Use Step verbs, twelve-column alignment, home-relative paths, anstream
   color handling, and one accent per line. Ui::detail continues an item; separate
   items get separate verbs.
-- `omega init` initializes the config workspace. `omega new <name>` scaffolds a
-  plugin; --lib scaffolds a reusable library.
+- `omega init` declares its pipeline once in `initialize/pipeline.rs`; operations
+  accept typed inputs and return data, never another executable step. Tests replace
+  typed slots in that same declaration; isolated slots never fall back to live effects.
+  The pipeline covers preflight, recoverable
+  file edits, shared build validation, installation, daemon verification, publication,
+  and shell activation. `--bare` stops at workspace files. A failed step stops the
+  sequence; service failures are errors and completed effects remain recoverable.
+- `omega new <name>` scaffolds a plugin; --lib scaffolds a reusable library.
 - `omega new` wires Cargo dependencies and prints a placement hint without editing
   layout. Scaffold::placement_hint uses fully qualified exported symbols.
 - `omega daemon` runs the daemon; `omega daemon install` installs its service.

@@ -100,6 +100,29 @@ impl FileEdits {
         Self(edits)
     }
 
+    /// Prepare every file before publishing any of them. Each replacement
+    /// retains its own durable record, without copying the workspace tree.
+    pub(crate) fn replacements(&self) -> Result<Vec<omega_host::recovery::Replacement>> {
+        use omega_host::recovery::{Replacement, Snapshot};
+        self.0
+            .iter()
+            .map(|edit| {
+                edit.check()?;
+                let after = match std::fs::metadata(&edit.path) {
+                    Ok(metadata) => Snapshot::file_with_permissions(
+                        edit.after.as_bytes(),
+                        metadata.permissions(),
+                    ),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        Snapshot::file(edit.after.as_bytes())
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                Ok(Replacement::prepare(&edit.path, after)?)
+            })
+            .collect()
+    }
+
     pub(crate) fn apply(&self) -> Result<()> {
         for edit in &self.0 {
             edit.check()?;

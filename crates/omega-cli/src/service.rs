@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 
 use anyhow::Context;
 
-use omega_host::AtomicFile;
+use omega_host::recovery::{InstalledReplacement, RecoveryStore, Replacement, Snapshot};
 
 /// The service that runs the daemon.
 #[derive(Debug, Clone, Copy)]
@@ -48,12 +48,21 @@ WantedBy=graphical-session.target
         std::env::current_exe().context("cannot tell where this omega is on disk")
     }
 
-    /// Write the generated unit file at the supplied path.
-    pub fn install(path: &Path, program: &Path) -> anyhow::Result<()> {
-        AtomicFile::at(path)
-            .write(Self::unit(program).as_bytes())
-            .with_context(|| format!("could not write {}", path.display()))?;
-        Ok(())
+    /// Install the generated unit file as one recoverable filesystem operation.
+    /// Service-manager activation remains the caller's responsibility.
+    pub fn install(
+        path: &Path,
+        program: &Path,
+        recovery: &RecoveryStore,
+    ) -> anyhow::Result<InstalledReplacement> {
+        Replacement::prepare(path, Snapshot::file(Self::unit(program).into_bytes()))?
+            .install(recovery)
+            .with_context(|| {
+                format!(
+                    "could not install {}; recovery records are retained",
+                    path.display()
+                )
+            })
     }
 
     /// Remove the unit file. Return whether it existed.
@@ -115,6 +124,43 @@ pub enum ServiceManager {
 }
 
 impl ServiceManager {
+    /// Reload the unit, enable it, and start or restart it. A refused operation
+    /// stops the sequence; service-manager success does not prove protocol health.
+    pub async fn activate(self) -> anyhow::Result<()> {
+        let running = self.is_active();
+        self.checked(&["daemon-reload"]).await?;
+        self.checked(&["enable", Service::NAME]).await?;
+        self.checked(&[if running { "restart" } else { "start" }, Service::NAME])
+            .await?;
+        self.checked(&["is-active", Service::NAME]).await?;
+        self.checked(&["is-enabled", Service::NAME]).await
+    }
+
+    async fn checked(self, args: &[&str]) -> anyhow::Result<()> {
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            tokio::process::Command::new("systemctl")
+                .arg("--user")
+                .args(args)
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .context(
+            "systemd operation timed out; inspect systemctl --user status omega.service before retrying",
+        )??;
+
+        anyhow::ensure!(
+            output.status.success(),
+            "systemd refused {}: {}; inspect {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim(),
+            self.diagnose_command()
+        );
+
+        Ok(())
+    }
+
     /// Override the unit directory, including for isolated tests.
     pub const ENV: &'static str = "OMEGA_SERVICE_DIR";
 

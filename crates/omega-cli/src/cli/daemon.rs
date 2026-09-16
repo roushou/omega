@@ -4,6 +4,7 @@ use anyhow::Context;
 
 use omega_daemon::Daemon;
 use omega_host::Layout;
+use omega_host::recovery::RecoveryStore;
 use omega_platform::Brokers;
 use omega_proto::Socket;
 
@@ -69,15 +70,6 @@ impl DaemonCmd {
         )
     }
 
-    /// Install the user service during initialization, if a service manager is available.
-    pub(crate) fn setup(ui: &mut Ui) -> anyhow::Result<()> {
-        let Some(manager) = ServiceManager::detect() else {
-            ui.warn("no service manager here — start the daemon with `omega daemon`");
-            return Ok(());
-        };
-        Self::install(Install { no_start: false }, manager, ui)
-    }
-
     fn install(install: Install, manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
         let program = Service::program()?;
 
@@ -90,9 +82,22 @@ impl DaemonCmd {
             ));
         }
 
-        Service::install(&manager.unit_path(), &program)?;
+        let recovery = RecoveryStore::new(&omega_host::Layout::resolve());
+        let installed = Service::install(&manager.unit_path(), &program, &recovery)?;
+        if let Some(recovery) = &installed.recovery {
+            ui.detail(format!(
+                "Recovery record: {}",
+                Paint::path(&recovery.record)
+            ));
+        } else {
+            ui.detail("Installed files already match; no backup or replacement needed.");
+        }
         ui.step(
-            Step::Installed,
+            if installed.recovery.is_some() {
+                Step::Installed
+            } else {
+                Step::Checked
+            },
             format!(
                 "{} — {} daemon",
                 Paint::name(Service::NAME),

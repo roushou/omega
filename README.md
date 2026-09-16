@@ -37,7 +37,8 @@ cargo install omega-cli --locked
 omega init
 ```
 
-`omega init` creates the workspace, installs the renderer, and starts the daemon
+`omega init` creates and builds the workspace, installs the renderer and daemon,
+and verifies that the configuration is applied. The daemon starts
 as a user service. When creating a fresh configuration, it imports the existing
 shell layout into Rust without changing its appearance. Existing Omega
 configurations can use `omega shell adopt` to back up the current shell configuration

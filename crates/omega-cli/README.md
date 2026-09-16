@@ -16,8 +16,8 @@ omega init
 omega new audio
 ```
 
-`omega init` creates a Rust workspace in `~/.config/omega`, installs the renderer,
-and starts the daemon as a user service. `omega new` scaffolds a plugin and prints
+`omega init` creates and builds a Rust workspace in `~/.config/omega`, installs
+the renderer and daemon service, then verifies configuration and renderer activation. `omega new` scaffolds a plugin and prints
 its placement declaration for `system/src/main.rs`. The
 [plugin SDK](https://crates.io/crates/omega-rs) provides the types your plugin uses.
 
@@ -98,6 +98,43 @@ including private components. It watches edits, keeps failed builds visibly stal
 and captures effects for explicit simulated outcomes. `--capture` and `--baseline`
 compare deterministic viewport images. See [the preview guide](../../docs/previews.md)
 for registration, reset, and fixture requirements.
+
+## Initialization and recovery
+
+`omega init` checks Rust, the systemd user manager, Omarchy, existing files, and
+unfinished recovery records before setup. It imports an existing `shell.json`
+into Rust and prints the original backup and ownership-receipt paths. Compilation
+and document validation finish before installing desktop files. The new generation
+is published after the daemon responds with the expected version.
+
+Use `omega init --bare` for workspace files only, or `omega init --debug` to build
+without release optimizations. Full initialization requires the supported desktop;
+missing host services are errors with `--bare` guidance.
+
+Each changed workspace file, service file, and renderer directory gets a private
+recovery record. Repeating initialization preserves existing Rust sources and
+skips unchanged file replacements. A failed step stops setup, leaves completed
+work in place, and reports recovery paths.
+
+```sh
+omega recovery list
+omega recovery inspect <id>
+omega recovery accept <id>   # confirm an interrupted write that finished
+```
+
+To undo a filesystem change, stop the daemon, then use `omega recovery restore <id>`.
+It refuses files that differ from both recorded states. Restore related source
+edits in reverse installation order and rebuild before restarting the daemon.
+Service files require `systemctl --user daemon-reload`; renderer changes require
+`omarchy restart shell`. Recovery does not undo service enablement or select a
+previous generation; use `omega rollback` for generation selection.
+
+To restore the original shell layout, stop the daemon, copy the printed
+`shell-before-omega.json` backup over `shell.json`, and restart Omarchy. Keep the
+daemon stopped until the Rust layout reflects the configuration you want.
+
+A new workspace usually has no Omega placements. Initialization verifies installed
+renderer files and says that live QML is unverified until a placement attaches.
 
 Run `omega --help` or `omega <command> --help` for the full command reference.
 

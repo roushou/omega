@@ -21,3 +21,11 @@ machinery in their plugins.
 [Architecture](https://github.com/roushou/omega/blob/main/docs/architecture.md)
 
 Licensed under MIT.
+
+## Workflows and recovery
+
+Pipeline execution lives in `omega-base::execution`.
+`recovery::RecoveryStore` records recoverable changes before
+effects and supports explicit inspection and restoration after interruption.
+`recovery::Replacement` applies those contracts to configuration files and asset
+trees. See [pipelines and recovery](../../docs/workflows.md) for semantics and examples.

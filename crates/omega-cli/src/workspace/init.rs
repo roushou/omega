@@ -1,7 +1,6 @@
 use super::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits};
 use anyhow::{Result, ensure};
 use omega_host::Toml;
-use omega_omarchy::installation::ShellInstallation;
 
 #[derive(Debug)]
 pub(crate) enum InitialShell {
@@ -24,11 +23,9 @@ impl InitialShell {
 
 #[derive(Debug)]
 pub(crate) struct PreparedConfig<'a> {
-    workspace: &'a ConfigWorkspace,
+    _workspace: &'a ConfigWorkspace,
     edits: FileEdits,
     imported: Option<serde_json::Value>,
-    pub(crate) founded: bool,
-    pub(crate) source_created: bool,
 }
 
 impl ConfigWorkspace {
@@ -89,23 +86,19 @@ impl ConfigWorkspace {
         ignore.replace(content);
         edits.push(ignore);
         Ok(PreparedConfig {
-            workspace: self,
+            _workspace: self,
             edits: FileEdits::new(edits),
             imported,
-            founded,
-            source_created,
         })
     }
 }
 
 impl PreparedConfig<'_> {
-    pub(crate) fn apply(self) -> Result<()> {
-        self.edits.apply()?;
-        if let Some(source) = self.imported
-            && let Err(error) = ShellInstallation::new(&self.workspace.layout).adopt(&source)
-        {
-            return Err(self.edits.rollback(error.into()));
-        }
-        Ok(())
+    pub(crate) fn replacements(&self) -> Result<Vec<omega_host::recovery::Replacement>> {
+        self.edits.replacements()
+    }
+
+    pub(crate) fn imported(&self) -> Option<&serde_json::Value> {
+        self.imported.as_ref()
     }
 }

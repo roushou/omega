@@ -1,15 +1,17 @@
 //! Compare active renderer attachments with this binary's embedded bundles.
+
 use crate::ui::{Step, Ui};
 use omega_proto::omega::{AttachRenderer, attach_renderer};
 use std::time::Duration;
 
-pub(super) struct RendererStatus;
-pub(super) struct Snapshot {
-    pub(super) active: Vec<AttachRenderer>,
-    pub(super) placements: Vec<omega_proto::omega::PlacementAttachment>,
+pub(crate) struct RendererStatus;
+pub(crate) struct Snapshot {
+    pub(crate) active: Vec<AttachRenderer>,
+    pub(crate) placements: Vec<omega_proto::omega::PlacementAttachment>,
 }
+
 impl RendererStatus {
-    pub(super) fn expected(attachment: &AttachRenderer) -> Option<String> {
+    pub(crate) fn expected(attachment: &AttachRenderer) -> Option<String> {
         match attachment.scope.as_ref()? {
             attach_renderer::Scope::Placement(_) => Some(
                 omega_omarchy::Renderer::VIEW
@@ -22,10 +24,12 @@ impl RendererStatus {
             }
         }
     }
-    pub(super) fn current(attachment: &AttachRenderer) -> bool {
+
+    pub(crate) fn current(attachment: &AttachRenderer) -> bool {
         Self::expected(attachment).is_some_and(|expected| expected == attachment.build_fingerprint)
     }
-    pub(super) fn show(
+
+    pub(crate) fn show(
         attachments: &[AttachRenderer],
         placements: &[omega_proto::omega::PlacementAttachment],
         ui: &mut Ui,
@@ -82,19 +86,19 @@ impl RendererStatus {
         }
     }
 
-    pub(super) async fn read() -> anyhow::Result<Snapshot> {
-        let status = tokio::time::timeout(
-            Duration::from_secs(2),
-            crate::operator::Operator::new().deployment(),
-        )
-        .await??;
+    pub(crate) async fn read() -> anyhow::Result<Snapshot> {
+        Self::read_at(&crate::operator::Operator::new()).await
+    }
+
+    pub(crate) async fn read_at(operator: &crate::operator::Operator) -> anyhow::Result<Snapshot> {
+        let status = tokio::time::timeout(Duration::from_secs(2), operator.deployment()).await??;
         Ok(Snapshot {
             active: status.renderers,
             placements: status.renderer_placements,
         })
     }
 
-    pub(super) fn activated(before: &[AttachRenderer], after: &[AttachRenderer]) -> bool {
+    pub(crate) fn activated(before: &[AttachRenderer], after: &[AttachRenderer]) -> bool {
         let placed: Vec<_> = after
             .iter()
             .filter(|a| matches!(a.scope, Some(attach_renderer::Scope::Placement(_))))
@@ -121,27 +125,30 @@ impl RendererStatus {
                 })
     }
 
-    pub(super) async fn verify_activation(before: &Snapshot, ui: &mut Ui) -> anyhow::Result<()> {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-        let mut interval = tokio::time::interval(Duration::from_millis(250));
-        loop {
-            interval.tick().await;
-            let after = match Self::read().await {
-                Ok(after) => after,
-                Err(error) if tokio::time::Instant::now() >= deadline => {
-                    return Err(error.context("renderer installed and shell restarted, but daemon status remained unavailable"));
+    pub(crate) async fn verify_activation(before: &Snapshot, ui: &mut Ui) -> anyhow::Result<()> {
+        let result = Self::verify(before, &crate::operator::Operator::new()).await?;
+        result.show(ui);
+        Ok(())
+    }
+
+    pub(crate) async fn verify(
+        before: &Snapshot,
+        operator: &crate::operator::Operator,
+    ) -> anyhow::Result<Verification> {
+        tokio::time::timeout(Duration::from_secs(15), async {
+            let mut interval = tokio::time::interval(Duration::from_millis(250));
+
+            loop {
+                interval.tick().await;
+                let after = match Self::read_at(operator).await {
+                    Ok(after) => after,
+                    Err(_) => continue,
+                };
+
+                if Self::ready(before, &after) {
+                    return Verification::Current;
                 }
-                Err(_) => continue,
-            };
-            if Self::ready(before, &after) {
-                ui.step(
-                    Step::Checked,
-                    "running Omarchy renderer matches the installed build",
-                );
-                return Ok(());
-            }
-            if tokio::time::Instant::now() >= deadline {
-                Self::show(&after.active, &after.placements, ui);
+
                 if before.placements.is_empty()
                     && after.placements.is_empty()
                     && before
@@ -150,13 +157,49 @@ impl RendererStatus {
                         .chain(&after.active)
                         .all(|a| !matches!(a.scope, Some(attach_renderer::Scope::Placement(_))))
                 {
-                    ui.warn("no active Omarchy placements were reported; installed files are verified, running code is not");
-                    return Ok(());
+                    return Verification::NoPlacements;
                 }
-                anyhow::bail!(
-                    "renderer installed and shell restarted, but activation could not be verified"
-                );
             }
+        })
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "renderer installed and shell restarted, but live attachment verification timed out; use omega shell status"
+            )
+        })
+    }
+
+    pub(crate) async fn restart(shell: omega_omarchy::HostShell) -> anyhow::Result<()> {
+        use anyhow::Context;
+        let output = tokio::time::timeout(
+            Duration::from_secs(45),
+            tokio::process::Command::from(shell.restart_command())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .context("shell restart timed out")?
+        .context("could not run the shell restart command")?;
+        anyhow::ensure!(
+            output.status.success(),
+            "shell restart failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Verification {
+    Current,
+    NoPlacements,
+}
+
+impl Verification {
+    pub(crate) fn show(self, ui: &mut Ui) {
+        match self {
+            Self::Current => ui.step(Step::Checked, "running Omarchy renderer matches the installed build"),
+            Self::NoPlacements => ui.detail("No Omega placements are configured; installed renderer files are verified, running QML is unverified."),
         }
     }
 }
@@ -166,6 +209,7 @@ mod tests {
     use super::*;
     use omega_proto::omega::PlacementAttachment;
     struct Fixture;
+
     impl Fixture {
         fn attachment(unit: &str) -> AttachRenderer {
             AttachRenderer {
@@ -179,6 +223,7 @@ mod tests {
             }
         }
     }
+
     #[test]
     fn activation_requires_current_builds_and_every_previous_placement() {
         let a = Fixture::attachment("audio");
@@ -196,6 +241,7 @@ mod tests {
         assert!(!RendererStatus::current(&legacy));
         assert!(RendererStatus::activated(&[a.clone(), b.clone()], &[b, a]));
     }
+
     #[test]
     fn disconnected_placements_cannot_disappear_from_activation_requirements() {
         let audio = Fixture::attachment("audio");

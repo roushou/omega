@@ -212,3 +212,48 @@ impl Write for Buffer {
         Ok(())
     }
 }
+
+impl omega_base::execution::Observer for Ui {
+    fn observe(&mut self, report: &omega_base::execution::Report) {
+        use omega_base::execution::Outcome;
+        let description = &report.description.title;
+        match &report.outcome {
+            Outcome::Running => self.step(Step::Checking, description),
+            Outcome::Completed => self.step(Step::Done, description),
+            Outcome::Skipped(reason) => self.detail(format!("{description}: {reason}")),
+            Outcome::Failed(_) => self.step(Step::Failed, description),
+            Outcome::Interrupted => self.warn(format!(
+                "{description} interrupted; effects may have completed"
+            )),
+        }
+    }
+
+    fn detail(
+        &mut self,
+        _: &omega_base::execution::Description,
+        detail: &omega_base::execution::Detail,
+    ) {
+        match &detail.path {
+            Some(path) => self.detail(format!("{} {}", detail.message, Paint::path(path))),
+            None => self.detail(&detail.message),
+        }
+    }
+}
+
+pub(crate) struct PipelineResult;
+
+impl PipelineResult {
+    pub(crate) fn finish<T>(
+        result: Result<T, omega_base::execution::Failure<anyhow::Error>>,
+    ) -> anyhow::Result<T> {
+        result.map_err(|failure| {
+            let error = match failure.cause {
+                omega_base::execution::FailureCause::Operation(error) => error,
+                omega_base::execution::FailureCause::Unconfigured => {
+                    anyhow::anyhow!("no implementation configured for {}", failure.step.id.0)
+                }
+            };
+            error.context(format!("pipeline stopped at: {}", failure.step.title))
+        })
+    }
+}

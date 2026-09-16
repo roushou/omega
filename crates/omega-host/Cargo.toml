@@ -23,6 +23,7 @@ libc = "0.2"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"], optional = true }
 omega-proto.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"], optional = true }
 toml = "1"

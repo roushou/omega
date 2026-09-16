@@ -20,6 +20,7 @@ anstyle = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 miette = { version = "7.6", features = ["fancy-no-backtrace"] }
+omega-base.workspace = true
 omega-daemon = { path = "../omega-daemon", version = "0.3.5" }
 omega-document.workspace = true
 omega-host = { workspace = true, features = ["watch"] }

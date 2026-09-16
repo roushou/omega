@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 
-use omega_host::StageDir;
+use omega_host::{
+    StageDir,
+    recovery::{InstalledReplacement, RecoveryStore, Replacement, Snapshot},
+};
 
 use crate::installed::Installed;
 
@@ -90,20 +93,30 @@ impl Renderer {
     }
 
     /// Atomically replace the installed asset directory and remove obsolete assets.
-    pub fn install(&self, plugins: &Path) -> anyhow::Result<PathBuf> {
+    pub fn install(
+        &self,
+        plugins: &Path,
+        recovery: &RecoveryStore,
+    ) -> anyhow::Result<InstalledReplacement> {
         let dir = self.dir_in(plugins);
-        omega_host::Directory::create_all(plugins)
-            .with_context(|| format!("could not create {}", plugins.display()))?;
+        self.prepare(plugins)?.install(recovery).with_context(|| {
+            format!(
+                "could not install into {}; recovery records are retained",
+                dir.display()
+            )
+        })
+    }
 
-        let stage = StageDir::new(&dir)?;
+    /// Capture the existing renderer and embedded replacement without writing
+    /// either. Publication rechecks this snapshot before changing the directory.
+    pub fn prepare(&self, plugins: &Path) -> anyhow::Result<Replacement> {
+        let dir = self.dir_in(plugins);
         let build = self.build();
-        for asset in self.assets() {
-            stage.write(asset.name, build.contents(asset).as_bytes())?;
-        }
-        stage
-            .commit()
-            .with_context(|| format!("could not install into {}", dir.display()))?;
-        Ok(dir)
+        let desired = Snapshot::directory(
+            self.assets()
+                .map(|asset| (asset.name, build.contents(asset).as_bytes().to_vec())),
+        )?;
+        Ok(Replacement::prepare(&dir, desired)?)
     }
 
     /// Link a source checkout for renderer development.

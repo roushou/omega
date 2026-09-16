@@ -2,7 +2,9 @@
 
 mod build;
 pub mod cli;
+mod initialize;
 pub mod operator;
+mod renderer;
 pub mod scaffold;
 pub mod service;
 pub mod ui;

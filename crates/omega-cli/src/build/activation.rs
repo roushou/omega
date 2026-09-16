@@ -4,11 +4,11 @@ use omega_host::{Generations, Layout};
 use omega_proto::omega::{DeploymentStatus, ReconciliationState, ShellApplicationState};
 use std::time::Duration;
 
-pub(super) struct Activation {
-    pub(super) timeout: Duration,
+pub(crate) struct Activation {
+    pub(crate) timeout: Duration,
 }
 impl Activation {
-    pub(super) async fn wait_for(
+    pub(crate) async fn wait_for(
         &self,
         layout: &Layout,
         generation: &omega_host::GenerationId,

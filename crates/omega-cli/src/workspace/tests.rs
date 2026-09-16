@@ -22,11 +22,13 @@ impl Fixture {
         ConfigWorkspace::open(self.layout.clone()).unwrap()
     }
     fn init(&self) {
-        self.open()
-            .prepare_init(InitialShell::Default)
-            .unwrap()
-            .apply()
-            .unwrap();
+        let workspace = self.open();
+        let config = workspace.prepare_init(InitialShell::Default).unwrap();
+        for change in config.replacements().unwrap() {
+            change
+                .install(&omega_host::recovery::RecoveryStore::new(&self.layout))
+                .unwrap();
+        }
     }
     fn write(&self, path: PathBuf, source: &str) {
         AtomicFile::at(path).write(source.as_bytes()).unwrap();

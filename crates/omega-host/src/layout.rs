@@ -121,6 +121,31 @@ impl Layout {
     pub fn shell_lock(&self) -> PathBuf {
         self.generations_dir().join("shell.lock")
     }
+
+    /// Durable installation change records, separate from generation cleanup.
+    pub fn recovery_dir(&self) -> PathBuf {
+        self.state.join("recovery")
+    }
+
+    pub fn recovery_lock(&self) -> PathBuf {
+        self.recovery_dir().join("store.lock")
+    }
+
+    pub fn recovery_record(&self, id: &crate::recovery::ChangeId) -> PathBuf {
+        self.recovery_dir().join(format!("{id}.json"))
+    }
+
+    pub(crate) fn new_change_id(&self) -> crate::recovery::ChangeId {
+        let path = crate::TempPath::sibling(&self.recovery_dir().join("change"), "record");
+        crate::recovery::ChangeId::parse(
+            path.file_name()
+                .expect("generated name")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("generated identifier")
+    }
+
     pub fn shell_backup(&self) -> PathBuf {
         self.generations_dir().join("shell-before-omega.json")
     }

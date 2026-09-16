@@ -45,6 +45,24 @@ impl AtomicFile {
     /// remove the temporary file. A directory-sync failure after rename leaves
     /// the new contents visible, but their durability is uncertain.
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
+        self.write_mode(bytes, None)
+    }
+
+    /// Publish contents and permissions together; permission bits are set on the
+    /// temporary file before it is flushed and renamed over the destination.
+    pub fn write_with_permissions(
+        &self,
+        bytes: &[u8],
+        permissions: std::fs::Permissions,
+    ) -> io::Result<()> {
+        self.write_mode(bytes, Some(permissions))
+    }
+
+    fn write_mode(
+        &self,
+        bytes: &[u8],
+        permissions: Option<std::fs::Permissions>,
+    ) -> io::Result<()> {
         let dir = match self.path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
             _ => Path::new("."),
@@ -53,7 +71,13 @@ impl AtomicFile {
 
         let tmp = TempPath::sibling(&self.path, "tmp");
         let file = File::options().write(true).create_new(true).open(&tmp)?;
-        match self.replace(file, &tmp, bytes, dir) {
+        let result = (|| {
+            if let Some(permissions) = permissions {
+                file.set_permissions(permissions)?;
+            }
+            self.replace(file, &tmp, bytes, dir)
+        })();
+        match result {
             Ok(()) => Ok(()),
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp);

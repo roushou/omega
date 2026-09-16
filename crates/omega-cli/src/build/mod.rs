@@ -1,24 +1,29 @@
 //! Compile, validate, and publish config generations without owning CLI syntax.
-use crate::ui::{Paint, Step, Ui};
+use crate::{
+    build::steps::{Sources, Steps},
+    ui::{Paint, PipelineResult, Step, Ui},
+    workspace::ConfigWorkspace,
+};
 use activation::Activation;
 use anyhow::bail;
 use cargo::Cargo;
 use describe::Describe;
+use omega_base::execution::Pipeline;
 use omega_document::StateDocument;
 use omega_host::{
     Layout, Profile,
     fs::{Changes, Recursion},
-    workspace::Plugins,
 };
 use plan::Plan;
 use std::time::Duration;
 use system::System;
 
-mod activation;
+pub(crate) mod activation;
 pub(crate) mod cargo;
 mod check;
 mod describe;
 mod plan;
+pub(crate) mod steps;
 mod system;
 pub(crate) use check::Check;
 
@@ -28,6 +33,7 @@ pub(crate) struct Build {
     pub(crate) watch: bool,
     pub(crate) activation_timeout: Option<Duration>,
 }
+
 impl Build {
     pub(crate) async fn run(&self, ui: &mut Ui) -> anyhow::Result<()> {
         if self.watch {
@@ -36,6 +42,7 @@ impl Build {
             self.build_once(&self.layout, self.profile, ui).await
         }
     }
+
     /// Rebuild on settled filesystem changes.
     async fn watch_loop(
         &self,
@@ -76,46 +83,17 @@ impl Build {
             );
         }
 
-        let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
-
-        let units = Plugins::discover(layout)?;
-        ui.step(
-            Step::Building,
-            format!(
-                "{} in {}",
-                Paint::count(units.len(), "plugin"),
-                Paint::path(&layout.config)
-            ),
-        );
-
-        Cargo::new(layout)
-            .build(profile)
-            .await
-            .map_err(anyhow::Error::from)
-            .map_err(|e| match crate::checkout::CheckoutLink::unlinked(layout) {
-                Some(why) => e.context(why),
-                None => e,
-            })?;
-
-        let plan = Plan::describe(&units, layout, profile).await?;
-        ui.step(
-            Step::Declared,
-            format!(
-                "{} by {}",
-                plan.grants(),
-                Paint::count(plan.len(), "plugin")
-            ),
-        );
-
-        let document = System::new(layout).evaluate(profile).await?;
-        if layout.system_dir().exists() {
-            ui.step(Step::Evaluated, Self::describe(&document));
-        }
-
-        omega_omarchy::DocumentValidation::validate(&document, plan.manifests())?;
-
-        let count = plan.len();
-        let generation = plan.materialize(layout, &document)?;
+        let workspace = ConfigWorkspace::open(layout.clone())?;
+        let steps = Steps::production();
+        let pipeline = Pipeline::new()
+            .then(steps.compile)
+            .then(steps.describe)
+            .then(steps.validate)
+            .then(steps.publish);
+        let run = pipeline.run(Sources { workspace, profile }, ui).await;
+        let published = PipelineResult::finish(run.result)?;
+        let count = published.plugins;
+        let generation = published.generation;
 
         ui.step(
             Step::Built,

@@ -91,6 +91,10 @@ impl<'a> CheckoutLink<'a> {
 }
 
 impl PreparedLink<'_> {
+    pub(crate) fn replacements(&self) -> Result<Vec<omega_host::recovery::Replacement>> {
+        self.edits.replacements()
+    }
+
     pub(crate) fn apply(self) -> Result<()> {
         self.edits.apply()
     }
