@@ -328,7 +328,7 @@ mod tests {
             .cargo()
             .build(
                 BuildRequest::new(Selection::Package(
-                    PackageSpec::parse("example@0.1.0").unwrap(),
+                    "example@0.1.0".parse::<PackageSpec>().unwrap(),
                 ))
                 .profile(Profile::Release)
                 .target_dir("target with spaces")

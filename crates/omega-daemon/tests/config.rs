@@ -14,7 +14,7 @@ async fn a_unit_is_told_its_settings_when_it_connects() {
     harness.units.activate(
         &ManifestStore::from_manifests([widget_manifest("test-unit", "battery")]),
         [(
-            UnitName::parse("test-unit").unwrap(),
+            "test-unit".parse::<UnitName>().unwrap(),
             Values::new()
                 .with("low-threshold", 20u8)
                 .with("label", "batt")

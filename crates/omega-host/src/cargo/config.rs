@@ -10,7 +10,7 @@ use toml_edit::{DocumentMut, Item, Table};
 ///
 /// ```
 /// use omega_host::cargo::{Config, Dependencies, Dependency};
-/// let mut config = Config::parse("[build]\njobs = 2\n")?;
+/// let mut config = "[build]\njobs = 2\n".parse::<Config>()?;
 /// let patches = Dependencies::from_iter([("example", Dependency::local("../example", &[]))]);
 /// config.update_patches(Config::REGISTRY, &["example"], &patches)?;
 /// assert_eq!(config.patches(Config::REGISTRY)?.get("example").unwrap().path(), Some("../example"));
@@ -21,10 +21,10 @@ pub struct Config {
     document: DocumentMut,
 }
 
-impl Config {
-    pub const REGISTRY: &'static str = "crates-io";
+impl std::str::FromStr for Config {
+    type Err = TomlError;
 
-    pub fn parse(source: &str) -> Result<Self, TomlError> {
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             document: source.parse().map_err(|source| TomlError::Decode {
                 kind: Self::KIND,
@@ -32,6 +32,10 @@ impl Config {
             })?,
         })
     }
+}
+
+impl Config {
+    pub const REGISTRY: &'static str = "crates-io";
 
     /// Read dependency values for a registry. Missing patch tables are empty;
     /// malformed tables and declarations are errors.
@@ -99,7 +103,7 @@ impl TomlSchema for Config {
     type Key<'a> = ();
 
     fn decode(source: &str) -> Result<Self, TomlError> {
-        Self::parse(source)
+        source.parse()
     }
     fn encode(&self) -> Result<String, TomlError> {
         Ok(self.to_string())
@@ -118,7 +122,7 @@ mod tests {
     #[test]
     fn scoped_patch_updates_preserve_other_registries_and_options() {
         let source = "# compiler\n[build]\njobs = 2\n\n[patch.crates-io]\nselected = { path = '/old' } # selected\nother = { path = '/other' } # unrelated\n\n[patch.custom]\nselected = { path = '/custom' }\n";
-        let mut config = Config::parse(source).unwrap();
+        let mut config = source.parse::<Config>().unwrap();
         assert_eq!(config.to_string(), source);
         config
             .update_patches(
@@ -162,7 +166,7 @@ mod tests {
     #[test]
     fn malformed_patch_tables_fail_without_mutation() {
         for source in ["patch = 1\n", "[patch]\ncrates-io = 1\n"] {
-            let mut config = Config::parse(source).unwrap();
+            let mut config = source.parse::<Config>().unwrap();
             assert!(config.patches(Config::REGISTRY).is_err());
             assert!(
                 config

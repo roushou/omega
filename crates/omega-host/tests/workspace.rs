@@ -40,7 +40,7 @@ fn workspace(layout: &Layout, members: &[&str], exclude: &[&str]) {
         "[workspace]\nresolver = \"3\"\nmembers = {:?}\nexclude = {:?}\n",
         members, exclude
     );
-    let manifest = Manifest::parse(&source).unwrap();
+    let manifest = source.parse::<Manifest>().unwrap();
     layout
         .file::<Manifest>(CargoSlot::Workspace)
         .write(&manifest)
@@ -60,8 +60,8 @@ fn only_plugins_are_runnable_members() {
     assert_eq!(
         units.iter().collect::<Vec<_>>(),
         vec![
-            &UnitName::parse("battery").unwrap(),
-            &UnitName::parse("clock").unwrap(),
+            &"battery".parse::<UnitName>().unwrap(),
+            &"clock".parse::<UnitName>().unwrap(),
         ]
     );
 }

@@ -138,7 +138,7 @@ impl Runtime {
                             // Placement settings override only the keys they supply.
                             let settings =
                                 Values::from_map(render.config.clone()).over(&self.settings);
-                            let identity = match render.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose() {
+                            let identity = match render.instance.as_ref().map(omega_proto::instance::InstanceKey::try_from).transpose() {
                                 Ok(Some(identity)) => identity,
                                 _ => {
                                     self.client.send(omega_proto::Refusal::invalid("RenderWidget requires a valid instance identity").frame(frame.stream_id)).await?;
@@ -187,7 +187,7 @@ impl Runtime {
                         }
 
                         Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::SurfaceLifecycle(event)) })) => {
-                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose();
+                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::try_from).transpose();
                             let completion = match identity {
                                 Ok(Some(identity)) => match instances.iter_mut().find(|instance| instance.identity == identity) {
                                     Some(instance) => instance.lifecycle(event.state),
@@ -199,7 +199,7 @@ impl Runtime {
                             self.publish_all(&mut instances).await?;
                         }
                         Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::SurfaceEvent(event)) })) => {
-                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose();
+                            let identity = event.instance.as_ref().map(omega_proto::instance::InstanceKey::try_from).transpose();
                             let completion = match identity {
                                 Ok(Some(identity)) => match instances.iter_mut().find(|instance| instance.identity == identity) {
                                     Some(instance) => instance.event(&event),
@@ -211,7 +211,7 @@ impl Runtime {
                             self.publish_all(&mut instances).await?;
                         }
                         Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::RemoveWidget(remove)) })) => {
-                            let identity = match remove.instance.as_ref().map(omega_proto::instance::InstanceKey::parse).transpose() {
+                            let identity = match remove.instance.as_ref().map(omega_proto::instance::InstanceKey::try_from).transpose() {
                                 Ok(Some(identity)) => identity,
                                 _ => {
                                     self.client.send(omega_proto::Refusal::invalid("RemoveWidget requires a valid instance identity").frame(frame.stream_id)).await?;

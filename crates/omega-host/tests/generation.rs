@@ -259,7 +259,7 @@ fn incomplete_directories_cannot_be_pinned_or_selected_for_rollback() {
     store.pin_current().unwrap().unwrap().accept().unwrap();
     let reference = std::fs::read(fixture.layout.active_build()).unwrap();
     for marker in ["missing", "directory", "symlink"] {
-        let id = omega_host::GenerationId::parse(marker).unwrap();
+        let id = omega_host::GenerationId::try_from(marker).unwrap();
         let incomplete = Layout::at(
             &fixture.layout.config,
             fixture.layout.generations_dir().join(id.as_str()),

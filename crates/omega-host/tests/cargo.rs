@@ -40,7 +40,7 @@ impl Drop for TempDir {
 }
 
 fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 #[test]
@@ -172,12 +172,11 @@ fn workspace_members_expand_globs_and_honour_exclude() {
         std::fs::create_dir_all(tmp.path().join(dir)).unwrap();
     }
 
-    let manifest = Manifest::parse(
-        r#"[workspace]
+    let manifest = (r#"[workspace]
 members = ["plugins/*", "crates/shared"]
 exclude = ["plugins/beta"]
-"#,
-    )
+"#)
+    .parse::<Manifest>()
     .unwrap();
     let dirs = manifest
         .workspace()
@@ -207,10 +206,10 @@ fn typed_file_roundtrips_preserve_source_bytes_and_report_parse_paths() {
     let config_source = "# user settings\n[build]\njobs = 2 # keep\n";
 
     manifest
-        .write(&Manifest::parse(manifest_source).unwrap())
+        .write(&manifest_source.parse::<Manifest>().unwrap())
         .unwrap();
     config
-        .write(&Config::parse(config_source).unwrap())
+        .write(&config_source.parse::<Config>().unwrap())
         .unwrap();
     manifest.open().unwrap().save().unwrap();
     config.open().unwrap().save().unwrap();

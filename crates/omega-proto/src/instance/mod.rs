@@ -14,14 +14,18 @@ pub struct InstanceKey {
     pub incarnation: IncarnationId,
 }
 
-impl InstanceKey {
-    pub fn parse(value: &crate::omega::InstanceRef) -> Result<Self, crate::IdentError> {
+impl TryFrom<&crate::omega::InstanceRef> for InstanceKey {
+    type Error = crate::IdentError;
+
+    fn try_from(value: &crate::omega::InstanceRef) -> Result<Self, Self::Error> {
         Ok(Self {
-            id: InstanceId::parse(&value.id)?,
-            incarnation: IncarnationId::parse(&value.incarnation)?,
+            id: value.id.parse::<InstanceId>()?,
+            incarnation: value.incarnation.parse::<IncarnationId>()?,
         })
     }
+}
 
+impl InstanceKey {
     pub fn wire(&self) -> crate::omega::InstanceRef {
         crate::omega::InstanceRef {
             id: self.id.to_string(),

@@ -96,7 +96,7 @@ impl SourceTree {
             source,
         })?;
 
-        let manifest = Manifest::parse(&source)?;
+        let manifest = source.parse::<Manifest>()?;
         let workspace = manifest.workspace()?.ok_or(LinkError::NoVersion)?;
         let version = workspace.version()?.ok_or(LinkError::NoVersion)?;
         Ok(version.to_owned())

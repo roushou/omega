@@ -35,12 +35,12 @@ impl Fixture {
     fn view(id: usize, payload: &str) -> ViewUpdate {
         {
             let surface = SurfaceRef::new(
-                UnitName::parse("example").unwrap(),
-                SurfaceId::parse(format!("panel{id}")).unwrap(),
+                "example".parse::<UnitName>().unwrap(),
+                SurfaceId::try_from(format!("panel{id}")).unwrap(),
             );
             ViewUpdate {
                 instance: omega_proto::instance::InstanceKey {
-                    id: omega_proto::instance::InstanceId::parse(format!(
+                    id: omega_proto::instance::InstanceId::try_from(format!(
                         "test-{}-{}-{}",
                         surface.unit,
                         surface.surface,
@@ -51,7 +51,8 @@ impl Fixture {
                             .unwrap_or_default()
                     ))
                     .unwrap(),
-                    incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                    incarnation: "test-session"
+                        .parse::<omega_proto::instance::IncarnationId>()
                         .unwrap(),
                 },
                 presentation: omega_proto::omega::Presentation {

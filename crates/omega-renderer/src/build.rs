@@ -22,7 +22,8 @@ impl Build {
             hash.update(bytes);
         }
         Self(
-            RendererFingerprint::parse(&format!("{:x}", hash.finalize()))
+            (format!("{:x}", hash.finalize()))
+                .parse::<RendererFingerprint>()
                 .expect("SHA-256 hex digest"),
         )
     }

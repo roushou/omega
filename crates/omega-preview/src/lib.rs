@@ -98,7 +98,7 @@ impl Cases {
             self.error = Some("preview catalogue exceeds 128 cases".into());
             return;
         }
-        match CaseId::parse(name) {
+        match CaseId::try_from(name) {
             Ok(id) if !self.factories.contains_key(&id) => {
                 self.factories.insert(id, factory);
             }
@@ -117,7 +117,7 @@ impl Cases {
         if let Some(error) = &self.error {
             return Err(Error::Invalid(error.clone()));
         }
-        let id = CaseId::parse(name).map_err(|e| Error::Invalid(e.to_string()))?;
+        let id = CaseId::try_from(name).map_err(|e| Error::Invalid(e.to_string()))?;
         let factory = self
             .factories
             .get(&id)

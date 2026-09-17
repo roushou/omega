@@ -44,7 +44,7 @@ impl<M: Send + 'static> Task<M> {
         future: impl Future<Output = Result<T, Error>> + Send + 'static,
         completed: impl Fn(Result<T, Error>) -> M + Send + Sync + 'static,
     ) -> Self {
-        let key = match TaskKey::parse(key.into()) {
+        let key = match TaskKey::try_from(key.into()) {
             Ok(key) => key,
             Err(error) => return Self::perform(async move { Err(error) }, completed),
         };
@@ -59,7 +59,7 @@ impl<M: Send + 'static> Task<M> {
         work: impl FnOnce() -> Result<T, Error> + Send + 'static,
         completed: impl Fn(Result<T, Error>) -> M + Send + Sync + 'static,
     ) -> Self {
-        let key = match TaskKey::parse(key.into()) {
+        let key = match TaskKey::try_from(key.into()) {
             Ok(key) => key,
             Err(error) => return Self::perform(async move { Err(error) }, completed),
         };
@@ -91,8 +91,10 @@ impl<M> std::fmt::Debug for Task<M> {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct TaskKey(String);
-impl TaskKey {
-    fn parse(key: String) -> Result<Self, Error> {
+impl TryFrom<String> for TaskKey {
+    type Error = Error;
+
+    fn try_from(key: String) -> Result<Self, Self::Error> {
         if key.is_empty() || key.len() > 128 || key.contains('\0') {
             return Err(Error::invalid(
                 "task key must contain 1–128 bytes without NUL",

@@ -8,15 +8,34 @@ use tokio::process::Command;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageSpec(String);
 
-impl PackageSpec {
-    pub fn parse(value: impl Into<String>) -> Result<Self, PackageSpecError> {
-        let value = value.into();
+impl std::str::FromStr for PackageSpec {
+    type Err = PackageSpecError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for PackageSpec {
+    type Error = PackageSpecError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for PackageSpec {
+    type Error = PackageSpecError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.trim().is_empty() || value.chars().any(char::is_control) {
             return Err(PackageSpecError(value));
         }
         Ok(Self(value))
     }
+}
 
+impl PackageSpec {
     pub fn as_str(&self) -> &str {
         &self.0
     }

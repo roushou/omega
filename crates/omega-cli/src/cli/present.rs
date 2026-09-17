@@ -77,8 +77,8 @@ impl PresentCmd {
     }
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit = UnitName::parse(self.unit)?;
-        let surface = SurfaceId::parse(self.surface)?;
+        let unit = UnitName::try_from(self.unit)?;
+        let surface = SurfaceId::try_from(self.surface)?;
         let kind = if self.overlay {
             presentation::Kind::Overlay(omega::OverlayPresentation {
                 width: self.width,

@@ -36,7 +36,7 @@ pub struct BluetoothDevice {
 impl BluetoothDevice {
     fn of(device: omega_proto::omega::BluetoothDevice) -> Self {
         Self {
-            id: omega_proto::BluetoothDeviceId::parse(device.id)
+            id: omega_proto::BluetoothDeviceId::try_from(device.id)
                 .expect("daemon supplied a valid Bluetooth device id"),
             can_connect: device.can_connect,
             battery: device

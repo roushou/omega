@@ -142,8 +142,10 @@ fn empty_selection_cannot_read_another_units_state() {
     use omega_daemon::session::Subscriptions;
     use omega_proto::omega::{StateSnapshot, StateTopic, Subscribe};
     let manifest = widget_manifest("reader", "widget");
-    let mut subscriptions =
-        Subscriptions::of(&omega_proto::UnitName::parse("reader").unwrap(), &manifest);
+    let mut subscriptions = Subscriptions::of(
+        &"reader".parse::<omega_proto::UnitName>().unwrap(),
+        &manifest,
+    );
     subscriptions.subscribe(&[], true).unwrap();
     let snapshot = StateSnapshot {
         topics: vec![StateTopic {

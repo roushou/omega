@@ -187,7 +187,7 @@ fn interrupted_restore_recognizes_already_restored_contents() {
 
 #[test]
 fn invalid_identifiers_records_and_snapshot_paths_are_refused() {
-    assert!(ChangeId::parse("../escape").is_err());
+    assert!("../escape".parse::<ChangeId>().is_err());
     let bad = r#"{"kind":"directory","entries":{"../escape":{"kind":"missing"}},"mode":493}"#;
     assert!(serde_json::from_str::<Snapshot>(bad).is_err());
     let f = Fixture::new();

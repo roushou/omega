@@ -9,7 +9,7 @@ use omega_host::package::PackageName;
 use omega_proto::UnitName;
 
 fn unit() -> UnitName {
-    UnitName::parse("battery-widget").unwrap()
+    "battery-widget".parse::<UnitName>().unwrap()
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn the_unit_crate_is_named_after_the_unit() {
 #[test]
 fn the_program_is_the_library_and_a_call() {
     let main = Scaffold::new()
-        .unit_main(&PackageName::parse(unit().as_str()).unwrap())
+        .unit_main(&unit().as_str().parse::<PackageName>().unwrap())
         .unwrap();
 
     // A plugin is a library so the config plane can depend on it. What is

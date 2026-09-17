@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 #[test]
 fn a_built_unit_the_document_never_mentions_still_runs() {
-    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
+    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
 
     // Putting a crate in the workspace is already a declaration; the document
     // exists to override that, not to repeat it.
@@ -26,8 +26,8 @@ fn a_built_unit_the_document_never_mentions_still_runs() {
 #[test]
 fn a_document_can_turn_one_unit_off() {
     let built = BTreeSet::from([
-        UnitName::parse("battery-widget").unwrap(),
-        UnitName::parse("clock").unwrap(),
+        "battery-widget".parse::<UnitName>().unwrap(),
+        "clock".parse::<UnitName>().unwrap(),
     ]);
 
     let document = Document::new()
@@ -43,7 +43,7 @@ fn a_document_can_turn_one_unit_off() {
 
 #[test]
 fn a_document_naming_an_unbuilt_unit_is_reported() {
-    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
+    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
 
     let document = Document::new()
         .unit(Units::enabled("does-not-exist"))
@@ -55,7 +55,7 @@ fn a_document_naming_an_unbuilt_unit_is_reported() {
 #[test]
 fn unit_planning_preserves_held_units_and_orders_starts_and_stops() {
     let [added, disabled, held, removed] =
-        ["added", "disabled", "held", "removed"].map(|name| UnitName::parse(name).unwrap());
+        ["added", "disabled", "held", "removed"].map(|name| UnitName::try_from(name).unwrap());
     let built = BTreeSet::from([added.clone(), disabled.clone(), held.clone()]);
     let running = BTreeSet::from([disabled.clone(), held.clone(), removed.clone()]);
     let document = Document::new()
@@ -78,7 +78,7 @@ fn unit_planning_preserves_held_units_and_orders_starts_and_stops() {
 
 #[test]
 fn duplicate_and_invalid_unit_declarations_fail_with_literal_inputs() {
-    let built = BTreeSet::from([UnitName::parse("clock").unwrap()]);
+    let built = BTreeSet::from(["clock".parse::<UnitName>().unwrap()]);
     let mut document = Document::new().unit(Units::enabled("clock")).into_inner();
     document.units.push(document.units[0].clone());
     assert!(UnitProvider::plan(&document, &built, &BTreeSet::new()).is_err());
@@ -136,7 +136,7 @@ async fn the_environment_converges_to_the_document() {
 #[test]
 fn a_machine_that_matches_its_document_plans_nothing() {
     let tmp = TempDir::new("converged");
-    let built = BTreeSet::from([UnitName::parse("battery-widget").unwrap()]);
+    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
     let environment = EnvironmentProvider::new(&tmp.layout());
     let document = Document::new()
         .unit(Units::disabled("battery-widget"))

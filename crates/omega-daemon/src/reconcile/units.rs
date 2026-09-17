@@ -33,7 +33,9 @@ impl UnitProvider {
         let mut desired = built.clone();
         let mut configured = BTreeSet::new();
         for unit in &document.units {
-            let name = UnitName::parse(&unit.name)
+            let name = unit
+                .name
+                .parse::<UnitName>()
                 .map_err(|error| ProviderError::new("units", error.to_string()))?;
             if !built.contains(&name) || !configured.insert(name.clone()) {
                 return Err(ProviderError::new(

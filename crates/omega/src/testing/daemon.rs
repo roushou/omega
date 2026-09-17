@@ -158,7 +158,7 @@ impl TestDaemon {
             {
                 return Published {
                     surface: surface_id,
-                    instance: omega_proto::instance::InstanceKey::parse(
+                    instance: omega_proto::instance::InstanceKey::try_from(
                         &instance.expect("published instance"),
                     )
                     .expect("valid instance"),

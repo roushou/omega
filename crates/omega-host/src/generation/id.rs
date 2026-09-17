@@ -6,9 +6,10 @@ use std::{fmt, io, str::FromStr};
 #[serde(transparent)]
 pub struct GenerationId(String);
 
-impl GenerationId {
-    pub fn parse(value: impl Into<String>) -> io::Result<Self> {
-        let value = value.into();
+impl TryFrom<String> for GenerationId {
+    type Error = io::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty()
             || value == "."
             || value == ".."
@@ -23,6 +24,9 @@ impl GenerationId {
         }
         Ok(Self(value))
     }
+}
+
+impl GenerationId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -35,11 +39,18 @@ impl fmt::Display for GenerationId {
 impl FromStr for GenerationId {
     type Err = io::Error;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::parse(value)
+        Self::try_from(value.to_owned())
     }
 }
 impl<'de> Deserialize<'de> for GenerationId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+impl TryFrom<&str> for GenerationId {
+    type Error = io::Error;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }

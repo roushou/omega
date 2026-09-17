@@ -74,7 +74,9 @@ async fn switching_needs_no_reading_and_preserves_the_target_kind() {
     }
     for name in ["7", "next", "Work notes", "仕事"] {
         assert_eq!(
-            Fixture::target(Called::of::<Named>(&state, WorkspaceName::parse(name).unwrap()).await),
+            Fixture::target(
+                Called::of::<Named>(&state, WorkspaceName::try_from(name).unwrap()).await
+            ),
             switch_workspace::Target::Name(name.into())
         );
     }

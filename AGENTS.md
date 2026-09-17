@@ -41,6 +41,10 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Fail loud over silent drop. No `filter_map` over a closed enum.
 - Parse identifiers into newtypes at boundaries (`UnitName`, `SurfaceId`, `ModuleId`).
   Maps use domain-specific key types.
+- Use `FromStr` for textual values and `TryFrom` for fallible owned or structured
+  conversions. `From` must be infallible. Conversion and deserialization entry points
+  share validation; owned string identifiers retain their allocation. Keep named
+  decoders for formats that need context or produce a different type.
 - Paths come from `Layout`; writes go through `AtomicFile`, which fsyncs the
   file and its directory.
 - Public API docs address plugin authors: state behavior first, then relevant defaults,
@@ -63,7 +67,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
   `Refusal` with a closed `ErrorCode`. Never a silent drop or bare EOF.
 - Which `ErrorCode` a domain error becomes is declared once per error type in
   `refusal.rs`. A unit's own refusal passes through unflattened.
-- Topic and event names are validated where they enter (`Address::parse`,
+- Topic and event names are validated where they enter (`str::parse::<Address>`,
   `EventKind::from_str_name`).
 - The observation socket uses the same Frame/Invoke schema and policy as the control
   socket, encoded as JSON. State reading is open; private views require a scoped

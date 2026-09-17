@@ -238,7 +238,7 @@ fn widget_errors_list_the_available_surfaces_through_configuration_errors() {
     let error = omega_document::Error::from(omega_document::ValidationError::MissingSurface {
         unit: "audio".into(),
         requested: "missing".into(),
-        available: vec![omega_proto::SurfaceId::parse("indicator").unwrap()],
+        available: vec!["indicator".parse::<omega_proto::SurfaceId>().unwrap()],
     });
     let (mut ui, transcript) = Ui::recording();
     ui.error(&anyhow::Error::new(error));

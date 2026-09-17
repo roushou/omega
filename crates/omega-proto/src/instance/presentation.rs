@@ -5,14 +5,16 @@ use crate::omega::{KeyboardPolicy, Presentation, RendererFeature, presentation};
 #[derive(Debug, Clone, PartialEq)]
 pub struct PresentationSpec(Presentation);
 
-impl PresentationSpec {
-    pub fn parse(value: Presentation) -> Result<Self, PresentationError> {
+impl TryFrom<Presentation> for PresentationSpec {
+    type Error = PresentationError;
+
+    fn try_from(value: Presentation) -> Result<Self, Self::Error> {
         match value.kind.as_ref().ok_or(PresentationError::Missing)? {
             presentation::Kind::Embedded(embedded) => {
-                PlacementId::parse(&embedded.placement)?;
+                embedded.placement.parse::<PlacementId>()?;
             }
             presentation::Kind::Popup(popup) => {
-                InstanceKey::parse(
+                InstanceKey::try_from(
                     popup
                         .anchor
                         .as_ref()
@@ -57,6 +59,9 @@ impl PresentationSpec {
         }
         Ok(Self(value))
     }
+}
+
+impl PresentationSpec {
     fn size(width: u32, height: u32) -> Result<(), PresentationError> {
         if !(1..=16384).contains(&width) || !(1..=16384).contains(&height) {
             return Err(PresentationError::Size);

@@ -22,7 +22,7 @@ impl DocumentValidation {
         }
         let mut units = BTreeSet::new();
         for unit in &document.units {
-            let name = UnitName::parse(&unit.name).map_err(Self::cause)?;
+            let name = unit.name.parse::<UnitName>().map_err(Self::cause)?;
             if !built.contains_key(&name) {
                 return Err(Self::error(format!("unknown unit {name}")));
             }
@@ -49,7 +49,7 @@ impl DocumentValidation {
                     .validate()
                     .map_err(|error| Self::error(format!("schedule {:?}: {error}", schedule.id)))?;
                 if let omega_proto::omega::action::Kind::InvokeUnit(call) = kind {
-                    let unit = UnitName::parse(&call.unit).map_err(Self::cause)?;
+                    let unit = call.unit.parse::<UnitName>().map_err(Self::cause)?;
                     let manifest = built.get(&unit).ok_or_else(|| {
                         Self::error(format!("schedule {:?}: unknown unit {unit}", schedule.id))
                     })?;
@@ -81,15 +81,18 @@ impl DocumentValidation {
                 return Err(Self::error("empty or duplicate bar id"));
             }
             for entry in &bar.modules {
-                ModuleId::parse(&entry.id).map_err(Self::cause)?;
-                omega_proto::instance::PlacementId::parse(&entry.id).map_err(Self::cause)?;
+                entry.id.parse::<ModuleId>().map_err(Self::cause)?;
+                entry
+                    .id
+                    .parse::<omega_proto::instance::PlacementId>()
+                    .map_err(Self::cause)?;
                 if !modules.insert(&entry.id) {
                     return Err(Self::error("module ids must be unique across bars"));
                 }
                 let Some(module::Kind::Widget(widget)) = &entry.kind else {
                     return Err(Self::error("only widget modules have an instance provider"));
                 };
-                let name = UnitName::parse(&widget.unit).map_err(Self::cause)?;
+                let name = widget.unit.parse::<UnitName>().map_err(Self::cause)?;
                 let manifest = built
                     .get(&name)
                     .ok_or_else(|| Self::error(format!("unknown widget unit {name}")))?;
@@ -102,18 +105,21 @@ impl DocumentValidation {
             }
         }
         for entry in &document.presentations {
-            omega_proto::instance::PlacementId::parse(&entry.id).map_err(Self::cause)?;
+            entry
+                .id
+                .parse::<omega_proto::instance::PlacementId>()
+                .map_err(Self::cause)?;
             if !modules.insert(&entry.id) {
                 return Err(Self::error(
                     "presentation and bar placement ids must be unique",
                 ));
             }
-            let unit = UnitName::parse(&entry.unit).map_err(Self::cause)?;
+            let unit = entry.unit.parse::<UnitName>().map_err(Self::cause)?;
             let manifest = built
                 .get(&unit)
                 .ok_or_else(|| Self::error(format!("unknown unit {unit}")))?;
             Self::surface(manifest, &entry.surface)?;
-            let specification = omega_proto::instance::PresentationSpec::parse(
+            let specification = omega_proto::instance::PresentationSpec::try_from(
                 entry
                     .presentation
                     .clone()

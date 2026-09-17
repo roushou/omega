@@ -36,7 +36,7 @@ impl ConfigWorkspace {
         if founded {
             root.replace(Toml::encode(&self.scaffold.workspace_manifest()?)?);
         }
-        let mut editor = Manifest::parse(root.source())?;
+        let mut editor = root.source().parse::<Manifest>()?;
         self.scaffold.complete_workspace(&mut editor)?;
         editor.ensure_member("system", "system")?;
         root.replace(editor.to_string());
@@ -45,7 +45,8 @@ impl ConfigWorkspace {
         if !system.exists() {
             system.replace(Toml::encode(&self.scaffold.system_manifest()?)?);
         }
-        Manifest::parse(system.source())?
+        (system.source())
+            .parse::<Manifest>()?
             .package()?
             .context("missing package")?
             .name()?;

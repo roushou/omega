@@ -26,10 +26,10 @@ impl WorkspaceRole {
             return Err(WorkspaceError::Location(directory.into()));
         };
         if directory.parent() == Some(layout.plugins_dir().as_path()) {
-            return Ok(Self::Plugin(PackageName::parse(name)?));
+            return Ok(Self::Plugin(name.parse::<PackageName>()?));
         }
         if directory.parent() == Some(layout.crates_dir().as_path()) {
-            return Ok(Self::Library(PackageName::parse(name)?));
+            return Ok(Self::Library(name.parse::<PackageName>()?));
         }
         Err(WorkspaceError::Location(directory.into()))
     }

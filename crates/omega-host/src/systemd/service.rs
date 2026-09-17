@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 ///
 /// ```
 /// use omega_host::{Layout, systemd::{Manager, Scope, Service, UnitName}};
-/// let name = UnitName::parse("worker.service")?;
+/// let name = "worker.service".parse::<UnitName>()?;
 /// let path = Layout::service_file(std::path::Path::new("/example/systemd/user"), &name);
 /// let service = Service::new(Manager::new(Scope::User), name, path)?;
 /// assert_eq!(service.name().as_str(), "worker.service");
@@ -205,14 +205,14 @@ mod tests {
     #[test]
     fn service_handles_validate_identity_and_distinguish_missing_from_unreadable() {
         let root = TempPath::sibling(Path::new("/tmp/omega-service-file"), "test");
-        let name = UnitName::parse("example.service").unwrap();
+        let name = "example.service".parse::<UnitName>().unwrap();
         let manager = Manager::new(Scope::User);
         assert!(Service::new(manager.clone(), name.clone(), root.join("other.service")).is_err());
         assert!(Service::new(manager.clone(), name.clone(), "example.service").is_err());
         assert!(
             Service::new(
                 manager.clone(),
-                UnitName::parse("example.target").unwrap(),
+                "example.target".parse::<UnitName>().unwrap(),
                 root.join("example.target")
             )
             .is_err()

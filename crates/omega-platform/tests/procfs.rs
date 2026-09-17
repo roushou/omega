@@ -71,7 +71,7 @@ fn counters_going_backwards_are_not_a_negative_percentage() {
 #[test]
 fn kibibytes_become_bytes() {
     // Convert meminfo values from kibibytes to bytes.
-    let memory = Memory::parse(MEMINFO).unwrap();
+    let memory = MEMINFO.parse::<Memory>().unwrap();
 
     assert_eq!(memory.total, 11_995_036 * 1024);
     assert_eq!(memory.available, 8_672_320 * 1024);
@@ -80,7 +80,9 @@ fn kibibytes_become_bytes() {
 
 #[test]
 fn a_machine_with_no_swap_reports_none_rather_than_failing() {
-    let memory = Memory::parse("MemTotal: 100 kB\nMemAvailable: 50 kB").unwrap();
+    let memory = "MemTotal: 100 kB\nMemAvailable: 50 kB"
+        .parse::<Memory>()
+        .unwrap();
     assert_eq!(memory.swap_total, 0);
     assert_eq!(memory.total, 100 * 1024);
 }
@@ -261,7 +263,7 @@ fn incomplete_and_malformed_samples_fail() {
         "MemTotal: 0 kB\nMemAvailable: 0 kB",
         "MemTotal: 100 kB\nMemAvailable: 101 kB",
     ] {
-        assert!(Memory::parse(input).is_err(), "{input}");
+        assert!(input.parse::<Memory>().is_err(), "{input}");
     }
 }
 

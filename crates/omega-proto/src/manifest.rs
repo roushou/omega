@@ -63,7 +63,7 @@ impl Manifest {
 
     /// The unit this manifest describes.
     pub fn unit(&self) -> Result<UnitName, ManifestError> {
-        UnitName::parse(self.name.clone()).map_err(ManifestError::from)
+        UnitName::try_from(self.name.clone()).map_err(ManifestError::from)
     }
 
     /// Encode deterministic manifest bytes after sorting and deduplicating repeated fields.
@@ -121,7 +121,7 @@ impl Manifest {
     pub fn addresses(&self) -> Result<Vec<Address>, ManifestError> {
         self.state_topics
             .iter()
-            .map(|address| Address::parse(address).map_err(ManifestError::from))
+            .map(|address| address.parse::<Address>().map_err(ManifestError::from))
             .collect()
     }
 
@@ -149,7 +149,7 @@ impl Manifest {
         self.granted()?;
         self.surface_kinds()?;
         for command in &self.commands {
-            SurfaceId::parse(&command.id)?;
+            command.id.parse::<SurfaceId>()?;
         }
         for surface in &self.surfaces {
             surface.surface_id()?;
@@ -180,7 +180,7 @@ impl Surface {
 
     /// The surface's id, validated.
     pub fn surface_id(&self) -> Result<SurfaceId, ManifestError> {
-        SurfaceId::parse(self.id.clone()).map_err(ManifestError::from)
+        SurfaceId::try_from(self.id.clone()).map_err(ManifestError::from)
     }
 }
 

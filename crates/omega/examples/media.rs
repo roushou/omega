@@ -332,13 +332,13 @@ mod tests {
     async fn explicit_selection_is_validated() {
         let state = Fixture::state();
         assert!(
-            Called::of::<SelectPlayer>(&state, Some(PlayerId::parse("gone").unwrap()))
+            Called::of::<SelectPlayer>(&state, Some("gone".parse::<PlayerId>().unwrap()))
                 .await
                 .answer
                 .is_err()
         );
         assert!(
-            Called::of::<SelectPlayer>(&state, Some(PlayerId::parse("first").unwrap()))
+            Called::of::<SelectPlayer>(&state, Some("first".parse::<PlayerId>().unwrap()))
                 .await
                 .answer
                 .is_ok()
@@ -354,7 +354,7 @@ mod tests {
     #[tokio::test]
     async fn controls_submit_effects_even_when_the_local_reading_is_stale() {
         let called =
-            Called::of::<PlayPause>(&Fixture::state(), PlayerId::parse("gone").unwrap()).await;
+            Called::of::<PlayPause>(&Fixture::state(), "gone".parse::<PlayerId>().unwrap()).await;
         assert!(called.answer.is_ok());
         assert_eq!(called.effects.len(), 1);
     }
@@ -367,7 +367,7 @@ mod tests {
             let state = Fixture::state().keyspace(
                 &Selection::address(),
                 Selection {
-                    player: Some(PlayerId::parse(selected).unwrap()),
+                    player: Some(PlayerId::try_from(selected).unwrap()),
                 }
                 .write(),
             );

@@ -36,7 +36,7 @@ impl action::Kind {
                 input.text("desktop_id", &app.desktop_id)?;
                 input.require(
                     "desktop_id",
-                    crate::ApplicationId::parse(app.desktop_id.clone()).is_ok(),
+                    crate::ApplicationId::try_from(app.desktop_id.clone()).is_ok(),
                     "must be a desktop-entry id, not a path",
                 )?;
                 input.require("uris", app.uris.len() <= 64, "at most 64 URIs")?;
@@ -76,12 +76,12 @@ impl action::Kind {
             Self::DisconnectWifi(_) => {}
             Self::ConnectBluetooth(target) => input.require(
                 "device_id",
-                crate::BluetoothDeviceId::parse(target.device_id.clone()).is_ok(),
+                crate::BluetoothDeviceId::try_from(target.device_id.clone()).is_ok(),
                 "must name a Bluetooth device",
             )?,
             Self::DisconnectBluetooth(target) => input.require(
                 "device_id",
-                crate::BluetoothDeviceId::parse(target.device_id.clone()).is_ok(),
+                crate::BluetoothDeviceId::try_from(target.device_id.clone()).is_ok(),
                 "must name a Bluetooth device",
             )?,
             Self::RunCommand(run) => input.text("command", &run.command)?,
@@ -138,7 +138,7 @@ impl action::Kind {
                 if let Some(id) = &key.player_id {
                     input.require(
                         "player_id",
-                        crate::PlayerId::parse(id.clone()).is_ok(),
+                        crate::PlayerId::try_from(id.clone()).is_ok(),
                         "must name a media player",
                     )?;
                 }
@@ -188,12 +188,12 @@ impl action::Kind {
             Self::InvokeUnit(call) => {
                 input.require(
                     "unit",
-                    UnitName::parse(&call.unit).is_ok(),
+                    call.unit.parse::<UnitName>().is_ok(),
                     "must be a unit identifier",
                 )?;
                 input.require(
                     "command",
-                    SurfaceId::parse(&call.command).is_ok(),
+                    call.command.parse::<SurfaceId>().is_ok(),
                     "must be a command surface identifier",
                 )?;
             }
@@ -248,7 +248,7 @@ impl Input {
     fn workspace_name(&self, value: &str) -> Result<(), ActionError> {
         self.require(
             "target.name",
-            crate::WorkspaceName::parse(value).is_ok(),
+            crate::WorkspaceName::try_from(value).is_ok(),
             "must be nonblank and contain no control characters",
         )
     }

@@ -202,7 +202,7 @@ nodes! {
 
 impl NodeKind {
     /// The kind this wire string names, if it is one this build knows.
-    pub fn parse(name: &str) -> Option<Self> {
+    pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|kind| kind.name() == name)
     }
 
@@ -275,9 +275,9 @@ mod tests {
     #[test]
     fn a_kind_round_trips_through_its_wire_name() {
         for kind in NodeKind::ALL {
-            assert_eq!(NodeKind::parse(kind.name()), Some(*kind));
+            assert_eq!(NodeKind::from_name(kind.name()), Some(*kind));
         }
-        assert_eq!(NodeKind::parse("nothing-this-build-knows"), None);
+        assert_eq!(NodeKind::from_name("nothing-this-build-knows"), None);
     }
 }
 
@@ -302,8 +302,9 @@ impl crate::omega::ViewTree {
 
                 let mut topics = std::collections::BTreeSet::new();
                 for topic in &self.pending_topics {
-                    let topic = crate::SystemTopic::parse(topic)
-                        .ok_or(ReadinessError("unknown required system topic"))?;
+                    let topic = topic
+                        .parse::<crate::SystemTopic>()
+                        .map_err(|_| ReadinessError("unknown required system topic"))?;
                     if !topics.insert(topic) {
                         return Err(ReadinessError("duplicate required system topic"));
                     }

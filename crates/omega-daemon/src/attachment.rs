@@ -24,7 +24,7 @@ pub(crate) enum Scope {
 }
 
 impl Attachment {
-    pub(crate) fn parse(request: &AttachRenderer) -> Result<Self, Refusal> {
+    pub(crate) fn from_request(request: &AttachRenderer) -> Result<Self, Refusal> {
         if request.features.len() > 16 {
             return Err(Refusal::invalid("too many renderer features"));
         }
@@ -54,18 +54,22 @@ impl Attachment {
             .as_ref()
             .ok_or_else(|| Refusal::invalid("renderer scope is required"))?
         {
-            attach_renderer::Scope::Unit(unit) => Scope::Unit(UnitName::parse(unit).or_refuse()?),
+            attach_renderer::Scope::Unit(unit) => {
+                Scope::Unit(unit.parse::<UnitName>().or_refuse()?)
+            }
             attach_renderer::Scope::Placement(placement) => Scope::Placement {
-                unit: UnitName::parse(&placement.unit).or_refuse()?,
-                surface: SurfaceId::parse(&placement.surface).or_refuse()?,
-                placement: PlacementId::parse(&placement.placement).or_refuse()?,
+                unit: placement.unit.parse::<UnitName>().or_refuse()?,
+                surface: placement.surface.parse::<SurfaceId>().or_refuse()?,
+                placement: placement.placement.parse::<PlacementId>().or_refuse()?,
             },
         };
         let fingerprint = if request.build_fingerprint.is_empty() {
             None
         } else {
             Some(
-                omega_proto::instance::RendererFingerprint::parse(&request.build_fingerprint)
+                request
+                    .build_fingerprint
+                    .parse::<omega_proto::instance::RendererFingerprint>()
                     .or_refuse()?,
             )
         };
@@ -142,7 +146,7 @@ impl Attachment {
         }
     }
     pub(crate) fn validate(&self, view: &ViewUpdate) -> Result<(), Refusal> {
-        let presentation = PresentationSpec::parse(view.presentation.clone()).or_refuse()?;
+        let presentation = PresentationSpec::try_from(view.presentation.clone()).or_refuse()?;
         if !self.features.contains(&presentation.feature()) {
             return Err(Refusal::unimplemented(
                 "renderer does not support this presentation",
@@ -179,11 +183,11 @@ impl Attachment {
         let module = match &self.scope {
             Scope::Unit(_) => None,
             Scope::Placement { placement, .. } => {
-                Some(omega_proto::ModuleId::parse(placement.as_str()).or_refuse()?)
+                Some(omega_proto::ModuleId::try_from(placement.as_str()).or_refuse()?)
             }
         };
         Ok(ViewUpdate {
-            instance: InstanceKey::parse(
+            instance: InstanceKey::try_from(
                 snapshot
                     .instance
                     .as_ref()
@@ -191,8 +195,8 @@ impl Attachment {
             )
             .or_refuse()?,
             surface: crate::hub::SurfaceRef {
-                unit: UnitName::parse(&snapshot.unit).or_refuse()?,
-                surface: SurfaceId::parse(&snapshot.surface).or_refuse()?,
+                unit: snapshot.unit.parse::<UnitName>().or_refuse()?,
+                surface: snapshot.surface.parse::<SurfaceId>().or_refuse()?,
                 module,
             },
             presentation: snapshot
@@ -260,7 +264,7 @@ mod tests {
 
     #[test]
     fn keyboard_features_are_required_only_for_views_using_them() {
-        let mut attachment = Attachment::parse(&AttachRenderer {
+        let mut attachment = Attachment::from_request(&AttachRenderer {
             scope: Some(attach_renderer::Scope::Unit("example".into())),
             features: [
                 RendererFeature::Instances,

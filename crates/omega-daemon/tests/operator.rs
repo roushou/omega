@@ -21,7 +21,7 @@ fn restart(stream_id: u64, unit: &str) -> Frame {
 }
 
 fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 #[tokio::test]

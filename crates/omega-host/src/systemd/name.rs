@@ -3,8 +3,26 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnitName(String);
 
-impl UnitName {
-    pub fn parse(name: &str) -> Result<Self, NameError> {
+impl std::str::FromStr for UnitName {
+    type Err = NameError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for UnitName {
+    type Error = NameError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for UnitName {
+    type Error = NameError;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
         let valid_suffix = [
             "service",
             "target",
@@ -23,7 +41,7 @@ impl UnitName {
                 .rsplit_once('.')
                 .is_some_and(|(stem, suffix)| !stem.is_empty() && valid_suffix.contains(&suffix));
         if !valid {
-            return Err(NameError(name.into()));
+            return Err(NameError(name));
         }
 
         let mut bytes = name.bytes();
@@ -33,15 +51,17 @@ impl UnitName {
                     || !bytes.next().is_some_and(|b| b.is_ascii_hexdigit())
                     || !bytes.next().is_some_and(|b| b.is_ascii_hexdigit())
                 {
-                    return Err(NameError(name.into()));
+                    return Err(NameError(name));
                 }
             } else if !byte.is_ascii_alphanumeric() && !b":_.@-".contains(&byte) {
-                return Err(NameError(name.into()));
+                return Err(NameError(name));
             }
         }
-        Ok(Self(name.into()))
+        Ok(Self(name))
     }
+}
 
+impl UnitName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -73,7 +93,7 @@ mod tests {
             "worker@desk.service",
             r"worker@a\x20b.service",
         ] {
-            assert_eq!(UnitName::parse(name).unwrap().as_str(), name);
+            assert_eq!(UnitName::try_from(name).unwrap().as_str(), name);
         }
         for name in [
             "",
@@ -86,7 +106,7 @@ mod tests {
             "a%.service",
             r"a\q.service",
         ] {
-            assert!(UnitName::parse(name).is_err(), "{name:?}");
+            assert!(UnitName::try_from(name).is_err(), "{name:?}");
         }
     }
 }

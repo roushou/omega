@@ -54,7 +54,7 @@ impl ConfigWorkspace {
             root.exists(),
             "this is not a config workspace; run omega init first"
         );
-        let mut editor = Manifest::parse(root.source())?;
+        let mut editor = root.source().parse::<Manifest>()?;
         self.scaffold.complete_workspace(&mut editor)?;
         editor.ensure_member(
             destination
@@ -80,7 +80,7 @@ impl ConfigWorkspace {
                 .into_path();
             if path.try_exists()? {
                 let source = std::fs::read_to_string(&path)?;
-                let member = Manifest::parse(&source)?;
+                let member = source.parse::<Manifest>()?;
                 let existing = member.package()?.context("missing package")?.name()?;
                 ensure!(
                     existing.replace('-', "_") != name.rust_ident(),
@@ -126,7 +126,7 @@ impl ConfigWorkspace {
                 "consumer {} has no Cargo.toml",
                 consumer.display()
             );
-            let mut editor = Manifest::parse(edit.source())?;
+            let mut editor = edit.source().parse::<Manifest>()?;
             editor.package()?.context("missing package")?.name()?;
             editor.ensure_path_dependency(
                 name.package(),

@@ -15,8 +15,11 @@ pub struct SurfaceHarness<S: Surface> {
 impl<S: Surface> SurfaceHarness<S> {
     fn identity() -> omega_proto::instance::InstanceKey {
         omega_proto::instance::InstanceKey {
-            id: omega_proto::instance::InstanceId::parse("fixture").expect("fixture id"),
-            incarnation: omega_proto::instance::IncarnationId::parse("fixture")
+            id: "fixture"
+                .parse::<omega_proto::instance::InstanceId>()
+                .expect("fixture id"),
+            incarnation: "fixture"
+                .parse::<omega_proto::instance::IncarnationId>()
                 .expect("fixture incarnation"),
         }
     }

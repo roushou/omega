@@ -43,9 +43,9 @@ impl Instance {
         Self {
             lifecycle: Default::default(),
             key: InstanceKey {
-                id: InstanceId::parse(format!("instance-{}", UnitToken::mint()))
+                id: InstanceId::try_from(format!("instance-{}", UnitToken::mint()))
                     .expect("generated ID"),
-                incarnation: IncarnationId::parse(format!("incarnation-{}", UnitToken::mint()))
+                incarnation: IncarnationId::try_from(format!("incarnation-{}", UnitToken::mint()))
                     .expect("generated ID"),
             },
             surface,

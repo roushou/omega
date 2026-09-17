@@ -63,8 +63,8 @@ impl PresentationProvider {
                     ) => return Err(Self::error("only widget modules have an instance provider")),
                     None => return Err(Self::error("module has no kind")),
                 };
-                let unit = UnitName::parse(&widget.unit).map_err(Self::error)?;
-                let module = ModuleId::parse(&module.id).map_err(Self::error)?;
+                let unit = widget.unit.parse::<UnitName>().map_err(Self::error)?;
+                let module = module.id.parse::<ModuleId>().map_err(Self::error)?;
                 let primary = self.surface_of(&unit, &widget.surface)?;
                 for named in std::iter::once(widget.surface.as_str())
                     .chain((!widget.panel.is_empty()).then_some(widget.panel.as_str()))
@@ -90,14 +90,14 @@ impl PresentationProvider {
             }
         }
         for entry in &document.presentations {
-            let unit = UnitName::parse(&entry.unit).map_err(Self::error)?;
+            let unit = entry.unit.parse::<UnitName>().map_err(Self::error)?;
             let surface = self.surface_of(&unit, &entry.surface)?;
             let address = SurfaceRef::module(
                 unit,
                 surface,
-                ModuleId::parse(&entry.id).map_err(Self::error)?,
+                entry.id.parse::<ModuleId>().map_err(Self::error)?,
             );
-            let presentation = omega_proto::instance::PresentationSpec::parse(
+            let presentation = omega_proto::instance::PresentationSpec::try_from(
                 entry
                     .presentation
                     .clone()
@@ -230,13 +230,13 @@ mod tests {
     impl Fixture {
         fn address(surface: &str) -> SurfaceRef {
             SurfaceRef::module(
-                UnitName::parse("wifi").unwrap(),
-                SurfaceId::parse(surface).unwrap(),
-                ModuleId::parse("slot").unwrap(),
+                "wifi".parse::<UnitName>().unwrap(),
+                SurfaceId::try_from(surface).unwrap(),
+                "slot".parse::<ModuleId>().unwrap(),
             )
         }
         fn embedded() -> PresentationSpec {
-            PresentationSpec::parse(omega::Presentation {
+            PresentationSpec::try_from(omega::Presentation {
                 kind: Some(omega::presentation::Kind::Embedded(
                     omega::EmbeddedPresentation {
                         placement: "slot".into(),
@@ -246,7 +246,7 @@ mod tests {
             .unwrap()
         }
         fn window() -> PresentationSpec {
-            PresentationSpec::parse(omega::Presentation {
+            PresentationSpec::try_from(omega::Presentation {
                 kind: Some(omega::presentation::Kind::Window(
                     omega::WindowPresentation {
                         app_id: "org.omega.wifi".into(),

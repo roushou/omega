@@ -168,8 +168,8 @@ impl Link {
         }
         for (path, interfaces) in &objects {
             if let Some(properties) = interfaces.get(Self::DEVICE) {
-                let id =
-                    BluetoothDeviceId::parse(path.to_string()).map_err(BrokerError::unreadable)?;
+                let id = BluetoothDeviceId::try_from(path.to_string())
+                    .map_err(BrokerError::unreadable)?;
                 let adapter_path: OwnedObjectPath =
                     dbus::field(properties, "Adapter").ok_or_else(|| {
                         BrokerError::Unreadable(format!("device {id} has no adapter"))
@@ -273,7 +273,7 @@ impl Broker for BlueZ {
             action::Kind::DisconnectBluetooth(target) => (&target.device_id, false),
             _ => return Err(BrokerError::Unserved(ActionKind::of(action))),
         };
-        let id = BluetoothDeviceId::parse(id.clone()).map_err(BrokerError::unreadable)?;
+        let id = BluetoothDeviceId::try_from(id.clone()).map_err(BrokerError::unreadable)?;
         let link = self.link.as_ref().ok_or_else(BrokerError::gone)?;
         let (_, devices) = link.read().await?;
         let target = Objects::target(&devices, &id, connect)?;

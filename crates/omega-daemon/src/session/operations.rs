@@ -125,7 +125,7 @@ mod tests {
                 shutdown.clone(),
             );
             let brokers = crate::broker::Brokerage::new(hub.clone(), shutdown);
-            let name = UnitName::parse("example").unwrap();
+            let name = "example".parse::<UnitName>().unwrap();
             let manifest = Manifest::new(&name, "1");
             Self {
                 dispatcher: Arc::new(Dispatcher::new(hub, supervisor, units, brokers)),

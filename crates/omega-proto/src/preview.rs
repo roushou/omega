@@ -8,12 +8,31 @@ pub const VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CaseId(String);
-impl CaseId {
-    pub fn parse(value: impl Into<String>) -> Result<Self, crate::IdentError> {
-        let value = value.into();
-        crate::UnitName::parse(value.clone())?;
-        Ok(Self(value))
+impl std::str::FromStr for CaseId {
+    type Err = crate::IdentError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
     }
+}
+
+impl TryFrom<&str> for CaseId {
+    type Error = crate::IdentError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for CaseId {
+    type Error = crate::IdentError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        crate::ident::Ident::validate("unit name", value).map(Self)
+    }
+}
+
+impl CaseId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -77,13 +96,24 @@ impl<W: AsyncWrite + Unpin> Writer<W> {
 /// Identity of one outstanding simulated effect within a preview session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EffectId(std::num::NonZeroU64);
-impl EffectId {
-    pub fn parse(value: u64) -> Result<Self, PreviewError> {
+impl TryFrom<u64> for EffectId {
+    type Error = PreviewError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
         std::num::NonZeroU64::new(value)
-            .map(Self)
+            .map(Self::from)
             .ok_or(PreviewError::InvalidEffect)
     }
+}
+
+impl EffectId {
     pub fn get(self) -> u64 {
         self.0.get()
+    }
+}
+
+impl From<std::num::NonZeroU64> for EffectId {
+    fn from(value: std::num::NonZeroU64) -> Self {
+        Self(value)
     }
 }

@@ -411,12 +411,12 @@ mod tests {
         fn view(id: &str, size: usize) -> ViewUpdate {
             {
                 let surface = SurfaceRef::new(
-                    UnitName::parse("example").unwrap(),
-                    SurfaceId::parse(id).unwrap(),
+                    "example".parse::<UnitName>().unwrap(),
+                    SurfaceId::try_from(id).unwrap(),
                 );
                 ViewUpdate {
                     instance: omega_proto::instance::InstanceKey {
-                        id: omega_proto::instance::InstanceId::parse(format!(
+                        id: omega_proto::instance::InstanceId::try_from(format!(
                             "test-{}-{}-{}",
                             surface.unit,
                             surface.surface,
@@ -427,7 +427,8 @@ mod tests {
                                 .unwrap_or_default()
                         ))
                         .unwrap(),
-                        incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                        incarnation: "test-session"
+                            .parse::<omega_proto::instance::IncarnationId>()
                             .unwrap(),
                     },
                     presentation: omega_proto::omega::Presentation {

@@ -6,7 +6,7 @@
 //! ```no_run
 //! # async fn example(launcher: &omega::platform::applications::Launcher) -> omega::Result<()> {
 //! use omega::platform::applications::ApplicationId;
-//! let id = ApplicationId::parse("org.gnome.Nautilus.desktop")
+//! let id = "org.gnome.Nautilus.desktop".parse::<ApplicationId>()
 //!     .map_err(|e| omega::Error::invalid(e.to_string()))?;
 //! launcher.launch(&id).await?;
 //! # Ok(()) }
@@ -27,7 +27,7 @@ pub struct Application {
 impl Application {
     fn of(entry: omega_proto::omega::Application) -> Self {
         Self {
-            id: ApplicationId::parse(entry.id.clone()).expect("validated application id"),
+            id: ApplicationId::try_from(entry.id.clone()).expect("validated application id"),
             entry,
         }
     }

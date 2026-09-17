@@ -9,7 +9,7 @@ fn layout() -> Layout {
 
 #[test]
 fn a_profile_decides_which_binaries_a_build_produced() {
-    let name = UnitName::parse("battery").unwrap();
+    let name = "battery".parse::<UnitName>().unwrap();
 
     // Two profiles, two directories: an inner loop compiling debug binaries
     // must never be confused for the release ones a machine runs.

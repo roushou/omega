@@ -26,7 +26,7 @@ pub struct NewCmd {
 
 impl NewCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = PackageName::parse(&self.name)?;
+        let name = self.name.parse::<PackageName>()?;
         let workspace = ConfigWorkspace::open(Layout::resolve())?;
         if self.lib {
             let created = workspace.prepare_library(name, &self.into)?.apply()?;

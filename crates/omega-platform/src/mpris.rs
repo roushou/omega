@@ -134,7 +134,7 @@ impl Players {
     pub fn target<'a>(players: &'a [Player], key: &MediaKey) -> Result<&'a Player, BrokerError> {
         let player = match &key.player_id {
             Some(id) => {
-                let id = PlayerId::parse(id.clone()).map_err(BrokerError::unreadable)?;
+                let id = PlayerId::try_from(id.clone()).map_err(BrokerError::unreadable)?;
                 players.iter().find(|player| player.id == id)
             }
             None => players.iter().min_by(|a, b| a.priority(b)),
@@ -228,7 +228,7 @@ impl Link {
             let Some(id) = name.as_str().strip_prefix(Self::PREFIX) else {
                 continue;
             };
-            let id = PlayerId::parse(id.to_string()).map_err(BrokerError::unreadable)?;
+            let id = PlayerId::try_from(id.to_string()).map_err(BrokerError::unreadable)?;
             if let Some(player) = self.player(name.as_str(), id).await {
                 players.push(player);
             }

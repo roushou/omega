@@ -97,8 +97,10 @@ enum CpuId {
     Core(u32),
 }
 
-impl CpuId {
-    fn parse(name: &str) -> Result<Self, BrokerError> {
+impl std::str::FromStr for CpuId {
+    type Err = BrokerError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
         if name == "cpu" {
             return Ok(Self::Aggregate);
         }
@@ -118,7 +120,7 @@ impl Cpu {
         let mut samples = BTreeMap::new();
         for line in stat.lines().take_while(|line| line.starts_with("cpu")) {
             let mut fields = line.split_whitespace();
-            let id = CpuId::parse(fields.next().unwrap_or_default())?;
+            let id = fields.next().unwrap_or_default().parse::<CpuId>()?;
             let counters = fields
                 .map(str::parse::<u64>)
                 .collect::<Result<Vec<_>, _>>()
@@ -153,8 +155,10 @@ pub struct Memory {
     pub swap_free: u64,
 }
 
-impl Memory {
-    pub fn parse(meminfo: &str) -> Result<Self, BrokerError> {
+impl std::str::FromStr for Memory {
+    type Err = BrokerError;
+
+    fn from_str(meminfo: &str) -> Result<Self, Self::Err> {
         let mut memory = Self::default();
         let mut total_seen = false;
         let mut available_seen = false;
@@ -328,7 +332,7 @@ impl Procfs {
 
     fn system_sample(&self) -> Result<(BTreeMap<CpuId, Jiffies>, Memory, u64), BrokerError> {
         let samples = Cpu::samples(&std::fs::read_to_string(self.root.join("stat"))?)?;
-        let memory = Memory::parse(&std::fs::read_to_string(self.root.join("meminfo"))?)?;
+        let memory = std::fs::read_to_string(self.root.join("meminfo"))?.parse::<Memory>()?;
         let uptime = std::fs::read_to_string(self.root.join("uptime"))?;
         let seconds = uptime
             .split_whitespace()

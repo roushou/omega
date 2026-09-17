@@ -62,7 +62,9 @@ impl Subscriptions {
     /// an all-topics observer to narrow its subscription.
     pub fn subscribe(&mut self, topics: &[String], replace: bool) -> Result<(), Refusal> {
         for topic in topics {
-            Address::parse(topic).map_err(|error| Refusal::invalid(error.to_string()))?;
+            topic
+                .parse::<Address>()
+                .map_err(|error| Refusal::invalid(error.to_string()))?;
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
                     "topic {topic:?} is not declared by this unit"
@@ -138,7 +140,7 @@ impl Subscriptions {
 
     /// A unit's own keyspace: always readable, always writable by it alone.
     pub fn owns(&self, topic: &str) -> bool {
-        let (Some(owner), Ok(parsed)) = (self.owner.as_ref(), Address::parse(topic)) else {
+        let (Some(owner), Ok(parsed)) = (self.owner.as_ref(), topic.parse::<Address>()) else {
             return false;
         };
         parsed.owner() == Some(owner.as_str())
@@ -175,7 +177,9 @@ impl Subscriptions {
         requested: &[String],
     ) -> Result<StatePatch, Refusal> {
         for topic in requested {
-            Address::parse(topic).map_err(|error| Refusal::invalid(error.to_string()))?;
+            topic
+                .parse::<Address>()
+                .map_err(|error| Refusal::invalid(error.to_string()))?;
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
                     "topic {topic:?} is not declared by this unit"

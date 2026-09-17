@@ -7,14 +7,28 @@ macro_rules! identity {
         #[serde(transparent)]
         pub struct $name(String);
 
-        impl $name {
-            pub fn parse(value: impl Into<String>) -> Result<Self, IdentError> {
-                let value = value.into();
+        impl TryFrom<String> for $name {
+            type Error = IdentError;
+            fn try_from(value: String) -> Result<Self, Self::Error> {
                 if value.len() > 128 {
                     return Err(IdentError::TooLong { kind: $kind });
                 }
-                Ident::parse($kind, value).map(Self)
+                Ident::validate($kind, value).map(Self)
             }
+        }
+        impl std::str::FromStr for $name {
+            type Err = IdentError;
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                Self::try_from(value.to_owned())
+            }
+        }
+        impl TryFrom<&str> for $name {
+            type Error = IdentError;
+            fn try_from(value: &str) -> Result<Self, Self::Error> {
+                value.parse()
+            }
+        }
+        impl $name {
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -26,7 +40,7 @@ macro_rules! identity {
         }
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+                Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
             }
         }
     };

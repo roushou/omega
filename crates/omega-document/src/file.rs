@@ -62,7 +62,7 @@ impl DocumentFile {
     }
 
     /// Parse a document from the text a `system/` crate emitted.
-    pub fn parse(src: &str) -> Result<StateDocument, DocumentError> {
+    pub fn decode(src: &str) -> Result<StateDocument, DocumentError> {
         serde_json::from_str(src).map_err(DocumentError::Decode)
     }
 

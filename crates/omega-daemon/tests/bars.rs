@@ -19,8 +19,14 @@ impl Fixture {
         let hub = Hub::new();
         let units = UnitTable::detached(hub.clone());
         let manifest = Manifest::new(&Self::name(), "0.1.0").exposing([
-            Surface::new(&SurfaceId::parse("indicator").unwrap(), SurfaceKind::Widget),
-            Surface::new(&SurfaceId::parse("details").unwrap(), SurfaceKind::Widget),
+            Surface::new(
+                &"indicator".parse::<SurfaceId>().unwrap(),
+                SurfaceKind::Widget,
+            ),
+            Surface::new(
+                &"details".parse::<SurfaceId>().unwrap(),
+                SurfaceKind::Widget,
+            ),
         ]);
         units.adopt(&ManifestStore::from_manifests([manifest.clone()]));
         let provider = PresentationProvider::new(
@@ -49,7 +55,7 @@ impl Fixture {
     }
 
     fn name() -> UnitName {
-        UnitName::parse("wifi").unwrap()
+        "wifi".parse::<UnitName>().unwrap()
     }
 
     fn document() -> StateDocument {

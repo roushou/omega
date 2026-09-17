@@ -140,7 +140,7 @@ impl<S: Surface> MountedSurface for Instance<S> {
         self.schedule(task)
     }
     fn event(&mut self, binding: u64, args: Args) -> Result<(), Error> {
-        let binding = super::events::BindingId::parse(binding)?;
+        let binding = super::events::BindingId::try_from(binding)?;
         let decoder = self.bindings.get(&binding).ok_or_else(|| {
             Error::from(omega_proto::Refusal::precondition("expired local binding"))
         })?;

@@ -128,7 +128,9 @@ impl Plugin {
     /// Build and validate the plugin manifest from its registered types.
     /// Subscriptions and capabilities are aggregated from their fields.
     pub fn manifest(&self) -> Result<Manifest, Error> {
-        let name = omega_proto::UnitName::parse(&self.name)
+        let name = self
+            .name
+            .parse::<omega_proto::UnitName>()
             .map_err(|source| Error::Name(self.name.clone(), source))?;
 
         let mut capabilities = BTreeSet::new();
@@ -155,7 +157,7 @@ impl Plugin {
             }
             widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
             surfaces.push(Declaration::new(
-                &omega_proto::SurfaceId::parse(widget.surface.clone())
+                &omega_proto::SurfaceId::try_from(widget.surface.clone())
                     .map_err(|source| Error::Name(widget.surface.clone(), source))?,
                 SurfaceKind::Widget,
             ));
@@ -170,7 +172,9 @@ impl Plugin {
             }
             command.declare(&mut capabilities, &mut topics, &mut keyspaces);
             commands.push(omega_proto::omega::CommandEndpoint {
-                id: omega_proto::SurfaceId::parse(&command.name)
+                id: command
+                    .name
+                    .parse::<omega_proto::SurfaceId>()
                     .map_err(|source| Error::Name(command.name.clone(), source))?
                     .to_string(),
             });

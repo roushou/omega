@@ -316,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn controls_route_typed_ids_and_reject_invalid_input_before_effects() {
-        let id = DeviceId::parse(Fixture::ID).unwrap();
+        let id = Fixture::ID.parse::<DeviceId>().unwrap();
         let called = Called::of::<Connect>(&State::new(), id.clone()).await;
         assert!(called.answer.is_ok());
         assert!(

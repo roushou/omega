@@ -65,7 +65,7 @@ impl Actions {
     /// Validate the target command against the manifest before dispatching it.
     async fn invoke_unit(&self, call: &InvokeUnit) -> Result<CommandAnswer, Refusal> {
         let unit =
-            UnitName::parse(call.unit.clone()).map_err(|e| Refusal::invalid(e.to_string()))?;
+            UnitName::try_from(call.unit.clone()).map_err(|e| Refusal::invalid(e.to_string()))?;
 
         self.declares_command(&unit, &call.command)?;
 

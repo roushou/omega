@@ -839,7 +839,7 @@ fn the_sdk_emits_only_props_the_vocabulary_declares() {
 
     walk(&tree["root"], &mut |node| {
         let kind = node["type"].as_str().expect("a node names its kind");
-        let kind = omega_proto::NodeKind::parse(kind)
+        let kind = omega_proto::NodeKind::from_name(kind)
             .unwrap_or_else(|| panic!("the SDK emits the kind {kind:?}, which the table lacks"));
         seen.insert(kind.name());
 

@@ -62,7 +62,7 @@ impl Fixture {
             plugin
         };
         [(
-            UnitName::parse(env!("CARGO_PKG_NAME")).unwrap(),
+            UnitName::try_from(env!("CARGO_PKG_NAME")).unwrap(),
             plugin.manifest().unwrap(),
         )]
         .into()

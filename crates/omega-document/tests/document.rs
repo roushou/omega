@@ -44,7 +44,7 @@ fn document() -> omega_document::StateDocument {
 fn a_document_round_trips_through_its_canonical_form() {
     let encoded = DocumentFile::encode(&document()).unwrap();
 
-    assert_eq!(DocumentFile::parse(&encoded).unwrap(), document());
+    assert_eq!(DocumentFile::decode(&encoded).unwrap(), document());
     assert!(
         encoded.ends_with('\n'),
         "a committed file ends in a newline"

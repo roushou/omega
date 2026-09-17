@@ -213,7 +213,7 @@ impl Native {
     }
     pub fn try_new(id: impl Into<String>) -> Result<Self, ShellError> {
         Ok(Self {
-            id: NativeId::parse(id)?,
+            id: NativeId::try_from(id.into())?,
             options: BTreeMap::new(),
         })
     }
@@ -329,9 +329,9 @@ impl PluginWidget {
     /// Parse placement and unit identities at the authoring boundary.
     pub fn try_new(id: impl Into<String>, unit: impl Into<String>) -> Result<Self, ShellError> {
         Ok(Self {
-            id: omega_proto::ModuleId::parse(id.into())
+            id: omega_proto::ModuleId::try_from(id.into())
                 .map_err(|e| ShellError::Invalid(e.to_string()))?,
-            unit: omega_proto::UnitName::parse(unit.into())
+            unit: omega_proto::UnitName::try_from(unit.into())
                 .map_err(|e| ShellError::Invalid(e.to_string()))?,
             surface: String::new(),
             panel: None,

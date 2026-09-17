@@ -46,16 +46,35 @@ impl IntoValue for WorkspaceIndex {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WorkspaceName(String);
 
-impl WorkspaceName {
+impl std::str::FromStr for WorkspaceName {
+    type Err = WorkspaceNameError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for WorkspaceName {
+    type Error = WorkspaceNameError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for WorkspaceName {
+    type Error = WorkspaceNameError;
+
     /// Accept nonblank names without control characters. Preserve spaces and case.
-    pub fn parse(name: impl Into<String>) -> Result<Self, WorkspaceNameError> {
-        let name = name.into();
+    fn try_from(name: String) -> Result<Self, Self::Error> {
         if name.trim().is_empty() || name.chars().any(char::is_control) {
             return Err(WorkspaceNameError(name));
         }
         Ok(Self(name))
     }
+}
 
+impl WorkspaceName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -73,7 +92,7 @@ pub struct WorkspaceNameError(String);
 
 impl FromValue for WorkspaceName {
     fn from_value(value: &Value) -> Option<Self> {
-        Self::parse(String::from_value(value)?).ok()
+        Self::try_from(String::from_value(value)?).ok()
     }
 }
 
@@ -109,14 +128,14 @@ mod tests {
     #[test]
     fn names_are_literal_and_round_trip() {
         for name in ["mail", "2", "next", "仕事", "Work notes", "a\"b\\c;d,e"] {
-            let name = WorkspaceName::parse(name).unwrap();
+            let name = WorkspaceName::try_from(name).unwrap();
             assert_eq!(
                 WorkspaceName::from_value(&name.clone().into_value()),
                 Some(name)
             );
         }
         for name in ["", " ", "a\nb", "a\rb", "a\0b", "a\tb"] {
-            assert!(WorkspaceName::parse(name).is_err());
+            assert!(WorkspaceName::try_from(name).is_err());
         }
     }
 }

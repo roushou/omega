@@ -5,14 +5,14 @@ use omega_proto::{Address, Manifest, Surface};
 use omega_proto::{SurfaceId, UnitName};
 
 fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 fn manifest() -> Manifest {
     Manifest::new(&unit("battery-widget"), "0.1.0")
         .granting([Capability::StateRead])
         .exposing([Surface::new(
-            &SurfaceId::parse("battery").unwrap(),
+            &"battery".parse::<SurfaceId>().unwrap(),
             SurfaceKind::Widget,
         )])
         .reading(["battery"])
@@ -26,7 +26,7 @@ fn a_complete_manifest_validates() {
 
     assert_eq!(
         manifest.addresses().unwrap(),
-        vec![Address::parse("battery").unwrap()]
+        vec!["battery".parse::<Address>().unwrap()]
     );
     assert_eq!(
         manifest.event_kinds().unwrap(),

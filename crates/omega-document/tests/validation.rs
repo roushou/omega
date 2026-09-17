@@ -5,9 +5,12 @@ use omega_proto::{Manifest, Surface, SurfaceId, UnitName};
 struct Fixture;
 impl Fixture {
     fn manifest() -> Manifest {
-        Manifest::new(&UnitName::parse("clock").unwrap(), "1").exposing([
-            Surface::new(&SurfaceId::parse("time").unwrap(), SurfaceKind::Widget),
-            Surface::new(&SurfaceId::parse("calendar").unwrap(), SurfaceKind::Widget),
+        Manifest::new(&"clock".parse::<UnitName>().unwrap(), "1").exposing([
+            Surface::new(&"time".parse::<SurfaceId>().unwrap(), SurfaceKind::Widget),
+            Surface::new(
+                &"calendar".parse::<SurfaceId>().unwrap(),
+                SurfaceKind::Widget,
+            ),
         ])
     }
 }
@@ -56,7 +59,7 @@ fn bar_placement_ids_obey_the_embedded_presentation_limit() {
             ))
             .into_inner();
         let embedded =
-            omega_proto::instance::PresentationSpec::parse(omega_proto::omega::Presentation {
+            omega_proto::instance::PresentationSpec::try_from(omega_proto::omega::Presentation {
                 kind: Some(omega_proto::omega::presentation::Kind::Embedded(
                     omega_proto::omega::EmbeddedPresentation {
                         placement: id.clone(),
@@ -73,7 +76,7 @@ fn bar_placement_ids_obey_the_embedded_presentation_limit() {
                     .contains("placement id exceeds 128 bytes")
             );
         }
-        assert!(omega_proto::ModuleId::parse(id).is_ok());
+        assert!(omega_proto::ModuleId::try_from(id).is_ok());
     }
 }
 
@@ -134,7 +137,7 @@ fn scheduled_commands_must_name_a_built_units_command_surface() {
     use omega_proto::omega::{Action, InvokeUnit, Schedule, action};
     let manifest = Fixture::manifest()
         .exposing([Surface::new(
-            &SurfaceId::parse("time").unwrap(),
+            &"time".parse::<SurfaceId>().unwrap(),
             SurfaceKind::Widget,
         )])
         .serving([omega_proto::omega::CommandEndpoint {

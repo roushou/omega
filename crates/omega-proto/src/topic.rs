@@ -96,9 +96,14 @@ topics! {
     Thermals => "thermals": ThermalsState,
 }
 
-impl SystemTopic {
-    pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.iter().copied().find(|t| t.as_str() == name)
+impl std::str::FromStr for SystemTopic {
+    type Err = AddressError;
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|t| t.as_str() == name)
+            .ok_or_else(|| AddressError::Unknown(name.to_owned()))
     }
 }
 
@@ -125,10 +130,10 @@ pub enum AddressError {
     MalformedUnitTopic(String),
 }
 
-impl Address {
-    pub const UNIT_PREFIX: &'static str = "unit.";
+impl std::str::FromStr for Address {
+    type Err = AddressError;
 
-    pub fn parse(address: &str) -> Result<Self, AddressError> {
+    fn from_str(address: &str) -> Result<Self, Self::Err> {
         if let Some(rest) = address.strip_prefix(Self::UNIT_PREFIX) {
             let (unit, key) = rest
                 .split_once('.')
@@ -142,10 +147,12 @@ impl Address {
             });
         }
 
-        SystemTopic::parse(address)
-            .map(Self::System)
-            .ok_or_else(|| AddressError::Unknown(address.to_string()))
+        address.parse::<SystemTopic>().map(Self::System)
     }
+}
+
+impl Address {
+    pub const UNIT_PREFIX: &'static str = "unit.";
 
     /// The address of a unit's own key.
     pub fn of_unit(unit: &str, key: &str) -> Self {

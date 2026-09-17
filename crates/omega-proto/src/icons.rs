@@ -100,7 +100,7 @@ glyphs! {
 
 impl Glyph {
     /// The glyph this name asks for, if it is one this build knows.
-    pub fn parse(name: &str) -> Option<Self> {
+    pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|glyph| glyph.name() == name)
     }
 }
@@ -127,9 +127,9 @@ mod tests {
     #[test]
     fn a_glyph_round_trips_through_its_wire_name() {
         for glyph in Glyph::ALL {
-            assert_eq!(Glyph::parse(glyph.name()), Some(*glyph));
+            assert_eq!(Glyph::from_name(glyph.name()), Some(*glyph));
         }
-        assert_eq!(Glyph::parse("nothing-this-build-draws"), None);
+        assert_eq!(Glyph::from_name("nothing-this-build-draws"), None);
     }
 
     #[test]

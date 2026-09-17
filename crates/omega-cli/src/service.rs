@@ -19,11 +19,11 @@ impl DaemonService {
     pub const NAME: &'static str = "omega.service";
 
     pub fn name() -> UnitName {
-        UnitName::parse(Self::NAME).expect("bundled service name")
+        UnitName::try_from(Self::NAME).expect("bundled service name")
     }
 
     pub fn definition(program: &Path) -> anyhow::Result<ServiceUnit> {
-        let session = UnitName::parse("graphical-session.target")?;
+        let session = "graphical-session.target".parse::<UnitName>()?;
         Ok(ServiceUnit::new(ExecStart::new(program)?.arg("daemon")?)
             .description("Omega — the desktop configuration daemon")?
             .documentation(env!("CARGO_PKG_REPOSITORY"))?

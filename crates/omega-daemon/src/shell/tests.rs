@@ -211,12 +211,12 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
     assert!(Refusal::of(&reply).is_none());
     hub.publish_view({
         let surface = crate::hub::SurfaceRef::new(
-            omega_proto::UnitName::parse("example").unwrap(),
-            omega_proto::SurfaceId::parse("view").unwrap(),
+            "example".parse::<omega_proto::UnitName>().unwrap(),
+            "view".parse::<omega_proto::SurfaceId>().unwrap(),
         );
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
-                id: omega_proto::instance::InstanceId::parse(format!(
+                id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
                     surface.unit,
                     surface.surface,
@@ -227,7 +227,9 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
                         .unwrap_or_default()
                 ))
                 .unwrap(),
-                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+                incarnation: "test-session"
+                    .parse::<omega_proto::instance::IncarnationId>()
+                    .unwrap(),
             },
             presentation: omega_proto::omega::Presentation {
                 kind: Some(omega_proto::omega::presentation::Kind::Window(
@@ -327,13 +329,13 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         use omega_proto::{SurfaceId, UnitName};
 
         let hub = Hub::new();
-        let unit = UnitName::parse("retired").unwrap();
-        let surface = SurfaceRef::new(unit.clone(), SurfaceId::parse("panel").unwrap());
+        let unit = "retired".parse::<UnitName>().unwrap();
+        let surface = SurfaceRef::new(unit.clone(), "panel".parse::<SurfaceId>().unwrap());
         hub.publish_view({
             let surface = surface.clone();
             ViewUpdate {
                 instance: omega_proto::instance::InstanceKey {
-                    id: omega_proto::instance::InstanceId::parse(format!(
+                    id: omega_proto::instance::InstanceId::try_from(format!(
                         "test-{}-{}-{}",
                         surface.unit,
                         surface.surface,
@@ -344,7 +346,8 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
                             .unwrap_or_default()
                     ))
                     .unwrap(),
-                    incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                    incarnation: "test-session"
+                        .parse::<omega_proto::instance::IncarnationId>()
                         .unwrap(),
                 },
                 presentation: omega_proto::omega::Presentation {
@@ -410,15 +413,15 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
 
         hub.forget_unit(&unit);
         let remaining = SurfaceRef::new(
-            UnitName::parse("current").unwrap(),
-            SurfaceId::parse("panel").unwrap(),
+            "current".parse::<UnitName>().unwrap(),
+            "panel".parse::<SurfaceId>().unwrap(),
         );
         for index in 0..70 {
             hub.publish_view({
                 let surface = remaining.clone();
                 ViewUpdate {
                     instance: omega_proto::instance::InstanceKey {
-                        id: omega_proto::instance::InstanceId::parse(format!(
+                        id: omega_proto::instance::InstanceId::try_from(format!(
                             "test-{}-{}-{}",
                             surface.unit,
                             surface.surface,
@@ -429,7 +432,8 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
                                 .unwrap_or_default()
                         ))
                         .unwrap(),
-                        incarnation: omega_proto::instance::IncarnationId::parse("test-session")
+                        incarnation: "test-session"
+                            .parse::<omega_proto::instance::IncarnationId>()
                             .unwrap(),
                     },
                     presentation: omega_proto::omega::Presentation {
@@ -494,12 +498,12 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
     tokio::time::timeout(Duration::from_secs(3), async {
         let hub = Hub::new();
         let update = { let surface = crate::hub::SurfaceRef::new(
-                omega_proto::UnitName::parse("example").unwrap(),
-                omega_proto::SurfaceId::parse("panel").unwrap(),
+                "example".parse::<omega_proto::UnitName>().unwrap(),
+                "panel".parse::<omega_proto::SurfaceId>().unwrap(),
             );
   ViewUpdate { instance: omega_proto::instance::InstanceKey {
-    id: omega_proto::instance::InstanceId::parse(format!("test-{}-{}-{}", surface.unit, surface.surface, surface.module.as_ref().map(ToString::to_string).unwrap_or_default())).unwrap(),
-    incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+    id: omega_proto::instance::InstanceId::try_from(format!("test-{}-{}-{}", surface.unit, surface.surface, surface.module.as_ref().map(ToString::to_string).unwrap_or_default())).unwrap(),
+    incarnation: "test-session".parse::<omega_proto::instance::IncarnationId>().unwrap(),
   }, presentation: omega_proto::omega::Presentation { kind: Some(omega_proto::omega::presentation::Kind::Window(omega_proto::omega::WindowPresentation { title: "Test".into(), app_id: "org.omega.example".into(), width: 480, height: 320, min_width: 1, min_height: 1 })) },
   requested: 2, observed: 2, destroyed: false, surface, view: omega_proto::omega::ViewTree {
                 root: Some(omega_proto::omega::ViewNode {
@@ -544,7 +548,7 @@ struct RendererFixture;
 impl RendererFixture {
     fn attach<S>(connection: &ShellConnection<S>, unit: &str) {
         *connection.attachment.lock().unwrap() = Some(
-            crate::attachment::Attachment::parse(&omega_proto::omega::AttachRenderer {
+            crate::attachment::Attachment::from_request(&omega_proto::omega::AttachRenderer {
                 build_fingerprint: String::new(),
                 scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
                     unit.into(),

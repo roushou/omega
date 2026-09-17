@@ -62,10 +62,10 @@ impl Shell {
                             return Err(ShellError::DuplicatePlacement { id: plugin.id.clone(), first, second: path });
                         }
                         if !plugin.surface.is_empty() {
-                            omega_proto::SurfaceId::parse(&plugin.surface).map_err(|e| ShellError::Invalid(e.to_string()))?;
+                            plugin.surface.parse::<omega_proto::SurfaceId>().map_err(|e| ShellError::Invalid(e.to_string()))?;
                         }
                         if let Some(panel) = &plugin.panel {
-                            omega_proto::SurfaceId::parse(panel).map_err(|e| ShellError::Invalid(e.to_string()))?;
+                            panel.parse::<omega_proto::SurfaceId>().map_err(|e| ShellError::Invalid(e.to_string()))?;
                         }
                         modules.push(Module { id: plugin.id.to_string(), kind: Some(module::Kind::Widget(WidgetModule {
                             unit: plugin.unit.to_string(), surface: plugin.surface.clone(),

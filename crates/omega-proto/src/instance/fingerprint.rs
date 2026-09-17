@@ -7,8 +7,26 @@ pub struct RendererFingerprint(String);
 #[error("renderer fingerprint must be 64 lowercase hexadecimal characters")]
 pub struct RendererFingerprintError;
 
-impl RendererFingerprint {
-    pub fn parse(value: &str) -> Result<Self, RendererFingerprintError> {
+impl std::str::FromStr for RendererFingerprint {
+    type Err = RendererFingerprintError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for RendererFingerprint {
+    type Error = RendererFingerprintError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for RendererFingerprint {
+    type Error = RendererFingerprintError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.len() != 64
             || !value
                 .bytes()
@@ -16,8 +34,11 @@ impl RendererFingerprint {
         {
             return Err(RendererFingerprintError);
         }
-        Ok(Self(value.to_owned()))
+        Ok(Self(value))
     }
+}
+
+impl RendererFingerprint {
     pub fn as_str(&self) -> &str {
         &self.0
     }

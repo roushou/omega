@@ -28,7 +28,7 @@ impl StatusCmd {
         let unit = self
             .unit
             .as_deref()
-            .map(omega_proto::UnitName::parse)
+            .map(omega_proto::UnitName::try_from)
             .transpose()?;
 
         if self.versions {
@@ -228,14 +228,14 @@ mod tests {
         assert!(
             StatusCmd::select(
                 &mut status,
-                Some(&omega_proto::UnitName::parse("missing").unwrap())
+                Some(&"missing".parse::<omega_proto::UnitName>().unwrap())
             )
             .is_err()
         );
         assert_eq!(status.units.len(), 2);
         StatusCmd::select(
             &mut status,
-            Some(&omega_proto::UnitName::parse("network").unwrap()),
+            Some(&"network".parse::<omega_proto::UnitName>().unwrap()),
         )
         .unwrap();
         assert_eq!(status.units.len(), 1);

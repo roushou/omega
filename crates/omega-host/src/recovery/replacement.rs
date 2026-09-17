@@ -14,8 +14,10 @@ use std::{
 #[serde(transparent)]
 struct EntryName(String);
 
-impl EntryName {
-    fn parse(value: String) -> io::Result<Self> {
+impl TryFrom<String> for EntryName {
+    type Error = io::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty()
             || value == "."
             || value == ".."
@@ -30,7 +32,7 @@ impl EntryName {
 
 impl<'de> Deserialize<'de> for EntryName {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Self::parse(String::deserialize(d)?).map_err(serde::de::Error::custom)
+        Self::try_from(String::deserialize(d)?).map_err(serde::de::Error::custom)
     }
 }
 
@@ -95,7 +97,7 @@ impl Snapshot {
                     std::path::Component::Normal(name) => name
                         .to_str()
                         .ok_or_else(|| io::Error::other("non-UTF-8 asset name"))
-                        .and_then(|name| EntryName::parse(name.into())),
+                        .and_then(|name| EntryName::try_from(name.to_owned())),
                     _ => Err(io::Error::other("asset paths must be relative child paths")),
                 })
                 .collect::<io::Result<Vec<_>>>()?;
@@ -164,7 +166,7 @@ impl Snapshot {
         let mut entries = BTreeMap::new();
         for entry in std::fs::read_dir(path)? {
             let entry = entry?;
-            let name = EntryName::parse(
+            let name = EntryName::try_from(
                 entry
                     .file_name()
                     .into_string()

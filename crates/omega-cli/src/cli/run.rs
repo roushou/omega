@@ -20,7 +20,7 @@ pub struct RunCmd {
 
 impl RunCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit = UnitName::parse(&self.unit)?;
+        let unit = self.unit.parse::<UnitName>()?;
         let args = self
             .args
             .iter()

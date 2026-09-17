@@ -14,7 +14,7 @@ pub struct RestartCmd {
 
 impl RestartCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = UnitName::parse(&self.unit)?;
+        let name = self.unit.parse::<UnitName>()?;
         Operator::new().restart(name.as_str()).await?;
         ui.step(Step::Restarted, Paint::name(&name));
         Ok(())

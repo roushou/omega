@@ -24,7 +24,7 @@ pub enum CargoSlot<'a> {
 ///
 /// ```
 /// use omega_host::cargo::Manifest;
-/// let mut manifest = Manifest::parse("[workspace]\nmembers = [\"system\"]\n")?;
+/// let mut manifest = "[workspace]\nmembers = [\"system\"]\n".parse::<Manifest>()?;
 /// manifest.ensure_member("plugins/clock", "plugins/*")?;
 /// assert_eq!(manifest.workspace()?.unwrap().members()?, ["system", "plugins/*"]);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -34,8 +34,10 @@ pub struct Manifest {
     document: DocumentMut,
 }
 
-impl Manifest {
-    pub fn parse(source: &str) -> Result<Self, TomlError> {
+impl std::str::FromStr for Manifest {
+    type Err = TomlError;
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             document: source.parse().map_err(|source| TomlError::Decode {
                 kind: Self::KIND,
@@ -43,7 +45,9 @@ impl Manifest {
             })?,
         })
     }
+}
 
+impl Manifest {
     pub fn package(&self) -> Result<Option<Package<'_>>, CargoError> {
         Ok(
             Fields::table(self.document.as_table(), "package", "package")?
@@ -350,7 +354,7 @@ impl TomlSchema for Manifest {
     type Key<'a> = CargoSlot<'a>;
 
     fn decode(source: &str) -> Result<Self, TomlError> {
-        Self::parse(source)
+        source.parse()
     }
     fn encode(&self) -> Result<String, TomlError> {
         Ok(self.to_string())
@@ -373,7 +377,7 @@ mod tests {
     #[test]
     fn borrowed_package_fields_support_inheritance_and_cargo_defaults() {
         let source = "# package\n[package]\nname = 'desktop'\nversion.workspace = true\nedition = { workspace = true }\n[workspace]\nmembers = []\n";
-        let manifest = Manifest::parse(source).unwrap();
+        let manifest = source.parse::<Manifest>().unwrap();
         let package = manifest.package().unwrap().unwrap();
 
         assert_eq!(package.name().unwrap(), "desktop");
@@ -390,7 +394,7 @@ mod tests {
         );
         assert_eq!(manifest.to_string(), source);
 
-        let manifest = Manifest::parse("[package]\nname = 'minimal'\n").unwrap();
+        let manifest = "[package]\nname = 'minimal'\n".parse::<Manifest>().unwrap();
         assert_eq!(
             manifest.package().unwrap().unwrap().version().unwrap(),
             None
@@ -408,14 +412,17 @@ mod tests {
             "version = { workspace = false }",
             "version = { workspace = true, extra = 1 }",
         ] {
-            let manifest =
-                Manifest::parse(&format!("[package]\nname = 'desktop'\n{declaration}\n")).unwrap();
+            let manifest = format!("[package]\nname = 'desktop'\n{declaration}\n")
+                .parse::<Manifest>()
+                .unwrap();
             let package = manifest.package().unwrap().unwrap();
             assert_eq!(package.name().unwrap(), "desktop");
             assert_eq!(package.version().unwrap_err().field, "package.version");
         }
 
-        let manifest = Manifest::parse("[workspace]\nmembers = ['system', 42]\n").unwrap();
+        let manifest = "[workspace]\nmembers = ['system', 42]\n"
+            .parse::<Manifest>()
+            .unwrap();
         assert_eq!(
             manifest
                 .workspace()
@@ -431,7 +438,7 @@ mod tests {
     #[test]
     fn version_edits_preserve_all_dependency_shapes_and_surrounding_source() {
         let source = "# workspace\n[workspace.dependencies]\nplain = '1' # plain\ninline = { version = '1', features = ['derive'] } # options\ndotted.version = '1' # dotted\n\n[workspace.dependencies.expanded]\nversion = '1' # expanded\noptional = true\n";
-        let mut manifest = Manifest::parse(source).unwrap();
+        let mut manifest = source.parse::<Manifest>().unwrap();
         let dependencies = manifest
             .workspace()
             .unwrap()
@@ -451,7 +458,7 @@ mod tests {
     #[test]
     fn rejected_edits_do_not_leave_partial_changes() {
         let source = "[workspace]\nmembers = ['system', 42]\n[workspace.dependencies]\nfirst = '1'\nlast = { path = '../last' }\n";
-        let mut manifest = Manifest::parse(source).unwrap();
+        let mut manifest = source.parse::<Manifest>().unwrap();
         assert!(manifest.require_versions(&["first", "last"], "2").is_err());
         assert_eq!(manifest.to_string(), source);
         assert!(
@@ -477,7 +484,7 @@ mod tests {
     fn existing_path_dependencies_keep_options_and_collisions_fail() {
         let source =
             "[dependencies]\nshared-types = { path = '../shared', features = ['ui'] } # keep\n";
-        let mut manifest = Manifest::parse(source).unwrap();
+        let mut manifest = source.parse::<Manifest>().unwrap();
         let dependency = Dependency::local("../shared", &[]);
         manifest
             .ensure_path_dependency("shared-types", &dependency)
@@ -493,8 +500,9 @@ mod tests {
 
     #[test]
     fn member_edits_support_inline_workspaces_and_validate_the_whole_list() {
-        let mut manifest =
-            Manifest::parse("workspace = { members = ['system'] } # workspace\n").unwrap();
+        let mut manifest = "workspace = { members = ['system'] } # workspace\n"
+            .parse::<Manifest>()
+            .unwrap();
         manifest
             .ensure_member("plugins/clock", "plugins/*")
             .unwrap();
@@ -516,7 +524,7 @@ mod tests {
         assert_eq!(manifest.to_string(), source);
 
         let source = "[workspace]\nmembers = ['plugins/*', 42]\n";
-        let mut manifest = Manifest::parse(source).unwrap();
+        let mut manifest = source.parse::<Manifest>().unwrap();
         assert!(
             manifest
                 .ensure_member("plugins/clock", "plugins/*")

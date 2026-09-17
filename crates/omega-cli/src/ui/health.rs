@@ -20,7 +20,7 @@ impl Ui {
         let width = Self::width(units.iter().map(|unit| unit.unit.as_str()));
 
         for unit in units {
-            let name = UnitName::parse(&unit.unit)?;
+            let name = unit.unit.parse::<UnitName>()?;
             let health = plugins.iter().find(|plugin| plugin.unit == unit.unit);
             let phase = UnitPhase::try_from(unit.phase).unwrap_or(UnitPhase::Unspecified);
             let readiness = health.map(|health| health.readiness()).unwrap_or_default();

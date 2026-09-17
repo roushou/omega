@@ -51,9 +51,9 @@ impl<'a> CheckoutLink<'a> {
     pub(crate) fn prepare(&self, source: Option<&SourceTree>) -> Result<PreparedLink<'a>> {
         let layout = self.workspace.layout();
         let mut config = FileEdit::read(layout.cargo_config())?;
-        let mut editor = Config::parse(config.source())?;
+        let mut editor = config.source().parse::<Config>()?;
         let root_source = FileEdit::read(layout.workspace_manifest())?;
-        let root_editor = Manifest::parse(root_source.source())?;
+        let root_editor = root_source.source().parse::<Manifest>()?;
         let dependencies = root_editor
             .workspace()?
             .map(|workspace| workspace.dependencies())
@@ -81,7 +81,7 @@ impl<'a> CheckoutLink<'a> {
         let mut edits = Vec::new();
         if let Some(source) = source {
             let mut root = FileEdit::read(layout.workspace_manifest())?;
-            let mut editor = Manifest::parse(root.source())?;
+            let mut editor = root.source().parse::<Manifest>()?;
             editor.require_versions(
                 &specs.iter().map(|s| s.name).collect::<Vec<_>>(),
                 &source.version()?,

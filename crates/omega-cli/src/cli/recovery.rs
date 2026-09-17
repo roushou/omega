@@ -50,7 +50,7 @@ impl RecoveryCmd {
 
         let id = match &self.action {
             Action::Inspect { id } | Action::Accept { id } | Action::Restore { id } => {
-                ChangeId::parse(id.clone())?
+                ChangeId::try_from(id.clone())?
             }
             Action::List => unreachable!("handled above"),
         };

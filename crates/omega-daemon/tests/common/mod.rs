@@ -103,11 +103,11 @@ impl Harness {
 }
 
 pub fn surface_id(id: &str) -> omega_proto::SurfaceId {
-    omega_proto::SurfaceId::parse(id).unwrap()
+    omega_proto::SurfaceId::try_from(id).unwrap()
 }
 
 pub fn unit_name(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 /// A unit that declares one widget surface and reads the battery topic — the

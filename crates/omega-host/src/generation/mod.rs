@@ -149,7 +149,7 @@ impl Generations {
             let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
                 continue;
             };
-            let id = GenerationId::parse(name)?;
+            let id = GenerationId::try_from(name)?;
             if protected.contains(&id) {
                 continue;
             }
@@ -176,7 +176,7 @@ impl Generations {
 
     fn current_id(&self) -> io::Result<Option<GenerationId>> {
         match std::fs::read_to_string(self.layout.active_build()) {
-            Ok(reference) => GenerationId::parse(reference.trim_end_matches('\n')).map(Some),
+            Ok(reference) => GenerationId::try_from(reference.trim_end_matches('\n')).map(Some),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
         }

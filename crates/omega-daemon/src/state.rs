@@ -50,7 +50,7 @@ impl StateStore {
         }
         let mut proposed = BTreeMap::new();
         for topic in patch.topics {
-            proposed.insert(Address::parse(&topic.topic)?, topic);
+            proposed.insert(topic.topic.parse::<Address>()?, topic);
         }
         let mut bytes = self.bytes;
         let mut count = self.unit_topics;

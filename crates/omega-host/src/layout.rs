@@ -137,7 +137,7 @@ impl Layout {
 
     pub(crate) fn new_change_id(&self) -> crate::recovery::ChangeId {
         let path = crate::TempPath::sibling(&self.recovery_dir().join("change"), "record");
-        crate::recovery::ChangeId::parse(
+        crate::recovery::ChangeId::try_from(
             path.file_name()
                 .expect("generated name")
                 .to_string_lossy()

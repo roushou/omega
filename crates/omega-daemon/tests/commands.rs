@@ -301,7 +301,7 @@ impl PendingCalls {
         tokio::spawn(async move {
             units
                 .request(
-                    &omega_proto::UnitName::parse("lamp").unwrap(),
+                    &"lamp".parse::<omega_proto::UnitName>().unwrap(),
                     Self::op(bytes),
                 )
                 .await

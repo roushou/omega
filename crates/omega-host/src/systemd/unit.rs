@@ -106,7 +106,7 @@ impl Restart {
 /// let command = ExecStart::new("/opt/example/bin/worker")?.arg("serve")?;
 /// let unit = ServiceUnit::new(command)
 ///     .description("Example worker")?
-///     .wanted_by(UnitName::parse("default.target")?);
+///     .wanted_by("default.target".parse::<UnitName>()?);
 /// assert!(unit.to_string().contains("Type=simple"));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```

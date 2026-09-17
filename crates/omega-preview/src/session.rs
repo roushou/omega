@@ -92,7 +92,7 @@ impl Session {
             .next_effect
             .checked_add(1)
             .ok_or_else(|| Error::Invalid("preview effect identities exhausted".into()))?;
-        let id = EffectId::parse(self.next_effect)?;
+        let id = EffectId::try_from(self.next_effect)?;
         self.effects.insert(id, effect);
         Ok(id)
     }
@@ -106,7 +106,7 @@ impl Session {
             .ok_or_else(|| Error::Invalid("missing preview command".into()))?
         {
             Command::Select(name) => {
-                self.reset(CaseId::parse(name).map_err(|e| Error::Invalid(e.to_string()))?)?
+                self.reset(CaseId::try_from(name).map_err(|e| Error::Invalid(e.to_string()))?)?
             }
             Command::Reset(_) => self.reset(self.selected.clone())?,
             Command::Interact(event) => {
@@ -130,7 +130,7 @@ impl Session {
             Command::Resolve(resolve) => {
                 let effect = self
                     .effects
-                    .remove(&EffectId::parse(resolve.effect)?)
+                    .remove(&EffectId::try_from(resolve.effect)?)
                     .ok_or_else(|| Error::Invalid("unknown or already resolved effect".into()))?;
                 self.record(
                     if resolve.success {
@@ -296,7 +296,7 @@ mod tests {
                     return Task::perform(
                         effects
                             .launch
-                            .launch(&ApplicationId::parse("never-run.desktop").unwrap()),
+                            .launch(&"never-run.desktop".parse::<ApplicationId>().unwrap()),
                         Message::Finished,
                     );
                 }
@@ -389,7 +389,9 @@ mod tests {
         assert!(session.drawn.text().contains("waiting"));
         let effect = Fixture::queued(&mut session).await;
         assert_eq!(Session::operation(effect.operation()), "action: LaunchApp");
-        session.effects.insert(EffectId::parse(1).unwrap(), effect);
+        session
+            .effects
+            .insert(EffectId::try_from(1).unwrap(), effect);
         let command = Command::Resolve(PreviewResolution {
             effect: 1,
             success: false,
@@ -412,7 +414,9 @@ mod tests {
         session.redraw();
         assert!(session.drawn.text().contains("success"));
         let close = Fixture::queued(&mut session).await;
-        session.effects.insert(EffectId::parse(2).unwrap(), close);
+        session
+            .effects
+            .insert(EffectId::try_from(2).unwrap(), close);
         Fixture::request(
             &mut session,
             Command::Resolve(PreviewResolution {
@@ -435,7 +439,9 @@ mod tests {
         let obsolete = Fixture::press(&session);
         Fixture::request(&mut session, obsolete.clone()).unwrap();
         let effect = Fixture::queued(&mut session).await;
-        session.effects.insert(EffectId::parse(1).unwrap(), effect);
+        session
+            .effects
+            .insert(EffectId::try_from(1).unwrap(), effect);
         Fixture::request(&mut session, Command::Reset(true)).unwrap();
         assert!(session.effects.is_empty());
         assert!(!session.drawn.text().contains("waiting"));

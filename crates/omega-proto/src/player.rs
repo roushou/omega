@@ -7,10 +7,27 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PlayerId(String);
 
-impl PlayerId {
+impl std::str::FromStr for PlayerId {
+    type Err = PlayerIdError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for PlayerId {
+    type Error = PlayerIdError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for PlayerId {
+    type Error = PlayerIdError;
+
     /// Parse the suffix of an MPRIS well-known bus name.
-    pub fn parse(id: impl Into<String>) -> Result<Self, PlayerIdError> {
-        let id = id.into();
+    fn try_from(id: String) -> Result<Self, Self::Error> {
         if id.len() + "org.mpris.MediaPlayer2.".len() > 255
             || !id.split('.').all(|part| {
                 !part.is_empty()
@@ -24,7 +41,9 @@ impl PlayerId {
         }
         Ok(Self(id))
     }
+}
 
+impl PlayerId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -43,7 +62,7 @@ pub struct PlayerIdError(String);
 
 impl FromValue for PlayerId {
     fn from_value(value: &Value) -> Option<Self> {
-        Self::parse(String::from_value(value)?).ok()
+        Self::try_from(String::from_value(value)?).ok()
     }
 }
 impl IntoValue for PlayerId {
@@ -58,7 +77,7 @@ mod tests {
     #[test]
     fn ids_obey_well_known_bus_name_rules() {
         for id in ["vlc", "chromium.instance123", "a-b", "_player", "UPPER"] {
-            assert!(PlayerId::parse(id).is_ok(), "{id}");
+            assert!(PlayerId::try_from(id).is_ok(), "{id}");
         }
         for id in [
             "",
@@ -71,10 +90,10 @@ mod tests {
             "vlc name",
             "é",
         ] {
-            assert!(PlayerId::parse(id).is_err(), "{id}");
+            assert!(PlayerId::try_from(id).is_err(), "{id}");
         }
-        assert!(PlayerId::parse("a".repeat(232)).is_ok());
-        assert!(PlayerId::parse("a".repeat(233)).is_err());
+        assert!(PlayerId::try_from("a".repeat(232)).is_ok());
+        assert!(PlayerId::try_from("a".repeat(233)).is_err());
     }
     #[test]
     fn an_explicit_empty_target_is_not_automatic_selection() {

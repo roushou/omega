@@ -230,8 +230,8 @@ mod tests {
         let new = serde_json::json!({"version":1, "bar":{"transparent":true}});
         fixture.write(&old);
         let install = ShellInstallation::new(&fixture.layout);
-        let a = GenerationId::parse("a").unwrap();
-        let b = GenerationId::parse("b").unwrap();
+        let a = "a".parse::<GenerationId>().unwrap();
+        let b = "b".parse::<GenerationId>().unwrap();
         assert!(matches!(
             install.apply(&new, &a, false),
             Err(InstallError::Unmanaged)
@@ -277,7 +277,7 @@ mod recovery_tests {
         install.adopt(&old).unwrap();
         install
             .save_receipt(&Receipt {
-                generation: Some(GenerationId::parse("new").unwrap()),
+                generation: Some("new".parse::<GenerationId>().unwrap()),
                 installed: old.clone(),
                 pending: Some(new.clone()),
                 target: layout.shell_config.clone(),
@@ -288,7 +288,7 @@ mod recovery_tests {
             .unwrap();
         assert_eq!(install.inspect().unwrap(), InstallationState::Current);
         install
-            .apply(&new, &GenerationId::parse("new").unwrap(), false)
+            .apply(&new, &"new".parse::<GenerationId>().unwrap(), false)
             .unwrap();
         assert!(install.receipt().unwrap().unwrap().pending.is_none());
         assert_eq!(
@@ -312,7 +312,7 @@ mod recovery_tests {
             install
                 .apply(
                     &serde_json::json!({"version":1}),
-                    &GenerationId::parse("new").unwrap(),
+                    &"new".parse::<GenerationId>().unwrap(),
                     true
                 )
                 .is_err()

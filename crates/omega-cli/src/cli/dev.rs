@@ -27,7 +27,7 @@ impl DevCmd {
     const PROFILE: Profile = Profile::Debug;
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = UnitName::parse(&self.unit)?;
+        let name = self.unit.parse::<UnitName>()?;
         let layout = Layout::resolve();
 
         let source = layout.unit_src_dir(&name);
@@ -120,7 +120,7 @@ impl DevCmd {
             .build(Build::request(
                 layout,
                 Self::PROFILE,
-                Selection::Package(PackageSpec::parse(name.as_str())?),
+                Selection::Package(PackageSpec::try_from(name.as_str())?),
             ))
             .await?;
         Ok(())

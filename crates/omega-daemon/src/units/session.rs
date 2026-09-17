@@ -83,8 +83,8 @@ mod tests {
     #[tokio::test]
     async fn outbound_requests_share_a_byte_budget_across_units() {
         let units = UnitTable::detached(crate::hub::Hub::new());
-        let first = UnitName::parse("first").unwrap();
-        let second = UnitName::parse("second").unwrap();
+        let first = "first".parse::<UnitName>().unwrap();
+        let second = "second".parse::<UnitName>().unwrap();
         let (a, mut ar) = tokio::sync::mpsc::channel(16);
         let (b, mut br) = tokio::sync::mpsc::channel(16);
         let _ag = units.connected(&first, a);

@@ -6,7 +6,7 @@ use omega_proto::UnitName;
 use omega_proto::omega::UnitPhase;
 
 fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 fn table() -> UnitTable {
@@ -136,7 +136,7 @@ fn a_peer_the_supervisor_never_spawned_has_no_lifecycle_to_change() {
 #[tokio::test]
 async fn obsolete_session_cannot_disconnect_its_replacement() {
     let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
-    let name = omega_proto::UnitName::parse("unit").unwrap();
+    let name = "unit".parse::<omega_proto::UnitName>().unwrap();
     let first = units.connected(&name, tokio::sync::mpsc::channel(1).0);
     let second = units.connected(&name, tokio::sync::mpsc::channel(1).0);
     first.cancelled().await;
@@ -150,7 +150,7 @@ async fn obsolete_session_cannot_disconnect_its_replacement() {
 #[test]
 fn obsolete_adoption_cannot_release_its_replacement() {
     let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
-    let name = omega_proto::UnitName::parse("unit").unwrap();
+    let name = "unit".parse::<omega_proto::UnitName>().unwrap();
     let old = units.adopt_unit(&name);
     let current = units.adopt_unit(&name);
     units.release_adoption(&name, &old);

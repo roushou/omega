@@ -58,6 +58,25 @@ retain the ordinary error-chain display. Internal orchestration still uses
 `anyhow`; neither the SDK nor the document API depends on `miette`. Errors from
 the separate configuration process arrive as stderr text, not typed diagnostics.
 
+## Value conversions
+
+Textual identifiers, topic addresses, cadences, and Cargo documents implement
+`FromStr`. String identifiers also implement `TryFrom<String>` to validate and
+retain owned storage, and `TryFrom<&str>` for borrowed conversion. Serde and
+protocol-value decoding use the same validation. Identifier grammars and length
+limits belong to their defining types.
+
+Validated presentations and instance references use `TryFrom` from their wire
+types. Effect and local binding identities use `TryFrom<u64>` and infallible
+`From<NonZeroU64>`. Systemd state conversions accept unknown spellings and preserve
+them in `Other`. Glyph and node-kind lookups return `Option` through `from_name`,
+preserving unknown-name fallback behavior.
+
+Format-specific decoding stays explicit: `DocumentFile::decode` reads document
+JSON, and systemd status uses `from_show_output`. Renderer attachments use
+`from_request` to validate feature requirements and initialize revocation state.
+Platform parsers that combine inputs or produce collections retain named methods.
+
 ## Workspace and build ownership
 
 `omega-host::cargo` owns `Manifest` (`Cargo.toml`) and `Config`

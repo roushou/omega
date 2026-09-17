@@ -38,7 +38,7 @@ struct Selection {
 
 #[tokio::test]
 async fn a_player_binding_carries_the_explicit_target_without_a_local_reading() {
-    let id = PlayerId::parse("vlc.instance123").unwrap();
+    let id = "vlc.instance123".parse::<PlayerId>().unwrap();
     let called = Called::of::<Pause>(&State::new(), id.clone()).await;
     assert!(called.answer.is_ok());
     assert!(called.did(&action::Kind::MediaKey(MediaKey {
@@ -64,7 +64,7 @@ async fn malformed_player_input_is_refused_before_an_effect_is_submitted() {
 
 #[test]
 fn player_identity_round_trips_through_bindings_and_records() {
-    let id = PlayerId::parse("chromium.instance123").unwrap();
+    let id = "chromium.instance123".parse::<PlayerId>().unwrap();
     assert_eq!(
         PlayerId::decode(omega::Args::new(id.clone().encode())).unwrap(),
         id

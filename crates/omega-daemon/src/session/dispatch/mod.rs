@@ -191,7 +191,7 @@ impl Dispatcher {
         let named = OpKind::target_surface(op)
             .ok_or_else(|| Refusal::invalid(format!("{} names no surface", policy.kind.name())))?;
         // An id that cannot be a surface id names no surface of anyone's.
-        let target = SurfaceId::parse(named).or_refuse()?;
+        let target = SurfaceId::try_from(named).or_refuse()?;
 
         match grants.surface(&target) {
             Some(kind) if kind == required => Ok(()),
@@ -259,7 +259,7 @@ impl Dispatcher {
                 let unit = if inspect.unit.is_empty() {
                     None
                 } else {
-                    Some(UnitName::parse(&inspect.unit).or_refuse()?)
+                    Some(inspect.unit.parse::<UnitName>().or_refuse()?)
                 };
                 Ok(Response::Instances(
                     self.units.inspect_instances(unit.as_ref()),
@@ -269,7 +269,7 @@ impl Dispatcher {
                 let slot = self.attachment.as_ref().ok_or_else(|| {
                     Refusal::precondition("renderer attachment requires the observation socket")
                 })?;
-                let attachment = attachment::Attachment::parse(request)?;
+                let attachment = attachment::Attachment::from_request(request)?;
                 if self.units.manifest(attachment.unit()).is_none() {
                     return Err(Refusal::invalid("unknown renderer unit"));
                 }
@@ -371,7 +371,7 @@ impl Dispatcher {
                     .ok_or_else(|| Refusal::denied("only units own a keyspace"))?;
 
                 // Units may write only their own record keyspace.
-                let topic = Address::parse(&set.topic).or_refuse()?;
+                let topic = set.topic.parse::<Address>().or_refuse()?;
                 if topic.owner() != Some(unit.as_str()) {
                     return Err(Refusal::denied(format!(
                         "{topic} is not in {unit}'s keyspace"
@@ -424,7 +424,7 @@ impl Dispatcher {
                 Ok(Response::Ok)
             }
             invoke::Op::AdoptUnit(adopt) => {
-                let name = UnitName::parse(adopt.unit.clone()).or_refuse()?;
+                let name = UnitName::try_from(adopt.unit.clone()).or_refuse()?;
 
                 let token = self.supervisor.adopt_unit(&name).await?;
                 self.adopted.taken(name.clone(), token.clone());
@@ -438,7 +438,7 @@ impl Dispatcher {
             }
 
             invoke::Op::RestartUnit(restart) => {
-                let name = UnitName::parse(restart.unit.clone()).or_refuse()?;
+                let name = UnitName::try_from(restart.unit.clone()).or_refuse()?;
 
                 // Restart preserves the document's desired running state.
                 if !self.supervisor.restart(&name) {

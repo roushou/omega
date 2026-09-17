@@ -8,7 +8,7 @@ use omega_proto::omega::{MediaKey, Playback, media_key, state_topic};
 
 fn player(id: &str, status: &str) -> Player {
     Player {
-        id: omega_proto::PlayerId::parse(id).unwrap(),
+        id: omega_proto::PlayerId::try_from(id).unwrap(),
         identity: id.into(),
         status: status.into(),
         title: "Track".into(),

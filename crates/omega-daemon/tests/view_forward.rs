@@ -13,7 +13,7 @@ use omega_proto::Observation;
 use omega_proto::omega::{Value, ViewNode, ViewTree, value};
 
 fn surface(id: &str) -> omega_proto::SurfaceId {
-    omega_proto::SurfaceId::parse(id).unwrap()
+    omega_proto::SurfaceId::try_from(id).unwrap()
 }
 
 fn view_with_text(text: &str) -> ViewTree {
@@ -49,7 +49,7 @@ fn battery(text: &str) -> ViewUpdate {
         let surface = SurfaceRef::new(unit_name("battery-widget"), surface("battery"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
-                id: omega_proto::instance::InstanceId::parse(format!(
+                id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
                     surface.unit,
                     surface.surface,
@@ -60,7 +60,9 @@ fn battery(text: &str) -> ViewUpdate {
                         .unwrap_or_default()
                 ))
                 .unwrap(),
-                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+                incarnation: "test-session"
+                    .parse::<omega_proto::instance::IncarnationId>()
+                    .unwrap(),
             },
             presentation: omega_proto::omega::Presentation {
                 kind: Some(omega_proto::omega::presentation::Kind::Window(
@@ -136,7 +138,7 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
         let surface = SurfaceRef::new(unit_name("clock-widget"), surface("battery"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
-                id: omega_proto::instance::InstanceId::parse(format!(
+                id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
                     surface.unit,
                     surface.surface,
@@ -147,7 +149,9 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
                         .unwrap_or_default()
                 ))
                 .unwrap(),
-                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+                incarnation: "test-session"
+                    .parse::<omega_proto::instance::IncarnationId>()
+                    .unwrap(),
             },
             presentation: omega_proto::omega::Presentation {
                 kind: Some(omega_proto::omega::presentation::Kind::Window(
@@ -285,7 +289,7 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
         let surface = SurfaceRef::module(unit.clone(), surface("battery"), module("top-bar-1"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
-                id: omega_proto::instance::InstanceId::parse(format!(
+                id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
                     surface.unit,
                     surface.surface,
@@ -296,7 +300,9 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
                         .unwrap_or_default()
                 ))
                 .unwrap(),
-                incarnation: omega_proto::instance::IncarnationId::parse("test-session").unwrap(),
+                incarnation: "test-session"
+                    .parse::<omega_proto::instance::IncarnationId>()
+                    .unwrap(),
             },
             presentation: omega_proto::omega::Presentation {
                 kind: Some(omega_proto::omega::presentation::Kind::Window(
@@ -339,7 +345,7 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
 }
 
 fn module(id: &str) -> ModuleId {
-    ModuleId::parse(id).unwrap()
+    ModuleId::try_from(id).unwrap()
 }
 
 struct ViewFixture;

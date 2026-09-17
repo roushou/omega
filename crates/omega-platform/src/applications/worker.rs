@@ -113,7 +113,7 @@ impl Worker {
             let id = desktop
                 .id()
                 .ok_or_else(|| BrokerError::unreadable("desktop entry has no id"))?;
-            let id = ApplicationId::parse(id.to_string()).map_err(BrokerError::unreadable)?;
+            let id = ApplicationId::try_from(id.to_string()).map_err(BrokerError::unreadable)?;
             let icon = match desktop.icon() {
                 Some(icon) => {
                     if let Some(themed) = icon.downcast_ref::<gio::ThemedIcon>() {

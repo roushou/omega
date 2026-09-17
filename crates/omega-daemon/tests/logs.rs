@@ -67,7 +67,8 @@ async fn a_units_output_survives_the_restart_that_follows_it() {
         "#!/bin/sh\necho 'the manifest hash did not match' >&2\nexit 2\n",
     );
 
-    supervisor.spawn(UnitSpec::new(UnitName::parse("noisy").unwrap(), &script).logged(log.clone()));
+    supervisor
+        .spawn(UnitSpec::new("noisy".parse::<UnitName>().unwrap(), &script).logged(log.clone()));
 
     // Unit logs must remain readable after process exit.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);

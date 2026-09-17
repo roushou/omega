@@ -89,7 +89,7 @@ impl Manager {
             diagnose: self.diagnose_command(Some(name)),
             source,
         })?;
-        Status::parse(source).map_err(|source| ManagerError::Status {
+        Status::from_show_output(source).map_err(|source| ManagerError::Status {
             unit: name.clone(),
             diagnose: self.diagnose_command(Some(name)),
             source,
@@ -214,7 +214,7 @@ mod tests {
         fn service(&self, scope: Scope) -> Service {
             Service::new(
                 self.manager(scope),
-                UnitName::parse("example.service").unwrap(),
+                "example.service".parse::<UnitName>().unwrap(),
                 self.root.join("example.service"),
             )
             .unwrap()

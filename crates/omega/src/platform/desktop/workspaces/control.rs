@@ -46,7 +46,7 @@ impl WorkspaceControl {
     /// ```no_run
     /// # async fn example(control: &omega::platform::desktop::WorkspaceControl) -> omega::Result<()> {
     /// use omega::platform::desktop::WorkspaceName;
-    /// let name = WorkspaceName::parse("mail").unwrap();
+    /// let name = "mail".parse::<WorkspaceName>().unwrap();
     /// control.switch_to_named(&name).await?;
     /// # Ok(()) }
     /// ```

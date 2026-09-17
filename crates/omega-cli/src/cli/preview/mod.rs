@@ -54,7 +54,7 @@ impl Drop for SessionDirectory {
 impl PreviewCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         if let Some(case) = &self.case {
-            CaseId::parse(case.clone())?;
+            CaseId::try_from(case.clone())?;
         }
         let layout = Layout::resolve();
         let directory = self

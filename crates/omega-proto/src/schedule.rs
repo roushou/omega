@@ -10,6 +10,44 @@ use crate::omega::{Action, Event, Schedule, event};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Cadence(Duration);
 
+impl std::str::FromStr for Cadence {
+    type Err = CadenceError;
+
+    /// Parse `every <n><s|m|h|d>`, rejecting zero, overflow, and unsupported syntax.
+    fn from_str(cadence: &str) -> Result<Self, Self::Err> {
+        let cadence = cadence.trim();
+
+        let Some(period) = cadence.strip_prefix(Self::EVERY) else {
+            return Err(CadenceError::NotACadence(cadence.to_string()));
+        };
+
+        let period = period.trim();
+        let Some(unit) = period.chars().last() else {
+            return Err(CadenceError::NoPeriod(cadence.to_string()));
+        };
+
+        let Some((_, seconds)) = Self::UNITS.iter().find(|(name, _)| *name == unit) else {
+            return Err(CadenceError::UnknownUnit {
+                cadence: cadence.to_string(),
+                unit,
+            });
+        };
+
+        let count: u64 = period[..period.len() - unit.len_utf8()]
+            .trim()
+            .parse()
+            .map_err(|_| CadenceError::NoPeriod(cadence.to_string()))?;
+
+        // Reject duration overflow at parsing.
+        let period = count
+            .checked_mul(*seconds)
+            .map(Duration::from_secs)
+            .ok_or_else(|| CadenceError::NoPeriod(cadence.to_string()))?;
+
+        Self::of(period)
+    }
+}
+
 impl Cadence {
     /// The word every cadence starts with.
     const EVERY: &'static str = "every";
@@ -36,7 +74,7 @@ impl Cadence {
     ///
     /// # Panics
     /// Panics if the count is zero.
-    /// Use [`Cadence::parse`] for fallible string input.
+    /// Use [`str::parse`] for fallible string input.
     pub fn seconds(count: u32) -> Self {
         Self::counted(count, 1)
     }
@@ -68,40 +106,6 @@ impl Cadence {
     fn counted(count: u32, seconds: u64) -> Self {
         assert!(count > 0, "a cadence of nought never fires");
         Self(Duration::from_secs(u64::from(count) * seconds))
-    }
-
-    /// Parse `every <n><s|m|h|d>`, rejecting zero, overflow, and unsupported syntax.
-    pub fn parse(cadence: &str) -> Result<Self, CadenceError> {
-        let cadence = cadence.trim();
-
-        let Some(period) = cadence.strip_prefix(Self::EVERY) else {
-            return Err(CadenceError::NotACadence(cadence.to_string()));
-        };
-
-        let period = period.trim();
-        let Some(unit) = period.chars().last() else {
-            return Err(CadenceError::NoPeriod(cadence.to_string()));
-        };
-
-        let Some((_, seconds)) = Self::UNITS.iter().find(|(name, _)| *name == unit) else {
-            return Err(CadenceError::UnknownUnit {
-                cadence: cadence.to_string(),
-                unit,
-            });
-        };
-
-        let count: u64 = period[..period.len() - unit.len_utf8()]
-            .trim()
-            .parse()
-            .map_err(|_| CadenceError::NoPeriod(cadence.to_string()))?;
-
-        // Reject duration overflow at parsing.
-        let period = count
-            .checked_mul(*seconds)
-            .map(Duration::from_secs)
-            .ok_or_else(|| CadenceError::NoPeriod(cadence.to_string()))?;
-
-        Self::of(period)
     }
 }
 
@@ -154,7 +158,7 @@ impl Schedule {
 
     /// How often this schedule fires, or why it cannot.
     pub fn parsed(&self) -> Result<Cadence, CadenceError> {
-        Cadence::parse(&self.cadence)
+        self.cadence.parse::<Cadence>()
     }
 }
 
@@ -175,7 +179,7 @@ mod tests {
     #[test]
     fn a_cadence_round_trips_through_its_written_form() {
         for written in ["every 1s", "every 30s", "every 10m", "every 2h", "every 1d"] {
-            let cadence = Cadence::parse(written).expect(written);
+            let cadence = written.parse::<Cadence>().expect(written);
             assert_eq!(cadence.to_string(), written);
         }
     }
@@ -193,22 +197,22 @@ mod tests {
     #[test]
     fn cron_is_refused_by_name() {
         // Reject unsupported schedule grammar.
-        let err = Cadence::parse("0 9 * * *").unwrap_err();
+        let err = "0 9 * * *".parse::<Cadence>().unwrap_err();
         assert!(err.to_string().contains("cron is not read"), "{err}");
     }
 
     #[test]
     fn a_cadence_with_no_period_is_refused() {
         assert!(matches!(
-            Cadence::parse("every"),
+            "every".parse::<Cadence>(),
             Err(CadenceError::NoPeriod(_))
         ));
         assert!(matches!(
-            Cadence::parse("every m"),
+            "every m".parse::<Cadence>(),
             Err(CadenceError::NoPeriod(_))
         ));
         assert!(matches!(
-            Cadence::parse("every 10"),
+            "every 10".parse::<Cadence>(),
             Err(CadenceError::UnknownUnit { unit: '0', .. })
         ));
     }
@@ -217,7 +221,7 @@ mod tests {
     fn a_unit_this_grammar_does_not_know_is_refused() {
         // Reject unsupported duration units.
         assert!(matches!(
-            Cadence::parse("every 2w"),
+            "every 2w".parse::<Cadence>(),
             Err(CadenceError::UnknownUnit { unit: 'w', .. })
         ));
     }
@@ -225,7 +229,7 @@ mod tests {
     #[test]
     fn nothing_may_fire_faster_than_the_floor() {
         assert!(matches!(
-            Cadence::parse("every 0s"),
+            "every 0s".parse::<Cadence>(),
             Err(CadenceError::TooFast(_))
         ));
         assert!(matches!(
@@ -236,22 +240,25 @@ mod tests {
 
     #[test]
     fn a_count_too_large_to_hold_is_a_typo_not_a_schedule() {
-        assert!(Cadence::parse(&format!("every {}d", u64::MAX)).is_err());
+        assert!(format!("every {}d", u64::MAX).parse::<Cadence>().is_err());
     }
 
     #[test]
     fn whitespace_is_not_part_of_the_grammar() {
         assert_eq!(
-            Cadence::parse("  every   10m  ").unwrap(),
+            "  every   10m  ".parse::<Cadence>().unwrap(),
             Cadence::of(Duration::from_secs(600)).unwrap()
         );
     }
 
     #[test]
     fn a_named_period_is_the_period_it_names() {
-        assert_eq!(Cadence::minutes(10), Cadence::parse("every 10m").unwrap());
-        assert_eq!(Cadence::hours(1), Cadence::parse("every 1h").unwrap());
-        assert_eq!(Cadence::days(1), Cadence::parse("every 1d").unwrap());
+        assert_eq!(
+            Cadence::minutes(10),
+            "every 10m".parse::<Cadence>().unwrap()
+        );
+        assert_eq!(Cadence::hours(1), "every 1h".parse::<Cadence>().unwrap());
+        assert_eq!(Cadence::days(1), "every 1d".parse::<Cadence>().unwrap());
         assert_eq!(Cadence::seconds(90).to_string(), "every 90s");
     }
 

@@ -11,8 +11,8 @@ pub enum LoadState {
     Other(String),
 }
 
-impl LoadState {
-    fn parse(value: &str) -> Self {
+impl From<&str> for LoadState {
+    fn from(value: &str) -> Self {
         match value {
             "loaded" => Self::Loaded,
             "not-found" => Self::NotFound,
@@ -36,8 +36,8 @@ pub enum ActiveState {
     Other(String),
 }
 
-impl ActiveState {
-    fn parse(value: &str) -> Self {
+impl From<&str> for ActiveState {
+    fn from(value: &str) -> Self {
         match value {
             "active" => Self::Active,
             "reloading" => Self::Reloading,
@@ -49,7 +49,9 @@ impl ActiveState {
             other => Self::Other(other.into()),
         }
     }
+}
 
+impl ActiveState {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Active => "active",
@@ -82,8 +84,8 @@ pub enum Enablement {
     Other(String),
 }
 
-impl Enablement {
-    fn parse(value: &str) -> Self {
+impl From<&str> for Enablement {
+    fn from(value: &str) -> Self {
         match value {
             "enabled" => Self::Enabled,
             "enabled-runtime" => Self::Runtime,
@@ -95,7 +97,9 @@ impl Enablement {
             other => Self::Other(other.into()),
         }
     }
+}
 
+impl Enablement {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Enabled => "enabled",
@@ -131,7 +135,7 @@ impl Status {
     pub(super) const PROPERTIES: &'static str =
         "--property=LoadState,ActiveState,UnitFileState,SubState,FragmentPath,NeedDaemonReload";
 
-    pub(super) fn parse(source: &str) -> Result<Self, StatusError> {
+    pub(super) fn from_show_output(source: &str) -> Result<Self, StatusError> {
         let mut fields = [None; 6];
         for line in source.lines().filter(|line| !line.is_empty()) {
             let (key, value) = line
@@ -170,9 +174,9 @@ impl Status {
             _ => return Err(StatusError("NeedDaemonReload must be yes or no".into())),
         };
         Ok(Self {
-            load: LoadState::parse(load),
-            active: ActiveState::parse(active),
-            enablement: Enablement::parse(enablement),
+            load: LoadState::from(load),
+            active: ActiveState::from(active),
+            enablement: Enablement::from(enablement),
             sub_state: sub.into(),
             fragment: (!fragment.is_empty()).then(|| fragment.into()),
             needs_reload,
@@ -191,11 +195,11 @@ mod tests {
 
     #[test]
     fn status_preserves_runtime_and_file_state_independently() {
-        let status = Status::parse(STATUS).unwrap();
+        let status = Status::from_show_output(STATUS).unwrap();
         assert!(status.active.is_active());
         assert!(status.enablement.is_persistent());
         assert_eq!(status.fragment, Some("/a b/test.service".into()));
-        let status = Status::parse(
+        let status = Status::from_show_output(
             &STATUS
                 .replace("ActiveState=active", "ActiveState=failed")
                 .replace("UnitFileState=enabled", "UnitFileState=enabled-runtime"),
@@ -207,14 +211,15 @@ mod tests {
 
     #[test]
     fn missing_units_are_data_but_missing_properties_are_errors() {
-        let status = Status::parse("LoadState=not-found\nActiveState=inactive\nUnitFileState=\nSubState=dead\nFragmentPath=\nNeedDaemonReload=no\n").unwrap();
+        let status = Status::from_show_output("LoadState=not-found\nActiveState=inactive\nUnitFileState=\nSubState=dead\nFragmentPath=\nNeedDaemonReload=no\n").unwrap();
         assert_eq!(status.load, LoadState::NotFound);
         assert_eq!(status.fragment, None);
-        assert!(Status::parse("").is_err());
-        assert!(Status::parse(&(STATUS.to_owned() + "ActiveState=failed\n")).is_err());
-        let status =
-            Status::parse(&STATUS.replace("ActiveState=active", "ActiveState=future-state"))
-                .unwrap();
+        assert!(Status::from_show_output("").is_err());
+        assert!(Status::from_show_output(&(STATUS.to_owned() + "ActiveState=failed\n")).is_err());
+        let status = Status::from_show_output(
+            &STATUS.replace("ActiveState=active", "ActiveState=future-state"),
+        )
+        .unwrap();
         assert_eq!(status.active, ActiveState::Other("future-state".into()));
     }
 }

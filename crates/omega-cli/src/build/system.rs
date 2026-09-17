@@ -46,7 +46,7 @@ impl<'a> System<'a> {
             );
         }
 
-        let document = DocumentFile::parse(&String::from_utf8_lossy(&output.stdout))
+        let document = DocumentFile::decode(&String::from_utf8_lossy(&output.stdout))
             .context("the config plane did not emit a state document")?;
 
         Ok(document)

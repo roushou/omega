@@ -22,7 +22,7 @@ fn table_with(manifests: ManifestStore) -> UnitTable {
 }
 
 fn unit(name: &str) -> UnitName {
-    UnitName::parse(name).unwrap()
+    UnitName::try_from(name).unwrap()
 }
 
 #[test]

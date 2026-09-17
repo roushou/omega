@@ -7,9 +7,11 @@ pub struct PackageName {
     rust_ident: String,
 }
 
-impl PackageName {
-    pub fn parse(input: &str) -> Result<Self, PackageNameError> {
-        let unit = UnitName::parse(input)?;
+impl std::str::FromStr for PackageName {
+    type Err = PackageNameError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let unit = UnitName::try_from(input)?;
         let rust_ident = input.replace('-', "_");
         // Include reserved keywords across supported editions; templates use plain paths.
         const RESERVED: &[&str] = &[
@@ -77,7 +79,9 @@ impl PackageName {
         }
         Ok(Self { unit, rust_ident })
     }
+}
 
+impl PackageName {
     pub fn unit(&self) -> &UnitName {
         &self.unit
     }
@@ -105,10 +109,10 @@ mod tests {
     #[test]
     fn names_must_work_as_rust_crates() {
         for name in ["type", "gen", "self", "system", "omega", "proc-macro"] {
-            assert!(PackageName::parse(name).is_err(), "{name}");
+            assert!(name.parse::<PackageName>().is_err(), "{name}");
         }
         assert_eq!(
-            PackageName::parse("audio-output").unwrap().rust_ident(),
+            "audio-output".parse::<PackageName>().unwrap().rust_ident(),
             "audio_output"
         );
     }

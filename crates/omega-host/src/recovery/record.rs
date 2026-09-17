@@ -8,9 +8,26 @@ pub(super) const VERSION: u32 = 1;
 #[serde(transparent)]
 pub struct ChangeId(String);
 
-impl ChangeId {
-    pub fn parse(value: impl Into<String>) -> io::Result<Self> {
-        let value = value.into();
+impl std::str::FromStr for ChangeId {
+    type Err = io::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for ChangeId {
+    type Error = io::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for ChangeId {
+    type Error = io::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty()
             || value == "."
             || value == ".."
@@ -25,7 +42,9 @@ impl ChangeId {
         }
         Ok(Self(value))
     }
+}
 
+impl ChangeId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -39,7 +58,7 @@ impl fmt::Display for ChangeId {
 
 impl<'de> Deserialize<'de> for ChangeId {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Self::parse(String::deserialize(d)?).map_err(serde::de::Error::custom)
+        Self::try_from(String::deserialize(d)?).map_err(serde::de::Error::custom)
     }
 }
 

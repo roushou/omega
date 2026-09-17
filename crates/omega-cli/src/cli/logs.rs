@@ -39,7 +39,7 @@ impl LogsCmd {
             return Self::list(&layout, ui);
         };
 
-        let name = UnitName::parse(unit)?;
+        let name = UnitName::try_from(unit)?;
         let path = layout.unit_log(&name);
         if !path.exists() {
             bail!("no log for {name} at {} — has it run?", Paint::path(&path));

@@ -386,10 +386,10 @@ mod tests {
             let root = self.layout();
             let generation = Generations::new(&root).stage().unwrap();
             let layout = Layout::at(&root.config, generation.files().path(), &root.cache);
-            let name = omega_proto::UnitName::parse("example").unwrap();
+            let name = "example".parse::<omega_proto::UnitName>().unwrap();
             let manifest =
                 omega_proto::Manifest::new(&name, "1").exposing([omega_proto::Surface::new(
-                    &omega_proto::SurfaceId::parse("view").unwrap(),
+                    &"view".parse::<omega_proto::SurfaceId>().unwrap(),
                     omega_proto::omega::SurfaceKind::Widget,
                 )]);
             generation
@@ -570,7 +570,7 @@ mod tests {
             .activate(worker.reload().unwrap().unwrap())
             .await
             .unwrap();
-        let name = omega_proto::UnitName::parse("example").unwrap();
+        let name = "example".parse::<omega_proto::UnitName>().unwrap();
         let token = worker.context.units.adopt_unit(&name);
         let second = dir.publish_unit(b"second");
         assert!(
@@ -646,7 +646,7 @@ mod tests {
             .activate(worker.reload().unwrap().unwrap())
             .await
             .unwrap();
-        let name = omega_proto::UnitName::parse("example").unwrap();
+        let name = "example".parse::<omega_proto::UnitName>().unwrap();
         let token = worker.context.units.adopt_unit(&name);
         let document = &mut worker.build.as_mut().unwrap().document;
         *document = omega_document::Document::new()

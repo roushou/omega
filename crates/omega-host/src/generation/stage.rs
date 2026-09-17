@@ -23,7 +23,7 @@ impl GenerationStage {
 
     /// The identity reserved for this stage, including after another build publishes.
     pub fn id(&self) -> super::GenerationId {
-        super::GenerationId::parse(
+        super::GenerationId::try_from(
             self.target
                 .file_name()
                 .expect("a generation has a name")

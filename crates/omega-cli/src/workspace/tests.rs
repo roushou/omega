@@ -51,7 +51,7 @@ fn invalid_system_manifest_creates_no_plugin_or_manifest_edits() {
     f.init();
     f.write(f.layout.system_manifest(), "[broken");
     let before = f.root_source();
-    let name = PackageName::parse("hello").unwrap();
+    let name = "hello".parse::<PackageName>().unwrap();
     let path = f.layout.unit_src_dir(name.unit());
     assert!(f.open().prepare_plugin(name, Template::Minimal).is_err());
     assert!(!path.exists());
@@ -79,7 +79,7 @@ fn new_preserves_comments_options_and_inherited_package_fields() {
     let system = "# my config\n[package]\nname = \"system\"\nversion.workspace = true\nedition.workspace = true\n\n[dependencies]\nomega-document.workspace = true # authoring\n";
     f.write(f.layout.system_manifest(), system);
     f.open()
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap()
         .apply()
         .unwrap();
@@ -91,7 +91,7 @@ fn new_preserves_comments_options_and_inherited_package_fields() {
     assert!(system.contains("version.workspace = true"));
     assert!(system.contains("omega-document.workspace = true # authoring"));
 
-    let manifest = omega_host::cargo::Manifest::parse(&system).unwrap();
+    let manifest = system.parse::<omega_host::cargo::Manifest>().unwrap();
     let dependencies = manifest.dependencies().unwrap();
     let plugin = dependencies.get("hello").unwrap();
     assert_eq!(plugin.path(), Some("../plugins/hello"));
@@ -108,7 +108,7 @@ fn excluded_plugins_are_refused_before_writing() {
     f.write(f.layout.workspace_manifest(), &root);
     let error = f
         .open()
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap_err();
     assert!(error.to_string().contains("excluded"));
     assert_eq!(f.root_source(), root);
@@ -125,7 +125,7 @@ fn existing_membership_globs_cover_a_plugin_before_its_directory_exists() {
     );
     f.write(f.layout.workspace_manifest(), &root);
     f.open()
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap()
         .apply()
         .unwrap();
@@ -142,7 +142,7 @@ fn rust_dependency_alias_collisions_do_not_replace_dependencies() {
     assert!(
         f.open()
             .prepare_plugin(
-                PackageName::parse("audio-output").unwrap(),
+                "audio-output".parse::<PackageName>().unwrap(),
                 Template::Minimal
             )
             .is_err()
@@ -159,7 +159,7 @@ fn normalized_workspace_package_collisions_are_refused() {
     f.init();
     f.open()
         .prepare_plugin(
-            PackageName::parse("audio-output").unwrap(),
+            "audio-output".parse::<PackageName>().unwrap(),
             Template::Minimal,
         )
         .unwrap()
@@ -168,7 +168,7 @@ fn normalized_workspace_package_collisions_are_refused() {
     assert!(
         f.open()
             .prepare_plugin(
-                PackageName::parse("audio_output").unwrap(),
+                "audio_output".parse::<PackageName>().unwrap(),
                 Template::Minimal
             )
             .is_err()
@@ -180,7 +180,7 @@ fn adding_a_glob_checks_previously_unlisted_package_names() {
     let f = Fixture::new();
     f.init();
     let root = f.root_source();
-    let name = PackageName::parse("audio_output").unwrap();
+    let name = "audio_output".parse::<PackageName>().unwrap();
     f.write(
         f.layout.unit_crate_manifest(name.unit()),
         "[package]\nname = \"audio_output\"\nversion = \"0.1.0\"\n",
@@ -188,7 +188,7 @@ fn adding_a_glob_checks_previously_unlisted_package_names() {
     let error = f
         .open()
         .prepare_plugin(
-            PackageName::parse("audio-output").unwrap(),
+            "audio-output".parse::<PackageName>().unwrap(),
             Template::Minimal,
         )
         .unwrap_err();
@@ -204,7 +204,7 @@ fn excluded_libraries_are_refused_before_writing() {
         .root_source()
         .replace("[workspace]\n", "[workspace]\nexclude = [\"crates/*\"]\n");
     f.write(f.layout.workspace_manifest(), &root);
-    let name = PackageName::parse("shared-types").unwrap();
+    let name = "shared-types".parse::<PackageName>().unwrap();
     let destination = f.layout.library_src_dir(&name);
     let error = f.open().prepare_library(name, &[]).unwrap_err();
     assert!(error.to_string().contains("excluded"));
@@ -218,7 +218,7 @@ fn stale_preparation_does_not_overwrite_an_editors_changes() {
     f.init();
     let workspace = f.open();
     let prepared = workspace
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap();
     let updated = f.root_source() + "\n# edited while command was preparing\n";
     f.write(f.layout.workspace_manifest(), &updated);
@@ -235,7 +235,7 @@ fn destination_created_after_preparation_is_preserved_and_manifests_rolled_back(
     let system = std::fs::read_to_string(f.layout.system_manifest()).unwrap();
     let workspace = f.open();
     let prepared = workspace
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap();
     let marker = f.layout.config.join("plugins/hello/mine");
     f.write(marker.clone(), "my file");
@@ -284,7 +284,7 @@ fn missing_sdk_dependency_is_added_but_wrong_package_is_refused() {
         .remove("omega");
     f.write(f.layout.workspace_manifest(), &doc.to_string());
     f.open()
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap()
         .apply()
         .unwrap();
@@ -295,7 +295,7 @@ fn missing_sdk_dependency_is_added_but_wrong_package_is_refused() {
     );
     assert!(
         f.open()
-            .prepare_plugin(PackageName::parse("another").unwrap(), Template::Minimal)
+            .prepare_plugin("another".parse::<PackageName>().unwrap(), Template::Minimal)
             .is_err()
     );
 }
@@ -341,7 +341,7 @@ fn retry_completes_manifest_references_left_before_plugin_publication() {
         + "hello = { path = \"../plugins/hello\" }\n";
     f.write(f.layout.system_manifest(), &system);
     f.open()
-        .prepare_plugin(PackageName::parse("hello").unwrap(), Template::Minimal)
+        .prepare_plugin("hello".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap()
         .apply()
         .unwrap();
@@ -380,13 +380,13 @@ fn shared_libraries_have_no_program_and_only_explicit_consumers() {
     let f = Fixture::new();
     f.init();
     f.open()
-        .prepare_plugin(PackageName::parse("power").unwrap(), Template::Minimal)
+        .prepare_plugin("power".parse::<PackageName>().unwrap(), Template::Minimal)
         .unwrap()
         .apply()
         .unwrap();
     f.open()
         .prepare_library(
-            PackageName::parse("desktop-ui").unwrap(),
+            "desktop-ui".parse::<PackageName>().unwrap(),
             &["plugins/power".into(), "system".into()],
         )
         .unwrap()

@@ -99,9 +99,9 @@ impl UnitTable {
         &self,
         request: &omega::CreateInstance,
     ) -> Result<omega::InstanceSnapshot, Refusal> {
-        let unit = UnitName::parse(&request.unit).or_refuse()?;
-        let surface = SurfaceId::parse(&request.surface).or_refuse()?;
-        let presentation = PresentationSpec::parse(
+        let unit = request.unit.parse::<UnitName>().or_refuse()?;
+        let surface = request.surface.parse::<SurfaceId>().or_refuse()?;
+        let presentation = PresentationSpec::try_from(
             request
                 .presentation
                 .clone()
@@ -126,7 +126,7 @@ impl UnitTable {
         let singleton = if request.singleton.is_empty() {
             None
         } else {
-            Some(SingletonId::parse(&request.singleton).or_refuse()?)
+            Some(request.singleton.parse::<SingletonId>().or_refuse()?)
         };
         self.create(
             &unit,
@@ -291,7 +291,7 @@ impl UnitTable {
                     .map(|instance| instance.key.wire())
             })
             .ok_or_else(|| Refusal::unavailable("popup anchor is not ready"))?;
-        let presentation = PresentationSpec::parse(omega::Presentation {
+        let presentation = PresentationSpec::try_from(omega::Presentation {
             kind: Some(presentation::Kind::Popup(omega::PopupPresentation {
                 anchor: Some(key),
             })),
@@ -338,7 +338,7 @@ impl UnitTable {
             .module
             .as_ref()
             .ok_or_else(|| Refusal::invalid("bar instance requires a placement"))?;
-        let presentation = PresentationSpec::parse(omega::Presentation {
+        let presentation = PresentationSpec::try_from(omega::Presentation {
             kind: Some(presentation::Kind::Embedded(omega::EmbeddedPresentation {
                 placement: placement.to_string(),
             })),
@@ -407,8 +407,10 @@ impl UnitTable {
     }
 
     pub fn instance_key(value: Option<&omega::InstanceRef>) -> Result<InstanceKey, Refusal> {
-        InstanceKey::parse(value.ok_or_else(|| Refusal::invalid("instance identity is required"))?)
-            .or_refuse()
+        InstanceKey::try_from(
+            value.ok_or_else(|| Refusal::invalid("instance identity is required"))?,
+        )
+        .or_refuse()
     }
 
     pub(crate) async fn change_presentation(

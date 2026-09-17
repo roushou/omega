@@ -813,8 +813,8 @@ async fn required_placements_are_reported_even_without_a_renderer() {
     let fixture = Fixture::new("renderer-required-placements");
     let address = omega_daemon::hub::SurfaceRef::module(
         common::unit_name("example"),
-        omega_proto::SurfaceId::parse("panel").unwrap(),
-        omega_proto::ModuleId::parse("slot").unwrap(),
+        "panel".parse::<omega_proto::SurfaceId>().unwrap(),
+        "slot".parse::<omega_proto::ModuleId>().unwrap(),
     );
     fixture
         .units

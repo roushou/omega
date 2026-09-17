@@ -58,7 +58,7 @@ impl InitFailure {
                     Paint::abbreviate(path).display()
                 ));
             };
-            let Ok(id) = ChangeId::parse(id) else {
+            let Ok(id) = ChangeId::try_from(id) else {
                 return Some(format!(
                     "Inspect the retained recovery record at {} before retrying.",
                     Paint::abbreviate(path).display()

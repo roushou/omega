@@ -5,10 +5,27 @@ use std::fmt;
 /// An opaque BlueZ device endpoint. An address alone is ambiguous across adapters.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BluetoothDeviceId(String);
-impl BluetoothDeviceId {
+impl std::str::FromStr for BluetoothDeviceId {
+    type Err = BluetoothDeviceIdError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for BluetoothDeviceId {
+    type Error = BluetoothDeviceIdError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for BluetoothDeviceId {
+    type Error = BluetoothDeviceIdError;
+
     /// Validate a device endpoint obtained from a Bluetooth reading.
-    pub fn parse(id: impl Into<String>) -> Result<Self, BluetoothDeviceIdError> {
-        let id = id.into();
+    fn try_from(id: String) -> Result<Self, Self::Error> {
         let valid = id
             .strip_prefix("/org/bluez/hci")
             .and_then(|tail| tail.split_once("/dev_"))
@@ -29,6 +46,9 @@ impl BluetoothDeviceId {
         }
         Ok(Self(id))
     }
+}
+
+impl BluetoothDeviceId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -43,7 +63,7 @@ impl fmt::Display for BluetoothDeviceId {
 pub struct BluetoothDeviceIdError(String);
 impl FromValue for BluetoothDeviceId {
     fn from_value(value: &Value) -> Option<Self> {
-        Self::parse(String::from_value(value)?).ok()
+        Self::try_from(String::from_value(value)?).ok()
     }
 }
 impl IntoValue for BluetoothDeviceId {
@@ -68,7 +88,7 @@ mod tests {
             "60:AB:D2:25:8C:49",
             "",
         ] {
-            assert!(BluetoothDeviceId::parse(id).is_err());
+            assert!(BluetoothDeviceId::try_from(id).is_err());
             assert!(
                 action::Kind::ConnectBluetooth(ConnectBluetooth {
                     device_id: id.into()
@@ -92,7 +112,9 @@ mod tests {
             ActionKind::DisconnectBluetooth.cost(),
             Some(Capability::Bluetooth)
         );
-        let id = BluetoothDeviceId::parse("/org/bluez/hci12/dev_60_AB_D2_25_8C_49").unwrap();
+        let id = "/org/bluez/hci12/dev_60_AB_D2_25_8C_49"
+            .parse::<BluetoothDeviceId>()
+            .unwrap();
         assert_eq!(
             BluetoothDeviceId::from_value(&id.clone().into_value()),
             Some(id)

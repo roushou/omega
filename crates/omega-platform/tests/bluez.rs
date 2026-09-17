@@ -8,7 +8,9 @@ use omega_proto::omega::state_topic;
 
 fn device(alias: &str, paired: bool, connected: bool) -> Device {
     Device {
-        id: omega_proto::BluetoothDeviceId::parse("/org/bluez/hci0/dev_60_AB_D2_25_8C_49").unwrap(),
+        id: "/org/bluez/hci0/dev_60_AB_D2_25_8C_49"
+            .parse::<omega_proto::BluetoothDeviceId>()
+            .unwrap(),
         can_connect: paired,
         address: "60:AB:D2:25:8C:49".into(),
         alias: alias.into(),
@@ -113,7 +115,9 @@ fn empty_battery_is_distinct_from_missing_and_targets_include_the_adapter() {
         ..device("Headphones", true, false)
     };
     let second = Device {
-        id: omega_proto::BluetoothDeviceId::parse("/org/bluez/hci1/dev_60_AB_D2_25_8C_49").unwrap(),
+        id: "/org/bluez/hci1/dev_60_AB_D2_25_8C_49"
+            .parse::<omega_proto::BluetoothDeviceId>()
+            .unwrap(),
         ..first.clone()
     };
     let target = second.id.clone();

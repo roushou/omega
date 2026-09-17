@@ -43,7 +43,8 @@ impl Player {
                 0 => None,
                 us => Some(Remaining::of(std::time::Duration::from_micros(us))),
             },
-            id: omega_proto::PlayerId::parse(player.id).expect("daemon supplied a valid player id"),
+            id: omega_proto::PlayerId::try_from(player.id)
+                .expect("daemon supplied a valid player id"),
             identity: player.identity,
             title: player.title,
             artist: player.artist,

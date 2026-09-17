@@ -148,12 +148,12 @@ mod tests {
         fn new() -> Self {
             let hub = Hub::new();
             let units = UnitTable::detached(hub.clone());
-            let name = UnitName::parse("network").unwrap();
-            let surface = SurfaceId::parse("indicator").unwrap();
+            let name = "network".parse::<UnitName>().unwrap();
+            let surface = "indicator".parse::<SurfaceId>().unwrap();
             let placement = SurfaceRef::module(
                 name.clone(),
                 surface.clone(),
-                ModuleId::parse("wifi").unwrap(),
+                "wifi".parse::<ModuleId>().unwrap(),
             );
             units
                 .adopt(&ManifestStore::from_manifests([Manifest::new(&name, "1")
@@ -174,7 +174,7 @@ mod tests {
             let instance = Instance::new(
                 self.placement.surface.clone(),
                 Default::default(),
-                PresentationSpec::parse(omega::Presentation {
+                PresentationSpec::try_from(omega::Presentation {
                     kind: Some(presentation::Kind::Embedded(omega::EmbeddedPresentation {
                         placement: "wifi".into(),
                     })),

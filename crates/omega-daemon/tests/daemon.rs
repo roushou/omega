@@ -32,7 +32,7 @@ impl Machine {
     /// Install a unit the way a build does: a binary, a canonical manifest,
     /// and an entry in `units.toml`.
     fn install(&self, name: &str, program: &str) -> UnitName {
-        let name = UnitName::parse(name).unwrap();
+        let name = UnitName::try_from(name).unwrap();
 
         let binary = self.layout.state_unit_program(&name);
         std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
@@ -306,7 +306,7 @@ async fn activation_replaces_changed_binaries_and_preserves_identical_ones() {
         .await
     );
     assert!(
-        std::fs::read_to_string(first.state_unit_program(&UnitName::parse("sleeper").unwrap()))
+        std::fs::read_to_string(first.state_unit_program(&"sleeper".parse::<UnitName>().unwrap()))
             .unwrap()
             .contains("first")
     );

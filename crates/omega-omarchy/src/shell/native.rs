@@ -4,9 +4,26 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct NativeId(String);
-impl NativeId {
-    pub fn parse(value: impl Into<String>) -> Result<Self, ShellError> {
-        let value = value.into();
+impl std::str::FromStr for NativeId {
+    type Err = ShellError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for NativeId {
+    type Error = ShellError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for NativeId {
+    type Error = ShellError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty()
             || !value
                 .bytes()
@@ -18,13 +35,16 @@ impl NativeId {
         }
         Ok(Self(value))
     }
+}
+
+impl NativeId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 impl<'de> Deserialize<'de> for NativeId {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
 }
 

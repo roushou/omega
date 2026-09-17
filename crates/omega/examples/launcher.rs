@@ -233,7 +233,7 @@ mod tests {
             })
         }
         fn id(name: &str) -> ApplicationId {
-            ApplicationId::parse(format!("{name}.desktop")).unwrap()
+            ApplicationId::try_from(format!("{name}.desktop")).unwrap()
         }
     }
     #[tokio::test]
