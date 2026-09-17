@@ -1,6 +1,6 @@
 # Omega
 
-_A declarative Rust framework and plugin runtime Omarchy._
+_A declarative Rust framework and plugin runtime for Omarchy._
 
 Omega lets you write desktop interfaces, controls, and automations in Rust.
 Plugins can appear in [Omarchy](https://omarchy.org)’s bar or in independent
