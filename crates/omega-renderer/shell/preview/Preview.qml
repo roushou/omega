@@ -43,7 +43,7 @@ ShellRoot {
             onRead: data => {
                 try {
                     var next = JSON.parse(data)
-                    if (next.version !== 2) { preview.failure = "Preview protocol mismatch"; return }
+                    if (next.version !== 1) { preview.failure = "Preview protocol mismatch"; return }
                     if (next.stale || next.epoch !== preview.snapshot.epoch)
                         requests.disconnected("Preview changed; reset pending interactions.")
                     preview.snapshot = next

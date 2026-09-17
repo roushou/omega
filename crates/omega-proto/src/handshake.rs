@@ -104,11 +104,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn plugin_namespace_requires_the_new_protocol() {
-        assert!(matches!(
-            Handshake::negotiate(7),
-            Err(HandshakeError::VersionMismatch { .. })
-        ));
-        assert_eq!(Handshake::negotiate(8).unwrap(), 8);
+    fn only_the_initial_protocol_version_is_accepted() {
+        for version in [0, 2, 7, 8, u32::MAX] {
+            assert!(matches!(
+                Handshake::negotiate(version),
+                Err(HandshakeError::VersionMismatch { .. })
+            ));
+        }
+        assert_eq!(Handshake::negotiate(1).unwrap(), 1);
     }
 }

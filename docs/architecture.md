@@ -291,12 +291,12 @@ Multiplexing, request correlation, flow control, and version negotiation are
 implemented above the encoding layer. `crates/omega-proto/schema/` defines the
 shared messages; generated Rust types are used by all native participants.
 
-The current protocol version and minimum accepted version are both 8, defined in
+The current protocol version and minimum accepted version are both 1, defined in
 `omega-proto/src/protocol.rs`. Rebuild plugins and update the daemon together
-when that compatibility boundary changes. Protocol 8 uses `plugin` identities,
+when that compatibility boundary changes. Protocol 1 uses `plugin` identities,
 the `plugins` lifecycle topic, and `plugin.<name>.<key>` record addresses.
 Deployment snapshots expose process status in `plugins` and UI health in
-`pluginHealth`. Preview transport version 2 uses the same renamed payloads.
+`pluginHealth`. Preview transport version 1 uses the same renamed payloads.
 
 Update configuration code to use `PluginName`, `PluginState`, and
 `omega_document::Plugins`. Run `omega build` to create a new generation with
