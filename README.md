@@ -190,13 +190,11 @@ Omega redraws the surface when its audio state changes. Moving the slider invoke
 in commands, reactions, or a stateful surface’s separate behavior dependencies.
 
 `omega new` creates a plugin crate and prints the declaration for placing its
-widget in your Rust shell layout. Build once to apply your changes,
-or keep a build running while you work:
+widget in your Rust shell layout. Build to apply your changes:
 
 ```sh
 omega new audio
 omega build
-omega build --watch --debug
 ```
 
 `omega new <name>` starts with a minimal text widget. Use

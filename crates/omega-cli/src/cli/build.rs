@@ -6,10 +6,6 @@ use std::time::Duration;
 /// Compile `~/.config/omega` and assemble `~/.local/state/omega`.
 #[derive(Debug, clap::Args)]
 pub struct BuildCmd {
-    /// Watch the config dir and rebuild on change.
-    #[arg(long)]
-    pub watch: bool,
-
     /// Compile using the debug profile without optimizations.
     #[arg(long)]
     pub debug: bool,
@@ -32,7 +28,6 @@ impl BuildCmd {
             } else {
                 Profile::Release
             },
-            watch: self.watch,
             activation_timeout: self
                 .wait
                 .then_some(self.timeout.unwrap_or(Duration::from_secs(30))),

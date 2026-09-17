@@ -12,7 +12,6 @@ use omega_document::StateDocument;
 use omega_host::{
     Layout, Profile,
     cargo::{BuildRequest, Selection},
-    fs::{Changes, Recursion},
 };
 use plan::Plan;
 use std::time::Duration;
@@ -29,7 +28,6 @@ pub(crate) use check::Check;
 pub(crate) struct Build {
     pub(crate) layout: Layout,
     pub(crate) profile: Profile,
-    pub(crate) watch: bool,
     pub(crate) activation_timeout: Option<Duration>,
 }
 
@@ -42,45 +40,9 @@ impl Build {
     }
 
     pub(crate) async fn run(&self, ui: &mut Ui) -> anyhow::Result<()> {
-        if self.watch {
-            self.watch_loop(&self.layout, self.profile, ui).await
-        } else {
-            self.build_once(&self.layout, self.profile, ui).await
-        }
-    }
+        let layout = &self.layout;
+        let profile = self.profile;
 
-    /// Rebuild on settled filesystem changes.
-    async fn watch_loop(
-        &self,
-        layout: &Layout,
-        profile: Profile,
-        ui: &mut Ui,
-    ) -> anyhow::Result<()> {
-        let mut changes = Changes::watch(&[layout.config.as_path()], Recursion::Recursive)?;
-
-        loop {
-            if let Err(e) = self.build_once(layout, profile, ui).await {
-                // A watch outlives a failed build: the next save is the fix.
-                ui.error(&e);
-            }
-            ui.step(Step::Watching, Paint::path(&layout.config));
-
-            // Events raised while the build was running are already waiting,
-            // so an edit during a build is not missed.
-            if changes.next().await.is_none() {
-                return Ok(());
-            }
-            ui.blank();
-            ui.step(Step::Changed, "rebuilding");
-        }
-    }
-
-    async fn build_once(
-        &self,
-        layout: &Layout,
-        profile: Profile,
-        ui: &mut Ui,
-    ) -> anyhow::Result<()> {
         if !layout.workspace_manifest().exists() {
             bail!(
                 "{} is not a Rust workspace — start one with {}",

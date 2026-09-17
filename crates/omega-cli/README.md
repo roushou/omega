@@ -31,7 +31,7 @@ omega logs audio
 ```
 
 A build compiles the configuration and plugins, then stages them for the daemon
-to apply. `omega build --watch --debug` rebuilds as you edit. `omega dev audio`
+to apply. Use `omega build --debug` for a debug build. `omega dev audio`
 temporarily replaces the supervised plugin with a development process in your
 terminal.
 
