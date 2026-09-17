@@ -40,6 +40,36 @@ takes the plugin's typed settings. Native widgets share the same ordered layout.
 options for native plugins. Explicit extensions preserve settings without typed
 APIs and cannot replace fields owned by typed configuration.
 
+## Generated bar entries
+
+Omarchy selects the widget through `id`. Omega's adapter reads its settings from
+one nested `omega` object:
+
+```json
+{
+  "id": "omega.view",
+  "omega": {
+    "placement": "audio-main",
+    "plugin": "audio",
+    "surface": "indicator",
+    "panel": "panel"
+  }
+}
+```
+
+`placement` identifies the configured slot; `plugin` identifies the process that
+provides its UI. `surface` selects the bar content, and optional `panel` selects
+its popup surface. Two placements can use the same plugin. Omega settings stay
+inside this namespace so they cannot collide with Omarchy's top-level widget
+settings. The adapter also accepts `omega.socket` to override the observation
+socket for a manually configured entry.
+
+Generate this file through `Shell` rather than editing it alongside the Rust
+configuration. Import expects the nested format and refuses unsupported Omega
+options instead of dropping them.
+
+## Shell ownership
+
 Shell ownership is opt-in. `omega shell adopt` backs up the current file and
 generates an editable Rust module without changing the desktop. Once adopted,
 `omega build` stages the generated shell configuration with the plugins; the

@@ -258,7 +258,7 @@ fn a_scaffolded_config_builds_and_runs() {
         "idle":{"screensaver":150,"lock":300},
         "bar":{"position":"top","transparent":false,"layout":{
             "left":[{"id":"omarchy.menu"}],"center":[{"id":"omarchy.clock","format":"HH:mm"}],
-            "right":[{"id":"omega.view","plugin":"battery-widget","module":"battery-widget"}]
+            "right":[{"id":"omega.view","omega":{"plugin":"battery-widget","placement":"battery-widget"}}]
         }},
         "plugins":[],
         "future":{"message":"preserved"}

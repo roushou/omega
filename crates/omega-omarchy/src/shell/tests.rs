@@ -23,9 +23,16 @@ fn placement_is_the_source_of_both_outputs() {
         let module::Kind::Widget(widget) = module.kind.as_ref().unwrap() else {
             panic!()
         };
-        assert_eq!(entry["plugin"], widget.plugin);
-        assert_eq!(entry["module"], module.id);
-        assert_eq!(entry["surface"], widget.surface);
+        assert_eq!(entry.as_object().unwrap().len(), 2);
+        assert_eq!(entry["id"], "omega.view");
+        assert_eq!(entry["omega"]["plugin"], widget.plugin);
+        assert_eq!(entry["omega"]["placement"], module.id);
+        assert_eq!(entry["omega"]["surface"], widget.surface);
+        if widget.panel.is_empty() {
+            assert!(entry["omega"].get("panel").is_none());
+        } else {
+            assert_eq!(entry["omega"]["panel"], widget.panel);
+        }
     }
 }
 #[test]
@@ -53,7 +60,7 @@ fn import_preserves_native_options_and_unknown_fields() {
         "version":1,
         "bar":{"position":"top","transparent":false,"layout":{
             "left":[{"id":"omarchy.clock","format":"HH:mm","nested":{"unicode":"界\u{1}"}}],
-            "center":[],"right":[{"id":"omega.view","plugin":"audio","module":"audio","surface":"indicator","panel":"panel"}]
+            "center":[],"right":[{"id":"omega.view","omega":{"plugin":"audio","placement":"audio","surface":"indicator","panel":"panel"}}]
         },"custom":17},
         "idle":{"screensaver":150,"lock":300,"extra":true},
         "plugins":[{"id":"custom.service","enabled":true}],
@@ -135,4 +142,21 @@ fn string_plugin_references_are_imported_without_losing_identity() {
         "omarchy.menu"
     );
     assert_eq!(compiled.config()["plugins"][0]["id"], "custom.service");
+}
+
+#[test]
+fn omega_import_rejects_flat_mixed_and_invalid_settings() {
+    for entry in [
+        json!({"id":"omega.view","plugin":"audio","module":"audio"}),
+        json!({"id":"omega.view","omega":"audio"}),
+        json!({"id":"omega.view","omega":{"placement":"audio"}}),
+        json!({"id":"omega.view","omega":{"plugin":"audio","module":"audio"}}),
+        json!({"id":"omega.view","plugin":"other","omega":{"plugin":"audio","placement":"audio"}}),
+    ] {
+        let source = json!({"version":1,"bar":{"layout":{"right":[entry]}}});
+        assert!(
+            Shell::from_omarchy(&source.to_string()).is_err(),
+            "{source}"
+        );
+    }
 }

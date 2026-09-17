@@ -42,23 +42,32 @@ impl Shell {
                         .ok_or_else(|| ShellError::Invalid("widget has no id".into()))?,
                 )?;
                 if id == "omega.view" {
+                    let mut settings = Self::object(entry.remove("omega"), "omega.view.omega")?;
                     let plugin: String =
-                        serde_json::from_value(entry.remove("plugin").ok_or_else(|| {
-                            ShellError::Invalid("omega.view needs a plugin before import".into())
+                        serde_json::from_value(settings.remove("plugin").ok_or_else(|| {
+                            ShellError::Invalid(
+                                "omega.view needs omega.plugin before import".into(),
+                            )
                         })?)?;
-                    let module: String = serde_json::from_value(
-                        entry
-                            .remove("module")
+                    let placement: String = serde_json::from_value(
+                        settings
+                            .remove("placement")
                             .unwrap_or_else(|| plugin.clone().into()),
                     )?;
-                    let mut plugin = PluginWidget::try_new(module, plugin)?;
+                    let mut plugin = PluginWidget::try_new(placement, plugin)?;
                     plugin.surface = serde_json::from_value(
-                        entry.remove("surface").unwrap_or_else(|| "".into()),
+                        settings.remove("surface").unwrap_or_else(|| "".into()),
                     )?;
-                    plugin.panel = entry
+                    plugin.panel = settings
                         .remove("panel")
                         .map(serde_json::from_value)
                         .transpose()?;
+                    if !settings.is_empty() {
+                        return Err(ShellError::Invalid(format!(
+                            "unsupported omega.view.omega options: {:?}",
+                            settings.keys()
+                        )));
+                    }
                     if !entry.is_empty() {
                         return Err(ShellError::Invalid(format!(
                             "unsupported omega.view options: {:?}",

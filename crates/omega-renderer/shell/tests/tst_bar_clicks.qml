@@ -24,7 +24,7 @@ TestCase {
                 id: widget
                 anchors.fill: parent
                 bar: slot
-                settings: ({plugin:"workspaces",surface:"indicator",module:"workspaces"})
+                settings: ({omega:{plugin:"workspaces",surface:"indicator",placement:"workspaces"}})
             }
             // The host owns the pointer grab for module dragging and forwards clicks
             // to registered targets before propagating them to embedded controls.
@@ -59,6 +59,18 @@ TestCase {
         wait(1)
         return slot
     }
+    function test_namespaced_settings_select_the_placement_and_ignore_host_fields() {
+        var slot = createTemporaryObject(factory, test)
+        slot.widget.settings = {
+            plugin: "host-plugin", module: "host-module", surface: "host-surface", panel: "host-panel",
+            omega: {plugin: "audio", placement: "audio-secondary", surface: "indicator", panel: "panel"}
+        }
+        compare(slot.widget.link.plugin, "audio")
+        compare(slot.widget.link.module, "audio-secondary")
+        compare(slot.widget.link.surface, "indicator")
+        compare(slot.widget.panelLink.module, "audio-secondary")
+        compare(slot.widget.panelLink.surface, "panel")
+    }
     function test_workspace_click_reaches_its_retained_binding() {
         var slot = indicator(false)
         var link = slot.widget.link
@@ -84,7 +96,7 @@ TestCase {
     }
     function test_panel_indicator_keeps_host_click_forwarding() {
         var slot = indicator(false)
-        slot.widget.settings = {plugin:"workspaces",surface:"indicator",module:"workspaces",panel:"panel"}
+        slot.widget.settings = {omega:{plugin:"workspaces",surface:"indicator",placement:"workspaces",panel:"panel"}}
         var panel = slot.widget.panelLink
         tryCompare(panel, "connected", true)
         panel.attached = true
