@@ -17,7 +17,8 @@ use crate::ui::{Paint, Step, Ui};
 #[derive(clap::Args, Debug)]
 pub struct LogsCmd {
     /// The unit to read. Omit to list the units that have logs.
-    pub unit: Option<String>,
+    #[arg(value_name = "UNIT")]
+    pub unit_name: Option<UnitName>,
 
     /// How many lines of history to print.
     #[arg(long, short = 'n', default_value_t = 50)]
@@ -35,14 +36,16 @@ impl LogsCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let layout = Layout::resolve();
 
-        let Some(unit) = self.unit.as_deref() else {
+        let Some(unit_name) = self.unit_name.as_ref() else {
             return Self::list(&layout, ui);
         };
 
-        let name = UnitName::try_from(unit)?;
-        let path = layout.unit_log(&name);
+        let path = layout.unit_log(unit_name);
         if !path.exists() {
-            bail!("no log for {name} at {} — has it run?", Paint::path(&path));
+            bail!(
+                "no log for {unit_name} at {} — has it run?",
+                Paint::path(&path)
+            );
         }
 
         // Preserve plugin output bytes without CLI decoration.

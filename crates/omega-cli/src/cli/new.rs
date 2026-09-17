@@ -12,7 +12,8 @@ use omega_host::package::PackageName;
 /// Scaffold a plugin into `~/.config/omega/plugins/<name>`.
 #[derive(Debug, clap::Args)]
 pub struct NewCmd {
-    pub name: String,
+    #[arg(value_name = "NAME")]
+    pub package_name: PackageName,
     /// Create a shared Rust library, which Omega never supervises.
     #[arg(long, conflicts_with = "template")]
     pub lib: bool,
@@ -26,10 +27,11 @@ pub struct NewCmd {
 
 impl NewCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = self.name.parse::<PackageName>()?;
         let workspace = ConfigWorkspace::open(Layout::resolve())?;
         if self.lib {
-            let created = workspace.prepare_library(name, &self.into)?.apply()?;
+            let created = workspace
+                .prepare_library(self.package_name, &self.into)?
+                .apply()?;
             ui.step(
                 Step::Created,
                 Paint::path(workspace.layout().library_src_dir(&created)),
@@ -42,18 +44,25 @@ impl NewCmd {
             }
             return Ok(());
         }
-        let created = workspace.prepare_plugin(name, self.template)?.apply()?;
+        let created = workspace
+            .prepare_plugin(self.package_name, self.template)?
+            .apply()?;
         Self::report(ui, workspace.layout(), &created, self.template);
         Ok(())
     }
 
     /// What was written, and the one line omega will not write.
-    fn report(ui: &mut Ui, layout: &Layout, name: &PackageName, template: Template) {
+    fn report(ui: &mut Ui, layout: &Layout, package_name: &PackageName, template: Template) {
         let path = layout
-            .unit_lib_src(name.unit())
+            .unit_lib_src(package_name.unit())
             .strip_prefix(&layout.config)
             .map(|rel| rel.display().to_string())
-            .unwrap_or_else(|_| layout.unit_lib_src(name.unit()).display().to_string());
+            .unwrap_or_else(|_| {
+                layout
+                    .unit_lib_src(package_name.unit())
+                    .display()
+                    .to_string()
+            });
 
         ui.step(
             Step::Created,
@@ -68,7 +77,10 @@ impl NewCmd {
             Step::Next,
             "add this expression to Bar::left(...), Bar::center(...), or Bar::right(...) in your Rust shell layout:",
         );
-        ui.detail(Paint::command(Scaffold::placement_hint(name, template)));
+        ui.detail(Paint::command(Scaffold::placement_hint(
+            package_name,
+            template,
+        )));
         ui.detail(format!(
             "Start at {}; follow its shell module if the layout lives elsewhere.",
             Paint::path(layout.system_main())

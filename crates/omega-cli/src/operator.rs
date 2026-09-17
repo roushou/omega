@@ -4,7 +4,7 @@
 use omega_proto::omega::{
     Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value,
 };
-use omega_proto::{Client, ClientError, CommandAnswer, Socket};
+use omega_proto::{Client, ClientError, CommandAnswer, Socket, SurfaceId, UnitName};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
@@ -73,9 +73,9 @@ impl Operator {
     }
 
     /// Ask the daemon to cycle a unit's process.
-    pub async fn restart(&self, unit: &str) -> Result<(), OperatorError> {
+    pub async fn restart(&self, unit_name: &UnitName) -> Result<(), OperatorError> {
         self.invoke(invoke::Op::RestartUnit(omega_proto::omega::RestartUnit {
-            unit: unit.to_string(),
+            unit: unit_name.to_string(),
         }))
         .await
         .map(|_| ())
@@ -84,16 +84,16 @@ impl Operator {
     /// Call a unit's command surface, and hand back whatever it answered.
     pub async fn run(
         &self,
-        unit: &str,
-        command: &str,
+        unit_name: &UnitName,
+        command_id: &SurfaceId,
         args: Vec<Value>,
     ) -> Result<Option<Value>, OperatorError> {
         let outcome = self
             .invoke(invoke::Op::Act(Act {
                 action: Some(Action {
                     kind: Some(action::Kind::InvokeUnit(InvokeUnit {
-                        unit: unit.to_string(),
-                        command: command.to_string(),
+                        unit: unit_name.to_string(),
+                        command: command_id.to_string(),
                         args,
                     })),
                 }),
@@ -133,10 +133,10 @@ pub struct Attached {
 
 impl Attached {
     /// Adopt a plugin and return its spawn token, valid until this connection closes.
-    pub async fn adopt(&mut self, unit: &str) -> Result<String, OperatorError> {
+    pub async fn adopt(&mut self, unit_name: &UnitName) -> Result<String, OperatorError> {
         let outcome = self
             .request(invoke::Op::AdoptUnit(AdoptUnit {
-                unit: unit.to_string(),
+                unit: unit_name.to_string(),
             }))
             .await?;
 

@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use omega_proto::UnitName;
 
 use crate::ui::{Paint, Step, Ui};
 
@@ -10,7 +11,8 @@ use crate::ui::{Paint, Step, Ui};
 #[derive(Debug, clap::Args)]
 pub struct StatusCmd {
     /// Inspect one plugin, including its surfaces and required readings.
-    pub unit: Option<String>,
+    #[arg(value_name = "UNIT")]
+    pub unit_name: Option<UnitName>,
 
     /// Show CLI, daemon, renderer, and resolved config dependency versions.
     #[arg(long)]
@@ -25,12 +27,6 @@ impl StatusCmd {
     const TIMEOUT: Duration = Duration::from_secs(2);
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit = self
-            .unit
-            .as_deref()
-            .map(omega_proto::UnitName::try_from)
-            .transpose()?;
-
         if self.versions {
             Self::versions(ui).await;
         }
@@ -40,7 +36,7 @@ impl StatusCmd {
                 .context("the daemon did not report status in time")?
                 .context("cannot read daemon status; ensure omega daemon is running")?;
 
-        Self::select(&mut status, unit.as_ref())?;
+        Self::select(&mut status, self.unit_name.as_ref())?;
 
         if self.json {
             ui.line(serde_json::to_string(&status)?);
@@ -74,34 +70,47 @@ impl StatusCmd {
         if status.units.is_empty() {
             ui.step(Step::Checked, "the daemon is running; no plugins");
         } else {
-            ui.plugin_health(&status.units, &status.plugins, &layout, unit.is_some())?;
+            ui.plugin_health(
+                &status.units,
+                &status.plugins,
+                &layout,
+                self.unit_name.is_some(),
+            )?;
         }
         Ok(())
     }
 
     fn select(
         status: &mut omega_proto::omega::DeploymentStatus,
-        unit: Option<&omega_proto::UnitName>,
+        unit_name: Option<&UnitName>,
     ) -> anyhow::Result<()> {
         use omega_proto::omega::attach_renderer;
 
-        let Some(unit) = unit else { return Ok(()) };
+        let Some(unit_name) = unit_name else {
+            return Ok(());
+        };
 
         anyhow::ensure!(
             status
                 .units
                 .iter()
-                .any(|status| status.unit == unit.as_str()),
-            "unknown plugin {unit}"
+                .any(|status| status.unit == unit_name.as_str()),
+            "unknown plugin {unit_name}"
         );
-        status.units.retain(|status| status.unit == unit.as_str());
-        status.plugins.retain(|status| status.unit == unit.as_str());
+        status
+            .units
+            .retain(|status| status.unit == unit_name.as_str());
+        status
+            .plugins
+            .retain(|status| status.unit == unit_name.as_str());
         status
             .renderer_placements
-            .retain(|placement| placement.unit == unit.as_str());
+            .retain(|placement| placement.unit == unit_name.as_str());
         status.renderers.retain(|renderer| match &renderer.scope {
-            Some(attach_renderer::Scope::Unit(name)) => name == unit.as_str(),
-            Some(attach_renderer::Scope::Placement(placement)) => placement.unit == unit.as_str(),
+            Some(attach_renderer::Scope::Unit(name)) => name == unit_name.as_str(),
+            Some(attach_renderer::Scope::Placement(placement)) => {
+                placement.unit == unit_name.as_str()
+            }
             None => false,
         });
 

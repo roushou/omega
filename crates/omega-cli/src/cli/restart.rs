@@ -9,14 +9,15 @@ use crate::ui::{Paint, Step, Ui};
 /// that it stop being this instance of it.
 #[derive(Debug, clap::Args)]
 pub struct RestartCmd {
-    pub unit: String,
+    #[arg(value_name = "UNIT")]
+    pub unit_name: UnitName,
 }
 
 impl RestartCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = self.unit.parse::<UnitName>()?;
-        Operator::new().restart(name.as_str()).await?;
-        ui.step(Step::Restarted, Paint::name(&name));
+        let unit_name = self.unit_name;
+        Operator::new().restart(&unit_name).await?;
+        ui.step(Step::Restarted, Paint::name(&unit_name));
         Ok(())
     }
 }

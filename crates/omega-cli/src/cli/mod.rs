@@ -118,8 +118,52 @@ impl Command {
 }
 
 #[cfg(test)]
-mod template_tests {
+mod tests {
     use super::*;
+
+    #[test]
+    fn identifiers_are_validated_before_dispatch() {
+        for (args, argument) in [
+            (vec!["omega", "dev", "Bad"], "UNIT"),
+            (vec!["omega", "restart", "../audio"], "UNIT"),
+            (vec!["omega", "logs", "Bad"], "UNIT"),
+            (vec!["omega", "status", "Bad"], "UNIT"),
+            (vec!["omega", "run", "Bad", "set"], "UNIT"),
+            (vec!["omega", "run", "audio", "Bad"], "COMMAND"),
+            (vec!["omega", "present", "Bad", "panel"], "UNIT"),
+            (vec!["omega", "present", "audio", "Bad"], "SURFACE"),
+            (vec!["omega", "new", "Bad"], "NAME"),
+            (vec!["omega", "new", "type", "--lib"], "NAME"),
+        ] {
+            let error = Cli::try_parse_from(args).unwrap_err();
+            assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
+            assert!(error.to_string().contains(argument), "{error}");
+        }
+    }
+
+    #[test]
+    fn typed_identifiers_preserve_command_syntax() {
+        for args in [
+            vec!["omega", "dev", "audio-output"],
+            vec!["omega", "restart", "audio-output"],
+            vec!["omega", "logs"],
+            vec!["omega", "logs", "audio-output", "--follow"],
+            vec!["omega", "status", "--versions"],
+            vec!["omega", "status", "audio-output", "--json"],
+            vec!["omega", "run", "audio-output", "set_volume", "40%"],
+            vec![
+                "omega",
+                "present",
+                "audio-output",
+                "volume-panel",
+                "--overlay",
+            ],
+            vec!["omega", "new", "audio-output"],
+            vec!["omega", "new", "shared-ui", "--lib", "--into", "system"],
+        ] {
+            Cli::try_parse_from(args).unwrap();
+        }
+    }
 
     #[test]
     fn new_defaults_to_minimal_and_accepts_named_templates() {

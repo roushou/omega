@@ -8,8 +8,10 @@ use omega_proto::{SurfaceId, UnitName};
 
 #[derive(Debug, clap::Args)]
 pub struct PresentCmd {
-    pub unit: String,
-    pub surface: String,
+    #[arg(value_name = "UNIT")]
+    pub unit_name: UnitName,
+    #[arg(value_name = "SURFACE")]
+    pub surface_id: SurfaceId,
     /// Create an independent instance instead of reusing this entry point.
     #[arg(long)]
     pub new: bool,
@@ -77,8 +79,8 @@ impl PresentCmd {
     }
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit = UnitName::try_from(self.unit)?;
-        let surface = SurfaceId::try_from(self.surface)?;
+        let unit_name = self.unit_name;
+        let surface_id = self.surface_id;
         let kind = if self.overlay {
             presentation::Kind::Overlay(omega::OverlayPresentation {
                 width: self.width,
@@ -89,8 +91,8 @@ impl PresentCmd {
             })
         } else {
             presentation::Kind::Window(omega::WindowPresentation {
-                title: format!("{unit} — {surface}"),
-                app_id: format!("org.omega.{unit}"),
+                title: format!("{unit_name} — {surface_id}"),
+                app_id: format!("org.omega.{unit_name}"),
                 width: self.width,
                 height: self.height,
                 min_width: 1,
@@ -99,8 +101,8 @@ impl PresentCmd {
         };
         let result = Operator::new()
             .present(omega::CreateInstance {
-                unit: unit.to_string(),
-                surface: surface.to_string(),
+                unit: unit_name.to_string(),
+                surface: surface_id.to_string(),
                 presentation: Some(omega::Presentation { kind: Some(kind) }),
                 config: self
                     .config
@@ -117,7 +119,10 @@ impl PresentCmd {
         if self.json {
             ui.line(serde_json::to_string(&result)?);
         } else {
-            ui.step(Step::Requested, Paint::name(format!("{unit}.{surface}")));
+            ui.step(
+                Step::Requested,
+                Paint::name(format!("{unit_name}.{surface_id}")),
+            );
         }
         Ok(())
     }
