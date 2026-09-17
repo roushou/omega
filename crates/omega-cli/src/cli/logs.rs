@@ -104,15 +104,13 @@ impl LogsCmd {
 
     /// List plugins with existing log files.
     fn list(layout: &Layout, ui: &mut Ui) -> anyhow::Result<()> {
-        let logged: Vec<String> = Plugins::discover(layout)
-            .map(|units| {
-                units
-                    .iter()
-                    .filter(|name| layout.unit_log(name).exists())
-                    .map(|name| name.to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let plugins = Plugins::discover(layout)
+            .with_context(|| format!("cannot discover plugins in {}", layout.config.display()))?;
+        let logged: Vec<String> = plugins
+            .iter()
+            .filter(|name| layout.unit_log(name).exists())
+            .map(|name| name.to_string())
+            .collect();
 
         if logged.is_empty() {
             ui.warn("no unit has written a log yet");
@@ -133,5 +131,64 @@ impl LogsCmd {
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_host::{AtomicFile, TempPath};
+
+    struct Fixture(Layout);
+
+    impl Fixture {
+        fn new() -> Self {
+            let root = TempPath::sibling(Path::new("/tmp/omega-logs"), "test");
+            Self(Layout::at(&root, root.join("state"), root.join("cache")))
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0.config);
+        }
+    }
+
+    #[test]
+    fn discovery_failures_are_not_reported_as_empty_logs() {
+        let fixture = Fixture::new();
+        for manifest in [
+            None,
+            Some("[workspace"),
+            Some("[package]\nname = 'example'\n"),
+        ] {
+            if let Some(source) = manifest {
+                AtomicFile::at(fixture.0.workspace_manifest())
+                    .write(source.as_bytes())
+                    .unwrap();
+            }
+            let (mut ui, transcript) = Ui::recording();
+            let error = LogsCmd::list(&fixture.0, &mut ui).unwrap_err();
+            assert!(error.to_string().contains("cannot discover plugins"));
+            assert!(
+                error
+                    .downcast_ref::<omega_host::workspace::PluginsError>()
+                    .is_some()
+            );
+            assert!(transcript.out().is_empty());
+            assert!(transcript.err().is_empty());
+        }
+    }
+
+    #[test]
+    fn valid_empty_workspace_reports_no_logs() {
+        let fixture = Fixture::new();
+        AtomicFile::at(fixture.0.workspace_manifest())
+            .write(b"[workspace]\nmembers = []\n")
+            .unwrap();
+        let (mut ui, transcript) = Ui::recording();
+        LogsCmd::list(&fixture.0, &mut ui).unwrap();
+        assert!(transcript.out().is_empty());
+        assert!(transcript.err().contains("no unit has written a log yet"));
     }
 }

@@ -4,6 +4,7 @@ mod runner;
 use crate::ui::{Step, Ui};
 use anyhow::Context;
 use build::Build;
+use omega_host::cargo::Cargo;
 use omega_host::{AtomicFile, Layout};
 use omega_proto::{
     omega::{PreviewRequest, PreviewSnapshot, preview_request},
@@ -52,7 +53,7 @@ impl Drop for SessionDirectory {
     }
 }
 impl PreviewCmd {
-    fn manifest_directory(path: &std::path::Path) -> anyhow::Result<PathBuf> {
+    fn manifest_cargo(path: &std::path::Path) -> anyhow::Result<Cargo> {
         let resolved = std::fs::canonicalize(path)
             .with_context(|| format!("cannot resolve manifest {}", path.display()))?;
         anyhow::ensure!(
@@ -60,10 +61,10 @@ impl PreviewCmd {
             "manifest {} must be a file",
             path.display()
         );
-        resolved
+        let directory = resolved
             .parent()
-            .map(std::path::Path::to_path_buf)
-            .with_context(|| format!("manifest {} has no parent directory", path.display()))
+            .with_context(|| format!("manifest {} has no parent directory", path.display()))?;
+        Ok(Cargo::new(directory).manifest_path(&resolved))
     }
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
@@ -71,13 +72,13 @@ impl PreviewCmd {
             CaseId::try_from(case.clone())?;
         }
         let layout = Layout::resolve();
-        let directory = self
+        let cargo = self
             .manifest_path
             .as_ref()
-            .map(|path| Self::manifest_directory(path))
+            .map(|path| Self::manifest_cargo(path))
             .transpose()?
-            .unwrap_or_else(|| layout.config.clone());
-        let build = Build::new(directory, &self.package).await?;
+            .unwrap_or_else(|| Cargo::new(&layout.config));
+        let build = Build::new(cargo, &self.package).await?;
         let mut changes = build.watch()?;
         ui.step(Step::Building, format!("{} preview cases", self.package));
         let binary = build.compile().await?;
@@ -241,21 +242,57 @@ impl PreviewCmd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use omega_host::{
+        TempPath,
+        cargo::{MetadataRequest, Resolution},
+    };
+
+    struct Fixture(PathBuf);
+
+    impl Fixture {
+        fn new() -> Self {
+            let root = TempPath::sibling(std::path::Path::new("/tmp/omega preview"), "test");
+            AtomicFile::at(root.join("Cargo.toml")).write(b"[package]\nname = 'preview-fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n").unwrap();
+            AtomicFile::at(root.join("src/lib.rs")).write(b"").unwrap();
+            AtomicFile::at(root.join("README.md"))
+                .write(b"not a manifest")
+                .unwrap();
+            Self(root)
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_manifest_never_falls_back_to_a_neighboring_manifest() {
+        let fixture = Fixture::new();
+        let request = MetadataRequest::new().resolution(Resolution::Offline);
+        let cargo = PreviewCmd::manifest_cargo(&fixture.0.join("Cargo.toml")).unwrap();
+        let metadata = cargo.metadata(request).await.unwrap();
+        assert_eq!(
+            metadata.workspace_packages()[0].name.as_str(),
+            "preview-fixture"
+        );
+
+        let cargo = PreviewCmd::manifest_cargo(&fixture.0.join("README.md")).unwrap();
+        assert!(Build::new(cargo, "preview-fixture").await.is_err());
+    }
 
     #[test]
     fn manifest_paths_must_resolve_to_files() {
         assert!(
-            PreviewCmd::manifest_directory(std::path::Path::new("/"))
+            PreviewCmd::manifest_cargo(std::path::Path::new("/"))
                 .unwrap_err()
                 .to_string()
                 .contains("must be a file")
         );
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        assert!(PreviewCmd::manifest_directory(root).is_err());
-        assert!(PreviewCmd::manifest_directory(&root.join("missing-manifest.toml")).is_err());
-        assert_eq!(
-            PreviewCmd::manifest_directory(&root.join("Cargo.toml")).unwrap(),
-            std::fs::canonicalize(root).unwrap()
-        );
+        assert!(PreviewCmd::manifest_cargo(root).is_err());
+        assert!(PreviewCmd::manifest_cargo(&root.join("missing-manifest.toml")).is_err());
+        assert!(PreviewCmd::manifest_cargo(&root.join("Cargo.toml")).is_ok());
     }
 }

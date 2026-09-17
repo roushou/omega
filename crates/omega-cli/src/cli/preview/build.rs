@@ -13,8 +13,7 @@ pub(super) struct Build {
 }
 
 impl Build {
-    pub(super) async fn new(directory: PathBuf, name: &str) -> anyhow::Result<Self> {
-        let cargo = Cargo::new(directory);
+    pub(super) async fn new(cargo: Cargo, name: &str) -> anyhow::Result<Self> {
         let metadata = cargo.metadata(MetadataRequest::new()).await?;
         Self::select(&metadata, name)?;
 

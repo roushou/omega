@@ -37,6 +37,7 @@ use tokio::{
 pub struct Cargo {
     directory: PathBuf,
     executable: PathBuf,
+    manifest_path: Option<PathBuf>,
 }
 
 impl Cargo {
@@ -44,12 +45,22 @@ impl Cargo {
         Self {
             directory: directory.into(),
             executable: "cargo".into(),
+            manifest_path: None,
         }
     }
 
     /// Override the executable without changing the workspace or process environment.
     pub fn executable(mut self, executable: impl Into<PathBuf>) -> Self {
         self.executable = executable.into();
+        self
+    }
+
+    /// Select the exact manifest for all operations. Cargo validates the file.
+    /// Relative paths resolve from this handle's working directory. This does not
+    /// change that directory or where Cargo discovers local configuration.
+    /// Without an override, Cargo discovers the manifest from the working directory.
+    pub fn manifest_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.manifest_path = Some(path.into());
         self
     }
 
@@ -123,6 +134,9 @@ impl Cargo {
             .arg(operation)
             .stdin(Stdio::null())
             .kill_on_drop(true);
+        if let Some(path) = &self.manifest_path {
+            command.arg("--manifest-path").arg(path);
+        }
         command
     }
 
@@ -363,6 +377,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn manifest_selection_is_preserved_for_every_operation() {
+        let fixture = Fixture::new("cat \"$0.output\"");
+        let cargo = fixture.cargo().manifest_path("nested project/Cargo.toml");
+        fixture.output(b"");
+        cargo
+            .build(BuildRequest::new(Selection::Workspace))
+            .await
+            .unwrap();
+        assert!(
+            fixture
+                .arguments()
+                .starts_with("build\n--manifest-path\nnested project/Cargo.toml\n")
+        );
+
+        fixture.output(json!({"packages": [], "workspace_members": [], "workspace_root": "/workspace", "target_directory": "/build", "version": 1}).to_string().as_bytes());
+        cargo.metadata(MetadataRequest::new()).await.unwrap();
+        assert!(
+            fixture
+                .arguments()
+                .starts_with("metadata\n--manifest-path\nnested project/Cargo.toml\n")
+        );
+
+        fixture.output(b"");
+        cargo
+            .compile_tests(TestBuildRequest::library(Fixture::package()))
+            .await
+            .unwrap();
+        assert!(
+            fixture
+                .arguments()
+                .starts_with("test\n--manifest-path\nnested project/Cargo.toml\n")
+        );
+        assert_eq!(
+            std::fs::read_to_string(fixture.script.with_extension("cwd"))
+                .unwrap()
+                .trim(),
+            fixture.root.to_str().unwrap()
+        );
+    }
+
+    #[tokio::test]
     async fn metadata_decodes_and_propagates_resolution_policy() {
         let fixture = Fixture::new("cat \"$0.output\"");
         fixture.output(json!({"packages": [], "workspace_members": [], "workspace_root": "/workspace", "target_directory": "/build", "version": 1, "future": true}).to_string().as_bytes());
@@ -554,6 +609,7 @@ name = "renamed_library"
             .write(b"[build]\ntarget-dir = 'configured-target'\n")
             .unwrap();
         let cargo = Cargo::new(&fixture.root)
+            .manifest_path(fixture.root.join("Cargo.toml"))
             .executable(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
         let metadata = cargo
             .metadata(MetadataRequest::new().resolution(Resolution::Offline))
