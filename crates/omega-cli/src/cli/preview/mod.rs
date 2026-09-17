@@ -170,7 +170,7 @@ impl PreviewCmd {
                     if let Some(preview_request::Command::Captured(path)) = &request.command {
                         let Some(expected) = &capture_path else { anyhow::bail!("unexpected capture completion"); };
                         anyhow::ensure!(path == &expected.to_string_lossy(), "capture failed or reported an unexpected path: {path}");
-                        break capture::Capture::finish(&self, expected, &snapshot, host.id().context("capture host exited")?, ui);
+                        break capture::Capture::finish(&self, expected, &snapshot, host.id().context("capture host exited")?, ui).await;
                     }
                     if snapshot.stale {
                         let mut refused = snapshot.clone();

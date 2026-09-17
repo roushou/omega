@@ -104,6 +104,11 @@ a mismatch returns failure and writes `<capture>.diff.png`, highlighting changed
 pixels. Baselines are never created or replaced implicitly. Capture and baseline
 must be different files.
 
+Before writing a capture, Omega queries `quickshell --version` and `fc-match` for
+the environment metadata. Each query has a 10-second timeout and a 64 KiB limit
+per output stream. Failed or invalid responses stop the capture before it writes
+the output PNG, metadata, or baseline.
+
 Interactive previews use the production theme icon provider. Offscreen capture
 requires fixed local fixture images instead: the native icon provider can produce
 placeholder textures with a software backend. Capture refuses theme icons explicitly.

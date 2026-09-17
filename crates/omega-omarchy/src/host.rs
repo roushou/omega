@@ -40,12 +40,15 @@ impl HostShell {
         }
     }
 
-    /// Request a shell plugin rescan. Installation remains valid if the shell is unavailable.
-    pub fn rescan(self) -> std::io::Result<Output> {
+    /// Construct a shell plugin rescan command without executing it.
+    /// The caller chooses execution limits and how to report an unavailable shell.
+    pub fn rescan_command(self) -> std::process::Command {
         match self {
-            Self::Omarchy => std::process::Command::new("omarchy-shell")
-                .args(["shell", "rescanPlugins"])
-                .output(),
+            Self::Omarchy => {
+                let mut command = std::process::Command::new("omarchy-shell");
+                command.args(["shell", "rescanPlugins"]);
+                command
+            }
         }
     }
 

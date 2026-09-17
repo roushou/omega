@@ -4,8 +4,10 @@ use anyhow::Context;
 
 use crate::checkout::SourceTree;
 use crate::ui::{Paint, Step, Ui};
+use omega_host::process::{OutputLimits, Process};
 use omega_omarchy::HostShell;
 use omega_omarchy::{Installed, Renderer};
+use std::time::Duration;
 
 /// Install and inspect the shell plugin that draws omega's views.
 #[derive(Debug, clap::Args)]
@@ -110,7 +112,7 @@ impl ShellCmd {
                 }
                 Ok(())
             }
-            Action::Uninstall => Self::uninstall(shell, ui),
+            Action::Uninstall => Self::uninstall(shell, ui).await,
             Action::Adopt | Action::Diff | Action::Apply { .. } => unreachable!("handled above"),
         }
     }
@@ -290,7 +292,7 @@ impl ShellCmd {
         Ok(())
     }
 
-    fn uninstall(shell: HostShell, ui: &mut Ui) -> anyhow::Result<()> {
+    async fn uninstall(shell: HostShell, ui: &mut Ui) -> anyhow::Result<()> {
         let plugins = shell.plugins();
 
         for renderer in Renderer::ALL {
@@ -306,7 +308,7 @@ impl ShellCmd {
             }
         }
 
-        Self::rescan(shell, ui);
+        Self::rescan(shell.rescan_command().into(), ui).await;
         Ok(())
     }
 
@@ -324,14 +326,70 @@ impl ShellCmd {
         }
     }
 
-    /// Request a plugin rescan. Report an unavailable shell without undoing installation.
-    fn rescan(shell: HostShell, ui: &mut Ui) {
-        match shell.rescan() {
+    /// Report rescan failures without undoing completed file removal.
+    async fn rescan(command: tokio::process::Command, ui: &mut Ui) {
+        let result = Process::new(command)
+            .timeout(Duration::from_secs(10))
+            .capture(OutputLimits {
+                stdout: 64 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await;
+        match result {
             Ok(output) if output.status.success() => {}
-            _ => ui.warn(format!(
-                "{} was not listening — it will find this when it starts",
-                shell.name()
+            Ok(output) => ui.warn(format!(
+                "shell plugin rescan failed ({}): {}; the shell will refresh its plugins when it restarts",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )),
+            Err(error) => ui.warn(format!(
+                "shell plugin rescan failed: {error}; the shell will refresh its plugins when it restarts"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::process::Command;
+
+    struct Rescan;
+
+    impl Rescan {
+        fn command(script: &str) -> Command {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", script]);
+            command
+        }
+    }
+
+    #[tokio::test]
+    async fn rescan_reports_actual_failures_as_warnings() {
+        let (mut ui, transcript) = Ui::recording();
+        ShellCmd::rescan(Rescan::command("exit 0"), &mut ui).await;
+        assert!(transcript.err().is_empty());
+
+        ShellCmd::rescan(
+            Rescan::command("printf 'rescan rejected' >&2; exit 9"),
+            &mut ui,
+        )
+        .await;
+        let diagnostic = transcript.err();
+        assert!(diagnostic.contains("Warning"), "{diagnostic}");
+        assert!(diagnostic.contains("exit status: 9"), "{diagnostic}");
+        assert!(diagnostic.contains("rescan rejected"), "{diagnostic}");
+        assert!(diagnostic.contains("when it restarts"), "{diagnostic}");
+
+        ShellCmd::rescan(Command::new("/dev/null/missing"), &mut ui).await;
+        assert!(transcript.err().contains("could not start subprocess"));
+        assert!(transcript.out().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_rescan_returns_a_warning_after_ten_seconds() {
+        let (mut ui, transcript) = Ui::recording();
+        ShellCmd::rescan(Rescan::command("exec /bin/sleep 60"), &mut ui).await;
+        assert!(transcript.err().contains("timed out after 10s"));
     }
 }

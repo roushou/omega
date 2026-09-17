@@ -124,14 +124,18 @@ a kill with Tokio's best-effort reaping. Neither case supervises descendants or 
 back effects; inherited pipes may outlive the direct child and require a timeout.
 
 Cargo builds and metadata, systemd commands, initialization probes, plugin manifest
-queries, system-document evaluation, and shell restart use this executor. Cargo's
-compiler-message reader retains its streaming child lifecycle and parsing in
+queries, system-document evaluation, shell restarts and rescans, and preview environment
+probes use this executor. Cargo's compiler-message reader retains its streaming
+child lifecycle and parsing in
 `cargo`; long-lived development and preview processes retain their own supervision.
 
 The CLI allows 10 seconds for plugin manifests and 30 seconds for system documents,
 with 8 MiB stdout and 64 KiB stderr each. Initialization probes allow 10 seconds;
 shell restart allows 45 seconds. Both capture at most 64 KiB per stream. Cargo and
-systemd limits remain with their respective clients.
+systemd limits remain with their respective clients. Shell rescan and each preview
+environment probe allow 10 seconds and 64 KiB per stream. Rescan failure is reported
+as a warning after file removal; it does not undo the removal. Preview rejects
+nonzero exits, empty responses, and invalid UTF-8 before publishing capture artifacts.
 
 ## Systemd service ownership
 

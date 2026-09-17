@@ -1,14 +1,19 @@
 use super::PreviewCmd;
 use crate::ui::{Step, Ui};
-use omega_host::{AtomicFile, Layout};
+use anyhow::Context;
+use omega_host::{
+    AtomicFile, Layout,
+    process::{OutputLimits, Process},
+};
 use omega_proto::omega::PreviewSnapshot;
 use sha2::{Digest, Sha256};
-use std::{io::Cursor, path::Path};
+use std::{io::Cursor, path::Path, time::Duration};
+use tokio::process::Command;
 
 #[derive(Debug)]
 pub(super) struct Capture;
 impl Capture {
-    pub(super) fn finish(
+    pub(super) async fn finish(
         cmd: &PreviewCmd,
         source: &Path,
         snapshot: &PreviewSnapshot,
@@ -30,18 +35,19 @@ impl Capture {
             image.0 == cmd.width && image.1 == cmd.height,
             "capture dimensions differ from the requested viewport"
         );
-        let version = std::process::Command::new("quickshell")
-            .arg("--version")
-            .output()?;
-        let font = std::process::Command::new("fc-match")
-            .args(["--format=%{file}", "DejaVu Sans"])
-            .output()?;
-        anyhow::ensure!(font.status.success(), "cannot determine capture font");
-        let font_path = String::from_utf8(font.stdout)?;
-        let font_hash = format!("{:x}", Sha256::digest(std::fs::read(font_path)?));
+        let mut version = Command::new("quickshell");
+        version.arg("--version");
+        let version = Self::probe(version, "quickshell --version").await?;
+
+        let mut font = Command::new("fc-match");
+        font.args(["--format=%{file}", "DejaVu Sans"]);
+        let font_path = Self::probe(font, "fc-match for DejaVu Sans").await?;
+        let font_bytes = std::fs::read(&font_path)
+            .with_context(|| format!("cannot read capture font {font_path}"))?;
+        let font_hash = format!("{:x}", Sha256::digest(font_bytes));
         let metadata = serde_json::json!({
             "format": 1, "raster_libraries": Self::raster_libraries(renderer_pid)?, "renderer": env!("CARGO_PKG_VERSION"),
-            "quickshell": String::from_utf8_lossy(&version.stdout).trim(),
+            "quickshell": version.trim(),
             "font_sha256": font_hash, "font": "DejaVu Sans", "backend": "software", "platform": "offscreen",
             "scale": 1, "dpi": 96, "width": cmd.width, "height": cmd.height,
             "theme": cmd.theme, "case": snapshot.selected,
@@ -103,6 +109,32 @@ impl Capture {
         }
         Ok(())
     }
+
+    async fn probe(command: Command, description: &str) -> anyhow::Result<String> {
+        let output = Process::new(command)
+            .timeout(Duration::from_secs(10))
+            .capture(OutputLimits {
+                stdout: 64 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await
+            .with_context(|| format!("cannot query capture environment: {description}"))?;
+        anyhow::ensure!(
+            output.status.success(),
+            "capture environment query {description} failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        let value = String::from_utf8(output.stdout).with_context(|| {
+            format!("capture environment query {description} returned invalid UTF-8")
+        })?;
+        anyhow::ensure!(
+            !value.trim().is_empty(),
+            "capture environment query {description} returned an empty response"
+        );
+        Ok(value)
+    }
+
     fn raster_libraries(pid: u32) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
         let maps = std::fs::read_to_string(Layout::preview_process_maps(pid))?;
         let mut paths = std::collections::BTreeSet::new();
@@ -196,5 +228,77 @@ impl Capture {
             encoder.write_header()?.write_image_data(bytes)?;
         }
         Ok(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_host::process::{Error, Stream};
+
+    struct Probe;
+
+    impl Probe {
+        fn command(script: &str) -> Command {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", script]);
+            command
+        }
+    }
+
+    #[tokio::test]
+    async fn environment_queries_preserve_paths_and_reject_failed_or_invalid_answers() {
+        let path = " /font directory/font.ttf ";
+        let mut command = Probe::command("printf '%s' \"$1\"");
+        command.args(["probe", path]);
+        assert_eq!(Capture::probe(command, "font").await.unwrap(), path);
+
+        for (script, expected) in [
+            (
+                "printf 'plausible version'; printf 'version failed' >&2; exit 9",
+                "version failed",
+            ),
+            ("printf '  \\n'", "empty response"),
+            ("printf '\\377'", "invalid UTF-8"),
+        ] {
+            let error = Capture::probe(Probe::command(script), "quickshell --version")
+                .await
+                .unwrap_err();
+            let diagnostic = format!("{error:#}");
+            assert!(diagnostic.contains("quickshell --version"), "{diagnostic}");
+            assert!(diagnostic.contains(expected), "{diagnostic}");
+        }
+    }
+
+    #[tokio::test]
+    async fn environment_queries_bound_both_streams_and_preserve_execution_errors() {
+        for (script, expected) in [
+            ("head -c 65537 /dev/zero", Stream::Stdout),
+            ("head -c 65537 /dev/zero >&2", Stream::Stderr),
+        ] {
+            let error = Capture::probe(Probe::command(script), "font")
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(error.downcast_ref::<Error>(), Some(Error::OutputLimit { stream, limit: 65536 }) if *stream == expected)
+            );
+        }
+        let error = Capture::probe(Command::new("/dev/null/missing"), "font")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<Error>(),
+            Some(Error::Spawn(_))
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn environment_queries_have_a_ten_second_timeout() {
+        let error = Capture::probe(Probe::command("exec /bin/sleep 60"), "font")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error.downcast_ref::<Error>(), Some(Error::Timeout { duration }) if *duration == Duration::from_secs(10))
+        );
     }
 }
