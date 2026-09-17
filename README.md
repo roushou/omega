@@ -1,50 +1,65 @@
 # Omega
 
-_A declarative Rust framework and plugin runtime for Omarchy._
+_A declarative Rust framework and plugin runtime for [Omarchy](https://omarchy.org)._
 
-Omega lets you write desktop interfaces, controls, and automations in Rust.
-Plugins can appear in [Omarchy](https://omarchy.org)’s bar or in independent
-windows and overlays. Omega connects them to system state, runs them as separate
-processes, and renders their declarative interfaces through a shared QML renderer.
+Omega lets you write plugins, compose your bar, and build interactive interfaces in Rust.
+Your desktop configuration is an ordinary Cargo workspace, and plugins are compiled to binaries.
 
-Your configuration is an ordinary Cargo workspace.
-Plugins are Rust crates, settings and command bindings are typed,
-and reusable behavior can live in libraries. Rust can also describe the shell
-itself: its layout, native widgets, plugin placements, and idle settings.
+No QML, JavaScript, or shell scripts required to write plugins.
 
-Each plugin runs as its own binary, so a plugin crash does not bring down the shell.
-Omega supervises those processes and brokers shared system integrations,
-while your code describes what to display and what interactions should do.
+## Features
 
-## Running Omega
+- Keep your desktop configuration in a Git repo: it's an ordinary Cargo workspace.
+- Use Rust crates, extract shared libraries, and run tests, Clippy, and CI.
+- Compile plugins into separate executables, supervised by Omega's daemon.
+- Compose bar widgets, popup panels, and standalone windows and overlays.
+- Build reusable UI components and preview them with sample data.
+- Read system state and control devices through typed Rust APIs.
+- Register commands, react to events, and schedule background work.
 
-Omega runs as a background daemon. Your configuration lives in `~/.config/omega`,
-a Rust workspace containing your plugins and the declaration of where they belong.
-A Rust shell layout can include both native Omarchy widgets and Omega plugins;
-Omega generates the shell configuration and matching plugin instances from it.
+The daemon runs plugins, shares system readings, and routes commands and UI
+interactions. Plugins run as your user in separate processes.
 
-### Requirements
+## Requirements
 
-- Linux with a systemd user manager
-- Quickshell for rendering; Omarchy for the integrated bar and shell configuration
+- Omarchy Quattro
 - Rust 1.88+
-- GLib/GIO development headers when building the CLI (`libglib2.0-dev` on Debian/Ubuntu)
 
-Install the [Omega CLI from crates.io](https://crates.io/crates/omega-cli):
+## Installation
+
+Install the [Omega CLI](https://crates.io/crates/omega-cli):
 
 ```sh
 cargo install omega-cli --locked
-omega init
 ```
 
-`omega init` creates and builds the workspace, installs the renderer and daemon,
-and verifies that the configuration is applied. The daemon starts
-as a user service. When creating a fresh configuration, it imports the existing
-shell layout into Rust without changing its appearance. Existing Omega
-configurations can use `omega shell adopt` to back up the current shell configuration
-and generate a Rust module to review and include in their document.
+Prebuilt CLI binaries are also available on the
+[GitHub Releases page](https://github.com/roushou/omega/releases). Rust is still
+required to build your configuration and plugins.
 
-With an `audio` plugin added, your configuration looks like this:
+## Writing your first plugin
+
+Initialize Omega. This creates a workspace under `~/.config/omega`, adopts and
+backs up your existing shell configuration, installs the renderer and daemon
+service, and builds and activates the configuration. It also restarts the shell.
+The command reports backup and recovery locations.
+
+Use `omega init --bare` if you only want to create the workspace files; the
+walkthrough below uses the full setup.
+
+```sh
+omega init
+cd ~/.config/omega
+```
+
+Scaffold a plugin named `audio`. This starts with the default greeting template;
+we will replace it with an audio indicator and panel.
+
+```sh
+omega new audio
+```
+
+Your configuration should look like this:
 
 ```text
 ~/.config/omega/
@@ -63,84 +78,41 @@ With an `audio` plugin added, your configuration looks like this:
             └── main.rs        # Runs the plugin as a separate process
 ```
 
-`system/` describes your desktop; each crate under `plugins/` implements a plugin.
-Both inherit the Rust edition declared in the root `Cargo.toml`.
-Plugins expose a library so the system declaration can refer to their settings
-and surfaces through Rust types. `omega new` adds plugin crates to the workspace;
-`shell_import.rs` is created only when importing an existing shell configuration.
-You can keep the whole workspace in Git and use ordinary Cargo tools to work on it.
+Each crate under `plugins/` implements a plugin and `system/` is where you compose your Omarchy shell.
 
-Shared crates live under `crates/` and are never supervised. Create one and
-connect its consumers explicitly:
-
-```sh
-omega new desktop-ui --lib --into plugins/audio --into system
-```
-
-`omega new` adds `plugins/*` or `crates/*` to workspace members when it creates
-the first crate in that directory. Later crates are covered automatically.
-`omega init` starts with only `system`: Cargo rejects a glob with no matches.
-Use Cargo's `workspace.exclude` to leave specific crates out.
-
-You can inspect the service and its plugins from the terminal:
-
-```sh
-omega daemon status
-omega status
-omega status --versions
-omega status --json
-```
-
-`omega build` publishes a generation for asynchronous daemon activation.
-Use `omega status` to see whether the latest build is active,
-inspect activation failures and the last reconciliation pass, and see the last
-shell application result alongside plugin phases. A completed pass does not mean
-every plugin is running. Shell application is reported independently: a conflict
-does not prevent valid plugins from starting. Use `omega shell diff` to check
-the current file for external changes.
-
-Use `omega build --wait --timeout 30s` to wait for that build to be accepted and
-its configuration applied. The timeout starts after publication; failure leaves
-the build published and does not cancel activation. This checks the last
-reconciliation pass and shell application, not ongoing plugin health.
-`omega status --json` writes the daemon snapshot, including generation IDs, to
-stdout for scripts.
-
-For foreground operation, `omega daemon` runs the daemon directly.
-
-### Configuring the shell
-
-Once adopted, the Rust declaration becomes the source of truth for the entire
-`~/.config/omarchy/shell.json` file. `omega build` generates it alongside the
-plugins, and the daemon applies it. Omarchy still provides and runs the shell;
-Omega supplies its configuration. Native Omarchy widgets and Omega plugins share
-one layout, and settings without dedicated Rust types can be preserved through
-explicit extensions.
-
-This means shell changes belong in Rust. Editing `shell.json` directly, or changing
-settings through a shell control that writes to it, creates a conflict with the
-generated configuration. Omega preserves those edits and reports the conflict.
-Use `omega shell diff` to inspect changed fields and their current and built
-values, and carry any changes you want to keep into
-Rust. After rebuilding, `omega shell apply --overwrite` explicitly replaces the
-edited file with the built configuration. External edits are never translated
-back into your Rust source automatically.
-
-## Writing plugins
-
-A plugin declares its dependencies through its fields. Holding `Audio` gives a
-widget access to the current audio state; holding `Volume` lets a command change
-it. Omega derives the required subscriptions and permissions from those types.
-
-Views are declarative, and controls bind directly to typed commands:
+Replace `plugins/audio/src/lib.rs` with the following. The indicator shows the
+volume in the bar; its panel contains a slider:
 
 ```rust
 use omega::platform::audio::{Audio, Volume};
 use omega::ui::{Section, Slider, Text};
-use omega::{Command, Percent, Surface, View};
+use omega::{Command, Percent, Plugin, Surface, View};
 
 #[derive(omega::Surface)]
-struct Panel {
+pub struct Indicator {
+    audio: Audio,
+}
+
+impl Surface for Indicator {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+
+    fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
+        if !self.audio.has_reading() {
+            return Text::new("Audio unavailable").into();
+        }
+
+        Text::new(self.audio.volume()).into()
+    }
+}
+
+#[derive(omega::Surface)]
+pub struct Panel {
     audio: Audio,
 }
 
@@ -148,9 +120,11 @@ impl Surface for Panel {
     type Model = ();
     type Message = std::convert::Infallible;
     type Effects = ();
+
     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
         match message {}
     }
+
     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
@@ -177,53 +151,44 @@ impl Command for SetVolume {
     }
 }
 
-fn main() -> omega::Result<()> {
+pub fn plugin() -> Plugin {
     omega::plugin!()
+        .surface(Indicator)
         .surface(Panel)
         .command::<SetVolume>()
-        .run()
 }
 ```
 
-Omega redraws the surface when its audio state changes. Moving the slider invokes
-`SetVolume` with a `Percent`. Render declarations can read state; effects belong
-in commands, reactions, or a stateful surface’s separate behavior dependencies.
+Keep the generated `plugins/audio/src/main.rs`; it calls `audio::plugin().run()`.
 
-`omega new` creates a plugin crate and prints the declaration for placing its
-widget in your Rust shell layout. Build to apply your changes:
+Now place the indicator and attach its panel. Add this expression to a
+`Bar::left(...)`, `Bar::center(...)`, or `Bar::right(...)` list in your system
+layout, alongside the existing entries:
 
-```sh
-omega new audio
-omega build
+```rust
+omega_omarchy::shell::PluginWidget::new("audio", audio::Indicator)
+    .panel(audio::Panel)
+    .into(),
 ```
 
-`omega new <name>` starts with a minimal text widget. Use
-`omega new power --template battery` for a battery widget with configurable
-low-charge styling. Both templates include tests and print a placement declaration. New plugins are
-registered as workspace members. Put the printed expression into your shell's
-`Bar::left`, `Bar::center`, or `Bar::right`; running a plugin alone does not
-place its widget on screen.
+Start at `system/src/main.rs`. When initialization imports your existing layout,
+the bar declarations live in `system/src/shell_import.rs` instead. `omega new`
+adds the Cargo dependency but leaves placement to you.
 
-`omega check` compiles the workspace, evaluates the Rust configuration, and
-validates its placements and schedules without publishing a generation.
-Configurations containing only native Omarchy widgets can be checked and built
-without creating any Omega plugins.
+Build and activate the configuration:
 
-Plugins are ordinary Cargo projects, so their tests run with `cargo test` from
-your configuration workspace. For development against the live desktop,
-`omega dev audio` temporarily runs the plugin in your terminal in place of its
-supervised process. `omega logs audio` shows its captured output.
+```sh
+omega build --wait
+```
 
-The [audio](crates/omega/examples/audio.rs), [Wi-Fi](crates/omega/examples/wifi.rs),
-and [focus timer](crates/omega/examples/focus.rs) examples show fuller plugins,
-including panels, forms, and plugin-owned state.
+The volume indicator should now appear in the bar. Click it to open the slider.
+Check plugin health with:
 
-## Preview components and surfaces
+```sh
+omega status
+```
 
-Register development cases in a plugin or library with the `omega-preview` dev
-dependency, then run `omega preview <package>`. Inspect loading/empty/error cases,
-interact with isolated surfaces, and rebuild on edits. `--capture` and `--baseline`
-provide explicit visual comparisons. See [the preview guide](docs/previews.md).
+My personal configuration is available at [omx](https://github.com/roushou/omx) with examples of a launcher, calendar, device controls, and background data collection.
 
 ## Documentation
 
