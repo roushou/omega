@@ -24,7 +24,6 @@ omega-host = { workspace = true, features = ["watch"] }
 omega-omarchy.workspace = true
 omega-platform.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
-omega-renderer.workspace = true
 prost = "0.14"
 serde.workspace = true
 serde_json.workspace = true

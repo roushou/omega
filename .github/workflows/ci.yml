@@ -22,7 +22,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -37,7 +37,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
         if: hashFiles('mise.toml') != ''
         with:
           version: 2026.9.1
@@ -71,7 +71,7 @@ jobs:
   renderer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -83,7 +83,7 @@ jobs:
           sudo apt-get update || true
           sudo apt-get install --no-install-recommends -y qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtqml-models qml6-module-qtquick-layouts qml6-module-qtquick-controls qml6-module-qtquick-templates
 
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
         if: hashFiles('mise.toml') != ''
         with:
           version: 2026.9.1
@@ -105,12 +105,12 @@ jobs:
   supply-chain:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
         if: hashFiles('mise.toml') != ''
         with:
           version: 2026.9.1
@@ -132,13 +132,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Backfills check the release tooling that runs them, even if the tag predates it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
         if: hashFiles('mise.toml') != ''
         with:
           version: 2026.9.1

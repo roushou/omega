@@ -974,7 +974,6 @@ dependencies = [
  "omega-omarchy",
  "omega-platform",
  "omega-proto",
- "omega-renderer",
  "prost",
  "serde",
  "serde_json",
