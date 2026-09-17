@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package omega;
 
+import "omega/instance.proto";
+import "omega/ui.proto";
+
 // Plugin lifecycle observations.
 
 // Daemon-owned unit status. Plugins cannot publish their own lifecycle state.
@@ -24,4 +27,32 @@ enum UnitPhase {
   UNIT_PHASE_RESTARTING = 3;    // exited; waiting out the backoff
   UNIT_PHASE_FAILED = 4;        // could not be spawned at all
   UNIT_PHASE_STOPPED = 5;       // the daemon is shutting down
+}
+
+// On-demand daemon projection, separate from process lifecycle and private trees.
+message PluginHealth {
+  string unit = 1;
+  PluginReadiness readiness = 2;
+  repeated string surfaces = 3;
+  repeated SurfaceHealth instances = 4;
+}
+
+enum PluginReadiness {
+  PLUGIN_READINESS_UNSPECIFIED = 0;
+  PLUGIN_READINESS_BACKGROUND = 1;
+  PLUGIN_READINESS_UNPLACED = 2;
+  PLUGIN_READINESS_WAITING = 3;
+  // Every live instance has completed a render, including deliberately empty views.
+  // This is not a claim about native visibility or renderer attachment.
+  PLUGIN_READINESS_READY = 4;
+}
+
+message SurfaceHealth {
+  InstanceRef instance = 1; // absent until instance construction starts
+  string surface = 2;
+  string placement = 3; // empty for transient presentations
+  RenderReadiness readiness = 4;
+  repeated string pending_topics = 5;
+  PresentationState requested = 6;
+  PresentationState observed = 7;
 }

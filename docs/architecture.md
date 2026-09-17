@@ -661,7 +661,27 @@ with the locally published generation. A rejected candidate remains visible whil
 the accepted build continues to converge. Shell application records its own
 generation and result because explicit application can precede activation.
 Ordinary `omega status` uses this operator snapshot; `--json` writes its protocol
-JSON to stdout, including generation identities. `omega build --wait` captures the
+JSON to stdout, including generation identities and plugin health. Human-readable
+status goes to stderr; `omega status <plugin>` adds instance details and log paths.
+
+Plugin health is an on-demand projection from `UnitTable`: manifest surfaces,
+the latest validated placement plan, session-owned instances, and retained view
+readiness. Lifecycle and health are sampled under the same unit-table lock.
+Missing configured instances remain waiting across session loss; unplaced means
+no desired placement or live instance. A running plugin without declared surfaces
+is a healthy background plugin. One waiting instance makes the plugin waiting,
+even if another instance has rendered. This does not change the lifecycle topic
+or feed diagnostic reads back into plugin invalidation.
+
+The SDK attaches startup readiness to each view. Waiting trees name required
+system topics not yet received; explicit topic absence satisfies the gate.
+Readiness changes participate in publication deduplication, so waiting can become
+ready even when both trees have no root. The daemon validates metadata and projects
+it without returning private view contents. Legacy nonempty trees prove a render
+occurred; legacy empty trees remain unknown. Ready describes rendering only;
+renderer attachment and requested/observed visibility remain separate facts.
+
+`omega build --wait` captures the
 identity from its own reserved stage before publication and waits for that exact
 build's acceptance, settled reconciliation, and successful shell application (or
 no shell declaration). Rejection, shell failure, and superseding publication fail

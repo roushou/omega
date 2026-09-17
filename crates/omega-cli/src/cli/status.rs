@@ -2,16 +2,16 @@
 
 use std::time::Duration;
 
-use anstyle::{AnsiColor, Effects, Style};
 use anyhow::Context;
 
-use omega_proto::omega::{UnitPhase, UnitStatus};
-
-use crate::ui::{Cell, Column, Paint, Step, Table, Ui};
+use crate::ui::{Paint, Step, Ui};
 
 /// Report the daemon's view of every unit.
 #[derive(Debug, clap::Args)]
 pub struct StatusCmd {
+    /// Inspect one plugin, including its surfaces and required readings.
+    pub unit: Option<String>,
+
     /// Show CLI, daemon, renderer, and resolved config dependency versions.
     #[arg(long)]
     pub versions: bool,
@@ -25,14 +25,23 @@ impl StatusCmd {
     const TIMEOUT: Duration = Duration::from_secs(2);
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
+        let unit = self
+            .unit
+            .as_deref()
+            .map(omega_proto::UnitName::parse)
+            .transpose()?;
+
         if self.versions {
             Self::versions(ui).await;
         }
-        let status =
+        let mut status =
             tokio::time::timeout(Self::TIMEOUT, crate::operator::Operator::new().deployment())
                 .await
                 .context("the daemon did not report status in time")?
                 .context("cannot read daemon status; ensure omega daemon is running")?;
+
+        Self::select(&mut status, unit.as_ref())?;
+
         if self.json {
             ui.line(serde_json::to_string(&status)?);
             return Ok(());
@@ -51,14 +60,51 @@ impl StatusCmd {
                 .as_ref()
                 .map(|generation| generation.id().as_str()),
         );
-        crate::renderer::RendererStatus::show(&status.renderers, &status.renderer_placements, ui);
-        let units = status.units;
+        if status.renderers.is_empty() && status.renderer_placements.is_empty() {
+            ui.detail("No active renderer attachments.");
+        } else {
+            crate::renderer::RendererStatus::show(
+                &status.renderers,
+                &status.renderer_placements,
+                ui,
+            );
+        }
 
-        if units.is_empty() {
+        ui.blank();
+        if status.units.is_empty() {
             ui.step(Step::Checked, "the daemon is running; no plugins");
         } else {
-            ui.table(&Self::table(&units));
+            ui.plugin_health(&status.units, &status.plugins, &layout, unit.is_some())?;
         }
+        Ok(())
+    }
+
+    fn select(
+        status: &mut omega_proto::omega::DeploymentStatus,
+        unit: Option<&omega_proto::UnitName>,
+    ) -> anyhow::Result<()> {
+        use omega_proto::omega::attach_renderer;
+
+        let Some(unit) = unit else { return Ok(()) };
+
+        anyhow::ensure!(
+            status
+                .units
+                .iter()
+                .any(|status| status.unit == unit.as_str()),
+            "unknown plugin {unit}"
+        );
+        status.units.retain(|status| status.unit == unit.as_str());
+        status.plugins.retain(|status| status.unit == unit.as_str());
+        status
+            .renderer_placements
+            .retain(|placement| placement.unit == unit.as_str());
+        status.renderers.retain(|renderer| match &renderer.scope {
+            Some(attach_renderer::Scope::Unit(name)) => name == unit.as_str(),
+            Some(attach_renderer::Scope::Placement(placement)) => placement.unit == unit.as_str(),
+            None => false,
+        });
+
         Ok(())
     }
 
@@ -143,84 +189,56 @@ impl StatusCmd {
             Err(_) => ui.warn("config dependency version lookup timed out"),
         }
     }
-
-    /// Highlight phases and nonzero restart counts.
-    fn table(units: &[UnitStatus]) -> Table {
-        let mut table = Table::new(vec![
-            Column::left("UNIT"),
-            Column::left("PHASE"),
-            Column::right("RESTARTS"),
-            Column::left("DETAIL"),
-        ]);
-
-        for status in units {
-            let phase = Self::phase(status.phase);
-            table.row(vec![
-                Cell::plain(&status.unit),
-                Cell::styled(phase.label(), phase.style()),
-                Cell::styled(status.restarts, Self::restarts(status.restarts)),
-                Cell::styled(&status.detail, Style::new().effects(Effects::DIMMED)),
-            ]);
-        }
-
-        table.drop_empty(3);
-        table
-    }
-
-    fn restarts(count: u32) -> Style {
-        match count {
-            0 => Style::new().effects(Effects::DIMMED),
-            _ => Style::new().fg_color(Some(AnsiColor::Yellow.into())),
-        }
-    }
-
-    fn phase(phase: i32) -> Phase {
-        match UnitPhase::try_from(phase) {
-            Ok(UnitPhase::Starting) => Phase::Starting,
-            Ok(UnitPhase::Running) => Phase::Running,
-            Ok(UnitPhase::Restarting) => Phase::Restarting,
-            Ok(UnitPhase::Failed) => Phase::Failed,
-            Ok(UnitPhase::Stopped) => Phase::Stopped,
-            Ok(UnitPhase::Unspecified) | Err(_) => Phase::Unknown,
-        }
-    }
 }
 
-/// Consistent labels and colors for process phases.
-#[derive(Debug, Clone, Copy)]
-enum Phase {
-    Starting,
-    Running,
-    Restarting,
-    Failed,
-    Stopped,
-    Unknown,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omega_proto::omega::{
+        AttachRenderer, DeploymentStatus, PluginHealth, UnitStatus, attach_renderer,
+    };
 
-impl Phase {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Starting => "starting",
-            Self::Running => "running",
-            Self::Restarting => "restarting",
-            Self::Failed => "failed",
-            Self::Stopped => "stopped",
-            Self::Unknown => "unknown",
+    #[test]
+    fn selecting_a_plugin_filters_json_facts_and_rejects_unknown_names() {
+        let mut status = DeploymentStatus {
+            accepted_generation: "retained".into(),
+            ..Default::default()
+        };
+        for name in ["audio", "network"] {
+            status.units.push(UnitStatus {
+                unit: name.into(),
+                ..Default::default()
+            });
+            status.plugins.push(PluginHealth {
+                unit: name.into(),
+                ..Default::default()
+            });
+            status.renderers.push(AttachRenderer {
+                scope: Some(attach_renderer::Scope::Unit(name.into())),
+                ..Default::default()
+            });
         }
-    }
 
-    fn style(self) -> Style {
-        match self {
-            Self::Running => Style::new()
-                .fg_color(Some(AnsiColor::Green.into()))
-                .effects(Effects::BOLD),
-            Self::Starting | Self::Restarting => {
-                Style::new().fg_color(Some(AnsiColor::Yellow.into()))
-            }
-            Self::Failed => Style::new()
-                .fg_color(Some(AnsiColor::Red.into()))
-                .effects(Effects::BOLD),
-            Self::Stopped | Self::Unknown => Style::new().effects(Effects::DIMMED),
-        }
+        assert!(
+            StatusCmd::select(
+                &mut status,
+                Some(&omega_proto::UnitName::parse("missing").unwrap())
+            )
+            .is_err()
+        );
+        assert_eq!(status.units.len(), 2);
+        StatusCmd::select(
+            &mut status,
+            Some(&omega_proto::UnitName::parse("network").unwrap()),
+        )
+        .unwrap();
+        assert_eq!(status.units.len(), 1);
+        assert_eq!(status.plugins.len(), 1);
+        assert_eq!(status.renderers.len(), 1);
+        assert_eq!(status.units[0].unit, "network");
+        assert_eq!(status.accepted_generation, "retained");
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(!json.contains("audio"));
+        assert!(json.contains("network"));
     }
 }

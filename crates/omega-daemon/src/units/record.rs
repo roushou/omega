@@ -39,6 +39,7 @@ pub struct UnitRecord {
     pub(crate) session: Option<SessionLink>,
     pub(crate) instances:
         std::collections::BTreeMap<omega_proto::instance::InstanceId, super::instance::Instance>,
+    pub(crate) placements: std::collections::BTreeSet<crate::hub::SurfaceRef>,
     /// Settings supplied to the running process at handshake. Changes require restart.
     pub config: HashMap<String, Value>,
     /// Active adoption suppresses supervised spawning.
@@ -61,6 +62,7 @@ impl UnitRecord {
             control: None,
             session: None,
             instances: Default::default(),
+            placements: Default::default(),
             config: HashMap::new(),
             adopted: false,
             restarts: 0,

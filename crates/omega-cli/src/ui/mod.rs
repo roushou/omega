@@ -4,6 +4,7 @@
 
 mod deployment;
 mod diagnostic;
+mod health;
 mod paint;
 mod shell;
 mod step;

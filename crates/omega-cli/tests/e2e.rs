@@ -333,7 +333,10 @@ fn a_scaffolded_config_builds_and_runs() {
     );
 
     // The unit the config declares is running, and the daemon says so.
-    let status = machine.run(&["status"]);
+    let output = machine.omega(&["status"]).output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    let status = String::from_utf8_lossy(&output.stderr);
     assert!(
         !status.contains("desktop-ui"),
         "libraries must never be supervised"
@@ -342,6 +345,30 @@ fn a_scaffolded_config_builds_and_runs() {
         status.contains("battery-widget"),
         "status did not report the unit:\n{status}"
     );
+
+    let details = machine
+        .omega(&["status", "battery-widget"])
+        .output()
+        .unwrap();
+    assert!(details.status.success());
+    assert!(details.stdout.is_empty());
+    let details = String::from_utf8_lossy(&details.stderr);
+    assert!(details.contains("Process:"), "{details}");
+    assert!(details.contains("battery-widget.log"), "{details}");
+
+    let snapshot = machine.run(&["status", "battery-widget", "--json"]);
+    let snapshot: omega_proto::omega::DeploymentStatus = serde_json::from_str(&snapshot).unwrap();
+    assert_eq!(snapshot.units.len(), 1);
+    assert_eq!(snapshot.plugins.len(), 1);
+    assert_eq!(snapshot.plugins[0].unit, "battery-widget");
+
+    let unknown = machine
+        .omega(&["status", "does-not-exist"])
+        .output()
+        .unwrap();
+    assert!(!unknown.status.success());
+    assert!(unknown.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown plugin does-not-exist"));
 
     let lock_path = machine.root.join("config/Cargo.lock");
     let lock_before = std::fs::read(&lock_path).unwrap();
@@ -364,7 +391,8 @@ fn a_scaffolded_config_builds_and_runs() {
     assert!(details.contains("path "), "{details}");
     assert!(details.contains("omega-document"), "{details}");
     assert_eq!(std::fs::read(&lock_path).unwrap(), lock_before);
-    assert!(String::from_utf8_lossy(&provenance.stdout).contains("battery-widget"));
+    assert!(provenance.stdout.is_empty());
+    assert!(details.contains("battery-widget"));
     machine.run(&["shell", "apply"]);
     let first = std::fs::read(&shell_path).unwrap();
     assert!(String::from_utf8_lossy(&first).contains("preserved"));
@@ -402,7 +430,8 @@ fn a_scaffolded_config_builds_and_runs() {
     );
     assert!(details.contains("shell application failed"), "{details}");
     assert!(details.contains("failed:"), "{details}");
-    assert!(String::from_utf8_lossy(&deployment.stdout).contains("battery-widget"));
+    assert!(deployment.stdout.is_empty());
+    assert!(details.contains("battery-widget"));
     let waiting = machine
         .omega(&["build", "--debug", "--wait"])
         .output()
@@ -477,13 +506,16 @@ fn a_scaffolded_config_builds_and_runs() {
     machine.run(&["restart", "battery-widget"]);
 
     // A cycled unit is still supervised, and the restart is counted.
-    let status = machine.run(&["status"]);
+    let output = machine.omega(&["status"]).output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    let status = String::from_utf8_lossy(&output.stderr);
     let line = status
         .lines()
-        .find(|line| line.starts_with("battery-widget"))
+        .find(|line| line.split_whitespace().nth(1) == Some("battery-widget"))
         .unwrap_or_else(|| panic!("the unit vanished after a restart:\n{status}"));
     assert!(
-        !line.contains("stopped"),
+        !line.contains("Stopped"),
         "a cycled unit must come back: {line}"
     );
 }

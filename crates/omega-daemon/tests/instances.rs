@@ -110,6 +110,7 @@ impl Fixture {
                 .into(),
                 ..Default::default()
             }),
+            ..Default::default()
         }
     }
     fn request(singleton: &str, label: &str) -> omega::CreateInstance {
@@ -378,6 +379,7 @@ async fn retained_interactions_share_eligibility_but_keep_command_authorization(
                     view: Some(omega::ViewTree {
                         root: Some(parent),
                         revision: 0,
+                        ..Default::default()
                     }),
                 },
             )
@@ -844,4 +846,77 @@ async fn required_placements_are_reported_even_without_a_renderer() {
         panic!("deployment")
     };
     assert!(status.renderer_placements.is_empty());
+}
+
+#[tokio::test]
+async fn deployment_reports_readiness_without_exposing_views_and_expires_session_facts() {
+    use omega::PluginReadiness;
+    use omega::RenderReadiness;
+
+    let mut fixture = Fixture::new("health");
+    let mut observer = fixture.observer().await;
+    let snapshot = observer.create("health", "private-view-content").await;
+    let result::Outcome::Deployment(status) = observer
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("expected deployment snapshot");
+    };
+    assert_eq!(status.plugins[0].readiness(), PluginReadiness::Ready);
+    assert_eq!(status.plugins[0].instances[0].instance, snapshot.instance);
+    assert!(
+        !serde_json::to_string(&status)
+            .unwrap()
+            .contains("private-view-content")
+    );
+
+    fixture
+        .units
+        .publish_instance(
+            &common::unit_name("example"),
+            &omega::PublishView {
+                surface_id: "panel".into(),
+                instance: snapshot.instance.clone(),
+                view: Some(omega::ViewTree {
+                    readiness: RenderReadiness::Waiting as i32,
+                    pending_topics: vec!["network".into()],
+                    ..Default::default()
+                }),
+            },
+        )
+        .unwrap();
+    let result::Outcome::Deployment(status) = observer
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("expected deployment snapshot");
+    };
+    assert_eq!(status.plugins[0].readiness(), PluginReadiness::Waiting);
+    assert_eq!(status.plugins[0].instances[0].pending_topics, ["network"]);
+
+    let stale = snapshot.instance;
+    drop(fixture.guard.take());
+    let result::Outcome::Deployment(status) = observer
+        .ask(invoke::Op::GetDeployment(Default::default()))
+        .await
+    else {
+        panic!("expected deployment snapshot");
+    };
+    assert!(status.plugins[0].instances.is_empty());
+    assert!(
+        fixture
+            .units
+            .publish_instance(
+                &common::unit_name("example"),
+                &omega::PublishView {
+                    surface_id: "panel".into(),
+                    instance: stale,
+                    view: Some(omega::ViewTree {
+                        readiness: RenderReadiness::Ready as i32,
+                        ..Default::default()
+                    }),
+                }
+            )
+            .is_err()
+    );
 }

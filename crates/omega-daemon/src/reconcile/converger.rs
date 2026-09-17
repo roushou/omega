@@ -299,6 +299,10 @@ impl Worker {
         let installed_instances = self.context.units.installed_presentations();
         let instance_changes = PresentationProvider::plan(&desired_instances, &installed_instances);
 
+        self.context
+            .units
+            .expect_presentations(desired_instances.keys());
+
         units.apply(&unit_changes).await?;
         if let Some(change) = environment_change {
             environment.apply(&change)?;

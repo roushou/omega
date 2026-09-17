@@ -20,6 +20,7 @@ impl<const KIND: u8> Wired for Probe<KIND> {
             0 => vec![SystemTopic::Battery],
             1 => vec![SystemTopic::Network],
             2 => vec![SystemTopic::Battery, SystemTopic::Network],
+            4 => vec![SystemTopic::Battery, SystemTopic::Battery],
             _ => vec![],
         }
     }
@@ -567,4 +568,38 @@ async fn disconnect_releases_a_runtime_with_an_unfinished_command() {
         .unwrap()
         .unwrap()
         .unwrap();
+}
+
+#[tokio::test]
+async fn startup_readiness_reports_remaining_topics_and_completes_with_an_empty_render() {
+    use omega_proto::omega::RenderReadiness;
+
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<2>>("both");
+    let mut peer = Peer::start(plugin, vec![]).await;
+    let initial = peer.render("both", "", "").await;
+    assert_eq!(initial.readiness(), RenderReadiness::Waiting);
+    assert_eq!(initial.pending_topics, ["battery", "network"]);
+    assert!(initial.root.is_none());
+
+    peer.patch(vec![Peer::network()]).await;
+    let partial = peer.published("both", "").await;
+    assert_eq!(partial.readiness(), RenderReadiness::Waiting);
+    assert_eq!(partial.pending_topics, ["battery"]);
+    peer.quiet().await;
+
+    peer.patch(vec![Peer::battery(1, None)]).await;
+    let ready = peer.published("both", "").await;
+    assert_eq!(ready.readiness(), RenderReadiness::Ready);
+    assert!(ready.pending_topics.is_empty());
+    assert!(ready.root.is_none());
+    peer.quiet().await;
+}
+
+#[tokio::test]
+async fn shared_required_readings_are_reported_once() {
+    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<4>>("shared");
+    let mut peer = Peer::start(plugin, vec![]).await;
+    let view = peer.render("shared", "", "").await;
+    assert_eq!(view.pending_topics, ["battery"]);
+    assert!(view.validate_readiness().is_ok());
 }

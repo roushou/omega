@@ -345,6 +345,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                             .revision
                             .checked_add(1)
                             .expect("view revision exhausted"),
+                        ..Default::default()
                     },
                 })
             })
@@ -387,6 +388,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                             view: omega_proto::omega::ViewTree {
                                 root: None,
                                 revision: view.view.revision,
+                                ..Default::default()
                             },
                             ..view.as_ref().clone()
                         }),

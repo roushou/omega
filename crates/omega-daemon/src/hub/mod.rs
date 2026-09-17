@@ -111,6 +111,8 @@ struct ViewRegistry {
 #[derive(Debug, thiserror::Error)]
 pub enum PublishError {
     #[error(transparent)]
+    Readiness(#[from] omega_proto::ui::ReadinessError),
+    #[error(transparent)]
     State(#[from] crate::state::StateError),
     #[error("publication exceeds payload limit")]
     TooLarge,
@@ -122,10 +124,18 @@ pub enum PublishError {
 
 impl ViewUpdate {
     fn size(&self) -> usize {
+        // Revisions are assigned after admission; accounting must not depend on them.
         self.view
             .root
             .as_ref()
             .map_or(0, |root| root.encoded_len() + 8)
+            + self
+                .view
+                .pending_topics
+                .iter()
+                .map(|topic| topic.len() + 8)
+                .sum::<usize>()
+            + 8
             + self.surface.unit.as_str().len()
             + self.surface.surface.as_str().len()
             + self
@@ -241,6 +251,7 @@ impl Hub {
     /// Store and broadcast a changed instance view with a new revision.
     /// Identical trees do not advance the revision or broadcast.
     pub fn publish_view(&self, mut update: ViewUpdate) -> Result<(), PublishError> {
+        update.view.validate_readiness()?;
         let size = update.size();
         if size > Self::PUBLICATION_BYTES {
             return Err(PublishError::TooLarge);
@@ -249,6 +260,8 @@ impl Hub {
 
         if registry.latest.get(&update.instance).is_some_and(|prev| {
             prev.view.root == update.view.root
+                && prev.view.pending_topics == update.view.pending_topics
+                && prev.view.readiness == update.view.readiness
                 && prev.requested == update.requested
                 && prev.observed == update.observed
                 && prev.presentation == update.presentation
@@ -342,6 +355,7 @@ impl Hub {
             view: ViewTree {
                 root: None,
                 revision: registry.revision,
+                ..Default::default()
             },
         };
         let size = update.size();
@@ -438,6 +452,7 @@ mod tests {
                             ..Default::default()
                         }),
                         revision: 0,
+                        ..Default::default()
                     },
                 }
             }

@@ -24,6 +24,7 @@ its placement declaration for `system/src/main.rs`. The
 ```sh
 omega build
 omega status
+omega status network
 omega status --versions
 omega status --json
 omega logs audio
@@ -71,7 +72,7 @@ without creating any Omega plugins.
 `omega build` publishes a generation for asynchronous daemon activation.
 Use `omega status` to see whether the latest build is active,
 inspect activation failures and the last reconciliation pass, and see the last
-shell application result alongside plugin phases. A completed pass does not mean
+shell application result alongside plugin health. A completed pass does not mean
 every plugin is running. Shell application is reported independently: a conflict
 does not prevent valid plugins from starting. Use `omega shell diff` to check
 the current file for external changes.
@@ -80,14 +81,27 @@ Use `omega build --wait --timeout 30s` to wait for that build to be accepted and
 its configuration applied. The timeout starts after publication; failure leaves
 the build published and does not cancel activation. This checks the last
 reconciliation pass and shell application, not ongoing plugin health.
-`omega status --json` writes the daemon snapshot, including generation IDs, to
-stdout for scripts.
+`omega status` distinguishes background plugins, unplaced surfaces, surfaces
+waiting for required readings, and completed renders. Process failures take
+precedence and include the last failure and log path. **Ready** means a render is
+available, including a deliberately empty view; it does not mean the shell is
+connected or the presentation is visible.
+
+Use `omega status <plugin>` for its declared surfaces, instances, missing readings,
+requested and observed presentation state, and log path. A configured placement
+whose instance has not started is waiting, not unplaced. An older plugin's empty
+view has unknown readiness.
+
+Human-readable status goes to stderr. `omega status --json` writes the daemon
+snapshot, including generation IDs and plugin health, to stdout for scripts.
+`omega status <plugin> --json` selects that plugin's process, health, and renderer
+facts while retaining the deployment summary.
 
 Use `omega status --versions` to inspect the CLI executable, the running daemon's
 version, renderer installation, and resolved Omega dependency versions and sources.
 Dependency inspection is offline and leaves the lockfile unchanged. It describes
 the current config workspace; running plugins retain their last published build.
-These details go to stderr alongside the usual plugin table on stdout.
+These details go to stderr alongside the usual plugin summary.
 
 `omega shell diff` shows changed JSON paths and their current and built values,
 then suggests adoption, application, or explicit overwrite as appropriate.

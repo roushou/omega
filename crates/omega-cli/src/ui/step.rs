@@ -5,6 +5,16 @@ use anstyle::{AnsiColor, Effects, Style};
 /// Closed set of CLI progress labels, aligned with Cargo output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
+    Healthy,
+    Ready,
+    Unplaced,
+    Waiting,
+    Starting,
+    Running,
+    Restarting,
+    Stopped,
+    Unknown,
+
     /// Accepted intent, before a host has necessarily made it visible.
     Requested,
     /// A file or directory the CLI wrote.
@@ -58,6 +68,16 @@ pub enum Step {
 impl Step {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Healthy => "Healthy",
+            Self::Ready => "Ready",
+            Self::Unplaced => "Unplaced",
+            Self::Waiting => "Waiting",
+            Self::Starting => "Starting",
+            Self::Running => "Running",
+            Self::Restarting => "Restarting",
+            Self::Stopped => "Stopped",
+            Self::Unknown => "Unknown",
+
             Self::Requested => "Requested",
             Self::Created => "Created",
             Self::Kept => "Kept",
@@ -88,6 +108,16 @@ impl Step {
     /// Assign status colors; Next leaves the accent to the suggested command.
     pub fn style(self) -> Style {
         let color = match self {
+            Self::Healthy => Some(AnsiColor::Green),
+            Self::Ready => Some(AnsiColor::Green),
+            Self::Unplaced => Some(AnsiColor::Cyan),
+            Self::Waiting => Some(AnsiColor::Yellow),
+            Self::Starting => Some(AnsiColor::Cyan),
+            Self::Running => Some(AnsiColor::Green),
+            Self::Restarting => Some(AnsiColor::Yellow),
+            Self::Stopped => Some(AnsiColor::Yellow),
+            Self::Unknown => Some(AnsiColor::Yellow),
+
             Self::Created
             | Self::Kept
             | Self::Built

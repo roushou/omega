@@ -280,3 +280,86 @@ mod tests {
         assert_eq!(NodeKind::parse("nothing-this-build-knows"), None);
     }
 }
+
+/// Invalid startup readiness accompanying a published view.
+#[derive(Debug, thiserror::Error)]
+#[error("invalid view readiness: {0}")]
+pub struct ReadinessError(&'static str);
+
+impl crate::omega::ViewTree {
+    /// Validate startup metadata. Waiting trees have no root and name only system
+    /// topics; ready and legacy trees cannot report pending readings.
+    pub fn validate_readiness(&self) -> Result<(), ReadinessError> {
+        use crate::omega::RenderReadiness;
+
+        match RenderReadiness::try_from(self.readiness) {
+            Ok(RenderReadiness::Waiting) => {
+                if self.root.is_some() || self.pending_topics.is_empty() {
+                    return Err(ReadinessError(
+                        "waiting requires pending topics and no root",
+                    ));
+                }
+
+                let mut topics = std::collections::BTreeSet::new();
+                for topic in &self.pending_topics {
+                    let topic = crate::SystemTopic::parse(topic)
+                        .ok_or(ReadinessError("unknown required system topic"))?;
+                    if !topics.insert(topic) {
+                        return Err(ReadinessError("duplicate required system topic"));
+                    }
+                }
+            }
+            Ok(RenderReadiness::Ready | RenderReadiness::Unspecified) => {
+                if !self.pending_topics.is_empty() {
+                    return Err(ReadinessError("pending topics require waiting readiness"));
+                }
+            }
+            Err(_) => return Err(ReadinessError("unknown render readiness")),
+        }
+
+        Ok(())
+    }
+
+    /// A legacy nonempty tree proves rendering occurred. A legacy empty tree
+    /// cannot distinguish a startup gate from a deliberately empty render.
+    pub fn render_readiness(&self) -> crate::omega::RenderReadiness {
+        use crate::omega::RenderReadiness;
+
+        match RenderReadiness::try_from(self.readiness) {
+            Ok(RenderReadiness::Unspecified) if self.root.is_some() => RenderReadiness::Ready,
+            Ok(readiness) => readiness,
+            Err(_) => RenderReadiness::Unspecified,
+        }
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use crate::omega::{RenderReadiness, ViewNode, ViewTree};
+
+    #[test]
+    fn waiting_metadata_is_validated_and_legacy_empty_trees_remain_unknown() {
+        let mut tree = ViewTree {
+            pending_topics: vec!["network".into()],
+            readiness: RenderReadiness::Waiting as i32,
+            ..Default::default()
+        };
+        assert!(tree.validate_readiness().is_ok());
+        tree.root = Some(ViewNode::default());
+        assert!(tree.validate_readiness().is_err());
+        tree.root = None;
+        tree.pending_topics.push("network".into());
+        assert!(tree.validate_readiness().is_err());
+        tree.pending_topics = vec!["not-a-topic".into()];
+        assert!(tree.validate_readiness().is_err());
+        tree.pending_topics.clear();
+        assert!(tree.validate_readiness().is_err());
+        tree.readiness = RenderReadiness::Ready as i32;
+        assert!(tree.validate_readiness().is_ok());
+        assert_eq!(tree.render_readiness(), RenderReadiness::Ready);
+        tree.readiness = 0;
+        assert_eq!(tree.render_readiness(), RenderReadiness::Unspecified);
+        tree.root = Some(ViewNode::default());
+        assert_eq!(tree.render_readiness(), RenderReadiness::Ready);
+    }
+}

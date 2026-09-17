@@ -63,6 +63,18 @@ impl Context {
         topics.iter().all(|topic| state.knows(*topic))
     }
 
+    pub(crate) fn missing(&self, topics: &[SystemTopic]) -> Vec<String> {
+        let state = self.read();
+        topics
+            .iter()
+            .filter(|topic| !state.knows(**topic))
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|topic| topic.to_string())
+            .collect()
+    }
+
     /// The current value of a topic, if the daemon has published one.
     pub fn topic<T: TopicValue + Clone>(&self) -> Option<T> {
         self.read().get::<T>().cloned()

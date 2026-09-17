@@ -19,6 +19,7 @@ fn view() -> ViewTree {
             ..Default::default()
         }),
         revision: 0,
+        ..Default::default()
     }
 }
 

@@ -10,6 +10,16 @@ import "omega/value.proto";
 message ViewTree {
   ViewNode root = 1;
   uint64 revision = 2;          // monotonic per widget surface
+  // SDK startup gate: required system topics not yet received, including absence.
+  // A waiting tree has no root. Empty with no pending topics is a completed render.
+  repeated string pending_topics = 3;
+  RenderReadiness readiness = 4;
+}
+
+enum RenderReadiness {
+  RENDER_READINESS_UNSPECIFIED = 0; // older SDK; an empty tree is ambiguous
+  RENDER_READINESS_WAITING = 1;
+  RENDER_READINESS_READY = 2;
 }
 
 message ViewNode {

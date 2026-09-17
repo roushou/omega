@@ -39,6 +39,7 @@ fn view_with_text(text: &str) -> ViewTree {
             ..Default::default()
         }),
         revision: 0,
+        ..Default::default()
     }
 }
 

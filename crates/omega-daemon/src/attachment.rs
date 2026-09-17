@@ -205,6 +205,7 @@ impl Attachment {
             view: omega_proto::omega::ViewTree {
                 root: None,
                 revision: snapshot.view.as_ref().map_or(0, |view| view.revision),
+                ..Default::default()
             },
         })
     }

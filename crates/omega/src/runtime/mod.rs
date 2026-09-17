@@ -154,7 +154,7 @@ impl Runtime {
                                 Err(error) => { self.client.send(error.refusal().frame(frame.stream_id)).await?; continue; }
                             };
                             let view = match instance.view(&self.context) {
-                                Ok(view) => view.unwrap_or_default(),
+                                Ok(view) => view,
                                 Err(error) => { self.client.send(error.refusal().frame(frame.stream_id)).await?; continue; }
                             };
                             let answer = Frame::reply(frame.stream_id, result::Outcome::View(view.clone()));

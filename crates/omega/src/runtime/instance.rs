@@ -39,20 +39,27 @@ impl Instance {
         })
     }
 
-    pub(super) fn view(&mut self, context: &Context) -> Result<Option<ViewTree>, crate::Error> {
-        if !context.holds(&self.topics) {
-            return Ok(None);
+    pub(super) fn view(&mut self, context: &Context) -> Result<ViewTree, crate::Error> {
+        let pending_topics = context.missing(&self.topics);
+
+        if !pending_topics.is_empty() {
+            return Ok(ViewTree {
+                pending_topics,
+                readiness: omega_proto::omega::RenderReadiness::Waiting as i32,
+                ..Default::default()
+            });
         }
         if self.dirty {
             self.cached = Some(self.widget.render().try_into_tree()?);
             self.dirty = false;
         }
-        Ok(self.cached.clone())
+        Ok(self
+            .cached
+            .clone()
+            .expect("clean instance has a cached render"))
     }
     pub(super) fn changed(&mut self, context: &Context) -> Result<Option<ViewTree>, crate::Error> {
-        let Some(view) = self.view(context)? else {
-            return Ok(None);
-        };
+        let view = self.view(context)?;
         Ok((self.sent.as_ref() != Some(&view)).then_some(view))
     }
     pub(super) fn invalidate(&mut self, patch: &omega_proto::omega::StatePatch) {

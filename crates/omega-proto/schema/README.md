@@ -35,6 +35,12 @@ absence, such as a missing battery or an unavailable broker. An unpublished topi
 is not equivalent to an absent one. Required readings gate surface startup;
 optional readings retain subscriptions without delaying the first render.
 
+`ViewTree.readiness` distinguishes waiting from a completed render, including an
+empty render. Waiting trees have no root and carry distinct, valid system-topic
+names in `pending_topics`. Ready and unspecified trees carry no pending topics.
+An unspecified legacy tree with a root proves rendering occurred; an unspecified
+empty tree is ambiguous. Readiness metadata participates in view deduplication.
+
 Choose topic boundaries and update resolution around what should wake consumers.
 For example, the clock topic reports minute-resolution time. Payloads should not
 carry redundant constants or duplicate facts that can disagree.
@@ -63,7 +69,10 @@ payloads (`PAYLOAD_TOO_LARGE`). `DEADLINE_EXCEEDED` means the wait expired; it d
 not establish whether an external action completed.
 
 `GetDeployment` is an operator-only snapshot of generation acceptance, the last
-reconciliation pass, shell application, and current unit phases. Shell results
+reconciliation pass, shell application, current unit phases, and plugin health.
+Health projects declarations, desired placements, instance identity, readiness,
+missing readings, and presentation state without exposing view trees. It is
+independent of process phase and native renderer attachment. Shell results
 carry their own generation because explicit application can precede activation.
 A settled reconciliation pass is not a guarantee that all unit processes are
 running; their phases remain authoritative.

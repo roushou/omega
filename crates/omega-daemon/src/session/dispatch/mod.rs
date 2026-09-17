@@ -397,7 +397,7 @@ impl Dispatcher {
 
             invoke::Op::GetDeployment(_) => {
                 let mut status = self.deployment.snapshot();
-                status.units = self.units.statuses();
+                (status.units, status.plugins) = self.units.health_snapshot();
                 status.renderers = self.units.renderer_statuses();
                 status.renderer_placements = self.units.renderer_placements();
                 Ok(Response::Deployment(status))

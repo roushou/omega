@@ -369,6 +369,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
                         ..Default::default()
                     }),
                     revision: 0,
+                    ..Default::default()
                 },
             }
         })
@@ -453,6 +454,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
                             ..Default::default()
                         }),
                         revision: 0,
+                        ..Default::default()
                     },
                 }
             })
@@ -505,7 +507,8 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
                     ..Default::default()
                 }),
                 revision: 1,
-            } } };
+            ..Default::default()
+} } };
         let updates = [Arc::new(update)];
         let (slow_server, _non_reader) = UnixStream::pair().unwrap();
         let (fast_server, fast_client) = UnixStream::pair().unwrap();

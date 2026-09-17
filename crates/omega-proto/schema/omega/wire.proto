@@ -263,4 +263,5 @@ message DeploymentStatus {
   repeated AttachRenderer renderers = 10;
   // Live embedded and popup placements that require a host attachment.
   repeated PlacementAttachment renderer_placements = 11;
+  repeated PluginHealth plugins = 12;
 }

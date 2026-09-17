@@ -47,7 +47,11 @@ impl View {
                 Ok(root.into_wire())
             })
             .transpose()?;
-        Ok(ViewTree { root, revision: 0 })
+        Ok(ViewTree {
+            root,
+            readiness: omega_proto::omega::RenderReadiness::Ready as i32,
+            ..Default::default()
+        })
     }
 
     pub(super) fn map_node(mut self, apply: impl FnOnce(Node) -> Node) -> Self {

@@ -76,6 +76,7 @@ impl Fixture {
                         ..Default::default()
                     }),
                     revision: 1,
+                    ..Default::default()
                 },
             }
         }

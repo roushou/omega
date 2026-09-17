@@ -1,6 +1,7 @@
 //! Authoritative unit table: manifests, lifecycle, tokens, supervision, and sessions.
 //! Publish the units topic as a projection whenever these records change.
 
+mod health;
 mod instance;
 pub mod lifecycle;
 mod presentation_state;
