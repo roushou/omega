@@ -170,6 +170,15 @@ async fn bare_setup_skips_host_tools_and_preserves_user_sources_on_repeat() {
     let m = Machine::new();
     let output = m.run(&["init", "--bare"]).await;
     assert!(output.contains("--bare skips compilation"));
+    assert!(output.contains("setup changes"), "{output}");
+    assert!(
+        output.contains("Created ~/config/system/src/main.rs"),
+        "{output}"
+    );
+    assert!(output.contains("omega recovery restore"), "{output}");
+    let summary = output.split("setup changes").nth(1).unwrap();
+    assert!(!summary.contains("Kept ~/config/Cargo.toml"), "{output}");
+    assert!(!summary.contains("daemon-reload"), "{output}");
     assert!(m.events().is_empty());
     assert!(!m.root.join("services").exists());
     assert!(!m.layout.active_build().exists());
@@ -177,7 +186,12 @@ async fn bare_setup_skips_host_tools_and_preserves_user_sources_on_repeat() {
         .write(b"// handwritten source\n")
         .unwrap();
     let records = m.records();
-    m.run(&["init", "--bare"]).await;
+    let repeated = m.run(&["init", "--bare"]).await;
+    assert!(
+        repeated.contains("Kept ~/config/system/src/main.rs"),
+        "{repeated}"
+    );
+    assert!(!repeated.contains("omega recovery restore"), "{repeated}");
     assert_eq!(m.records(), records);
     assert_eq!(
         std::fs::read_to_string(m.layout.system_main()).unwrap(),
@@ -194,6 +208,11 @@ async fn missing_tool_and_invalid_workspace_fail_before_installation() {
     assert!(!m.layout.workspace_manifest().exists());
     assert!(!m.layout.recovery_dir().exists());
     assert!(Machine::diagnostic(&output).contains("cargo is required"));
+    let text = Machine::diagnostic(&output);
+    assert!(output.stdout.is_empty());
+    assert!(text.contains("omega::init::failed"), "{text}");
+    assert!(!text.contains("Recovery record:"), "{text}");
+    assert!(!text.contains("Completed changes are retained"), "{text}");
 
     m.script("cargo", "exit 0");
     AtomicFile::at(m.layout.system_manifest())
@@ -219,6 +238,9 @@ async fn compilation_failure_preserves_scaffolding_and_does_not_install_or_publi
     let text = Machine::diagnostic(&output);
     assert!(text.contains("compile configuration"), "{text}");
     assert!(text.contains("omega recovery list"), "{text}");
+    assert!(text.contains("setup changes"), "{text}");
+    assert!(text.contains("omega init --debug"), "{text}");
+    assert!(output.stdout.is_empty());
     assert!(m.layout.system_main().exists());
     assert!(m.records() > 0);
     assert!(!m.root.join("services").exists());
@@ -239,6 +261,11 @@ async fn service_failure_is_fatal_and_does_not_publish_or_restart_the_shell() {
     assert!(!output.status.success());
     let text = Machine::diagnostic(&output);
     assert!(text.contains("systemd refused"), "{text}");
+    assert!(
+        text.contains("systemctl --user status omega.service"),
+        "{text}"
+    );
+    assert!(!text.contains("remains selected"), "{text}");
     assert!(m.root.join("services/omega.service").is_file());
     assert!(!m.layout.active_build().exists());
     assert!(!m.events().contains("omarchy restart"));
@@ -259,6 +286,12 @@ async fn initialization_publishes_applies_and_verifies_with_honest_empty_rendere
         "{output}"
     );
     assert!(output.contains("running QML is unverified"), "{output}");
+    assert!(output.contains("original shell backup:"), "{output}");
+    assert!(output.contains("Restore destination:"), "{output}");
+    assert!(
+        output.contains("daemon service started and enabled at login"),
+        "{output}"
+    );
     assert_eq!(std::fs::read(m.layout.shell_backup()).unwrap(), original);
     assert!(m.layout.shell_import().exists());
     let records = m.records();
@@ -298,6 +331,8 @@ async fn shell_restart_failure_keeps_the_published_generation_and_reports_failur
         .unwrap();
     assert!(!output.status.success());
     assert!(Machine::diagnostic(&output).contains("shell restart failed"));
+    assert!(Machine::diagnostic(&output).contains("remains selected"));
+    assert!(Machine::diagnostic(&output).contains("omega rollback"));
     assert!(m.layout.active_build().exists());
     assert!(m.records() > 0);
     handle.stop();
@@ -317,6 +352,12 @@ async fn pending_recovery_blocks_init_and_cli_restore_preserves_subsequent_edits
     let output = m.command(&["init", "--bare"]).output().await.unwrap();
     assert!(!output.status.success());
     assert!(!m.layout.workspace_manifest().exists());
+    let text = Machine::diagnostic(&output);
+    assert!(
+        text.contains(&format!("omega recovery inspect {id}")),
+        "{text}"
+    );
+    assert!(!text.contains("setup changes"), "{text}");
     assert!(
         m.run(&["recovery", "inspect", &id])
             .await

@@ -36,6 +36,24 @@ pub enum RecoveryError<E: std::error::Error + 'static> {
     },
 }
 
+impl<E: std::error::Error + 'static> RecoveryError<E> {
+    /// The retained record requiring inspection, when this failure identifies one.
+    pub fn record_path(&self) -> Option<&Path> {
+        match self {
+            Self::Pending(path) | Self::ReopenRequired(path) | Self::Recorded { path, .. } => {
+                Some(path)
+            }
+            Self::Io(_)
+            | Self::Decode(_)
+            | Self::InvalidRecord
+            | Self::Conflict
+            | Self::Postcondition
+            | Self::InvalidState
+            | Self::Change(_) => None,
+        }
+    }
+}
+
 /// Owns a durable record and its exclusive lease. Restore is idempotent when
 /// the before-state is already present. External changes are never overwritten.
 #[derive(Debug)]

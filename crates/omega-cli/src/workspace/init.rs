@@ -70,8 +70,8 @@ impl ConfigWorkspace {
                     main.replace(self.scaffold.imported_system_main().into());
                 }
             }
-            edits.push(main);
         }
+        edits.push(main);
         let mut ignore = FileEdit::read(self.layout.gitignore())?;
         let mut content = ignore.source().to_string();
         for entry in self.scaffold.gitignore().lines() {

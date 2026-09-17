@@ -3,6 +3,7 @@ use super::{
     pipeline::Steps,
     preflight::{Host, HostPlan, Inspected, PrepareWorkspace},
     steps::*,
+    summary::Changes,
 };
 use crate::{build::steps as build, renderer::Snapshot, service::ServiceManager};
 use omega_base::execution::{
@@ -61,16 +62,24 @@ impl Fixture {
             host,
         }));
         steps.prepare_workspace.replace(PrepareWorkspace);
-        steps.adopt_shell.replace(AdoptShell);
-        steps.write_workspace.replace(WriteWorkspace);
-        steps.dependencies.replace(ConfigureDependencies);
+        steps.adopt_shell.replace(AdoptShell(Changes::default()));
+        steps
+            .write_workspace
+            .replace(WriteWorkspace(Changes::default()));
+        steps
+            .dependencies
+            .replace(ConfigureDependencies(Changes::default()));
         steps.finish_bare.replace(FinishBare);
         steps.prepare_build.replace(PrepareBuild);
         steps.compile.replace(Carry(FakeCompile));
         steps.describe.replace(Carry(build::DescribePlugins));
         steps.validate.replace(Carry(FakeDocument));
-        steps.install_renderer.replace(InstallRenderer);
-        steps.install_service.replace(InstallService);
+        steps
+            .install_renderer
+            .replace(InstallRenderer(Changes::default()));
+        steps
+            .install_service
+            .replace(InstallService(Changes::default()));
         steps.start_daemon.replace(Pass::default());
         steps.verify_daemon.replace(Pass::default());
         steps.publish.replace(Carry(build::Publish));
@@ -149,7 +158,6 @@ impl Operation<Applied> for FakeRenderer {
         Ok(InitReport {
             layout: applied.published.layout,
             renderer: Some(Verification::NoPlacements),
-            backup: None,
         })
     }
 }

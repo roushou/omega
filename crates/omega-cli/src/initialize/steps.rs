@@ -1,6 +1,7 @@
 use super::{
     InitReport, Initialize,
     preflight::{Host, HostPlan, Prepared},
+    summary::Changes,
 };
 use crate::{
     build::{
@@ -48,7 +49,7 @@ pub(super) struct Applied {
     pub(super) before: Snapshot,
 }
 
-pub(super) struct AdoptShell;
+pub(super) struct AdoptShell(pub(super) Changes);
 
 impl Operation<Prepared> for AdoptShell {
     type Output = Prepared;
@@ -61,17 +62,36 @@ impl Operation<Prepared> for AdoptShell {
     ) -> anyhow::Result<Prepared> {
         if let Some(expected) = &prepared.imported {
             let layout = prepared.workspace.layout();
-            ShellInstallation::new(layout).adopt(expected)?;
+            let adopted = ShellInstallation::new(layout).adopt(expected);
+            let backup = self.record_backup(layout);
+            if backup.is_err() {
+                self.0.unverified(layout.shell_backup());
+            }
+            adopted?;
+            backup?;
             progress.path("Original shell backup:", layout.shell_backup());
             progress.path("Shell ownership receipt:", layout.shell_receipt());
         } else {
+            if !prepared.request.bare {
+                self.record_backup(prepared.workspace.layout())?;
+            }
             progress.skip("no shell import to adopt");
         }
         Ok(prepared)
     }
 }
 
-pub(super) struct WriteWorkspace;
+impl AdoptShell {
+    fn record_backup(&self, layout: &omega_host::Layout) -> std::io::Result<()> {
+        let backup = layout.shell_backup();
+        if backup.try_exists()? {
+            self.0.shell_backup(backup, layout.shell_config.clone());
+        }
+        Ok(())
+    }
+}
+
+pub(super) struct WriteWorkspace(pub(super) Changes);
 
 impl Operation<Prepared> for WriteWorkspace {
     type Output = Prepared;
@@ -86,12 +106,13 @@ impl Operation<Prepared> for WriteWorkspace {
             std::mem::take(&mut prepared.files),
             &RecoveryStore::new(prepared.workspace.layout()),
             progress,
+            &self.0,
         )?;
         Ok(prepared)
     }
 }
 
-pub(super) struct ConfigureDependencies;
+pub(super) struct ConfigureDependencies(pub(super) Changes);
 
 impl Operation<Prepared> for ConfigureDependencies {
     type Output = WorkspaceReady;
@@ -108,6 +129,7 @@ impl Operation<Prepared> for ConfigureDependencies {
                 link.replacements()?,
                 &RecoveryStore::new(prepared.workspace.layout()),
                 progress,
+                &self.0,
             )?;
             progress.path("Linked checkout:", source.root());
         } else {
@@ -135,7 +157,6 @@ impl Operation<WorkspaceReady> for FinishBare {
         Ok(InitReport {
             layout: ready.request.layout,
             renderer: None,
-            backup: None,
         })
     }
 }
@@ -172,7 +193,7 @@ impl Operation<WorkspaceReady> for PrepareBuild {
     }
 }
 
-pub(super) struct InstallRenderer;
+pub(super) struct InstallRenderer(pub(super) Changes);
 
 impl Operation<(Installation, Validated)> for InstallRenderer {
     type Output = (ServicePending, Validated);
@@ -187,6 +208,7 @@ impl Operation<(Installation, Validated)> for InstallRenderer {
             installation.renderers,
             &RecoveryStore::new(build.layout()),
             progress,
+            &self.0,
         )?;
         Ok((
             ServicePending {
@@ -198,7 +220,7 @@ impl Operation<(Installation, Validated)> for InstallRenderer {
     }
 }
 
-pub(super) struct InstallService;
+pub(super) struct InstallService(pub(super) Changes);
 
 impl Operation<(ServicePending, Validated)> for InstallService {
     type Output = (Runtime, Validated);
@@ -213,6 +235,7 @@ impl Operation<(ServicePending, Validated)> for InstallService {
             [pending.service],
             &RecoveryStore::new(build.layout()),
             progress,
+            &self.0,
         )?;
         Ok((pending.runtime, build))
     }
@@ -329,12 +352,9 @@ impl Operation<Applied> for VerifyRenderer {
     async fn execute(self, applied: Applied, _: &mut Progress<'_>) -> anyhow::Result<InitReport> {
         let renderer =
             RendererStatus::verify(&applied.before, &Operator::at(applied.runtime.socket)).await?;
-        let backup = applied.published.layout.shell_backup();
-        let backup = backup.try_exists()?.then_some(backup);
         Ok(InitReport {
             layout: applied.published.layout,
             renderer: Some(renderer),
-            backup,
         })
     }
 }
@@ -346,23 +366,96 @@ impl Files {
         changes: impl IntoIterator<Item = Replacement>,
         store: &RecoveryStore,
         progress: &mut Progress<'_>,
+        summary: &Changes,
     ) -> anyhow::Result<()> {
         let mut changed = false;
         for change in changes {
-            let installed = change.install(store)?;
-            if let Some(recovery) = installed.recovery {
+            let target = change.target().to_path_buf();
+            let installed = match change.install(store) {
+                Ok(installed) => installed,
+                Err(error) => {
+                    summary.unverified(target.clone());
+                    return Err(anyhow::Error::new(error))
+                        .with_context(|| format!("installing {}", target.display()));
+                }
+            };
+            if let Some(recovery) = &installed.recovery {
                 changed = true;
-                progress.path("Updated:", installed.target);
-                progress.path("Recovery record:", recovery.record);
+                progress.path("Installed:", &installed.target);
+                progress.path("Recovery record:", &recovery.record);
                 progress.message(format!(
                     "Inspect: omega recovery inspect {}",
                     recovery.receipt.id
                 ));
             }
+            summary.installed(installed);
         }
         if !changed {
             progress.skip("files already match; no replacements or backups needed");
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::Ui;
+    use omega_base::execution::{Pipeline, Step};
+    use omega_host::{AtomicFile, Layout, TempPath, recovery::Snapshot};
+
+    struct InstallFiles {
+        files: Vec<Replacement>,
+        store: RecoveryStore,
+        changes: Changes,
+    }
+
+    impl Operation<()> for InstallFiles {
+        type Output = ();
+        type Error = anyhow::Error;
+
+        async fn execute(self, _: (), progress: &mut Progress<'_>) -> anyhow::Result<()> {
+            Files::install(self.files, &self.store, progress, &self.changes)
+        }
+    }
+
+    #[tokio::test]
+    async fn a_later_file_failure_keeps_confirmed_changes_and_marks_the_failed_target_unverified() {
+        let root = TempPath::sibling(&std::env::temp_dir().join("omega-summary"), "test");
+        let layout = Layout::at(root.join("config"), root.join("state"), root.join("cache"));
+        let first = layout.workspace_manifest();
+        let second = layout.system_main();
+        let files = vec![
+            Replacement::prepare(&first, Snapshot::file(b"first")).unwrap(),
+            Replacement::prepare(&second, Snapshot::file(b"second")).unwrap(),
+        ];
+        AtomicFile::at(&second).write(b"external edit").unwrap();
+        let changes = Changes::default();
+        let pipeline =
+            Pipeline::new().then(Step::new("files", "install files").using(InstallFiles {
+                files,
+                store: RecoveryStore::new(&layout),
+                changes: changes.clone(),
+            }));
+        let run = pipeline.run((), &mut ()).await;
+        assert!(run.result.is_err());
+        let (mut ui, transcript) = Ui::recording();
+        changes.show(&mut ui, &run.reports, &layout);
+        let text = transcript.err();
+        assert!(transcript.out().is_empty());
+        assert!(
+            text.contains(&format!("Created {}", first.display())),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "Could not confirm the final state of {}",
+                second.display()
+            )),
+            "{text}"
+        );
+        assert!(text.contains("omega recovery restore"), "{text}");
+        assert_eq!(std::fs::read(&second).unwrap(), b"external edit");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

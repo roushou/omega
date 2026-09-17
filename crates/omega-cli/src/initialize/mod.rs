@@ -1,15 +1,20 @@
 //! Initialization declares one pipeline; operations own effects and return data.
 
+mod diagnostic;
 mod pipeline;
 mod preflight;
 mod steps;
+mod summary;
 
 use crate::{
     renderer::Verification,
-    ui::{Paint, PipelineResult, Step, Ui},
+    ui::{Paint, Step, Ui},
 };
 use omega_host::{Layout, Profile};
 use omega_proto::Socket;
+
+pub(crate) use diagnostic::InitFailure;
+use summary::Changes;
 
 #[derive(Clone)]
 pub(crate) struct Initialize {
@@ -21,24 +26,18 @@ pub(crate) struct Initialize {
 
 impl Initialize {
     pub(crate) async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let pipeline = pipeline::Steps::production().compose(self.bare);
-        let recovery_dir = self.layout.recovery_dir();
-        let run = pipeline.run(self, ui).await;
-        match PipelineResult::finish(run.result) {
+        let changes = Changes::default();
+        let pipeline = pipeline::Steps::production(&changes).compose(self.bare);
+        let run = pipeline.run(self.clone(), ui).await;
+
+        changes.show(ui, &run.reports, &self.layout);
+
+        match run.result {
             Ok(report) => {
                 report.show(ui);
                 Ok(())
             }
-            Err(error) => {
-                ui.detail("Completed changes are retained. Fix the reported problem, then rerun omega init; unchanged files will be kept.");
-                ui.detail(format!(
-                    "File recovery records: {}",
-                    Paint::path(recovery_dir)
-                ));
-                ui.next("omega recovery list");
-                ui.detail("Inspect a pending record before retrying: omega recovery inspect <id>; accept a completed write or restore it with omega recovery accept|restore <id>.");
-                Err(error.context("initialization stopped"))
-            }
+            Err(failure) => Err(InitFailure::new(failure, &run.reports, &self).into()),
         }
     }
 }
@@ -46,7 +45,6 @@ impl Initialize {
 pub(super) struct InitReport {
     layout: Layout,
     renderer: Option<Verification>,
-    backup: Option<std::path::PathBuf>,
 }
 
 impl InitReport {
@@ -69,10 +67,6 @@ impl InitReport {
             }
         }
         ui.detail(format!("Workspace: {}", Paint::path(&self.layout.config)));
-        if let Some(backup) = self.backup {
-            ui.detail(format!("Original shell backup: {}", Paint::path(backup)));
-            ui.detail("To recover the original shell: stop omega.service, restore this backup over shell.json, then restart Omarchy. Keep the daemon stopped until your Rust layout agrees.");
-        }
         ui.next("omega new <name>");
     }
 }

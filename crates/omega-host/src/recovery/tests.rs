@@ -46,6 +46,7 @@ fn file_installation_is_durable_and_restore_preserves_bytes_and_mode() {
     f.write(b"old");
     std::fs::set_permissions(f.target(), std::fs::Permissions::from_mode(0o600)).unwrap();
     let installed = f.replacement().install(&f.store()).unwrap();
+    assert_eq!(installed.outcome, ReplacementOutcome::Updated);
     assert!(installed.recovery.as_ref().unwrap().record.is_file());
     assert_eq!(std::fs::read(f.target()).unwrap(), b"new");
     let mut recovered = f
@@ -66,6 +67,7 @@ fn file_installation_is_durable_and_restore_preserves_bytes_and_mode() {
 fn restoring_a_created_file_removes_it_but_never_later_edits() {
     let f = Fixture::new();
     let installed = f.replacement().install(&f.store()).unwrap();
+    assert_eq!(installed.outcome, ReplacementOutcome::Created);
     f.write(b"user edit");
     let mut recovered = f
         .store()
@@ -306,6 +308,7 @@ fn reinstalling_identical_files_does_not_create_recovery_records() {
     f.write(b"new");
     assert_eq!(f.replacement().inspect().unwrap(), Observation::Unchanged);
     let installed = f.replacement().install(&f.store()).unwrap();
+    assert_eq!(installed.outcome, ReplacementOutcome::Unchanged);
     assert!(installed.recovery.is_none());
     assert!(!f.layout.recovery_dir().exists());
 
@@ -427,8 +430,8 @@ fn accepting_an_observed_effect_requires_durability_confirmation() {
     assert_eq!(saved.receipt().state, State::Applying);
 }
 
-#[test]
-fn backup_records_are_private_and_store_lock_is_held_until_handle_drop() {
+#[tokio::test]
+async fn backup_records_are_private_and_store_lock_is_held_until_handle_drop() {
     let f = Fixture::new();
     let saved = f.store().prepare(f.replacement()).unwrap();
     assert_eq!(
@@ -453,11 +456,21 @@ fn backup_records_are_private_and_store_lock_is_held_until_handle_drop() {
             .is_none()
     );
     drop(saved);
-    assert!(
-        crate::fs::FileLock::try_exclusive(&f.layout.recovery_lock())
-            .unwrap()
-            .is_some()
-    );
+
+    // Concurrent subprocess tests can inherit the descriptor until exec closes it.
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if crate::fs::FileLock::try_exclusive(&f.layout.recovery_lock())
+                .unwrap()
+                .is_some()
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .expect("dropping the recovery handle must release its lock");
 }
 
 #[test]

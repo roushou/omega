@@ -209,6 +209,20 @@ shell lifecycles. Interrupted records block further initialization until explici
 accepted or restored. The shell ownership journal retains its existing separate
 contract and first-adoption backup.
 
+Initialization keeps a per-run change log alongside the pipeline reports.
+Filesystem operations record verified `Created`, `Updated`, or `Unchanged`
+outcomes and their recovery receipts; failed targets are marked unverified.
+The summary uses these facts without parsing progress messages or scanning old
+records. Existing Rust entry points are included as unchanged replacements so
+their preservation is visible. Shell backup availability is observed by the
+adoption step, including when adoption fails after creating the backup.
+
+The initialization diagnostic retains the original error chain and nested source
+labels. A recovery error naming a record takes priority over step-specific retry
+advice. Publication success comes from the completed step report; a publication
+failure is reported as potentially having taken effect. Rendering diagnostics and
+summaries performs no recovery or rollback.
+
 ## Other consumers
 
 - `omega build` shares compilation, manifest evaluation, document validation,

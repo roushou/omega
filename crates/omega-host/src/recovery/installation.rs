@@ -6,7 +6,16 @@ use std::{io, path::PathBuf};
 #[derive(Debug)]
 pub struct InstalledReplacement {
     pub target: PathBuf,
+    pub outcome: ReplacementOutcome,
     pub recovery: Option<RetainedChange>,
+}
+
+/// The verified effect of installing a replacement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplacementOutcome {
+    Created,
+    Updated,
+    Unchanged,
 }
 
 /// A durable replacement's recovery information.
@@ -31,13 +40,20 @@ impl Replacement {
             }
             return Ok(InstalledReplacement {
                 target,
+                outcome: ReplacementOutcome::Unchanged,
                 recovery: None,
             });
         }
+        let outcome = if self.creates_target() {
+            ReplacementOutcome::Created
+        } else {
+            ReplacementOutcome::Updated
+        };
         let mut saved = store.prepare(self)?;
         saved.apply()?;
         Ok(InstalledReplacement {
             target,
+            outcome,
             recovery: Some(RetainedChange {
                 record: saved.path().into(),
                 receipt: saved.receipt().clone(),

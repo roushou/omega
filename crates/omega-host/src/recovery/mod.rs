@@ -15,7 +15,7 @@ mod saved;
 mod store;
 
 pub use change::{Change, Observation};
-pub use installation::{InstalledReplacement, RetainedChange};
+pub use installation::{InstalledReplacement, ReplacementOutcome, RetainedChange};
 pub use record::{ChangeId, Receipt, State};
 pub use replacement::{Replacement, Snapshot};
 pub use saved::{RecoveryError, SavedChange};

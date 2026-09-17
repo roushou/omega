@@ -4,6 +4,7 @@ use super::{
     InitReport, Initialize,
     preflight::{Inspected, Preflight, PrepareWorkspace, Prepared},
     steps::*,
+    summary::Changes,
 };
 use crate::build::steps::{self as build, Compiled, Described, Published, Sources, Validated};
 use omega_base::execution::{Carry, Pipeline, Step};
@@ -100,14 +101,18 @@ impl Steps {
         }
     }
 
-    pub(super) fn production() -> Self {
+    pub(super) fn production(changes: &Changes) -> Self {
         let mut steps = Self::isolated();
 
         steps.preflight.replace(Preflight);
         steps.prepare_workspace.replace(PrepareWorkspace);
-        steps.adopt_shell.replace(AdoptShell);
-        steps.write_workspace.replace(WriteWorkspace);
-        steps.dependencies.replace(ConfigureDependencies);
+        steps.adopt_shell.replace(AdoptShell(changes.clone()));
+        steps
+            .write_workspace
+            .replace(WriteWorkspace(changes.clone()));
+        steps
+            .dependencies
+            .replace(ConfigureDependencies(changes.clone()));
         steps.finish_bare.replace(FinishBare);
 
         steps.prepare_build.replace(PrepareBuild);
@@ -116,8 +121,12 @@ impl Steps {
         steps.validate.replace(Carry(build::Validate));
         steps.publish.replace(Carry(build::Publish));
 
-        steps.install_renderer.replace(InstallRenderer);
-        steps.install_service.replace(InstallService);
+        steps
+            .install_renderer
+            .replace(InstallRenderer(changes.clone()));
+        steps
+            .install_service
+            .replace(InstallService(changes.clone()));
         steps.start_daemon.replace(StartDaemon);
         steps.verify_daemon.replace(VerifyDaemon);
         steps.verify_application.replace(VerifyApplication);

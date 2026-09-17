@@ -9,6 +9,8 @@ pub enum Step {
     Requested,
     /// A file or directory the CLI wrote.
     Created,
+    /// Existing configuration retained without replacement.
+    Kept,
     /// Work starting, which cargo's own output follows.
     Building,
     /// The plugins were asked what they declare, and answered.
@@ -58,6 +60,7 @@ impl Step {
         match self {
             Self::Requested => "Requested",
             Self::Created => "Created",
+            Self::Kept => "Kept",
             Self::Building => "Building",
             Self::Declared => "Declared",
             Self::Evaluated => "Evaluated",
@@ -86,6 +89,7 @@ impl Step {
     pub fn style(self) -> Style {
         let color = match self {
             Self::Created
+            | Self::Kept
             | Self::Built
             | Self::Checked
             | Self::Restarted

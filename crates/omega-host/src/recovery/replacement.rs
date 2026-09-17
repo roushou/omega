@@ -290,6 +290,10 @@ impl Replacement {
         self.before != self.after
     }
 
+    pub(super) fn creates_target(&self) -> bool {
+        matches!(self.before.0, Node::Missing)
+    }
+
     fn validate(&self) -> io::Result<()> {
         if !self.target.is_absolute()
             || self.target.file_name().is_none()

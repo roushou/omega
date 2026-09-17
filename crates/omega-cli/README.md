@@ -116,6 +116,17 @@ recovery record. Repeating initialization preserves existing Rust sources and
 skips unchanged file replacements. A failed step stops setup, leaves completed
 work in place, and reports recovery paths.
 
+The setup summary lists created, updated, and retained files, with recovery-record
+paths and an undo command for each change. It also reports the original shell
+backup and completed service, publication, and shell actions. Summaries describe
+this invocation; `omega recovery list` includes older records.
+
+Failures identify the step and cause through a `miette` diagnostic. Advice depends
+on the failed operation: a Cargo error suggests fixing the sources, a service
+failure points to systemd status and logs, and an interrupted file write names
+the exact record to inspect. Failures after publication explain that the new
+generation remains selected. Existing JSON source labels are preserved.
+
 ```sh
 omega recovery list
 omega recovery inspect <id>
