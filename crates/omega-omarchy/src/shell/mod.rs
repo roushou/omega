@@ -255,7 +255,7 @@ impl Native {
 #[serde(deny_unknown_fields)]
 pub struct PluginWidget {
     id: omega_proto::ModuleId,
-    unit: omega_proto::UnitName,
+    plugin: omega_proto::PluginName,
     surface: String,
     panel: Option<String>,
     settings: BTreeMap<String, omega_proto::omega::Value>,
@@ -296,42 +296,42 @@ impl PluginWidget {
         reference: impl Into<omega::surface::SurfaceRef<W>>,
     ) -> Self {
         let reference = reference.into();
-        Self::named(id, reference.unit()).surface_named(reference.surface())
+        Self::named(id, reference.plugin()).surface_named(reference.surface())
     }
 
-    /// Attach a widget from the same unit as this placement.
+    /// Attach a widget from the same plugin as this placement.
     /// The built manifest also verifies that both surfaces were registered.
     pub fn panel<W: omega::surface::SurfaceIdentity>(
         self,
         reference: impl Into<omega::surface::SurfaceRef<W>>,
     ) -> Self {
         self.try_panel(reference)
-            .expect("panel must belong to the placed unit")
+            .expect("panel must belong to the placed plugin")
     }
 
-    /// Attach a typed panel, reporting a cross-unit reference as a config error.
+    /// Attach a typed panel, reporting a cross-plugin reference as a config error.
     pub fn try_panel<W: omega::surface::SurfaceIdentity>(
         self,
         reference: impl Into<omega::surface::SurfaceRef<W>>,
     ) -> Result<Self, ShellError> {
         let reference = reference.into();
-        if self.unit.as_str() != reference.unit() {
+        if self.plugin.as_str() != reference.plugin() {
             return Err(ShellError::Invalid(format!(
                 "panel {} belongs to {}, not {}",
                 reference.surface(),
-                reference.unit(),
-                self.unit
+                reference.plugin(),
+                self.plugin
             )));
         }
         Ok(self.panel_named(reference.surface()))
     }
 
-    /// Parse placement and unit identities at the authoring boundary.
-    pub fn try_new(id: impl Into<String>, unit: impl Into<String>) -> Result<Self, ShellError> {
+    /// Parse placement and plugin identities at the authoring boundary.
+    pub fn try_new(id: impl Into<String>, plugin: impl Into<String>) -> Result<Self, ShellError> {
         Ok(Self {
             id: omega_proto::ModuleId::try_from(id.into())
                 .map_err(|e| ShellError::Invalid(e.to_string()))?,
-            unit: omega_proto::UnitName::try_from(unit.into())
+            plugin: omega_proto::PluginName::try_from(plugin.into())
                 .map_err(|e| ShellError::Invalid(e.to_string()))?,
             surface: String::new(),
             panel: None,
@@ -339,8 +339,8 @@ impl PluginWidget {
         })
     }
     /// For literal names. Dynamic names should use `try_new`.
-    pub fn named(id: &str, unit: &str) -> Self {
-        Self::try_new(id, unit).expect("valid placement and unit names")
+    pub fn named(id: &str, plugin: &str) -> Self {
+        Self::try_new(id, plugin).expect("valid placement and plugin names")
     }
     pub fn surface_named(mut self, surface: impl Into<String>) -> Self {
         self.surface = surface.into();

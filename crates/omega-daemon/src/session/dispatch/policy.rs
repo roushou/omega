@@ -24,8 +24,8 @@ pub enum OpKind {
     Act,
     EmitEvent,
     PublishView,
-    RestartUnit,
-    AdoptUnit,
+    RestartPlugin,
+    AdoptPlugin,
     ApplyShell,
     GetDeployment,
     CallCommand,
@@ -51,8 +51,8 @@ impl OpKind {
             invoke::Op::Act(_) => Self::Act,
             invoke::Op::EmitEvent(_) => Self::EmitEvent,
             invoke::Op::PublishView(_) => Self::PublishView,
-            invoke::Op::RestartUnit(_) => Self::RestartUnit,
-            invoke::Op::AdoptUnit(_) => Self::AdoptUnit,
+            invoke::Op::RestartPlugin(_) => Self::RestartPlugin,
+            invoke::Op::AdoptPlugin(_) => Self::AdoptPlugin,
             invoke::Op::ApplyShell(_) => Self::ApplyShell,
             invoke::Op::GetDeployment(_) => Self::GetDeployment,
             invoke::Op::CallCommand(_) => Self::CallCommand,
@@ -78,8 +78,8 @@ impl OpKind {
             Self::Act => "Act",
             Self::EmitEvent => "EmitEvent",
             Self::PublishView => "PublishView",
-            Self::RestartUnit => "RestartUnit",
-            Self::AdoptUnit => "AdoptUnit",
+            Self::RestartPlugin => "RestartPlugin",
+            Self::AdoptPlugin => "AdoptPlugin",
             Self::ApplyShell => "ApplyShell",
             Self::GetDeployment => "GetDeployment",
             Self::CallCommand => "CallCommand",
@@ -109,10 +109,10 @@ impl OpKind {
             | invoke::Op::Unsubscribe(_)
             | invoke::Op::Act(_)
             | invoke::Op::EmitEvent(_)
-            | invoke::Op::RestartUnit(_)
+            | invoke::Op::RestartPlugin(_)
             | invoke::Op::GetDeployment(_)
             | invoke::Op::ApplyShell(_)
-            | invoke::Op::AdoptUnit(_)
+            | invoke::Op::AdoptPlugin(_)
             | invoke::Op::CallCommand(_) => None,
         }
     }
@@ -121,13 +121,13 @@ impl OpKind {
 /// What an op requires of the peer that sent it.
 pub(super) struct OpPolicy {
     pub(super) kind: OpKind,
-    /// Who this op is served to. A unit does not manage its neighbours, and
-    /// an operator does not act as a unit — but some ops belong to both.
+    /// Who this op is served to. A plugin does not manage its neighbours, and
+    /// an operator does not act as a plugin — but some ops belong to both.
     pub(super) roles: &'static [Role],
-    /// Capabilities the unit's manifest must grant.
+    /// Capabilities the plugin's manifest must grant.
     pub(super) capabilities: &'static [Capability],
     /// The kind the targeted surface must be declared as. Publishing to a
-    /// surface a unit did not declare is another unit's business.
+    /// surface a plugin did not declare is another plugin's business.
     pub(super) surface: Option<SurfaceKind>,
 }
 
@@ -142,7 +142,7 @@ pub(super) const POLICY: &[OpPolicy] = &[
     },
     OpPolicy {
         kind: OpKind::ChangePresentation,
-        roles: &[Role::Operator, Role::Renderer, Role::Unit],
+        roles: &[Role::Operator, Role::Renderer, Role::Plugin],
         capabilities: &[],
         surface: None,
     },
@@ -184,32 +184,32 @@ pub(super) const POLICY: &[OpPolicy] = &[
     },
     OpPolicy {
         kind: OpKind::PublishView,
-        roles: &[Role::Unit],
+        roles: &[Role::Plugin],
         capabilities: &[],
         surface: Some(SurfaceKind::Widget),
     },
     OpPolicy {
         kind: OpKind::GetState,
-        roles: &[Role::Unit],
+        roles: &[Role::Plugin],
         capabilities: &[Capability::StateRead],
         surface: None,
     },
     OpPolicy {
         // Subscriptions can only narrow the peer's authorized topic set.
         kind: OpKind::Subscribe,
-        roles: &[Role::Unit, Role::Operator, Role::Renderer],
+        roles: &[Role::Plugin, Role::Operator, Role::Renderer],
         capabilities: &[Capability::StateRead],
         surface: None,
     },
     OpPolicy {
         kind: OpKind::Unsubscribe,
-        roles: &[Role::Unit, Role::Operator, Role::Renderer],
+        roles: &[Role::Plugin, Role::Operator, Role::Renderer],
         capabilities: &[Capability::StateRead],
         surface: None,
     },
     OpPolicy {
         kind: OpKind::SetState,
-        roles: &[Role::Unit],
+        roles: &[Role::Plugin],
         capabilities: &[Capability::StateWrite],
         surface: None,
     },
@@ -217,27 +217,27 @@ pub(super) const POLICY: &[OpPolicy] = &[
         // Action-specific capabilities are checked by the action dispatcher.
         // Operators act as the daemon owner; plugins remain within their grants.
         kind: OpKind::Act,
-        roles: &[Role::Unit, Role::Operator],
+        roles: &[Role::Plugin, Role::Operator],
         capabilities: &[],
         surface: None,
     },
     OpPolicy {
         kind: OpKind::EmitEvent,
-        roles: &[Role::Unit],
+        roles: &[Role::Plugin],
         capabilities: &[],
         surface: None,
     },
     OpPolicy {
         // Lifecycle belongs to whoever owns the daemon, and to nothing that
         // the daemon runs.
-        kind: OpKind::RestartUnit,
+        kind: OpKind::RestartPlugin,
         roles: &[Role::Operator],
         capabilities: &[],
         surface: None,
     },
     OpPolicy {
-        // Only the operator may adopt a unit; adoption retains its manifest grants.
-        kind: OpKind::AdoptUnit,
+        // Only the operator may adopt a plugin; adoption retains its manifest grants.
+        kind: OpKind::AdoptPlugin,
         roles: &[Role::Operator],
         capabilities: &[],
         surface: None,

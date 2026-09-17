@@ -57,7 +57,7 @@ construction settings, `record` holds plugin state, and `testing` lets you rende
 widgets and exercise commands without a running daemon. Shared values such as
 `Percent` are available at the root. Typed references live in
 `surface::SurfaceRef` and `command::CommandRef`. Omega’s supervision readings
-live in `plugin::{Units, UnitPhase, UnitReport}`; `platform::system` describes
+live in `plugin::{Plugins, PluginPhase, PluginReport}`; `platform::system` describes
 machine resources.
 
 See [`examples/media.rs`](examples/media.rs) for a media indicator and panel

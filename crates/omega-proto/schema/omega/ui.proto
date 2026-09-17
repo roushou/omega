@@ -40,7 +40,7 @@ message ViewNode {
 }
 
 // A declared command or instance-local message binding.
-// Command targets belong to the publishing unit. Fixed arguments retain order;
+// Command targets belong to the publishing plugin. Fixed arguments retain order;
 // a control value is appended on interaction. Local bindings use local_id and no arguments.
 message Bind {
   string command = 1;

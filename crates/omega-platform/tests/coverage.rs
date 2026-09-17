@@ -9,13 +9,13 @@ use omega_proto::{ActionKind, SystemTopic};
 const UNSERVED_TOPICS: &[SystemTopic] = &[];
 
 /// Topics projected by the daemon itself.
-const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Units];
+const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Plugins];
 
 /// Actions without current handlers. Daemon-owned actions are listed separately.
 const UNSERVED_ACTIONS: &[ActionKind] = &[ActionKind::SetSetting, ActionKind::ToggleSetting];
 
 /// Actions handled by the daemon.
-const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokeUnit];
+const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokePlugin];
 
 fn served_topics() -> HashSet<SystemTopic> {
     Brokers::all()
@@ -42,7 +42,7 @@ fn every_topic_is_served_or_named_unserved() {
             served.contains(topic) || unserved.contains(topic) || daemons.contains(topic),
             "the ontology declares {topic} and nothing serves it. Add a broker, \
              or add it to UNSERVED_TOPICS — a topic that is silently unserved \
-             is a unit that never renders."
+             is a plugin that never renders."
         );
     }
 }

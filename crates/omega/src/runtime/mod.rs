@@ -25,7 +25,7 @@ pub(crate) struct Runtime {
     client: Client,
     context: Context,
     effects: crate::effect::queue::Effects,
-    /// Unit settings received at handshake. Instance settings override matching keys.
+    /// Plugin settings received at handshake. Instance settings override matching keys.
     settings: Values,
 }
 
@@ -219,7 +219,7 @@ impl Runtime {
                             self.answer(frame.stream_id, result::Outcome::Ok(Default::default())).await?;
                         }
                         Some(frame::Body::Invoke(_)) => {
-                            self.client.send(omega_proto::Refusal::unimplemented("unsupported unit operation").frame(frame.stream_id)).await?;
+                            self.client.send(omega_proto::Refusal::unimplemented("unsupported plugin operation").frame(frame.stream_id)).await?;
                         }
                         Some(frame::Body::Event(event)) => {
                             for (kind, reaction) in &reactions {

@@ -2,5 +2,5 @@
 //! `system/` can depend on it and be checked against it.
 
 fn main() -> omega::Result<()> {
-    {unit_snake}::plugin().run()
+    {plugin_snake}::plugin().run()
 }

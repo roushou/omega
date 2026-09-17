@@ -54,12 +54,12 @@ impl NewCmd {
     /// What was written, and the one line omega will not write.
     fn report(ui: &mut Ui, layout: &Layout, package_name: &PackageName, template: Template) {
         let path = layout
-            .unit_lib_src(package_name.unit())
+            .plugin_lib_src(package_name.plugin())
             .strip_prefix(&layout.config)
             .map(|rel| rel.display().to_string())
             .unwrap_or_else(|_| {
                 layout
-                    .unit_lib_src(package_name.unit())
+                    .plugin_lib_src(package_name.plugin())
                     .display()
                     .to_string()
             });

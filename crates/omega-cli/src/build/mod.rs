@@ -90,7 +90,7 @@ impl Build {
     /// Summarize the evaluated document.
     fn describe(document: &StateDocument) -> String {
         let counts = [
-            (document.units.len(), "unit"),
+            (document.plugins.len(), "plugin"),
             (
                 document.bars.len() + usize::from(!document.shell_json.is_empty()),
                 "bar",

@@ -7,7 +7,7 @@ ShellRoot {
     id: desktop
     RendererConnection {
         id: link
-        unit: Quickshell.env("OMEGA_RENDERER_UNIT")
+        plugin: Quickshell.env("OMEGA_RENDERER_PLUGIN")
         socketPath: Quickshell.env("OMEGA_RENDERER_SOCKET")
         standalone: true
     }
@@ -51,7 +51,7 @@ ShellRoot {
                 readonly property bool modal: spec !== null && !!spec.dismissOnOutside
                 anchors { top: modal; bottom: modal; left: modal; right: modal }
                 color: "transparent"
-                WlrLayershell.namespace: "omega-" + link.unit
+                WlrLayershell.namespace: "omega-" + link.plugin
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: !spec || spec.keyboard === "KEYBOARD_POLICY_NONE" ? WlrKeyboardFocus.None
                     : spec.keyboard === "KEYBOARD_POLICY_EXCLUSIVE" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand

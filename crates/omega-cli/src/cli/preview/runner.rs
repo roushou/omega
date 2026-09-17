@@ -33,7 +33,7 @@ impl Runner {
             .env("OMEGA_PREVIEW_GENERATION", generation.to_string())
             .env_remove("OMEGA_SOCKET")
             .env_remove("OMEGA_SHELL_SOCKET")
-            .env_remove("OMEGA_SPAWN_TOKEN")
+            .env_remove(omega_proto::Handshake::TOKEN_ENV)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::inherit())
             .kill_on_drop(true)

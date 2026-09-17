@@ -75,7 +75,7 @@ enum RendererFeature {
 
 message InstanceSnapshot {
   InstanceRef instance = 1;
-  string unit = 2;
+  string plugin = 2;
   string surface = 3;
   Presentation presentation = 4;
   PresentationState requested = 5;
@@ -85,11 +85,11 @@ message InstanceSnapshot {
 }
 
 message CreateInstance {
-  string unit = 1;
+  string plugin = 1;
   string surface = 2;
   map<string, Value> config = 3;
   Presentation presentation = 4;
-  // Empty allocates an independent instance; otherwise scoped to unit/surface.
+  // Empty allocates an independent instance; otherwise scoped to plugin/surface.
   string singleton = 5;
 }
 message ChangePresentation {
@@ -100,13 +100,13 @@ message ReportPresentation {
   InstanceRef instance = 1;
   PresentationState observed = 2;
 }
-message InspectInstances { string unit = 1; }
+message InspectInstances { string plugin = 1; }
 message InstanceList { repeated InstanceSnapshot instances = 1; }
 
 // Only the owner may bootstrap. Success restricts this connection to its scope.
 message AttachRenderer {
   oneof scope {
-    string unit = 1;
+    string plugin = 1;
     PlacementAttachment placement = 2;
   }
   repeated RendererFeature features = 3;
@@ -114,7 +114,7 @@ message AttachRenderer {
   string build_fingerprint = 4;
 }
 message PlacementAttachment {
-  string unit = 1;
+  string plugin = 1;
   string surface = 2;
   string placement = 3;
 }

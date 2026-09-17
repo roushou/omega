@@ -135,12 +135,12 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
     let (server, client) = UnixStream::pair().unwrap();
     let peer = Peer::operator(std::process::id() as i32, server.peer_cred().unwrap().uid());
     let hub = Hub::new();
-    let units = UnitTable::detached(hub.clone());
+    let plugins = PluginRegistry::detached(hub.clone());
     let shutdown = crate::Shutdown::new();
     let brokers = Brokerage::new(hub.clone(), shutdown.clone());
     let entered = Arc::new(tokio::sync::Notify::new());
     brokers.add(Box::new(SlowBroker(entered.clone())));
-    let supervisor = Supervisor::new(Socket::at("/unused"), units.clone(), shutdown.clone());
+    let supervisor = Supervisor::new(Socket::at("/unused"), plugins.clone(), shutdown.clone());
     let (snapshot, state) = hub.subscribe_state();
     let (views, updates) = hub.subscribe_views();
     let connection = ShellConnection::new(
@@ -153,7 +153,7 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
             deployment: Default::default(),
             layout: None,
             supervisor,
-            units,
+            plugins,
             brokers: brokers.clone(),
         }),
     );
@@ -211,14 +211,14 @@ async fn slow_observation_actions_do_not_delay_subscription_changes_or_views() {
     assert!(Refusal::of(&reply).is_none());
     hub.publish_view({
         let surface = crate::hub::SurfaceRef::new(
-            "example".parse::<omega_proto::UnitName>().unwrap(),
+            "example".parse::<omega_proto::PluginName>().unwrap(),
             "view".parse::<omega_proto::SurfaceId>().unwrap(),
         );
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
                 id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
-                    surface.unit,
+                    surface.plugin,
                     surface.surface,
                     surface
                         .module
@@ -326,18 +326,18 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
     tokio::time::timeout(Duration::from_secs(5), async {
         use crate::hub::SurfaceRef;
         use omega_proto::omega::{ViewNode, ViewTree};
-        use omega_proto::{SurfaceId, UnitName};
+        use omega_proto::{PluginName, SurfaceId};
 
         let hub = Hub::new();
-        let unit = "retired".parse::<UnitName>().unwrap();
-        let surface = SurfaceRef::new(unit.clone(), "panel".parse::<SurfaceId>().unwrap());
+        let plugin = "retired".parse::<PluginName>().unwrap();
+        let surface = SurfaceRef::new(plugin.clone(), "panel".parse::<SurfaceId>().unwrap());
         hub.publish_view({
             let surface = surface.clone();
             ViewUpdate {
                 instance: omega_proto::instance::InstanceKey {
                     id: omega_proto::instance::InstanceId::try_from(format!(
                         "test-{}-{}-{}",
-                        surface.unit,
+                        surface.plugin,
                         surface.surface,
                         surface
                             .module
@@ -411,9 +411,9 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         );
         drop(snapshot);
 
-        hub.forget_unit(&unit);
+        hub.forget_plugin(&plugin);
         let remaining = SurfaceRef::new(
-            "current".parse::<UnitName>().unwrap(),
+            "current".parse::<PluginName>().unwrap(),
             "panel".parse::<SurfaceId>().unwrap(),
         );
         for index in 0..70 {
@@ -423,7 +423,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
                     instance: omega_proto::instance::InstanceKey {
                         id: omega_proto::instance::InstanceId::try_from(format!(
                             "test-{}-{}-{}",
-                            surface.unit,
+                            surface.plugin,
                             surface.surface,
                             surface
                                 .module
@@ -478,7 +478,7 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
             lines
         });
         written.unwrap();
-        assert_eq!(lines[0]["unit"], "retired");
+        assert_eq!(lines[0]["plugin"], "retired");
         assert!(lines[0]["view"]["root"].is_null());
         assert_eq!(lines[0]["view"]["revision"], (revision + 1).to_string());
         assert!(
@@ -498,11 +498,11 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
     tokio::time::timeout(Duration::from_secs(3), async {
         let hub = Hub::new();
         let update = { let surface = crate::hub::SurfaceRef::new(
-                "example".parse::<omega_proto::UnitName>().unwrap(),
+                "example".parse::<omega_proto::PluginName>().unwrap(),
                 "panel".parse::<omega_proto::SurfaceId>().unwrap(),
             );
   ViewUpdate { instance: omega_proto::instance::InstanceKey {
-    id: omega_proto::instance::InstanceId::try_from(format!("test-{}-{}-{}", surface.unit, surface.surface, surface.module.as_ref().map(ToString::to_string).unwrap_or_default())).unwrap(),
+    id: omega_proto::instance::InstanceId::try_from(format!("test-{}-{}-{}", surface.plugin, surface.surface, surface.module.as_ref().map(ToString::to_string).unwrap_or_default())).unwrap(),
     incarnation: "test-session".parse::<omega_proto::instance::IncarnationId>().unwrap(),
   }, presentation: omega_proto::omega::Presentation { kind: Some(omega_proto::omega::presentation::Kind::Window(omega_proto::omega::WindowPresentation { title: "Test".into(), app_id: "org.omega.example".into(), width: 480, height: 320, min_width: 1, min_height: 1 })) },
   requested: 2, observed: 2, destroyed: false, surface, view: omega_proto::omega::ViewTree {
@@ -546,12 +546,12 @@ mod pressure;
 
 struct RendererFixture;
 impl RendererFixture {
-    fn attach<S>(connection: &ShellConnection<S>, unit: &str) {
+    fn attach<S>(connection: &ShellConnection<S>, plugin: &str) {
         *connection.attachment.lock().unwrap() = Some(
             crate::attachment::Attachment::from_request(&omega_proto::omega::AttachRenderer {
                 build_fingerprint: String::new(),
-                scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
-                    unit.into(),
+                scope: Some(omega_proto::omega::attach_renderer::Scope::Plugin(
+                    plugin.into(),
                 )),
                 features: vec![1, 2, 3, 4, 5, 6, 7, 8],
             })

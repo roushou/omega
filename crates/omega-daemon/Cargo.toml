@@ -9,7 +9,7 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
-description = "The Omega daemon: trust boundary, state owner, unit supervisor, and reconciler."
+description = "The Omega daemon: trust boundary, state owner, plugin supervisor, and reconciler."
 
 [lints]
 workspace = true

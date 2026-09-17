@@ -31,7 +31,7 @@ fn main() -> omega_document::Result<()> {
 `audio::Indicator` and `audio::Panel` are public widget types from the audio
 plugin. `#[derive(Surface)]` supplies their references; the plugin registers them
 with `.surface(Indicator).surface(Panel)`. Imported or dynamic configuration can use
-`PluginWidget::named(id, unit).surface_named(surface).panel_named(panel)`.
+`PluginWidget::named(id, plugin).surface_named(surface).panel_named(panel)`.
 
 A plugin placement generates both its Omarchy bar entry and its Omega render
 instances. Its ID distinguishes placements of the same plugin; `settings(&value)`
@@ -49,7 +49,7 @@ restores the Rust-defined configuration. Invalid JSON must be repaired before
 application, even with overwrite.
 
 Legacy `Document::bar` declares render instances only. It cannot be combined with
-`Document::with(Shell)`. `Units` configures lifecycle and settings; `Schedules` and
+`Document::with(Shell)`. `Plugins` configures lifecycle and settings; `Schedules` and
 `Actions` describe recurring work. The daemon validates references against the
 plugins in the build.
 

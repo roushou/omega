@@ -2,10 +2,10 @@
 
 use omega_proto::omega::{PluginHealth, PluginReadiness, RenderReadiness, SurfaceHealth};
 
-use super::{UnitRecord, UnitTable};
+use super::{PluginRecord, PluginRegistry};
 use crate::hub::{Hub, SurfaceRef};
 
-impl UnitTable {
+impl PluginRegistry {
     /// Retain validated placement intent even before a plugin can construct it.
     /// Session loss clears instances, but does not erase desired placement intent.
     pub(crate) fn expect_presentations<'a>(
@@ -19,8 +19,8 @@ impl UnitTable {
 
         for placement in placements {
             records
-                .entry(placement.unit.clone())
-                .or_insert_with(|| UnitRecord::new(placement.unit.clone()))
+                .entry(placement.plugin.clone())
+                .or_insert_with(|| PluginRecord::new(placement.plugin.clone()))
                 .placements
                 .insert(placement.clone());
         }
@@ -28,7 +28,7 @@ impl UnitTable {
 
     pub(crate) fn health_snapshot(
         &self,
-    ) -> (Vec<omega_proto::omega::UnitStatus>, Vec<PluginHealth>) {
+    ) -> (Vec<omega_proto::omega::PluginStatus>, Vec<PluginHealth>) {
         self.lock()
             .values()
             .map(|record| (record.status(), record.health(&self.inner.hub)))
@@ -36,7 +36,7 @@ impl UnitTable {
     }
 }
 
-impl UnitRecord {
+impl PluginRecord {
     fn health(&self, hub: &Hub) -> PluginHealth {
         let mut instances = Vec::new();
 
@@ -129,7 +129,7 @@ impl UnitRecord {
         };
 
         PluginHealth {
-            unit: self.name.to_string(),
+            plugin: self.name.to_string(),
             readiness: readiness as i32,
             surfaces,
             instances,
@@ -141,42 +141,42 @@ impl UnitRecord {
 mod tests {
     use super::*;
     use crate::manifest::ManifestStore;
-    use crate::units::instance::Instance;
+    use crate::plugins::instance::Instance;
     use omega_proto::instance::PresentationSpec;
     use omega_proto::omega::{self, SurfaceKind, ViewTree, presentation};
-    use omega_proto::{Manifest, ModuleId, Surface, SurfaceId, UnitName};
+    use omega_proto::{Manifest, ModuleId, PluginName, Surface, SurfaceId};
 
     struct Fixture {
         hub: Hub,
-        units: UnitTable,
-        name: UnitName,
+        plugins: PluginRegistry,
+        name: PluginName,
         placement: SurfaceRef,
     }
 
     impl Fixture {
         fn new() -> Self {
             let hub = Hub::new();
-            let units = UnitTable::detached(hub.clone());
-            let name = "network".parse::<UnitName>().unwrap();
+            let plugins = PluginRegistry::detached(hub.clone());
+            let name = "network".parse::<PluginName>().unwrap();
             let surface = "indicator".parse::<SurfaceId>().unwrap();
             let placement = SurfaceRef::module(
                 name.clone(),
                 surface.clone(),
                 "wifi".parse::<ModuleId>().unwrap(),
             );
-            units
+            plugins
                 .adopt(&ManifestStore::from_manifests([Manifest::new(&name, "1")
                     .exposing([Surface::new(&surface, SurfaceKind::Widget)])]));
             Self {
                 hub,
-                units,
+                plugins,
                 name,
                 placement,
             }
         }
 
         fn health(&self) -> PluginHealth {
-            self.units.health_snapshot().1.remove(0)
+            self.plugins.health_snapshot().1.remove(0)
         }
 
         fn instance(&self) -> Instance {
@@ -193,7 +193,7 @@ mod tests {
                 Some(self.placement.clone()),
             )
             .unwrap();
-            self.units
+            self.plugins
                 .lock()
                 .get_mut(&self.name)
                 .unwrap()
@@ -207,25 +207,28 @@ mod tests {
     fn declarations_and_desired_placements_are_distinct_from_live_instances() {
         let f = Fixture::new();
         assert_eq!(f.health().readiness(), PluginReadiness::Unplaced);
-        f.units.expect_presentations(std::iter::once(&f.placement));
+        f.plugins
+            .expect_presentations(std::iter::once(&f.placement));
         let health = f.health();
         assert_eq!(health.readiness(), PluginReadiness::Waiting);
         assert!(health.instances[0].instance.is_none());
-        f.units.expect_presentations(std::iter::empty());
+        f.plugins.expect_presentations(std::iter::empty());
         assert_eq!(f.health().readiness(), PluginReadiness::Unplaced);
 
-        f.units.adopt(&ManifestStore::from_manifests([Manifest::new(
-            &f.name, "1",
-        )]));
+        f.plugins
+            .adopt(&ManifestStore::from_manifests([Manifest::new(
+                &f.name, "1",
+            )]));
         assert_eq!(f.health().readiness(), PluginReadiness::Background);
     }
 
     #[tokio::test]
     async fn waiting_empty_ready_and_disconnect_preserve_their_meaning() {
         let f = Fixture::new();
-        f.units.expect_presentations(std::iter::once(&f.placement));
+        f.plugins
+            .expect_presentations(std::iter::once(&f.placement));
         let (tx, _rx) = tokio::sync::mpsc::channel(1);
-        let guard = f.units.connected(&f.name, tx);
+        let guard = f.plugins.connected(&f.name, tx);
         let instance = f.instance();
         assert_eq!(f.health().readiness(), PluginReadiness::Waiting);
 

@@ -7,20 +7,20 @@ use tokio::sync::broadcast::error::TryRecvError;
 
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
+use omega_daemon::plugins::PluginRegistry;
 use omega_daemon::reconcile::{ScheduleProvider, schedules::ScheduleChange};
 use omega_daemon::schedule::Schedules;
 use omega_daemon::shutdown::Shutdown;
-use omega_daemon::units::UnitTable;
 use omega_proto::Cadence;
 use omega_proto::omega::{Event, EventKind, Schedule, StateDocument};
 
 fn schedules() -> (Hub, Schedules) {
     let hub = Hub::new();
     let shutdown = Shutdown::new();
-    let units = UnitTable::detached(hub.clone());
+    let plugins = PluginRegistry::detached(hub.clone());
     let brokers = Brokerage::new(hub.clone(), shutdown.clone());
 
-    (hub.clone(), Schedules::new(hub, units, brokers, shutdown))
+    (hub.clone(), Schedules::new(hub, plugins, brokers, shutdown))
 }
 
 fn document(schedules: impl IntoIterator<Item = Schedule>) -> StateDocument {
@@ -63,7 +63,7 @@ async fn a_schedule_fires_as_soon_as_it_starts() {
 
 #[tokio::test]
 async fn a_schedule_with_no_action_still_announces_itself() {
-    // The half a unit reacts to. A document that declares only a cadence is
+    // The half a plugin reacts to. A document that declares only a cadence is
     // saying how often, and leaving what to do about it to whoever listens.
     let (hub, schedules) = schedules();
     let mut events = hub.subscribe_events();
@@ -252,7 +252,7 @@ async fn a_schedule_the_document_stops_declaring_is_planned_away() {
 
 #[tokio::test]
 async fn a_schedule_performs_the_action_the_document_gave_it() {
-    // `RunCommand` because it is the one action that needs neither a unit nor
+    // `RunCommand` because it is the one action that needs neither a plugin nor
     // a broker to prove it ran: the file is either there or it is not.
     let (_hub, schedules) = schedules();
 

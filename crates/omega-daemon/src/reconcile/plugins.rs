@@ -1,22 +1,22 @@
-//! Reconcile built-unit lifecycle. Unlisted built units are enabled; explicit
-//! `enabled = false` disables a unit without removing its artifact.
+//! Reconcile built-plugin lifecycle. Unlisted built plugins are enabled; explicit
+//! `enabled = false` disables a plugin without removing its artifact.
 
 use std::collections::BTreeSet;
 
 use omega_host::Generation;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use omega_proto::omega::StateDocument;
 
 use crate::reconcile::ProviderError;
-use crate::supervisor::{Supervisor, UnitLog, UnitSpec};
+use crate::supervisor::{PluginLog, PluginSpec, Supervisor};
 
 #[derive(Debug)]
-pub struct UnitProvider {
+pub struct PluginProvider {
     supervisor: Supervisor,
     generation: Generation,
 }
 
-impl UnitProvider {
+impl PluginProvider {
     pub fn new(supervisor: Supervisor, generation: Generation) -> Self {
         Self {
             supervisor,
@@ -24,58 +24,64 @@ impl UnitProvider {
         }
     }
 
-    /// Plan enabled built units against captured supervision ownership.
+    /// Plan enabled built plugins against captured supervision ownership.
     pub fn plan(
         document: &StateDocument,
-        built: &BTreeSet<UnitName>,
-        running: &BTreeSet<UnitName>,
-    ) -> Result<Vec<UnitChange>, ProviderError> {
+        built: &BTreeSet<PluginName>,
+        running: &BTreeSet<PluginName>,
+    ) -> Result<Vec<PluginChange>, ProviderError> {
         let mut desired = built.clone();
         let mut configured = BTreeSet::new();
-        for unit in &document.units {
-            let name = unit
+        for plugin in &document.plugins {
+            let name = plugin
                 .name
-                .parse::<UnitName>()
-                .map_err(|error| ProviderError::new("units", error.to_string()))?;
+                .parse::<PluginName>()
+                .map_err(|error| ProviderError::new("plugins", error.to_string()))?;
             if !built.contains(&name) || !configured.insert(name.clone()) {
                 return Err(ProviderError::new(
-                    "units",
-                    format!("unknown or duplicate unit {name}"),
+                    "plugins",
+                    format!("unknown or duplicate plugin {name}"),
                 ));
             }
-            if !unit.enabled {
+            if !plugin.enabled {
                 desired.remove(&name);
             }
         }
         let mut changes: Vec<_> = desired
             .difference(running)
             .cloned()
-            .map(UnitChange::Start)
-            .chain(running.difference(&desired).cloned().map(UnitChange::Stop))
+            .map(PluginChange::Start)
+            .chain(
+                running
+                    .difference(&desired)
+                    .cloned()
+                    .map(PluginChange::Stop),
+            )
             .collect();
         changes.sort_by(|a, b| a.name().cmp(b.name()));
         Ok(changes)
     }
 
-    pub async fn apply(&self, changes: &[UnitChange]) -> Result<(), ProviderError> {
+    pub async fn apply(&self, changes: &[PluginChange]) -> Result<(), ProviderError> {
         let _handover = self.supervisor.handover().await;
         for change in changes {
             let name = change.name();
-            tracing::info!(unit = %name, ?change, "converging unit");
+            tracing::info!(plugin = %name, ?change, "converging plugin");
             match change {
-                UnitChange::Start(_) => {
+                PluginChange::Start(_) => {
                     if self.supervisor.running().contains(name) {
                         continue;
                     }
-                    let spec = UnitSpec::for_generation(name.clone(), self.generation.clone());
-                    self.supervisor
-                        .spawn(spec.logged(UnitLog::at(self.generation.layout().unit_log(name))));
+                    let spec = PluginSpec::for_generation(name.clone(), self.generation.clone());
+                    self.supervisor.spawn(
+                        spec.logged(PluginLog::at(self.generation.layout().plugin_log(name))),
+                    );
                 }
-                UnitChange::Stop(_) => {
+                PluginChange::Stop(_) => {
                     self.supervisor.stop(name).await;
                     if self.supervisor.running().contains(name) {
                         return Err(ProviderError::new(
-                            "units",
+                            "plugins",
                             format!("{name} has not stopped"),
                         ));
                     }
@@ -87,13 +93,13 @@ impl UnitProvider {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UnitChange {
-    Start(UnitName),
-    Stop(UnitName),
+pub enum PluginChange {
+    Start(PluginName),
+    Stop(PluginName),
 }
 
-impl UnitChange {
-    pub fn name(&self) -> &UnitName {
+impl PluginChange {
+    pub fn name(&self) -> &PluginName {
         match self {
             Self::Start(name) | Self::Stop(name) => name,
         }

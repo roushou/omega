@@ -177,8 +177,8 @@ Derive `omega::Config` on settings types that implement `Default`. It implements
 `config::Fields` and value conversion; missing fields use the settings type's
 declared defaults. `Fields` is the serialization trait, not a derive macro.
 
-Unit settings are construction inputs. Placement settings override only matching
-keys, and changes to unit settings restart the plugin. Store mutable application
+Plugin settings are construction inputs. Placement settings override only matching
+keys, and changes to plugin settings restart the plugin. Store mutable application
 state in the instance model or records. Records survive plugin restarts while the
 daemon runs, but are not persisted across daemon restarts.
 

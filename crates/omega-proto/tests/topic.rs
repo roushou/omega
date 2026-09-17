@@ -24,22 +24,29 @@ fn system_topics_are_a_closed_set() {
 }
 
 #[test]
-fn a_unit_keyspace_address_names_its_owner() {
-    let topic = "unit.battery-widget.threshold".parse::<Address>().unwrap();
+fn a_plugin_keyspace_address_names_its_owner() {
+    let topic = "plugin.battery-widget.threshold"
+        .parse::<Address>()
+        .unwrap();
     assert_eq!(topic.owner(), Some("battery-widget"));
-    assert_eq!(topic.to_string(), "unit.battery-widget.threshold");
+    assert_eq!(topic.to_string(), "plugin.battery-widget.threshold");
 
-    // A system topic has no unit owner: no capability makes it writable.
+    // A system topic has no plugin owner: no capability makes it writable.
     assert_eq!("battery".parse::<Address>().unwrap().owner(), None);
 }
 
 #[test]
-fn a_malformed_unit_address_is_rejected() {
-    for address in ["unit.", "unit.battery-widget", "unit..key", "unit.name."] {
+fn a_malformed_plugin_address_is_rejected() {
+    for address in [
+        "plugin.",
+        "plugin.battery-widget",
+        "plugin..key",
+        "plugin.name.",
+    ] {
         assert!(
             matches!(
                 address.parse::<Address>(),
-                Err(AddressError::MalformedUnitTopic(_))
+                Err(AddressError::MalformedPluginTopic(_))
             ),
             "{address} should not parse"
         );
@@ -48,8 +55,8 @@ fn a_malformed_unit_address_is_rejected() {
 
 #[test]
 fn keys_may_contain_dots() {
-    let topic = "unit.clock.format.long".parse::<Address>().unwrap();
-    assert_eq!(topic, Address::of_unit("clock", "format.long"));
+    let topic = "plugin.clock.format.long".parse::<Address>().unwrap();
+    assert_eq!(topic, Address::of_plugin("clock", "format.long"));
 }
 
 #[test]

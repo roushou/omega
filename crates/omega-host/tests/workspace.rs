@@ -1,11 +1,11 @@
-//! Unit discovery: the workspace manifest is the only registry.
+//! Plugin discovery: the workspace manifest is the only registry.
 
 use std::path::PathBuf;
 
 use omega_host::Layout;
 use omega_host::cargo::{CargoSlot, Manifest};
 use omega_host::workspace::Plugins;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 struct TempDir(PathBuf);
 
@@ -56,18 +56,18 @@ fn only_plugins_are_runnable_members() {
     }
     workspace(&layout, &["plugins/*", "crates/*"], &[]);
 
-    let units = Plugins::discover(&layout).unwrap();
+    let plugins = Plugins::discover(&layout).unwrap();
     assert_eq!(
-        units.iter().collect::<Vec<_>>(),
+        plugins.iter().collect::<Vec<_>>(),
         vec![
-            &"battery".parse::<UnitName>().unwrap(),
-            &"clock".parse::<UnitName>().unwrap(),
+            &"battery".parse::<PluginName>().unwrap(),
+            &"clock".parse::<PluginName>().unwrap(),
         ]
     );
 }
 
 #[test]
-fn excluded_members_are_not_units() {
+fn excluded_members_are_not_plugins() {
     let tmp = TempDir::new("exclude");
     let layout = tmp.layout();
     for dir in ["plugins/battery", "plugins/scratch"] {
@@ -75,9 +75,9 @@ fn excluded_members_are_not_units() {
     }
     workspace(&layout, &["plugins/*"], &["plugins/scratch"]);
 
-    let units = Plugins::discover(&layout).unwrap();
-    assert_eq!(units.len(), 1);
-    assert_eq!(units.iter().next().unwrap().as_str(), "battery");
+    let plugins = Plugins::discover(&layout).unwrap();
+    assert_eq!(plugins.len(), 1);
+    assert_eq!(plugins.iter().next().unwrap().as_str(), "battery");
 }
 
 #[test]

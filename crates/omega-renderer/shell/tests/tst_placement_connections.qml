@@ -7,7 +7,7 @@ TestCase {
     name: "PlacementConnections"
     Component {
         id: factory
-        Omarchy.PlacementConnection { unit: "audio"; surface: "indicator"; module: "audio" }
+        Omarchy.PlacementConnection { plugin: "audio"; surface: "indicator"; module: "audio" }
     }
     function init() { failOnWarning(/.*/) }
     function lease(properties) {
@@ -16,7 +16,7 @@ TestCase {
         return result
     }
     function snapshot(link, revision) {
-        link.onLine(JSON.stringify({unit:"audio",surface:"indicator",
+        link.onLine(JSON.stringify({plugin:"audio",surface:"indicator",
             instance:{id:"audio-instance",incarnation:"session"}, requested:2,
             view:{revision:revision,root:{type:"text",key:"volume"}}}))
     }
@@ -71,7 +71,7 @@ TestCase {
     }
     function test_scopes_and_daemons_remain_separate() {
         var original = lease()
-        for (var properties of [{unit:"power"}, {surface:"panel"}, {module:"second"}, {socketPath:"/tmp/other-omega.sock"}]) {
+        for (var properties of [{plugin:"power"}, {surface:"panel"}, {module:"second"}, {socketPath:"/tmp/other-omega.sock"}]) {
             var other = lease(properties)
             verify(other.connection !== original.connection)
         }

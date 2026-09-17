@@ -1,11 +1,11 @@
-//! Built-unit index serialization and typed TOML edit tests.
+//! Built-plugin index serialization and typed TOML edit tests.
 
 use std::path::{Path, PathBuf};
 
 use omega_host::Layout;
 use omega_host::Toml;
-use omega_host::{BuiltUnit, StateConfig};
-use omega_proto::UnitName;
+use omega_host::{BuiltPlugin, StateConfig};
+use omega_proto::PluginName;
 
 struct TempDir(PathBuf);
 
@@ -35,8 +35,8 @@ impl Drop for TempDir {
     }
 }
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
 #[test]
@@ -48,9 +48,9 @@ fn the_schema_puts_it_where_the_layout_says() {
     // One name, in one place, or a staged copy and the final one disagree.
     assert_eq!(
         layout.file::<StateConfig>(()).path(),
-        layout.state_units_toml()
+        layout.state_plugins_toml()
     );
-    assert_eq!(StateConfig::FILE_NAME, Layout::UNITS_TOML);
+    assert_eq!(StateConfig::FILE_NAME, Layout::PLUGINS_TOML);
 }
 
 #[test]
@@ -59,13 +59,13 @@ fn write_then_read_round_trips() {
     let layout = tmp.layout();
     let file = layout.file::<StateConfig>(());
 
-    let config = StateConfig::new(&layout, [unit("a-unit"), unit("b-unit")]);
+    let config = StateConfig::new(&layout, [plugin("a-plugin"), plugin("b-plugin")]);
     file.write(&config).unwrap();
 
     assert_eq!(file.read().unwrap(), config);
     assert_eq!(
-        config.units[0].program,
-        Path::new("units/a-unit/a-unit").to_path_buf()
+        config.plugins[0].program,
+        Path::new("plugins/a-plugin/a-plugin").to_path_buf()
     );
 }
 
@@ -77,11 +77,11 @@ fn missing_file_is_distinguishable_from_a_broken_one() {
 
     let err = file.read().unwrap_err();
     assert!(err.is_not_found());
-    assert_eq!(err.path(), Some(layout.state_units_toml().as_path()));
+    assert_eq!(err.path(), Some(layout.state_plugins_toml().as_path()));
     assert_eq!(file.read_or_default().unwrap(), StateConfig::default());
 
     std::fs::create_dir_all(&layout.state).unwrap();
-    std::fs::write(layout.state_units_toml(), "units = 3\n").unwrap();
+    std::fs::write(layout.state_plugins_toml(), "plugins = 3\n").unwrap();
     let err = file.read().unwrap_err();
     assert!(!err.is_not_found());
     assert!(err.to_string().starts_with("cannot parse state config"));
@@ -94,7 +94,7 @@ fn create_new_never_overwrites() {
     let layout = tmp.layout();
     let file = layout.file::<StateConfig>(());
 
-    let first = StateConfig::new(&layout, [unit("a-unit")]);
+    let first = StateConfig::new(&layout, [plugin("a-plugin")]);
     assert!(file.create_new(&first).unwrap());
     assert!(!file.create_new(&StateConfig::default()).unwrap());
     assert_eq!(file.read().unwrap(), first);
@@ -105,18 +105,20 @@ fn edit_reads_mutates_and_writes_back() {
     let tmp = TempDir::new("edit");
     let layout = tmp.layout();
     let file = layout.file::<StateConfig>(());
-    file.write(&StateConfig::new(&layout, [unit("a-unit")]))
+    file.write(&StateConfig::new(&layout, [plugin("a-plugin")]))
         .unwrap();
 
     let added = file
         .edit(|config| {
-            config.units.push(BuiltUnit::new(&layout, unit("b-unit")));
-            config.units.len()
+            config
+                .plugins
+                .push(BuiltPlugin::new(&layout, plugin("b-plugin")));
+            config.plugins.len()
         })
         .unwrap();
 
     assert_eq!(added, 2);
-    assert_eq!(file.read().unwrap().units.len(), 2);
+    assert_eq!(file.read().unwrap().plugins.len(), 2);
 }
 
 #[test]
@@ -129,35 +131,35 @@ fn a_doc_is_changed_across_steps_and_saved_once() {
     // The value outlives the call that loaded it: several decisions are made
     // against one read, and the file is written once at the end.
     let mut doc = file.open().unwrap();
-    for name in ["a-unit", "b-unit", "c-unit"] {
+    for name in ["a-plugin", "b-plugin", "c-plugin"] {
         doc.value_mut()
-            .units
-            .push(BuiltUnit::new(&layout, unit(name)));
+            .plugins
+            .push(BuiltPlugin::new(&layout, plugin(name)));
     }
 
     assert_eq!(doc.path(), file.path());
 
     // Nothing has touched the file yet.
-    assert!(file.read().unwrap().units.is_empty());
+    assert!(file.read().unwrap().plugins.is_empty());
 
     doc.save().unwrap();
-    assert_eq!(file.read().unwrap().units.len(), 3);
-    assert_eq!(doc.value().units.len(), 3);
+    assert_eq!(file.read().unwrap().plugins.len(), 3);
+    assert_eq!(doc.value().plugins.len(), 3);
 }
 
 #[test]
 fn a_schema_declares_which_tables_hold_inline_entries() {
-    // `units.toml` declares none, so its entries stay as sections.
+    // `plugins.toml` declares none, so its entries stay as sections.
     let tmp = TempDir::new("inline");
     let layout = tmp.layout();
-    let encoded = Toml::encode(&StateConfig::new(&layout, [unit("a-unit")])).unwrap();
+    let encoded = Toml::encode(&StateConfig::new(&layout, [plugin("a-plugin")])).unwrap();
 
     assert_eq!(
         encoded,
-        r#"[[units]]
-name = "a-unit"
-program = "units/a-unit/a-unit"
-manifest = "units/a-unit/unit.pb"
+        r#"[[plugins]]
+name = "a-plugin"
+program = "plugins/a-plugin/a-plugin"
+manifest = "plugins/a-plugin/plugin.pb"
 "#
     );
 }

@@ -1,4 +1,4 @@
-//! Spawns units as subprocesses, vouches for their identity, and reports
+//! Spawns plugins as subprocesses, vouches for their identity, and reports
 //! their health.
 
 pub mod backoff;
@@ -12,30 +12,30 @@ use tokio::process::{Child, Command};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-use omega_proto::UnitName;
-use omega_proto::omega::UnitStatus;
+use omega_proto::PluginName;
+use omega_proto::omega::PluginStatus;
 use omega_proto::{Handshake, Socket};
 
 use crate::manifest::ManifestStore;
+use crate::plugins::{PluginControl, PluginRegistry, PluginToken, Transition};
 use crate::process::Signal;
 use crate::shutdown::Shutdown;
-use crate::units::{Transition, UnitControl, UnitTable, UnitToken};
 
 pub use backoff::Backoff;
-pub use log::UnitLog;
+pub use log::PluginLog;
 
-/// A unit the supervisor should run.
+/// A plugin the supervisor should run.
 #[derive(Debug, Clone)]
-pub struct UnitSpec {
-    pub name: UnitName,
+pub struct PluginSpec {
+    pub name: PluginName,
     pub program: PathBuf,
     generation: Option<omega_host::Generation>,
     /// Captured output path. If absent, inherit the daemon's output streams.
-    pub log: Option<UnitLog>,
+    pub log: Option<PluginLog>,
 }
 
-impl UnitSpec {
-    pub fn new(name: UnitName, program: impl Into<PathBuf>) -> Self {
+impl PluginSpec {
+    pub fn new(name: PluginName, program: impl Into<PathBuf>) -> Self {
         Self {
             name,
             program: program.into(),
@@ -45,21 +45,24 @@ impl UnitSpec {
     }
 
     /// Keep the executable generation leased throughout supervision and crash recovery.
-    pub fn for_generation(name: UnitName, generation: omega_host::Generation) -> Self {
-        let mut spec = Self::new(name.clone(), generation.layout().state_unit_program(&name));
+    pub fn for_generation(name: PluginName, generation: omega_host::Generation) -> Self {
+        let mut spec = Self::new(
+            name.clone(),
+            generation.layout().state_plugin_program(&name),
+        );
         spec.generation = Some(generation);
         spec
     }
 
-    /// Send this unit's output to its own log.
-    pub fn logged(mut self, log: UnitLog) -> Self {
+    /// Send this plugin's output to its own log.
+    pub fn logged(mut self, log: PluginLog) -> Self {
         self.log = Some(log);
         self
     }
 }
 
-/// Spawns and restarts units, and answers the one question every session
-/// starts with: which unit is this, if any?
+/// Spawns and restarts plugins, and answers the one question every session
+/// starts with: which plugin is this, if any?
 #[derive(Debug, Clone)]
 pub struct Supervisor {
     inner: Arc<SupervisorInner>,
@@ -68,73 +71,73 @@ pub struct Supervisor {
 #[derive(Debug)]
 struct SupervisorInner {
     socket: Socket,
-    /// The daemon is stopping: every unit goes with it.
+    /// The daemon is stopping: every plugin goes with it.
     shutdown: Shutdown,
-    /// Shared unit registry; the supervisor keeps no separate copy.
-    units: UnitTable,
+    /// Shared plugin registry; the supervisor keeps no separate copy.
+    plugins: PluginRegistry,
     handover: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Supervisor {
-    pub fn new(socket: Socket, units: UnitTable, shutdown: Shutdown) -> Self {
+    pub fn new(socket: Socket, plugins: PluginRegistry, shutdown: Shutdown) -> Self {
         Self {
             inner: Arc::new(SupervisorInner {
                 socket,
                 shutdown,
-                units,
+                plugins,
                 handover: Arc::new(tokio::sync::Mutex::new(())),
             }),
         }
     }
 
-    /// What the supervisor currently reports about each unit.
-    pub fn statuses(&self) -> Vec<UnitStatus> {
-        self.inner.units.statuses()
+    /// What the supervisor currently reports about each plugin.
+    pub fn statuses(&self) -> Vec<PluginStatus> {
+        self.inner.plugins.statuses()
     }
 
-    /// Whether every unit has finished stopping.
+    /// Whether every plugin has finished stopping.
     pub fn all_stopped(&self) -> bool {
-        self.inner.units.all_stopped()
+        self.inner.plugins.all_stopped()
     }
 
-    /// Register a unit this supervisor did not spawn, for tests and dev. The
+    /// Register a plugin this supervisor did not spawn, for tests and dev. The
     /// returned token is what that process must present in `Hello`.
-    pub fn register(&self, name: &UnitName) -> Result<UnitToken, crate::units::TokenError> {
-        self.inner.units.issue(name)
+    pub fn register(&self, name: &PluginName) -> Result<PluginToken, crate::plugins::TokenError> {
+        self.inner.plugins.issue(name)
     }
 
-    /// The unit a connecting peer may claim. `None` means the peer is not a
-    /// unit — a stale token, a recycled pid, or a stranger on the socket.
-    pub fn identify(&self, pid: i32, token: &str) -> Option<UnitName> {
-        self.inner.units.identify(pid, token)
+    /// The plugin a connecting peer may claim. `None` means the peer is not a
+    /// plugin — a stale token, a recycled pid, or a stranger on the socket.
+    pub fn identify(&self, pid: i32, token: &str) -> Option<PluginName> {
+        self.inner.plugins.identify(pid, token)
     }
 
     /// Replace manifests for future admissions. Existing sessions retain their grants.
     pub fn adopt(&self, manifests: Arc<ManifestStore>) {
-        self.inner.units.adopt(&manifests);
+        self.inner.plugins.adopt(&manifests);
     }
 
-    /// Supervise this executable until the unit or daemon stops.
+    /// Supervise this executable until the plugin or daemon stops.
     /// Build activation owns replacement; crash recovery reuses this exact path.
-    pub fn spawn(&self, spec: UnitSpec) -> tokio::task::JoinHandle<()> {
-        let control = UnitControl {
+    pub fn spawn(&self, spec: PluginSpec) -> tokio::task::JoinHandle<()> {
+        let control = PluginControl {
             stop: Shutdown::new(),
             cycle: watch::channel(0).0,
         };
-        self.inner.units.supervise(&spec.name, control.clone());
+        self.inner.plugins.supervise(&spec.name, control.clone());
         let task_name = format!("supervisor {}", spec.name);
-        let process = UnitProcess::new(self.inner.clone(), spec, control);
+        let process = PluginProcess::new(self.inner.clone(), spec, control);
         let shutdown = self.inner.shutdown.clone();
         tokio::spawn(async move { shutdown.supervise(task_name, process.run()).await })
     }
 
-    /// Cycle a unit's process, leaving it supervised. Returns whether there
-    /// was a unit to cycle.
-    pub fn restart(&self, name: &UnitName) -> bool {
-        let Some(control) = self.inner.units.control(name) else {
+    /// Cycle a plugin's process, leaving it supervised. Returns whether there
+    /// was a plugin to cycle.
+    pub fn restart(&self, name: &PluginName) -> bool {
+        let Some(control) = self.inner.plugins.control(name) else {
             return false;
         };
-        tracing::info!(unit = %name, "restart requested");
+        tracing::info!(plugin = %name, "restart requested");
         control.cycle.send_modify(|count| *count += 1);
         true
     }
@@ -142,88 +145,91 @@ impl Supervisor {
     /// Publish the current table, so observers see the topic even when the
     /// document leaves nothing to run.
     pub fn publish_status(&self) {
-        self.inner.units.publish();
+        self.inner.plugins.publish();
     }
 
-    /// The units something is running: supervised by this process, or
+    /// The plugins something is running: supervised by this process, or
     /// adopted by whoever is developing them.
-    pub fn running(&self) -> Vec<UnitName> {
-        self.inner.units.held()
+    pub fn running(&self) -> Vec<PluginName> {
+        self.inner.plugins.held()
     }
 
     /// Stop and await the supervised process before granting development adoption.
-    /// Only one process may own a unit identity at a time.
+    /// Only one process may own a plugin identity at a time.
     pub async fn handover(&self) -> tokio::sync::OwnedMutexGuard<()> {
         self.inner.handover.clone().lock_owned().await
     }
 
-    pub async fn adopt_unit(&self, name: &UnitName) -> Result<UnitToken, omega_proto::Refusal> {
-        self.adopt_with(name, UnitToken::mint).await
+    pub async fn adopt_plugin(
+        &self,
+        name: &PluginName,
+    ) -> Result<PluginToken, omega_proto::Refusal> {
+        self.adopt_with(name, PluginToken::mint).await
     }
 
     async fn adopt_with(
         &self,
-        name: &UnitName,
-        mint: impl FnOnce() -> Result<UnitToken, crate::units::TokenError>,
-    ) -> Result<UnitToken, omega_proto::Refusal> {
+        name: &PluginName,
+        mint: impl FnOnce() -> Result<PluginToken, crate::plugins::TokenError>,
+    ) -> Result<PluginToken, omega_proto::Refusal> {
         let _handover = self.handover().await;
-        if self.inner.units.manifest(name).is_none() {
+        if self.inner.plugins.manifest(name).is_none() {
             return Err(omega_proto::Refusal::precondition(format!(
-                "{name} is not a unit this build contains"
+                "{name} is not a plugin this build contains"
             )));
         }
         use crate::refusal::RefusableResult;
         let token = mint().or_refuse()?;
         self.stop(name).await;
-        if self.inner.units.is_supervised(name) {
+        if self.inner.plugins.is_supervised(name) {
             return Err(omega_proto::Refusal::precondition(format!(
                 "{name} has not finished stopping"
             )));
         }
-        Ok(self.inner.units.adopt_with_token(name, token))
+        Ok(self.inner.plugins.adopt_with_token(name, token))
     }
 
-    /// Give an adopted unit back, so the next convergence runs the binary the
+    /// Give an adopted plugin back, so the next convergence runs the binary the
     /// build produced.
-    pub fn release_unit(&self, name: &UnitName, token: &UnitToken) {
-        self.inner.units.release_adoption(name, token);
+    pub fn release_plugin(&self, name: &PluginName, token: &PluginToken) {
+        self.inner.plugins.release_adoption(name, token);
     }
 
-    /// Stop one unit and wait for it, leaving every other unit alone.
-    pub async fn stop(&self, name: &UnitName) {
-        let Some(control) = self.inner.units.control(name) else {
+    /// Stop one plugin and wait for it, leaving every other plugin alone.
+    pub async fn stop(&self, name: &PluginName) {
+        let Some(control) = self.inner.plugins.control(name) else {
             return;
         };
         control.stop.trigger();
 
         // Wait for supervision to end, allowing shutdown grace plus observation delay.
         let deadline =
-            tokio::time::Instant::now() + UnitProcess::GRACE + Duration::from_millis(500);
+            tokio::time::Instant::now() + PluginProcess::GRACE + Duration::from_millis(500);
         while tokio::time::Instant::now() < deadline {
-            if !self.inner.units.is_supervised(name) {
+            if !self.inner.plugins.is_supervised(name) {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        tracing::warn!(unit = %name, "unit did not stop within its grace period");
+        tracing::warn!(plugin = %name, "plugin did not stop within its grace period");
     }
 }
 
-/// One supervised unit: spawn, watch, restart, until the daemon stops.
-struct UnitProcess {
+/// One supervised plugin: spawn, watch, restart, until the daemon stops.
+struct PluginProcess {
     supervisor: Arc<SupervisorInner>,
-    spec: UnitSpec,
+    spec: PluginSpec,
     backoff: Backoff,
-    /// This unit alone: stopped by the reconciler, cycled by an operator.
-    control: UnitControl,
+    /// This plugin alone: stopped by the reconciler, cycled by an operator.
+    control: PluginControl,
     cycles: watch::Receiver<u64>,
 }
 
-impl UnitProcess {
-    /// How long a unit gets to exit on its own before it is killed.
+impl PluginProcess {
+    /// How long a plugin gets to exit on its own before it is killed.
     pub(crate) const GRACE: Duration = Duration::from_secs(5);
 
-    fn new(supervisor: Arc<SupervisorInner>, spec: UnitSpec, control: UnitControl) -> Self {
+    fn new(supervisor: Arc<SupervisorInner>, spec: PluginSpec, control: PluginControl) -> Self {
         let cycles = control.cycle.subscribe();
         Self {
             supervisor,
@@ -234,7 +240,7 @@ impl UnitProcess {
         }
     }
 
-    /// Whether unit-specific or daemon-wide shutdown was requested.
+    /// Whether plugin-specific or daemon-wide shutdown was requested.
     fn stopping(&self) -> bool {
         self.control.stop.is_triggered() || self.supervisor.shutdown.is_triggered()
     }
@@ -253,13 +259,13 @@ impl UnitProcess {
 
     async fn run(mut self) {
         while !self.stopping() {
-            tracing::info!(unit = %self.spec.name, program = %self.spec.program.display(), "spawning unit");
-            // The token is issued before the spawn: a unit that connects the
+            tracing::info!(plugin = %self.spec.name, program = %self.spec.program.display(), "spawning plugin");
+            // The token is issued before the spawn: a plugin that connects the
             // instant it starts must already be identifiable.
             let started = Instant::now();
             let child = self
                 .supervisor
-                .units
+                .plugins
                 .issue(&self.spec.name)
                 .map_err(std::io::Error::other)
                 .and_then(|token| {
@@ -270,12 +276,12 @@ impl UnitProcess {
             match child {
                 Ok(mut child) => {
                     if let Some(pid) = child.id() {
-                        self.supervisor.units.bind(&self.spec.name, pid as i32);
+                        self.supervisor.plugins.bind(&self.spec.name, pid as i32);
                     }
 
                     self.watch(&mut child).await;
 
-                    // A unit that stayed up is not in a crash loop, whatever
+                    // A plugin that stayed up is not in a crash loop, whatever
                     // it did an hour ago.
                     if started.elapsed() >= Backoff::HEALTHY {
                         self.backoff.reset();
@@ -284,10 +290,10 @@ impl UnitProcess {
                 Err(e) => {
                     // Include the binary path in spawn errors reported by status.
                     tracing::error!(
-                        unit = %self.spec.name,
+                        plugin = %self.spec.name,
                         program = %self.spec.program.display(),
                         error = %e,
-                        "failed to spawn unit"
+                        "failed to spawn plugin"
                     );
                     self.report(Transition::Unspawnable(format!(
                         "cannot run {}: {e}",
@@ -297,8 +303,8 @@ impl UnitProcess {
             }
 
             // The process is gone; its token dies with it, so a recycled pid
-            // cannot inherit this unit's grants.
-            self.supervisor.units.revoke(&self.spec.name);
+            // cannot inherit this plugin's grants.
+            self.supervisor.plugins.revoke(&self.spec.name);
 
             if self.stopping() {
                 break;
@@ -306,7 +312,7 @@ impl UnitProcess {
 
             let delay = self.backoff.delay();
             tracing::debug!(
-                unit = %self.spec.name,
+                plugin = %self.spec.name,
                 ?delay,
                 attempt = self.backoff.attempts(),
                 "restarting after backoff"
@@ -322,11 +328,11 @@ impl UnitProcess {
     /// Tell the table what happened. Nothing else records it.
     fn report(&self, transition: Transition) {
         self.supervisor
-            .units
+            .plugins
             .transition(&self.spec.name, transition);
     }
 
-    fn start(&self, token: &UnitToken) -> std::io::Result<Child> {
+    fn start(&self, token: &PluginToken) -> std::io::Result<Child> {
         let mut command = Command::new(&self.spec.program);
         command
             .env("OMEGA_SOCKET", self.supervisor.socket.path())
@@ -355,7 +361,7 @@ impl UnitProcess {
             }
             // Requested restarts bypass crash backoff.
             _ = self.cycles.changed() => {
-                tracing::info!(unit = %self.spec.name, "cycling on request");
+                tracing::info!(plugin = %self.spec.name, "cycling on request");
                 self.terminate(child).await;
                 self.backoff.reset();
             }
@@ -368,7 +374,7 @@ impl UnitProcess {
     fn exited(&self, status: std::io::Result<std::process::ExitStatus>) {
         match status {
             Ok(status) => {
-                tracing::warn!(unit = %self.spec.name, %status, "unit exited; restarting");
+                tracing::warn!(plugin = %self.spec.name, %status, "plugin exited; restarting");
                 self.report(Transition::Exited {
                     code: status.code().unwrap_or(-1),
                     detail: status.to_string(),
@@ -376,7 +382,7 @@ impl UnitProcess {
             }
             Err(e) => {
                 tracing::error!(
-                    unit = %self.spec.name,
+                    plugin = %self.spec.name,
                     program = %self.spec.program.display(),
                     error = %e,
                     "wait failed"
@@ -396,26 +402,26 @@ impl UnitProcess {
         };
 
         if let Err(e) = Signal::terminate(pid as i32) {
-            tracing::debug!(unit = %self.spec.name, error = %e, "could not signal unit; killing");
+            tracing::debug!(plugin = %self.spec.name, error = %e, "could not signal plugin; killing");
             let _ = child.kill().await;
             return;
         }
 
         match tokio::time::timeout(Self::GRACE, child.wait()).await {
-            Ok(_) => tracing::debug!(unit = %self.spec.name, "unit exited on request"),
+            Ok(_) => tracing::debug!(plugin = %self.spec.name, "plugin exited on request"),
             Err(_) => {
-                tracing::warn!(unit = %self.spec.name, "unit ignored SIGTERM; killing");
+                tracing::warn!(plugin = %self.spec.name, "plugin ignored SIGTERM; killing");
                 let _ = child.kill().await;
             }
         }
     }
 }
 
-impl Drop for UnitProcess {
+impl Drop for PluginProcess {
     fn drop(&mut self) {
-        self.supervisor.units.revoke(&self.spec.name);
+        self.supervisor.plugins.revoke(&self.spec.name);
         self.report(Transition::Stopped);
-        self.supervisor.units.release(&self.spec.name);
+        self.supervisor.plugins.release(&self.spec.name);
     }
 }
 
@@ -425,36 +431,36 @@ mod tests {
 
     #[tokio::test]
     async fn failed_adoption_identity_preserves_the_supervised_session() {
-        let name: UnitName = "test".parse().unwrap();
-        let units = UnitTable::detached(crate::hub::Hub::new());
-        units.adopt(&ManifestStore::from_manifests([
+        let name: PluginName = "test".parse().unwrap();
+        let plugins = PluginRegistry::detached(crate::hub::Hub::new());
+        plugins.adopt(&ManifestStore::from_manifests([
             omega_proto::Manifest::new(&name, "1"),
         ]));
-        let token = units.issue(&name).unwrap();
-        units.bind(&name, 123);
+        let token = plugins.issue(&name).unwrap();
+        plugins.bind(&name, 123);
         let stop = Shutdown::new();
-        units.supervise(
+        plugins.supervise(
             &name,
-            UnitControl {
+            PluginControl {
                 stop: stop.clone(),
                 cycle: watch::channel(0).0,
             },
         );
         let (requests, _receiver) = tokio::sync::mpsc::channel(1);
-        let _session = units.connected(&name, requests);
+        let _session = plugins.connected(&name, requests);
         let supervisor =
-            Supervisor::new(Socket::at("/unused.sock"), units.clone(), Shutdown::new());
-        let before = units.statuses();
+            Supervisor::new(Socket::at("/unused.sock"), plugins.clone(), Shutdown::new());
+        let before = plugins.statuses();
         let error = supervisor
             .adopt_with(&name, || Err(getrandom::Error::UNSUPPORTED.into()))
             .await
             .unwrap_err();
         assert_eq!(error.code, omega_proto::omega::ErrorCode::Unavailable);
         assert!(!stop.is_triggered());
-        assert!(units.is_supervised(&name));
-        assert!(units.is_connected(&name));
-        assert!(!units.is_adopted(&name));
-        assert_eq!(units.identify(123, token.as_str()), Some(name));
-        assert_eq!(units.statuses(), before);
+        assert!(plugins.is_supervised(&name));
+        assert!(plugins.is_connected(&name));
+        assert!(!plugins.is_adopted(&name));
+        assert_eq!(plugins.identify(123, token.as_str()), Some(name));
+        assert_eq!(plugins.statuses(), before);
     }
 }

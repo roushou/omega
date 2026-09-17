@@ -4,9 +4,9 @@ use omega::record::{Own, Watch};
 use omega::ui::{Button, Column, Glyph, Icon, Row, Section, Text};
 use omega::{Command, Plugin, Surface, Ui};
 
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
-#[derive(omega::UnitState, Default, Clone, Debug)]
+#[derive(omega::PluginState, Default, Clone, Debug)]
 pub struct Selection {
     pub player: Option<PlayerId>,
 }
@@ -265,7 +265,7 @@ impl Command for Next {
 }
 
 fn main() -> omega::Result<()> {
-    Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
+    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<SelectPlayer>()
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn explicit_selection_wins_and_missing_selection_falls_back() {
         use omega::config::Fields;
-        use omega::record::UnitState;
+        use omega::record::PluginState;
         for (selected, expected) in [("first", "first"), ("gone", "second")] {
             let state = Fixture::state().keyspace(
                 &Selection::address(),

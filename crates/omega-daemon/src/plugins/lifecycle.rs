@@ -1,11 +1,11 @@
-//! Where a unit is in its life.
+//! Where a plugin is in its life.
 //!
-//! Transitions are the only way to change lifecycle state. The `units` topic
+//! Transitions are the only way to change lifecycle state. The `plugins` topic
 //! projects that state so supervision and observers cannot report different phases.
 
-use omega_proto::omega::UnitPhase;
+use omega_proto::omega::PluginPhase;
 
-/// What is true of a unit's process.
+/// What is true of a plugin's process.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Lifecycle {
     /// Built and known; nothing is running.
@@ -23,7 +23,7 @@ pub enum Lifecycle {
     Stopped,
 }
 
-/// A thing that happened to a unit. Transitions are named for the event, not
+/// A thing that happened to a plugin. Transitions are named for the event, not
 /// the destination: the state machine decides where an event leads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Transition {
@@ -42,7 +42,7 @@ impl Lifecycle {
     /// publish only what changed.
     pub fn apply(&mut self, transition: Transition) -> bool {
         let next = match (&*self, transition) {
-            // A stopped unit stays stopped until something spawns it again.
+            // A stopped plugin stays stopped until something spawns it again.
             (Self::Stopped, Transition::Spawned) => Self::Starting,
             (Self::Stopped, _) => return false,
 
@@ -57,18 +57,18 @@ impl Lifecycle {
         moved
     }
 
-    /// Whether a process is up. A connected unit is running; a spawned one
+    /// Whether a process is up. A connected plugin is running; a spawned one
     /// that has not checked in yet is only starting.
-    pub fn phase(&self, connected: bool) -> UnitPhase {
+    pub fn phase(&self, connected: bool) -> PluginPhase {
         match self {
-            Self::Idle => UnitPhase::Unspecified,
-            Self::Starting => UnitPhase::Starting,
+            Self::Idle => PluginPhase::Unspecified,
+            Self::Starting => PluginPhase::Starting,
             // Report starting until the process completes its handshake.
-            Self::Running if connected => UnitPhase::Running,
-            Self::Running => UnitPhase::Starting,
-            Self::Restarting { .. } => UnitPhase::Restarting,
-            Self::Failed { .. } => UnitPhase::Failed,
-            Self::Stopped => UnitPhase::Stopped,
+            Self::Running if connected => PluginPhase::Running,
+            Self::Running => PluginPhase::Starting,
+            Self::Restarting { .. } => PluginPhase::Restarting,
+            Self::Failed { .. } => PluginPhase::Failed,
+            Self::Stopped => PluginPhase::Stopped,
         }
     }
 
@@ -99,7 +99,7 @@ impl Lifecycle {
 impl Lifecycle {
     pub fn connected(&mut self) -> bool {
         match self {
-            // A unit connects while the supervisor thinks it is starting;
+            // A plugin connects while the supervisor thinks it is starting;
             // that is the handshake completing.
             Self::Starting | Self::Running => {
                 let moved = *self != Self::Running;

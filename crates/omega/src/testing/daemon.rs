@@ -28,11 +28,12 @@ impl TestDaemon {
     /// Run a plugin against a test daemon. The plugin serves on a task of its
     /// own until the returned daemon is dropped.
     pub fn serving(plugin: Plugin) -> Self {
-        let (daemon, unit) = UnixStream::pair().expect("a socket pair is always available");
+        let (daemon, plugin_stream) =
+            UnixStream::pair().expect("a socket pair is always available");
         let manifest = plugin.manifest().expect("the plugin's manifest is valid");
 
         tokio::spawn(async move {
-            if let Ok(runtime) = crate::runtime::Runtime::over(unit, &manifest).await {
+            if let Ok(runtime) = crate::runtime::Runtime::over(plugin_stream, &manifest).await {
                 let _ = runtime.serve(plugin).await;
             }
         });
@@ -50,7 +51,7 @@ impl TestDaemon {
         self.welcome_configured(state, &Values::new()).await
     }
 
-    /// Complete the handshake with explicit unit settings.
+    /// Complete the handshake with explicit plugin settings.
     /// Surface placement settings can be supplied separately during rendering.
     pub async fn welcome_configured(&mut self, state: &State, settings: &Values) -> Hello {
         let hello = match self.next().await.body {
@@ -67,7 +68,7 @@ impl TestDaemon {
             stream_id: 0,
             body: Some(frame::Body::Welcome(Welcome {
                 protocol_version: PROTOCOL_VERSION,
-                unit_id: "test".to_string(),
+                plugin_id: "test".to_string(),
                 daemon_version: env!("CARGO_PKG_VERSION").to_string(),
                 capabilities: Vec::new(),
                 state: Some(snapshot),

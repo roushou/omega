@@ -15,7 +15,7 @@ BarWidget {
   InstanceSession { id: panelSession; connection: panelLink; snapshot: panelLink ? panelLink.snapshot : null }
   moduleName: "omega.view"
 
-  readonly property string unit: setting("unit", "")
+  readonly property string plugin: setting("plugin", "")
   readonly property string surface: setting("surface", "")
   readonly property string module: setting("module", "")
   readonly property string panel: setting("panel", "")
@@ -57,18 +57,18 @@ BarWidget {
 
   PlacementConnection {
     id: indicatorConnection
-    unit: root.unit
+    plugin: root.plugin
     surface: root.surface
     module: root.module
     // An empty socket path selects the shared transport default.
     socketPath: root.socketPath
   }
 
-  // The popout's own view. A second surface of the same unit and the same
+  // The popout's own view. A second surface of the same plugin and the same
   // module instance — the document placed one thing, which draws in two.
   PlacementConnection {
     id: panelConnection
-    unit: root.unit
+    plugin: root.plugin
     surface: root.panel
     module: root.module
     socketPath: root.socketPath

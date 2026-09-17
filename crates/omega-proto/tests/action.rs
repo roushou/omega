@@ -13,7 +13,7 @@ fn every_action_states_what_it_costs() {
     assert_eq!(ActionKind::SetBacklight.cost(), Some(Capability::Backlight));
     assert_eq!(ActionKind::Notify.cost(), Some(Capability::Notify));
 
-    // Actions that only move a unit's own windows around cost nothing extra.
+    // Actions that only move a plugin's own windows around cost nothing extra.
     assert_eq!(ActionKind::ToggleFullscreen.cost(), None);
 }
 

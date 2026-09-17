@@ -1,22 +1,24 @@
-//! Taking a unit's place: what `omega dev` asks the daemon for.
+//! Taking a plugin's place: what `omega dev` asks the daemon for.
 
 mod common;
 
 use std::time::Duration;
 
-use common::{Harness, expect_outcome, expect_refusal, next_result, unit_name, widget_manifest};
+use common::{Harness, expect_outcome, expect_refusal, next_result, plugin_name, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::units::UnitRecord;
+use omega_daemon::plugins::PluginRecord;
 use omega_proto::omega::{
-    AdoptUnit, ErrorCode, Frame, Invoke, UnitPhase, Welcome, frame, invoke, result, value,
+    AdoptPlugin, ErrorCode, Frame, Invoke, PluginPhase, Welcome, frame, invoke, result, value,
 };
 use omega_proto::{Refusal, Transport};
 
-fn adopt(stream_id: u64, unit: &str) -> Frame {
+fn adopt(stream_id: u64, plugin: &str) -> Frame {
     Frame {
         stream_id,
         body: Some(frame::Body::Invoke(Invoke {
-            op: Some(invoke::Op::AdoptUnit(AdoptUnit { unit: unit.into() })),
+            op: Some(invoke::Op::AdoptPlugin(AdoptPlugin {
+                plugin: plugin.into(),
+            })),
         })),
     }
 }
@@ -29,14 +31,14 @@ fn harness(tag: &str) -> Harness {
 }
 
 /// Ask as the operator, and take the token back.
-async fn adopted(transport: &mut Transport<tokio::net::UnixStream>, unit: &str) -> String {
-    transport.send(adopt(1, unit)).await.unwrap();
+async fn adopted(transport: &mut Transport<tokio::net::UnixStream>, plugin: &str) -> String {
+    transport.send(adopt(1, plugin)).await.unwrap();
     match expect_outcome(next_result(transport).await) {
         result::Outcome::Value(value) => match value.kind {
             Some(value::Kind::StringValue(token)) => token,
-            other => panic!("AdoptUnit answered with {other:?}"),
+            other => panic!("AdoptPlugin answered with {other:?}"),
         },
-        other => panic!("AdoptUnit answered with {other:?}"),
+        other => panic!("AdoptPlugin answered with {other:?}"),
     }
 }
 
@@ -60,48 +62,48 @@ async fn until(within: Duration, done: impl Fn() -> bool) {
 }
 
 #[tokio::test]
-async fn a_token_the_daemon_hands_out_makes_this_process_the_unit() {
+async fn a_token_the_daemon_hands_out_makes_this_process_the_plugin() {
     let harness = harness("adopt-identity");
-    let name = unit_name("battery-widget");
+    let name = plugin_name("battery-widget");
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap(); // Welcome
 
     let token = adopted(&mut operator, "battery-widget").await;
 
-    // The token is what a spawned unit would have been given, and it admits
-    // this process as that unit — with the manifest's grants, not more.
+    // The token is what a spawned plugin would have been given, and it admits
+    // this process as that plugin — with the manifest's grants, not more.
     let hash = widget_manifest("battery-widget", "battery").hash();
-    let mut unit = harness.connect(&hash, &token).await;
-    let welcome = welcome(unit.recv().await.unwrap());
+    let mut plugin = harness.connect(&hash, &token).await;
+    let welcome = welcome(plugin.recv().await.unwrap());
 
-    assert_eq!(welcome.unit_id, name.to_string());
+    assert_eq!(welcome.plugin_id, name.to_string());
     assert!(
         !welcome.capabilities.is_empty(),
-        "an adopted unit is granted what its manifest declares"
+        "an adopted plugin is granted what its manifest declares"
     );
 
     // Adopted lifecycle reports the replacement process.
     until(Duration::from_secs(2), || {
-        phase_of(&harness, &name) == UnitPhase::Running as i32
+        phase_of(&harness, &name) == PluginPhase::Running as i32
     })
     .await;
 }
 
-fn phase_of(harness: &Harness, name: &omega_proto::UnitName) -> i32 {
+fn phase_of(harness: &Harness, name: &omega_proto::PluginName) -> i32 {
     harness
-        .units
+        .plugins
         .statuses()
         .into_iter()
-        .find(|status| status.unit == name.to_string())
+        .find(|status| status.plugin == name.to_string())
         .map(|status| status.phase)
         .unwrap_or_default()
 }
 
 #[tokio::test]
-async fn an_adopted_unit_is_not_started_underneath_the_process_developing_it() {
+async fn an_adopted_plugin_is_not_started_underneath_the_process_developing_it() {
     let harness = harness("adopt-held");
-    let name = unit_name("battery-widget");
+    let name = plugin_name("battery-widget");
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap();
@@ -110,29 +112,29 @@ async fn an_adopted_unit_is_not_started_underneath_the_process_developing_it() {
     // Active adoption prevents convergence from spawning another process.
     assert!(
         harness.supervisor.running().contains(&name),
-        "an adopted unit must count as held, or the built binary races the one being written"
+        "an adopted plugin must count as held, or the built binary races the one being written"
     );
 
     // Status must identify the adopted process.
     let status = harness
-        .units
+        .plugins
         .statuses()
         .into_iter()
-        .find(|status| status.unit == name.to_string())
-        .expect("the unit is in the table");
-    assert_eq!(status.detail, UnitRecord::ADOPTED);
+        .find(|status| status.plugin == name.to_string())
+        .expect("the plugin is in the table");
+    assert_eq!(status.detail, PluginRecord::ADOPTED);
 }
 
 #[tokio::test]
 async fn an_adoption_ends_with_the_connection_that_asked_for_it() {
     let harness = harness("adopt-release");
-    let name = unit_name("battery-widget");
+    let name = plugin_name("battery-widget");
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap();
     let token = adopted(&mut operator, "battery-widget").await;
 
-    // Closing the terminal is how a dev session usually ends, and the unit
+    // Closing the terminal is how a dev session usually ends, and the plugin
     // has to come back from it.
     drop(operator);
     until(Duration::from_secs(2), || {
@@ -140,29 +142,29 @@ async fn an_adoption_ends_with_the_connection_that_asked_for_it() {
     })
     .await;
 
-    // An expired adoption token grants no unit authority.
+    // An expired adoption token grants no plugin authority.
     let hash = widget_manifest("battery-widget", "battery").hash();
     let mut late = harness.connect(&hash, &token).await;
     let welcome = welcome(late.recv().await.unwrap());
 
-    assert_ne!(welcome.unit_id, name.to_string());
-    assert!(welcome.unit_id.starts_with("operator-"), "{welcome:?}");
+    assert_ne!(welcome.plugin_id, name.to_string());
+    assert!(welcome.plugin_id.starts_with("operator-"), "{welcome:?}");
     assert!(welcome.capabilities.is_empty(), "{welcome:?}");
 }
 
 #[tokio::test]
-async fn a_unit_may_not_take_another_units_place() {
+async fn a_plugin_may_not_take_another_plugins_place() {
     let harness = harness("adopt-denied");
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
     let hash = widget_manifest("battery-widget", "battery").hash();
 
-    let mut unit = harness.connect(&hash, token.as_str()).await;
-    unit.recv().await.unwrap().unwrap(); // Welcome
+    let mut plugin = harness.connect(&hash, token.as_str()).await;
+    plugin.recv().await.unwrap().unwrap(); // Welcome
 
-    unit.send(adopt(1, "battery-widget")).await.unwrap();
-    let refusal: Refusal = expect_refusal(next_result(&mut unit).await);
+    plugin.send(adopt(1, "battery-widget")).await.unwrap();
+    let refusal: Refusal = expect_refusal(next_result(&mut plugin).await);
 
-    // Handing out identity is the owner's business. A unit that could adopt
+    // Handing out identity is the owner's business. A plugin that could adopt
     // its neighbour could become it.
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
 }

@@ -6,7 +6,7 @@ use std::fmt;
 use crate::omega::{
     ApplicationsState, AudioState, BacklightState, BatteryState, BluetoothState, DiskState,
     IdleState, InputState, MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState,
-    PowerProfileState, SystemState, ThermalsState, ThroughputState, TimeState, UnitsState,
+    PluginsState, PowerProfileState, SystemState, ThermalsState, ThroughputState, TimeState,
     VpnState, WifiState, WindowState, WorkspacesState, state_topic,
 };
 
@@ -70,8 +70,8 @@ topics! {
     Mains => "mains": MainsState,
     /// The monitors the compositor is driving.
     Monitors => "monitors": MonitorsState,
-    /// The supervisor's report on every unit it runs.
-    Units => "units": UnitsState,
+    /// The supervisor's report on every plugin it runs.
+    Plugins => "plugins": PluginsState,
     Time => "time": TimeState,
     /// What the last scan found on the air.
     Wifi => "wifi": WifiState,
@@ -123,31 +123,31 @@ impl fmt::Display for SystemTopic {
 pub enum Address {
     /// One of the daemon's own topics.
     System(SystemTopic),
-    /// `unit.<name>.<key>` — data a unit owns and only it may write.
-    Unit { unit: String, key: String },
+    /// `plugin.<name>.<key>` — data a plugin owns and only it may write.
+    Plugin { plugin: String, key: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AddressError {
     #[error("unknown state topic {0:?}")]
     Unknown(String),
-    #[error("unit topic {0:?} must be shaped unit.<name>.<key>")]
-    MalformedUnitTopic(String),
+    #[error("plugin topic {0:?} must be shaped plugin.<name>.<key>")]
+    MalformedPluginTopic(String),
 }
 
 impl std::str::FromStr for Address {
     type Err = AddressError;
 
     fn from_str(address: &str) -> Result<Self, Self::Err> {
-        if let Some(rest) = address.strip_prefix(Self::UNIT_PREFIX) {
-            let (unit, key) = rest
+        if let Some(rest) = address.strip_prefix(Self::PLUGIN_PREFIX) {
+            let (plugin, key) = rest
                 .split_once('.')
-                .ok_or_else(|| AddressError::MalformedUnitTopic(address.to_string()))?;
-            if unit.is_empty() || key.is_empty() {
-                return Err(AddressError::MalformedUnitTopic(address.to_string()));
+                .ok_or_else(|| AddressError::MalformedPluginTopic(address.to_string()))?;
+            if plugin.is_empty() || key.is_empty() {
+                return Err(AddressError::MalformedPluginTopic(address.to_string()));
             }
-            return Ok(Self::Unit {
-                unit: unit.to_string(),
+            return Ok(Self::Plugin {
+                plugin: plugin.to_string(),
                 key: key.to_string(),
             });
         }
@@ -157,22 +157,22 @@ impl std::str::FromStr for Address {
 }
 
 impl Address {
-    pub const UNIT_PREFIX: &'static str = "unit.";
+    pub const PLUGIN_PREFIX: &'static str = "plugin.";
 
-    /// The address of a unit's own key.
-    pub fn of_unit(unit: &str, key: &str) -> Self {
-        Self::Unit {
-            unit: unit.to_string(),
+    /// The address of a plugin's own key.
+    pub fn of_plugin(plugin: &str, key: &str) -> Self {
+        Self::Plugin {
+            plugin: plugin.to_string(),
             key: key.to_string(),
         }
     }
 
-    /// The unit that may write this topic. System topics are the daemon's:
-    /// no unit writes them, whatever capability it holds.
+    /// The plugin that may write this topic. System topics are the daemon's:
+    /// no plugin writes them, whatever capability it holds.
     pub fn owner(&self) -> Option<&str> {
         match self {
             Self::System(_) => None,
-            Self::Unit { unit, .. } => Some(unit),
+            Self::Plugin { plugin, .. } => Some(plugin),
         }
     }
 }
@@ -181,7 +181,7 @@ impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::System(topic) => f.write_str(topic.as_str()),
-            Self::Unit { unit, key } => write!(f, "{}{unit}.{key}", Self::UNIT_PREFIX),
+            Self::Plugin { plugin, key } => write!(f, "{}{plugin}.{key}", Self::PLUGIN_PREFIX),
         }
     }
 }
@@ -196,4 +196,22 @@ pub trait TopicValue: Sized {
 
     /// Wrap this payload in a protocol topic value.
     fn into_value(self) -> state_topic::Value;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_namespace_has_no_legacy_aliases() {
+        assert_eq!(
+            "plugins".parse::<SystemTopic>().unwrap(),
+            SystemTopic::Plugins
+        );
+        let address = "plugin.audio.volume".parse::<Address>().unwrap();
+        assert_eq!(address.owner(), Some("audio"));
+        assert_eq!(address.to_string(), "plugin.audio.volume");
+        assert!("units".parse::<SystemTopic>().is_err());
+        assert!("unit.audio.volume".parse::<Address>().is_err());
+    }
 }

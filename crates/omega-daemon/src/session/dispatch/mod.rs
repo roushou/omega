@@ -5,7 +5,7 @@ use omega_proto::omega::{
     Empty, Frame, Invoke, StatePatch, StateTopic, Value, invoke, result, state_topic,
 };
 use omega_proto::{Address, CommandAnswer, Refusal};
-use omega_proto::{SurfaceId, UnitName};
+use omega_proto::{PluginName, SurfaceId};
 
 use crate::action::Actions;
 use crate::attachment;
@@ -14,10 +14,10 @@ use crate::refusal::RefusableResult;
 
 use crate::authorization::{Grants, Role};
 use crate::hub::Hub;
+use crate::plugins::PluginRegistry;
 use crate::session::admission::Peer;
 use crate::session::subscriptions::Subscriptions;
 use crate::supervisor::Supervisor;
-use crate::units::UnitTable;
 
 mod adoption;
 mod policy;
@@ -35,7 +35,7 @@ pub enum Response {
     Instances(omega_proto::omega::InstanceList),
     /// Topic values, for `GetState`.
     State(StatePatch),
-    /// Whatever a unit answered with, for an op that asked it something.
+    /// Whatever a plugin answered with, for an op that asked it something.
     Value(Value),
     Deployment(omega_proto::omega::DeploymentStatus),
 }
@@ -68,7 +68,7 @@ pub struct Dispatcher {
     attachment: Option<attachment::RendererAttachment>,
     hub: Hub,
     supervisor: Supervisor,
-    units: UnitTable,
+    plugins: PluginRegistry,
     brokers: Brokerage,
     adopted: Adoptions,
     layout: Option<omega_host::Layout>,
@@ -76,7 +76,12 @@ pub struct Dispatcher {
 }
 
 impl Dispatcher {
-    pub fn new(hub: Hub, supervisor: Supervisor, units: UnitTable, brokers: Brokerage) -> Self {
+    pub fn new(
+        hub: Hub,
+        supervisor: Supervisor,
+        plugins: PluginRegistry,
+        brokers: Brokerage,
+    ) -> Self {
         Self {
             attachment: None,
             hub,
@@ -84,7 +89,7 @@ impl Dispatcher {
             deployment: Default::default(),
             adopted: Adoptions::new(supervisor.clone()),
             supervisor,
-            units,
+            plugins,
             brokers,
         }
     }
@@ -140,14 +145,14 @@ impl Dispatcher {
                 kind.name(),
                 match role {
                     Role::Renderer => "renderer",
-                    Role::Unit => "unit",
+                    Role::Plugin => "plugin",
                     Role::Operator => "operator",
                 }
             )));
         }
 
-        // Operator authorization is role-based; units additionally require manifest capabilities.
-        if peer.role() == Role::Unit {
+        // Operator authorization is role-based; plugins additionally require manifest capabilities.
+        if peer.role() == Role::Plugin {
             Self::authorize(policy, peer.grants(), op)?;
         }
 
@@ -158,7 +163,7 @@ impl Dispatcher {
         &self,
         instance: Option<&omega_proto::omega::InstanceRef>,
     ) -> Result<attachment::InstancePermit, Refusal> {
-        let key = UnitTable::instance_key(instance)?;
+        let key = PluginRegistry::instance_key(instance)?;
         let slot = self
             .attachment
             .as_ref()
@@ -201,7 +206,7 @@ impl Dispatcher {
                 required.as_str_name()
             ))),
             None => Err(Refusal::denied(format!(
-                "surface {target:?} is not declared by this unit"
+                "surface {target:?} is not declared by this plugin"
             ))),
         }
     }
@@ -215,15 +220,15 @@ impl Dispatcher {
         match op {
             invoke::Op::CreateInstance(create) => {
                 Ok(Response::Instances(omega_proto::omega::InstanceList {
-                    instances: vec![self.units.create_instance(create).await?],
+                    instances: vec![self.plugins.create_instance(create).await?],
                 }))
             }
             invoke::Op::ChangePresentation(change) => {
-                if peer.role() == Role::Unit {
-                    let key = UnitTable::instance_key(change.instance.as_ref())?;
+                if peer.role() == Role::Plugin {
+                    let key = PluginRegistry::instance_key(change.instance.as_ref())?;
                     if !peer
-                        .unit_name()
-                        .is_some_and(|unit| self.units.owns_instance(unit, &key))
+                        .plugin_name()
+                        .is_some_and(|plugin| self.plugins.owns_instance(plugin, &key))
                     {
                         return Err(Refusal::denied(
                             "a plugin may only change its own instances",
@@ -250,19 +255,19 @@ impl Dispatcher {
                     } else {
                         None
                     };
-                self.units
+                self.plugins
                     .change_presentation(change, permit.as_ref())
                     .await?;
                 Ok(Response::Ok)
             }
             invoke::Op::InspectInstances(inspect) => {
-                let unit = if inspect.unit.is_empty() {
+                let plugin = if inspect.plugin.is_empty() {
                     None
                 } else {
-                    Some(inspect.unit.parse::<UnitName>().or_refuse()?)
+                    Some(inspect.plugin.parse::<PluginName>().or_refuse()?)
                 };
                 Ok(Response::Instances(
-                    self.units.inspect_instances(unit.as_ref()),
+                    self.plugins.inspect_instances(plugin.as_ref()),
                 ))
             }
             invoke::Op::AttachRenderer(request) => {
@@ -270,8 +275,8 @@ impl Dispatcher {
                     Refusal::precondition("renderer attachment requires the observation socket")
                 })?;
                 let attachment = attachment::Attachment::from_request(request)?;
-                if self.units.manifest(attachment.unit()).is_none() {
-                    return Err(Refusal::invalid("unknown renderer unit"));
+                if self.plugins.manifest(attachment.plugin()).is_none() {
+                    return Err(Refusal::invalid("unknown renderer plugin"));
                 }
                 let mut held = slot.lock().unwrap_or_else(|e| e.into_inner());
                 if held.is_some() {
@@ -286,7 +291,7 @@ impl Dispatcher {
                         instances.push(metadata);
                     }
                 }
-                self.units.claim_renderer(&attachment);
+                self.plugins.claim_renderer(&attachment);
                 *held = Some(attachment);
                 Ok(Response::Instances(omega_proto::omega::InstanceList {
                     instances,
@@ -294,21 +299,21 @@ impl Dispatcher {
             }
             invoke::Op::ReportPresentation(report) => {
                 let permit = self.authorize_instance(report.instance.as_ref())?;
-                self.units.report_presentation(report, &permit).await?;
+                self.plugins.report_presentation(report, &permit).await?;
                 Ok(Response::Ok)
             }
             invoke::Op::Interact(interact) => {
                 let key = self.authorize_instance(interact.instance.as_ref())?;
-                self.units
+                self.plugins
                     .interact(&key, interact)
                     .await
                     .map(Response::from)
             }
             invoke::Op::PublishView(publish) => {
-                let unit = peer
-                    .unit_name()
-                    .ok_or_else(|| Refusal::denied("only units publish views"))?;
-                self.units.publish_instance(unit, publish)?;
+                let plugin = peer
+                    .plugin_name()
+                    .ok_or_else(|| Refusal::denied("only plugins publish views"))?;
+                self.plugins.publish_instance(plugin, publish)?;
                 Ok(Response::Ok)
             }
 
@@ -339,42 +344,42 @@ impl Dispatcher {
                     .ok_or_else(|| Refusal::invalid("Act carries no action"))?;
 
                 // Check the capability for this action kind.
-                if peer.role() == Role::Unit {
+                if peer.role() == Role::Plugin {
                     Actions::authorize(action, peer.grants())?;
                 }
-                Actions::new(self.units.clone(), self.brokers.clone())
+                Actions::new(self.plugins.clone(), self.brokers.clone())
                     .perform(action)
                     .await
                     .map(Response::from)
             }
 
             invoke::Op::EmitEvent(emit) => {
-                let unit = peer
-                    .unit_name()
-                    .ok_or_else(|| Refusal::denied("only units emit events"))?;
+                let plugin = peer
+                    .plugin_name()
+                    .ok_or_else(|| Refusal::denied("only plugins emit events"))?;
                 let event = emit
                     .event
                     .as_ref()
                     .ok_or_else(|| Refusal::invalid("EmitEvent carries no event"))?;
 
-                // The unit field is the daemon's, not the frame's: an event
-                // cannot claim to come from another unit.
+                // The plugin field is the daemon's, not the frame's: an event
+                // cannot claim to come from another plugin.
                 self.hub
-                    .publish_custom_event(unit.as_str(), &event.name, event.payload.clone())
+                    .publish_custom_event(plugin.as_str(), &event.name, event.payload.clone())
                     .or_refuse()?;
                 Ok(Response::Ok)
             }
 
             invoke::Op::SetState(set) => {
-                let unit = peer
-                    .unit_name()
-                    .ok_or_else(|| Refusal::denied("only units own a keyspace"))?;
+                let plugin = peer
+                    .plugin_name()
+                    .ok_or_else(|| Refusal::denied("only plugins own a keyspace"))?;
 
-                // Units may write only their own record keyspace.
+                // Plugins may write only their own record keyspace.
                 let topic = set.topic.parse::<Address>().or_refuse()?;
-                if topic.owner() != Some(unit.as_str()) {
+                if topic.owner() != Some(plugin.as_str()) {
                     return Err(Refusal::denied(format!(
-                        "{topic} is not in {unit}'s keyspace"
+                        "{topic} is not in {plugin}'s keyspace"
                     )));
                 }
 
@@ -397,9 +402,9 @@ impl Dispatcher {
 
             invoke::Op::GetDeployment(_) => {
                 let mut status = self.deployment.snapshot();
-                (status.units, status.plugins) = self.units.health_snapshot();
-                status.renderers = self.units.renderer_statuses();
-                status.renderer_placements = self.units.renderer_placements();
+                (status.plugins, status.plugin_health) = self.plugins.health_snapshot();
+                status.renderers = self.plugins.renderer_statuses();
+                status.renderer_placements = self.plugins.renderer_placements();
                 Ok(Response::Deployment(status))
             }
             invoke::Op::ApplyShell(apply) => {
@@ -423,12 +428,12 @@ impl Dispatcher {
                 .or_refuse()?;
                 Ok(Response::Ok)
             }
-            invoke::Op::AdoptUnit(adopt) => {
-                let name = UnitName::try_from(adopt.unit.clone()).or_refuse()?;
+            invoke::Op::AdoptPlugin(adopt) => {
+                let name = PluginName::try_from(adopt.plugin.clone()).or_refuse()?;
 
-                let token = self.supervisor.adopt_unit(&name).await?;
+                let token = self.supervisor.adopt_plugin(&name).await?;
                 self.adopted.taken(name.clone(), token.clone());
-                tracing::info!(unit = %name, "adopted for development");
+                tracing::info!(plugin = %name, "adopted for development");
 
                 Ok(Response::Value(Value {
                     kind: Some(omega_proto::omega::value::Kind::StringValue(
@@ -437,8 +442,8 @@ impl Dispatcher {
                 }))
             }
 
-            invoke::Op::RestartUnit(restart) => {
-                let name = UnitName::try_from(restart.unit.clone()).or_refuse()?;
+            invoke::Op::RestartPlugin(restart) => {
+                let name = PluginName::try_from(restart.plugin.clone()).or_refuse()?;
 
                 // Restart preserves the document's desired running state.
                 if !self.supervisor.restart(&name) {
@@ -467,7 +472,8 @@ impl Drop for Dispatcher {
                     .filter(|view| attachment.accepts(view))
                     .map(|view| view.instance.clone())
                     .collect();
-                self.units.renderer_disconnected(&keys, &attachment.active);
+                self.plugins
+                    .renderer_disconnected(&keys, &attachment.active);
             }
         }
     }

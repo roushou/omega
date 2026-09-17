@@ -33,7 +33,7 @@ impl Presentations {
             entry: Self::entry(id, surface),
             spec: omega::WindowPresentation {
                 title: surface.surface().into(),
-                app_id: format!("org.omega.{}", surface.unit()),
+                app_id: format!("org.omega.{}", surface.plugin()),
                 width: 480,
                 height: 320,
                 min_width: 1,
@@ -59,7 +59,7 @@ impl Presentations {
     ) -> omega::ConfiguredPresentation {
         omega::ConfiguredPresentation {
             id: id.into(),
-            unit: surface.unit().into(),
+            plugin: surface.plugin().into(),
             surface: surface.surface().into(),
             ..Default::default()
         }

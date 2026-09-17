@@ -5,10 +5,10 @@ package omega;
 import "omega/action.proto";
 import "omega/event.proto";
 import "omega/state.proto";
-import "omega/state/units.proto";
+import "omega/state/plugins.proto";
 import "omega/ui.proto";
 import "omega/instance.proto";
-import "omega/unit.proto";
+import "omega/plugin.proto";
 import "omega/value.proto";
 
 // Length-prefixed frame on a multiplexed Unix connection.
@@ -42,24 +42,24 @@ message Hello {
   string token = 3;
 }
 
-// Daemon -> unit. Grants capabilities (read from the manifest, never from the
-// unit) and hands over the initial state mirror.
+// Daemon -> plugin. Grants capabilities (read from the manifest, never from the
+// plugin) and hands over the initial state mirror.
 message Welcome {
   uint32 protocol_version = 1;      // the version both will speak
-  string unit_id = 2;
+  string plugin_id = 2;
   string daemon_version = 3;
   repeated Capability capabilities = 4;
   StateSnapshot state = 5;
 
-  // Construction settings supplied once per unit session. Changes restart the unit.
-  // RenderWidget carries instance settings layered over these unit defaults.
+  // Construction settings supplied once per plugin session. Changes restart the plugin.
+  // RenderWidget carries instance settings layered over these plugin defaults.
   map<string, Value> config = 6;
 }
 
 // Bidirectional request, correlated by Frame.stream_id. One request per stream.
 message Invoke {
   oneof op {
-    // ---- unit -> daemon: daemon services ----
+    // ---- plugin -> daemon: daemon services ----
     GetState get_state = 1;
     SetState set_state = 2;
     Subscribe subscribe = 3;
@@ -69,8 +69,8 @@ message Invoke {
     PublishView publish_view = 7;
 
     // ---- operator -> daemon: lifecycle ----
-    RestartUnit restart_unit = 8;
-    AdoptUnit adopt_unit = 9;
+    RestartPlugin restart_plugin = 8;
+    AdoptPlugin adopt_plugin = 9;
     ApplyShell apply_shell = 13;
     GetDeployment get_deployment = 14;
     CreateInstance create_instance = 15;
@@ -82,7 +82,7 @@ message Invoke {
     SurfaceEvent surface_event = 21;
     SurfaceLifecycle surface_lifecycle = 22;
 
-    // ---- daemon -> unit: surface invocations ----
+    // ---- daemon -> plugin: surface invocations ----
     CallCommand call_command = 10;
     RenderWidget render_widget = 11;
     RemoveWidget remove_widget = 12;
@@ -94,7 +94,7 @@ message GetState {
 }
 
 message SetState {
-  string topic = 1;                 // `unit.<name>.<key>` only
+  string topic = 1;                 // `plugin.<name>.<key>` only
   Value value = 2;
 }
 
@@ -111,7 +111,7 @@ message Unsubscribe {
   repeated EventKind events = 2;
 }
 
-// Perform an action, gated by the unit's granted capabilities.
+// Perform an action, gated by the plugin's granted capabilities.
 message Act {
   Action action = 1;
 }
@@ -129,19 +129,19 @@ message PublishView {
   InstanceRef instance = 4;
 }
 
-// Operator request to restart a unit without changing its desired enabled state.
-message RestartUnit {
-  string unit = 1;
+// Operator request to restart a plugin without changing its desired enabled state.
+message RestartPlugin {
+  string plugin = 1;
 }
 
-// Adopt a unit for development. Stop supervision and return a spawn token with
-// the unit's existing manifest grants. Closing the operator connection releases
+// Adopt a plugin for development. Stop supervision and return a spawn token with
+// the plugin's existing manifest grants. Closing the operator connection releases
 // adoption and allows normal supervision to resume.
-message AdoptUnit {
-  string unit = 1;
+message AdoptPlugin {
+  string plugin = 1;
 }
 
-// Run a unit's command surface.
+// Run a plugin's command surface.
 message CallCommand {
   string command = 1;
   repeated Value args = 2;
@@ -187,10 +187,10 @@ message Error {
 // the message is for humans only.
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
-  // The peer is not a unit this daemon spawned.
+  // The peer is not a plugin this daemon spawned.
   ERROR_CODE_UNAUTHENTICATED = 1;
-  // The unit's manifest does not grant what the op requires, or the op names
-  // a surface the unit did not declare.
+  // The plugin's manifest does not grant what the op requires, or the op names
+  // a surface the plugin did not declare.
   ERROR_CODE_PERMISSION_DENIED = 2;
   // The frame is malformed for its op.
   ERROR_CODE_INVALID_ARGUMENT = 3;
@@ -258,10 +258,10 @@ message DeploymentStatus {
   string shell_generation = 6;
   ShellApplicationState shell = 7;
   string shell_error = 8;
-  repeated UnitStatus units = 9;
+  repeated PluginStatus plugins = 9;
   // Active renderer attachments, including their reported build identity.
   repeated AttachRenderer renderers = 10;
   // Live embedded and popup placements that require a host attachment.
   repeated PlacementAttachment renderer_placements = 11;
-  repeated PluginHealth plugins = 12;
+  repeated PluginHealth plugin_health = 12;
 }

@@ -5,7 +5,7 @@ use crate::hub::{Hub, SurfaceRef, ViewUpdate};
 use crate::session::Subscriptions;
 use crate::shell::{ShellConnection, ShellError};
 use omega_proto::omega::{StateTopic, ViewNode, ViewTree, state_topic};
-use omega_proto::{IntoValue, Refusal, SurfaceId, UnitName};
+use omega_proto::{IntoValue, PluginName, Refusal, SurfaceId};
 use tokio::io::{AsyncBufReadExt, BufReader, DuplexStream};
 use tokio::time::Instant;
 
@@ -35,14 +35,14 @@ impl Fixture {
     fn view(id: usize, payload: &str) -> ViewUpdate {
         {
             let surface = SurfaceRef::new(
-                "example".parse::<UnitName>().unwrap(),
+                "example".parse::<PluginName>().unwrap(),
                 SurfaceId::try_from(format!("panel{id}")).unwrap(),
             );
             ViewUpdate {
                 instance: omega_proto::instance::InstanceKey {
                     id: omega_proto::instance::InstanceId::try_from(format!(
                         "test-{}-{}-{}",
-                        surface.unit,
+                        surface.plugin,
                         surface.surface,
                         surface
                             .module
@@ -118,7 +118,7 @@ async fn line_progress_cannot_extend_a_state_batch() {
     let mut fixture = Fixture::new(&Hub::new());
     let topics: Vec<_> = (0..3)
         .map(|id| StateTopic {
-            topic: format!("unit.example.value{id}"),
+            topic: format!("plugin.example.value{id}"),
             revision: 1,
             value: Some(state_topic::Value::Generic("x".repeat(1000).into_value())),
         })
@@ -134,7 +134,7 @@ async fn line_progress_cannot_extend_a_state_batch() {
                 let mut line = String::new();
                 assert_ne!(fixture.reader.read_line(&mut line).await.unwrap(), 0);
                 let value: serde_json::Value = serde_json::from_str(&line).unwrap();
-                assert_eq!(value["topic"], format!("unit.example.value{lines}"));
+                assert_eq!(value["topic"], format!("plugin.example.value{lines}"));
                 lines += 1;
             }
         } => unreachable!(),

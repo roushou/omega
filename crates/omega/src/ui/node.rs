@@ -105,7 +105,7 @@ impl Node {
         self
     }
 
-    /// Bind an event to a call back into this unit.
+    /// Bind an event to a call back into this plugin.
     pub(crate) fn on<I>(mut self, event: &str, bind: impl Into<Bind<I>>) -> Self {
         self.events
             .insert(event.to_string(), bind.into().into_wire());

@@ -6,10 +6,10 @@ use omega_cli::scaffold::{Published, Scaffold};
 use omega_host::Toml;
 use omega_host::cargo::{Inherited, Manifest};
 use omega_host::package::PackageName;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
-fn unit() -> UnitName {
-    "battery-widget".parse::<UnitName>().unwrap()
+fn plugin() -> PluginName {
+    "battery-widget".parse::<PluginName>().unwrap()
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn every_member_inherits_from_the_workspace_and_never_declares() {
     let declared: Vec<&str> = dependencies.names().collect();
 
     for member in [
-        scaffold.unit_crate_manifest(&unit()).unwrap(),
+        scaffold.plugin_crate_manifest(&plugin()).unwrap(),
         scaffold.system_manifest().unwrap(),
     ] {
         for (name, dependency) in member.dependencies().unwrap().iter() {
@@ -47,24 +47,27 @@ fn every_member_inherits_from_the_workspace_and_never_declares() {
 }
 
 #[test]
-fn a_unit_and_the_config_plane_depend_on_different_things() {
+fn a_plugin_and_the_config_plane_depend_on_different_things() {
     let scaffold = Scaffold::new();
-    let unit_manifest = scaffold.unit_crate_manifest(&unit()).unwrap();
+    let plugin_manifest = scaffold.plugin_crate_manifest(&plugin()).unwrap();
     let system_manifest = scaffold.system_manifest().unwrap();
-    let unit_dependencies = unit_manifest.dependencies().unwrap();
-    let unit_crate: Vec<&str> = unit_dependencies.names().collect();
+    let plugin_dependencies = plugin_manifest.dependencies().unwrap();
+    let plugin_crate: Vec<&str> = plugin_dependencies.names().collect();
     let system_dependencies = system_manifest.dependencies().unwrap();
     let system: Vec<&str> = system_dependencies.names().collect();
 
     // A plugin is written against the plugin crate, and nothing else: no
     // runtime to start, no protocol to speak, no manifest to keep.
-    assert_eq!(unit_crate, vec!["omega"], "{unit_crate:?}");
+    assert_eq!(plugin_crate, vec!["omega"], "{plugin_crate:?}");
 
     // The config plane computes a document and exits, so it needs neither the
     // runtime nor the protocol — and a plugin never touches the authoring API.
     assert!(!system.contains(&"omega"), "{system:?}");
     assert!(system.contains(&"omega-document"), "{system:?}");
-    assert!(!unit_crate.contains(&"omega-document"), "{unit_crate:?}");
+    assert!(
+        !plugin_crate.contains(&"omega-document"),
+        "{plugin_crate:?}"
+    );
 }
 
 #[test]
@@ -74,7 +77,7 @@ fn the_workspace_manifest_is_a_workspace_cargo_would_accept() {
 
     assert_eq!(workspace.resolver().unwrap(), Some("3"));
     assert_eq!(workspace.edition().unwrap(), Some("2024"));
-    // The config plane is a member alongside the units it configures.
+    // The config plane is a member alongside the plugins it configures.
     assert_eq!(workspace.members().unwrap(), vec!["system".to_string()]);
     assert!(
         manifest.package().unwrap().is_none(),
@@ -107,20 +110,20 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
 }
 
 #[test]
-fn the_unit_crate_is_named_after_the_unit() {
-    let unit_crate = Scaffold::new().unit_crate_manifest(&unit()).unwrap();
-    let package = unit_crate.package().unwrap().unwrap();
+fn the_plugin_crate_is_named_after_the_plugin() {
+    let plugin_crate = Scaffold::new().plugin_crate_manifest(&plugin()).unwrap();
+    let package = plugin_crate.package().unwrap().unwrap();
 
     // The build copies `target/release/<crate name>`, so the crate name and
-    // the unit name must be the same string.
-    assert_eq!(package.name().unwrap(), unit().as_str());
+    // the plugin name must be the same string.
+    assert_eq!(package.name().unwrap(), plugin().as_str());
     assert_eq!(package.edition().unwrap(), Some(Inherited::Workspace));
 }
 
 #[test]
 fn the_program_is_the_library_and_a_call() {
     let main = Scaffold::new()
-        .unit_main(&unit().as_str().parse::<PackageName>().unwrap())
+        .plugin_main(&plugin().as_str().parse::<PackageName>().unwrap())
         .unwrap();
 
     // A plugin is a library so the config plane can depend on it. What is

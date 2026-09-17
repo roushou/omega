@@ -28,7 +28,7 @@ impl<const KIND: u8> Wired for Probe<KIND> {
         vec![]
     }
     fn keyspaces() -> Vec<String> {
-        vec!["unit.other.value".into()]
+        vec!["plugin.other.value".into()]
     }
     fn build(context: &Context, settings: &Values) -> Self {
         Self {
@@ -82,9 +82,13 @@ impl Peer {
     }
     async fn start(plugin: Plugin, topics: Vec<StateTopic>) -> Self {
         let manifest = plugin.manifest().unwrap();
-        let (daemon, unit) = UnixStream::pair().unwrap();
-        let task =
-            tokio::spawn(async move { Runtime::over(unit, &manifest).await?.serve(plugin).await });
+        let (daemon, plugin_stream) = UnixStream::pair().unwrap();
+        let task = tokio::spawn(async move {
+            Runtime::over(plugin_stream, &manifest)
+                .await?
+                .serve(plugin)
+                .await
+        });
         let mut peer = Self {
             transport: Transport::new(daemon),
             streams: DaemonStreams::new(),
@@ -332,7 +336,7 @@ impl Wired for Forward {
     }
 }
 impl crate::command::CommandName for Forward {
-    const UNIT: &'static str = "test";
+    const PLUGIN: &'static str = "test";
     const NAME: &'static str = "forward";
 }
 impl crate::Command for Forward {

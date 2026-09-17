@@ -1,4 +1,4 @@
-//! What an admitted unit may ask for. Every refusal is answered, never
+//! What an admitted plugin may ask for. Every refusal is answered, never
 //! silently dropped.
 
 mod common;
@@ -39,11 +39,11 @@ fn publish(surface: &str) -> Frame {
     }
 }
 
-/// A harness with one unit that declares the `battery` widget surface.
-async fn harness(tag: &str) -> (Harness, String, omega_daemon::units::UnitToken) {
+/// A harness with one plugin that declares the `battery` widget surface.
+async fn harness(tag: &str) -> (Harness, String, omega_daemon::plugins::PluginToken) {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
     (harness, manifest.hash(), token)
 }
 
@@ -68,7 +68,7 @@ async fn publishing_to_an_undeclared_surface_is_refused() {
     let mut transport = harness.connect(&hash, token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
-    // "clock" belongs to some other unit; this one never declared it.
+    // "clock" belongs to some other plugin; this one never declared it.
     transport.send(publish("clock")).await.unwrap();
 
     let refusal = expect_refusal(transport.recv().await.unwrap());
@@ -100,7 +100,7 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
     let mut transport = harness.connect(&hash, token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
-    // CallCommand is daemon-to-unit only; peer requests must be refused.
+    // CallCommand is daemon-to-plugin only; peer requests must be refused.
     transport
         .send(Frame {
             stream_id: 1,
@@ -120,7 +120,7 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
 }
 
 #[tokio::test]
-async fn an_operator_cannot_publish_as_a_unit() {
+async fn an_operator_cannot_publish_as_a_plugin() {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(
         "operator-publish",
@@ -138,18 +138,18 @@ async fn an_operator_cannot_publish_as_a_unit() {
 }
 
 #[test]
-fn empty_selection_cannot_read_another_units_state() {
+fn empty_selection_cannot_read_another_plugins_state() {
     use omega_daemon::session::Subscriptions;
     use omega_proto::omega::{StateSnapshot, StateTopic, Subscribe};
     let manifest = widget_manifest("reader", "widget");
     let mut subscriptions = Subscriptions::of(
-        &"reader".parse::<omega_proto::UnitName>().unwrap(),
+        &"reader".parse::<omega_proto::PluginName>().unwrap(),
         &manifest,
     );
     subscriptions.subscribe(&[], true).unwrap();
     let snapshot = StateSnapshot {
         topics: vec![StateTopic {
-            topic: "unit.other.private".into(),
+            topic: "plugin.other.private".into(),
             ..Default::default()
         }],
     };
@@ -164,7 +164,7 @@ fn empty_selection_cannot_read_another_units_state() {
 }
 
 #[tokio::test]
-async fn units_cannot_apply_host_shell_configuration() {
+async fn plugins_cannot_apply_host_shell_configuration() {
     let (harness, hash, token) = harness("shell-operator-only").await;
     let mut transport = harness.connect(&hash, token.as_str()).await;
     transport.recv().await.unwrap().unwrap();

@@ -1,4 +1,4 @@
-//! Lifecycle: what the daemon's owner may ask of it, and what a unit may not.
+//! Lifecycle: what the daemon's owner may ask of it, and what a plugin may not.
 
 mod common;
 
@@ -7,31 +7,33 @@ use std::time::Duration;
 use common::{Harness, expect_ok, expect_refusal, next_result, widget_manifest};
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::supervisor::{UnitLog, UnitSpec};
-use omega_proto::UnitName;
-use omega_proto::omega::{ErrorCode, Frame, Invoke, RestartUnit, frame, invoke};
+use omega_daemon::supervisor::{PluginLog, PluginSpec};
+use omega_proto::PluginName;
+use omega_proto::omega::{ErrorCode, Frame, Invoke, RestartPlugin, frame, invoke};
 
-fn restart(stream_id: u64, unit: &str) -> Frame {
+fn restart(stream_id: u64, plugin: &str) -> Frame {
     Frame {
         stream_id,
         body: Some(frame::Body::Invoke(Invoke {
-            op: Some(invoke::Op::RestartUnit(RestartUnit { unit: unit.into() })),
+            op: Some(invoke::Op::RestartPlugin(RestartPlugin {
+                plugin: plugin.into(),
+            })),
         })),
     }
 }
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
 #[tokio::test]
-async fn an_operator_can_cycle_a_running_unit() {
+async fn an_operator_can_cycle_a_running_plugin() {
     let harness = Harness::new(
         "operator-restart",
         ManifestStore::from_manifests([widget_manifest("sleeper", "battery")]),
     );
 
-    // A unit that stays up until something stops it.
+    // A plugin that stays up until something stops it.
     let script = std::env::temp_dir().join(format!("omega-sleeper-{}.sh", std::process::id()));
     std::fs::write(&script, "#!/bin/sh\nsleep 30\n").unwrap();
     std::fs::set_permissions(
@@ -41,7 +43,7 @@ async fn an_operator_can_cycle_a_running_unit() {
     .unwrap();
     harness
         .supervisor
-        .spawn(UnitSpec::new(unit("sleeper"), &script));
+        .spawn(PluginSpec::new(plugin("sleeper"), &script));
 
     let started = tokio::time::Instant::now() + Duration::from_secs(2);
     while tokio::time::Instant::now() < started && harness.supervisor.running().is_empty() {
@@ -55,8 +57,8 @@ async fn an_operator_can_cycle_a_running_unit() {
     transport.send(restart(1, "sleeper")).await.unwrap();
     expect_ok(next_result(&mut transport).await);
 
-    // Cycled, not stopped: the unit is still supervised afterwards.
-    assert!(harness.supervisor.running().contains(&unit("sleeper")));
+    // Cycled, not stopped: the plugin is still supervised afterwards.
+    assert!(harness.supervisor.running().contains(&plugin("sleeper")));
 
     let _ = std::fs::remove_file(&script);
 }
@@ -68,7 +70,7 @@ async fn restarting_something_that_is_not_running_says_so() {
     let mut transport = harness.connect("operator", "").await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
-    transport.send(restart(1, "not-a-unit")).await.unwrap();
+    transport.send(restart(1, "not-a-plugin")).await.unwrap();
 
     let refusal = expect_refusal(next_result(&mut transport).await);
     assert_eq!(refusal.code, ErrorCode::InvalidArgument);
@@ -76,13 +78,13 @@ async fn restarting_something_that_is_not_running_says_so() {
 }
 
 #[tokio::test]
-async fn a_unit_may_not_restart_its_neighbours() {
+async fn a_plugin_may_not_restart_its_neighbours() {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(
-        "unit-restart",
+        "plugin-restart",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
 
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
@@ -92,17 +94,20 @@ async fn a_unit_may_not_restart_its_neighbours() {
 
     let refusal = expect_refusal(next_result(&mut transport).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
-    assert!(refusal.message.contains("not served to units"), "{refusal}");
+    assert!(
+        refusal.message.contains("not served to plugins"),
+        "{refusal}"
+    );
 }
 
 #[tokio::test]
-async fn an_operator_may_not_read_a_units_state() {
+async fn an_operator_may_not_read_a_plugins_state() {
     let harness = Harness::new(
         "operator-getstate",
         ManifestStore::from_manifests([widget_manifest("reader", "battery")]),
     );
     let _ = Hub::new();
-    let _ = UnitLog::at("/dev/null");
+    let _ = PluginLog::at("/dev/null");
 
     let mut transport = harness.connect("operator", "").await;
     transport.recv().await.unwrap().unwrap(); // Welcome

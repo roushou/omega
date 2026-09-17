@@ -1,9 +1,9 @@
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 /// A workspace package name usable as a Rust crate identifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageName {
-    unit: UnitName,
+    plugin: PluginName,
     rust_ident: String,
 }
 
@@ -11,7 +11,7 @@ impl std::str::FromStr for PackageName {
     type Err = PackageNameError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let unit = UnitName::try_from(input)?;
+        let plugin = PluginName::try_from(input)?;
         let rust_ident = input.replace('-', "_");
         // Include reserved keywords across supported editions; templates use plain paths.
         const RESERVED: &[&str] = &[
@@ -77,16 +77,16 @@ impl std::str::FromStr for PackageName {
         if RESERVED.contains(&rust_ident.as_str()) {
             return Err(PackageNameError::Reserved(input.to_owned()));
         }
-        Ok(Self { unit, rust_ident })
+        Ok(Self { plugin, rust_ident })
     }
 }
 
 impl PackageName {
-    pub fn unit(&self) -> &UnitName {
-        &self.unit
+    pub fn plugin(&self) -> &PluginName {
+        &self.plugin
     }
     pub fn package(&self) -> &str {
-        self.unit.as_str()
+        self.plugin.as_str()
     }
     pub fn rust_ident(&self) -> &str {
         &self.rust_ident

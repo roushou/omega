@@ -9,14 +9,14 @@ use omega_daemon::manifest::ManifestStore;
 use omega_proto::omega::{BatteryState, Capability, StatePatch, StateTopic, frame, state_topic};
 
 fn store() -> ManifestStore {
-    ManifestStore::from_manifests([widget_manifest("test-unit", "battery")])
+    ManifestStore::from_manifests([widget_manifest("test-plugin", "battery")])
 }
 
 #[tokio::test]
-async fn a_spawned_unit_is_admitted_and_mirrors_state() {
+async fn a_spawned_plugin_is_admitted_and_mirrors_state() {
     let harness = Harness::new("handshake", store());
-    let token = harness.register_unit("test-unit");
-    let hash = widget_manifest("test-unit", "battery").hash();
+    let token = harness.register_plugin("test-plugin");
+    let hash = widget_manifest("test-plugin", "battery").hash();
 
     let mut transport = harness.connect(&hash, token.as_str()).await;
 
@@ -24,7 +24,7 @@ async fn a_spawned_unit_is_admitted_and_mirrors_state() {
     match welcome.body {
         Some(frame::Body::Welcome(w)) => {
             assert_eq!(w.protocol_version, omega_proto::PROTOCOL_VERSION);
-            assert_eq!(w.unit_id, "test-unit");
+            assert_eq!(w.plugin_id, "test-plugin");
             // Grants come from the daemon's manifest, never from the peer.
             assert_eq!(w.capabilities, vec![Capability::StateRead as i32]);
         }
@@ -65,8 +65,8 @@ async fn a_spawned_unit_is_admitted_and_mirrors_state() {
 #[tokio::test]
 async fn a_token_belonging_to_another_process_is_refused() {
     let harness = Harness::new("wrong-pid", store());
-    let token = harness.register_unit("test-unit");
-    let hash = widget_manifest("test-unit", "battery").hash();
+    let token = harness.register_plugin("test-plugin");
+    let hash = widget_manifest("test-plugin", "battery").hash();
 
     // The first connection binds the token to this process...
     let mut first = harness.connect(&hash, token.as_str()).await;
@@ -93,16 +93,16 @@ async fn a_token_belonging_to_another_process_is_refused() {
 #[tokio::test]
 async fn a_peer_with_no_token_is_the_operator() {
     let harness = Harness::new("operator", store());
-    harness.register_unit("test-unit");
+    harness.register_plugin("test-plugin");
 
-    // Not a unit — but the daemon's own user, who can already signal it and
+    // Not a plugin — but the daemon's own user, who can already signal it and
     // rewrite its state dir. It is admitted as what it is.
     let mut transport = harness.connect("no-manifest-of-my-own", "").await;
 
     match transport.recv().await.unwrap().unwrap().body {
         Some(frame::Body::Welcome(w)) => {
-            assert!(w.unit_id.starts_with("operator-"), "{}", w.unit_id);
-            // Owning the daemon is not the same as being a unit: an operator
+            assert!(w.plugin_id.starts_with("operator-"), "{}", w.plugin_id);
+            // Owning the daemon is not the same as being a plugin: an operator
             // holds no capabilities and no surfaces.
             assert!(w.capabilities.is_empty());
         }

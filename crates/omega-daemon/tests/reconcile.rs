@@ -4,87 +4,90 @@
 mod common;
 
 use common::TempDir;
-use omega_daemon::reconcile::units::UnitChange;
-use omega_daemon::reconcile::{EnvironmentProvider, UnitProvider};
-use omega_document::{Document, Units};
-use omega_proto::UnitName;
+use omega_daemon::reconcile::plugins::PluginChange;
+use omega_daemon::reconcile::{EnvironmentProvider, PluginProvider};
+use omega_document::{Document, Plugins};
+use omega_proto::PluginName;
 use std::collections::BTreeSet;
 
 #[test]
-fn a_built_unit_the_document_never_mentions_still_runs() {
-    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
+fn a_built_plugin_the_document_never_mentions_still_runs() {
+    let built = BTreeSet::from(["battery-widget".parse::<PluginName>().unwrap()]);
 
     // Putting a crate in the workspace is already a declaration; the document
     // exists to override that, not to repeat it.
-    let plan = UnitProvider::plan(&Document::new().into_inner(), &built, &BTreeSet::new()).unwrap();
+    let plan =
+        PluginProvider::plan(&Document::new().into_inner(), &built, &BTreeSet::new()).unwrap();
 
     assert_eq!(plan.len(), 1);
-    assert!(matches!(plan[0], UnitChange::Start(_)));
+    assert!(matches!(plan[0], PluginChange::Start(_)));
     assert_eq!(plan[0].name().as_str(), "battery-widget");
 }
 
 #[test]
-fn a_document_can_turn_one_unit_off() {
+fn a_document_can_turn_one_plugin_off() {
     let built = BTreeSet::from([
-        "battery-widget".parse::<UnitName>().unwrap(),
-        "clock".parse::<UnitName>().unwrap(),
+        "battery-widget".parse::<PluginName>().unwrap(),
+        "clock".parse::<PluginName>().unwrap(),
     ]);
 
     let document = Document::new()
-        .unit(Units::disabled("battery-widget"))
+        .plugin(Plugins::disabled("battery-widget"))
         .into_inner();
-    let plan = UnitProvider::plan(&document, &built, &BTreeSet::new()).unwrap();
+    let plan = PluginProvider::plan(&document, &built, &BTreeSet::new()).unwrap();
 
-    // The blast radius of the change is the unit it names.
+    // The blast radius of the change is the plugin it names.
     assert_eq!(plan.len(), 1);
     assert_eq!(plan[0].name().as_str(), "clock");
-    assert!(matches!(plan[0], UnitChange::Start(_)));
+    assert!(matches!(plan[0], PluginChange::Start(_)));
 }
 
 #[test]
-fn a_document_naming_an_unbuilt_unit_is_reported() {
-    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
+fn a_document_naming_an_unbuilt_plugin_is_reported() {
+    let built = BTreeSet::from(["battery-widget".parse::<PluginName>().unwrap()]);
 
     let document = Document::new()
-        .unit(Units::enabled("does-not-exist"))
+        .plugin(Plugins::enabled("does-not-exist"))
         .into_inner();
-    let error = UnitProvider::plan(&document, &built, &BTreeSet::new()).unwrap_err();
+    let error = PluginProvider::plan(&document, &built, &BTreeSet::new()).unwrap_err();
     assert!(error.to_string().contains("does-not-exist"));
 }
 
 #[test]
-fn unit_planning_preserves_held_units_and_orders_starts_and_stops() {
+fn plugin_planning_preserves_held_plugins_and_orders_starts_and_stops() {
     let [added, disabled, held, removed] =
-        ["added", "disabled", "held", "removed"].map(|name| UnitName::try_from(name).unwrap());
+        ["added", "disabled", "held", "removed"].map(|name| PluginName::try_from(name).unwrap());
     let built = BTreeSet::from([added.clone(), disabled.clone(), held.clone()]);
     let running = BTreeSet::from([disabled.clone(), held.clone(), removed.clone()]);
     let document = Document::new()
-        .unit(Units::disabled("disabled"))
+        .plugin(Plugins::disabled("disabled"))
         .into_inner();
     assert_eq!(
-        UnitProvider::plan(&document, &built, &running).unwrap(),
+        PluginProvider::plan(&document, &built, &running).unwrap(),
         vec![
-            UnitChange::Start(added.clone()),
-            UnitChange::Stop(disabled),
-            UnitChange::Stop(removed),
+            PluginChange::Start(added.clone()),
+            PluginChange::Stop(disabled),
+            PluginChange::Stop(removed),
         ]
     );
     assert!(
-        UnitProvider::plan(&document, &built, &BTreeSet::from([added, held]))
+        PluginProvider::plan(&document, &built, &BTreeSet::from([added, held]))
             .unwrap()
             .is_empty()
     );
 }
 
 #[test]
-fn duplicate_and_invalid_unit_declarations_fail_with_literal_inputs() {
-    let built = BTreeSet::from(["clock".parse::<UnitName>().unwrap()]);
-    let mut document = Document::new().unit(Units::enabled("clock")).into_inner();
-    document.units.push(document.units[0].clone());
-    assert!(UnitProvider::plan(&document, &built, &BTreeSet::new()).is_err());
-    document.units.truncate(1);
-    document.units[0].name = "invalid/name".into();
-    assert!(UnitProvider::plan(&document, &built, &BTreeSet::new()).is_err());
+fn duplicate_and_invalid_plugin_declarations_fail_with_literal_inputs() {
+    let built = BTreeSet::from(["clock".parse::<PluginName>().unwrap()]);
+    let mut document = Document::new()
+        .plugin(Plugins::enabled("clock"))
+        .into_inner();
+    document.plugins.push(document.plugins[0].clone());
+    assert!(PluginProvider::plan(&document, &built, &BTreeSet::new()).is_err());
+    document.plugins.truncate(1);
+    document.plugins[0].name = "invalid/name".into();
+    assert!(PluginProvider::plan(&document, &built, &BTreeSet::new()).is_err());
 }
 
 #[tokio::test]
@@ -136,13 +139,13 @@ async fn the_environment_converges_to_the_document() {
 #[test]
 fn a_machine_that_matches_its_document_plans_nothing() {
     let tmp = TempDir::new("converged");
-    let built = BTreeSet::from(["battery-widget".parse::<UnitName>().unwrap()]);
+    let built = BTreeSet::from(["battery-widget".parse::<PluginName>().unwrap()]);
     let environment = EnvironmentProvider::new(&tmp.layout());
     let document = Document::new()
-        .unit(Units::disabled("battery-widget"))
+        .plugin(Plugins::disabled("battery-widget"))
         .into_inner();
     assert!(
-        UnitProvider::plan(&document, &built, &BTreeSet::new())
+        PluginProvider::plan(&document, &built, &BTreeSet::new())
             .unwrap()
             .is_empty()
     );

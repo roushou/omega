@@ -1,41 +1,41 @@
-//! Everything the daemon knows about one unit.
+//! Everything the daemon knows about one plugin.
 
 use std::collections::HashMap;
 
-use omega_proto::UnitName;
-use omega_proto::omega::{UnitPhase, UnitStatus, Value};
+use omega_proto::PluginName;
+use omega_proto::omega::{PluginPhase, PluginStatus, Value};
 
-use crate::manifest::UnitManifest;
+use crate::manifest::PluginManifest;
+use crate::plugins::lifecycle::{Lifecycle, Transition};
+use crate::plugins::session::SessionLink;
+use crate::plugins::token::PluginToken;
 use crate::shutdown::Shutdown;
-use crate::units::lifecycle::{Lifecycle, Transition};
-use crate::units::session::SessionLink;
-use crate::units::token::UnitToken;
 
-/// The two things that can be asked of a running unit.
+/// The two things that can be asked of a running plugin.
 #[derive(Debug, Clone)]
-pub struct UnitControl {
-    /// Stop supervising: the document no longer wants this unit.
+pub struct PluginControl {
+    /// Stop supervising: the document no longer wants this plugin.
     pub stop: Shutdown,
     /// Cycle the process: the document still wants it, just not this
     /// instance. The count is what a restart increments.
     pub cycle: tokio::sync::watch::Sender<u64>,
 }
 
-/// One unit's manifest, identity, supervision handles, session, and lifecycle state.
+/// One plugin's manifest, identity, supervision handles, session, and lifecycle state.
 #[derive(Debug)]
-pub struct UnitRecord {
-    pub name: UnitName,
-    /// What the build produced for it. Absent for a unit this build does not
+pub struct PluginRecord {
+    pub name: PluginName,
+    /// What the build produced for it. Absent for a plugin this build does not
     /// contain but something still refers to.
-    pub manifest: Option<UnitManifest>,
+    pub manifest: Option<PluginManifest>,
     pub lifecycle: Lifecycle,
     /// The token of the current spawn, and the pid it was bound to on first
     /// use. Identity is the pair: a pid is recycled, a token is not.
-    pub token: Option<UnitToken>,
+    pub token: Option<PluginToken>,
     pub pid: Option<i32>,
     /// Present while the supervisor is running it.
-    pub control: Option<UnitControl>,
-    /// Present while the unit holds a session.
+    pub control: Option<PluginControl>,
+    /// Present while the plugin holds a session.
     pub(crate) session: Option<SessionLink>,
     pub(crate) instances:
         std::collections::BTreeMap<omega_proto::instance::InstanceId, super::instance::Instance>,
@@ -48,11 +48,11 @@ pub struct UnitRecord {
     pub restarts: u32,
 }
 
-impl UnitRecord {
+impl PluginRecord {
     /// Status detail reported by an adopted development process.
     pub const ADOPTED: &'static str = "adopted for development";
 
-    pub fn new(name: UnitName) -> Self {
+    pub fn new(name: PluginName) -> Self {
         Self {
             name,
             manifest: None,
@@ -77,7 +77,7 @@ impl UnitRecord {
         self.control.is_some()
     }
 
-    /// Whether supervision or development adoption currently owns the unit.
+    /// Whether supervision or development adoption currently owns the plugin.
     pub fn is_held(&self) -> bool {
         self.is_supervised() || self.adopted
     }
@@ -108,10 +108,10 @@ impl UnitRecord {
         self.lifecycle.apply(transition)
     }
 
-    /// Project lifecycle and adoption state into the units topic.
-    pub fn status(&self) -> UnitStatus {
-        UnitStatus {
-            unit: self.name.to_string(),
+    /// Project lifecycle and adoption state into the plugins topic.
+    pub fn status(&self) -> PluginStatus {
+        PluginStatus {
+            plugin: self.name.to_string(),
             phase: self.phase() as i32,
             restarts: self.restarts,
             last_exit_code: self.lifecycle.exit_code(),
@@ -125,15 +125,15 @@ impl UnitRecord {
 
     /// Report the adopted process's handshake state while adoption is active;
     /// otherwise report the supervised lifecycle state.
-    fn phase(&self) -> UnitPhase {
+    fn phase(&self) -> PluginPhase {
         if !self.adopted {
             return self.lifecycle.phase(self.is_connected());
         }
 
         if self.is_connected() {
-            UnitPhase::Running
+            PluginPhase::Running
         } else {
-            UnitPhase::Starting
+            PluginPhase::Starting
         }
     }
 }

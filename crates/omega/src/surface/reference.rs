@@ -5,13 +5,13 @@ use std::marker::PhantomData;
 /// Identity emitted by `derive(Surface)` and shared by registration and placement.
 #[doc(hidden)]
 pub trait SurfaceIdentity {
-    const UNIT: &'static str;
+    const PLUGIN: &'static str;
     const SURFACE: &'static str;
 }
 
 /// A typed reference to a widget surface. `derive(Surface)` supplies a value with
 /// the widget's name, following the same convention as typed command references.
-/// The unit comes from the defining crate; the surface defaults to the type's
+/// The plugin comes from the defining crate; the surface defaults to the type's
 /// kebab-case name. `#[omega(name = "indicator")]` pins it across type renames.
 ///
 /// ```
@@ -52,8 +52,8 @@ impl<W> SurfaceRef<W> {
 }
 impl<W: SurfaceIdentity> SurfaceRef<W> {
     /// The package that defines this widget.
-    pub fn unit(self) -> &'static str {
-        W::UNIT
+    pub fn plugin(self) -> &'static str {
+        W::PLUGIN
     }
     /// The surface name used by typed registration.
     pub fn surface(self) -> &'static str {

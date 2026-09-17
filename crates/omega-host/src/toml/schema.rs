@@ -4,7 +4,7 @@ use crate::toml::file::TomlFile;
 /// A TOML document's kind, location, and codec.
 /// Use [`Layout::file`] to locate a [`TomlFile`] for the schema.
 pub trait TomlSchema: Sized {
-    /// How the document is named in errors: "unit manifest", "cargo manifest".
+    /// How the document is named in errors: "plugin manifest", "cargo manifest".
     const KIND: &'static str;
 
     /// Parse the document without reading the filesystem.

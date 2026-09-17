@@ -9,7 +9,7 @@ use omega::{Plugin, Surface, View};
 use std::convert::Infallible;
 
 /// This plugin's name, for the config plane to refer to it by.
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
 /// What the document can configure an instance with.
 #[derive(omega::Config, Debug, Clone, PartialEq)]

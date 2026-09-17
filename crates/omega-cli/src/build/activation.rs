@@ -158,8 +158,8 @@ mod tests {
             reconciliation: ReconciliationState::Settled as i32,
             shell_generation: "build".into(),
             shell: ShellApplicationState::NotDeclared as i32,
-            units: vec![omega_proto::omega::UnitStatus {
-                phase: omega_proto::omega::UnitPhase::Starting as i32,
+            plugins: vec![omega_proto::omega::PluginStatus {
+                phase: omega_proto::omega::PluginPhase::Starting as i32,
                 ..Default::default()
             }],
             ..Default::default()

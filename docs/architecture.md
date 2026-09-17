@@ -9,37 +9,42 @@ The [desktop platform decisions](desktop-platform.md) summarize composition rule
 ## Two planes
 
 The **configuration plane** is a Rust program that computes a state document
-with no side effects. The **runtime plane** is units running as supervised
+with no side effects. The **runtime plane** is plugins running as supervised
 processes, converged toward that document.
+
+A plugin is a registered extension, with or without UI. Its process is supervised
+by the daemon; its authenticated connection is a plugin session. Each live surface
+has its own instance. Cargo packages identify build inputs, and systemd units
+describe services independently of plugin identity.
 
 The daemon runs published binaries and documents without invoking Cargo.
 A failed build leaves the last accepted generation active.
 
 ## Crate boundaries
 
-| Crate                | Responsibility                                                             |
-| -------------------- | -------------------------------------------------------------------------- |
-| `omega-base`         | Shared mechanisms: typed pipeline execution and observation                |
-| `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts          |
-| `omega-keyboard`     | Logical keyboard events, chords and conflict-checked keymaps               |
-| `omega-host`         | Layout, durable files, generations, workspace documents and discovery      |
-| `omega-document`     | Desired-state builders and shared validation                               |
-| `omega-derive`       | Field-based SDK derives                                                    |
-| `omega` (`omega-rs`) | Unit-author SDK; depends on proto, derive and keyboard, not host or daemon |
-| `omega-platform`     | External subsystem connections, readings and actions                       |
-| `omega-daemon`       | Sessions, supervision, state, action routing and convergence               |
-| `omega-renderer`     | Host-independent QML controls and generated readers                        |
-| `omega-omarchy`      | Omarchy authoring, compilation, validation, transport and installation     |
-| `omega-preview`      | Development case registration and isolated surface sessions                |
-| `omega-cli`          | Build and deployment orchestration, environment resolution and terminal UI |
+| Crate                | Responsibility                                                               |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `omega-base`         | Shared mechanisms: typed pipeline execution and observation                  |
+| `omega-proto`        | Schema, identifiers, wire vocabulary, codecs and socket contracts            |
+| `omega-keyboard`     | Logical keyboard events, chords and conflict-checked keymaps                 |
+| `omega-host`         | Layout, durable files, generations, workspace documents and discovery        |
+| `omega-document`     | Desired-state builders and shared validation                                 |
+| `omega-derive`       | Field-based SDK derives                                                      |
+| `omega` (`omega-rs`) | Plugin-author SDK; depends on proto, derive and keyboard, not host or daemon |
+| `omega-platform`     | External subsystem connections, readings and actions                         |
+| `omega-daemon`       | Sessions, supervision, state, action routing and convergence                 |
+| `omega-renderer`     | Host-independent QML controls and generated readers                          |
+| `omega-omarchy`      | Omarchy authoring, compilation, validation, transport and installation       |
+| `omega-preview`      | Development case registration and isolated surface sessions                  |
+| `omega-cli`          | Build and deployment orchestration, environment resolution and terminal UI   |
 
 The SDK declares dependencies by fields: readings and composites read, records
-hold unit memory, and effects request changes. `Reads` excludes effects from
+hold plugin memory, and effects request changes. `Reads` excludes effects from
 widgets. Derives generate through `omega::internal`; the field declarations form
-the manifest extracted from the compiled unit. Construction settings arrive at
-handshake, with placement settings layered over unit settings for widget instances.
+the manifest extracted from the compiled plugin. Construction settings arrive at
+handshake, with placement settings layered over plugin settings for widget instances.
 The protocol's optional `json` feature is used by observation/document consumers;
-a standalone unit does not compile the generated JSON implementations.
+a standalone plugin does not compile the generated JSON implementations.
 
 Configuration entry points can return `omega_document::Result<()>`. Its error
 enum wraps document, extension, validation and I/O failures; config authors can also
@@ -94,7 +99,7 @@ diagnostic, clearing stale UI. Failures are cached until dependency or model
 invalidation; publication acknowledgements do not retry rendering. The daemon
 projects per-instance failures into health without changing process lifecycle.
 
-Unit tokens and instance identities require OS randomness. Failure is returned to
+Plugin tokens and instance identities require OS randomness. Failure is returned to
 the caller before installing identities. Development adoption prepares its token
 before stopping the current process; supervised spawn failures follow the ordinary
 failure-reporting and backoff path.
@@ -244,35 +249,35 @@ composites declare multiple dependencies without adding another primitive readin
 
 ## The daemon
 
-The daemon authorizes sessions, supervises units and converges the document.
-`UnitTable` owns process and session facts; `Hub` owns replicated state and views;
+The daemon authorizes sessions, supervises plugins and converges the document.
+`PluginRegistry` owns process and session facts; `Hub` owns replicated state and views;
 `Schedules` owns timers across convergence passes. Brokers own external subsystem
 connections, including NetworkManager, PipeWire, UPower and Hyprland.
 
-Units communicate with the daemon through frames and run as separate native
+Plugins communicate with the daemon through frames and run as separate native
 processes. Their code is not loaded into the daemon.
 
 ## State
 
-The daemon owns the replicated state. Units keep a revisioned mirror, so a
+The daemon owns the replicated state. Plugins keep a revisioned mirror, so a
 reading is a local memory read rather than a round-trip. `Own<T>` holds a local
 record initialized from that mirror; its updates are serialized and published
 in order. Admission is reserved before changing local memory; a rejected update
 closure never runs. Admitted writes remain locally optimistic if publication is
 later refused, and their receipt reports that failure. `Watch<T>` observes only
-replicated values. Record replication is in-memory and survives a unit restart,
+replicated values. Record replication is in-memory and survives a plugin restart,
 but not a daemon restart.
 
 Replication is last-value-wins on the _value_: a source that polls an
-unchanged reading produces no revision and wakes nobody. A unit receives only
+unchanged reading produces no revision and wakes nobody. A plugin receives only
 the topics its manifest declares, narrowed at runtime by `Subscribe`. A
 subscriber that falls behind takes a snapshot together with a fresh subscription.
 The SDK rejects older revisions, including values older than a removal. View
 observers receive tombstones for instances absent from their replacement snapshot.
 
-Units also own state. Every unit has the keyspace `unit.<name>.<key>`,
-writable by that unit alone with `CAPABILITY_STATE_WRITE` and readable by any
-unit that declares that keyspace. Units compose through replicated records;
+Plugins also own state. Every plugin has the keyspace `plugin.<name>.<key>`,
+writable by that plugin alone with `CAPABILITY_STATE_WRITE` and readable by any
+plugin that declares that keyspace. Plugins compose through replicated records;
 typed `Watch<T>` consumers depend on the crate defining `T`.
 
 Reload replaces changed plugin processes. Process supervision also handles crash recovery.
@@ -286,10 +291,21 @@ Multiplexing, request correlation, flow control, and version negotiation are
 implemented above the encoding layer. `crates/omega-proto/schema/` defines the
 shared messages; generated Rust types are used by all native participants.
 
-The current protocol version and minimum accepted version are both 7, defined in
+The current protocol version and minimum accepted version are both 8, defined in
 `omega-proto/src/protocol.rs`. Rebuild plugins and update the daemon together
-when that compatibility boundary changes. Action and adoption execution is bounded per control or
-observation connection and runs concurrently with frame reception, so a unit can receive a command while its
+when that compatibility boundary changes. Protocol 8 uses `plugin` identities,
+the `plugins` lifecycle topic, and `plugin.<name>.<key>` record addresses.
+Deployment snapshots expose process status in `plugins` and UI health in
+`pluginHealth`. Preview transport version 2 uses the same renamed payloads.
+
+Update configuration code to use `PluginName`, `PluginState`, and
+`omega_document::Plugins`. Run `omega build` to create a new generation with
+`plugins.toml` and `plugins/<name>/plugin.pb`, and reinstall the renderer with
+`omega shell install`. Previous generations and binaries are incompatible;
+rebuild from source rather than rolling back to an older-format generation.
+
+Action and adoption execution is bounded per control or
+observation connection and runs concurrently with frame reception, so a plugin can receive a command while its
 request is outstanding. Deadlines bound queue admission and response waits; a
 timeout does not prove an external action was not performed. Both encodings use
 one operation queue with at most 16 tasks and 8 MiB of request payloads.
@@ -299,7 +315,7 @@ are logged and answered on their original stream.
 Each listener runs at most 64 connection tasks; excess peers wait in the kernel
 backlog until capacity is available. The daemon owns both task sets across
 accept-loop cancellation, triggers shutdown, and aborts and joins connections
-before completing unit shutdown. Dropping a standalone observation server also
+before completing plugin shutdown. Dropping a standalone observation server also
 cancels its children. Connection task panics are reported when reaped.
 
 Observation requests have a four-MiB encoded-line limit. Partial bytes belong to
@@ -368,7 +384,7 @@ when the method is called, including local record updates; awaiting observes
 terminal success or failure. `Effect::receipt` exposes admission and a unique
 completion receipt for manual polling or explicit detachment. Dropping an
 admitted effect does not cancel it. An unobserved completion failure ends the
-unit. Completion is the daemon's operation result; launching a program confirms
+plugin. Completion is the daemon's operation result; launching a program confirms
 spawn, not process exit.
 
 A runtime admits at most 64 queued or in-flight effects. The five-second deadline
@@ -393,37 +409,37 @@ Three kinds of peer on the control socket:
 
 | peer        | identity                        | may do                               |
 | ----------- | ------------------------------- | ------------------------------------ |
-| unit        | spawn token + `SO_PEERCRED` pid | what its manifest declares           |
+| plugin      | spawn token + `SO_PEERCRED` pid | what its manifest declares           |
 | operator    | the daemon's own uid            | lifecycle, actions and subscriptions |
 | anyone else | —                               | refused                              |
 
-Unit supervision operations require the operator. Presentation changes also
+Plugin supervision operations require the operator. Presentation changes also
 accept scoped renderers; plugins may only hide or close their own instances.
 
 Grants are read from the daemon's copy of the manifest, never from a frame.
-Capabilities cannot be self-declared at runtime: a unit's manifest is
+Capabilities cannot be self-declared at runtime: a plugin's manifest is
 extracted at build time from the binary itself.
 
 `authorization` owns role and manifest-grant values. Session admission owns peer
 credentials and operator authentication; the dispatch policy table consumes these
 facts to authorize operations. The sibling `attachment` module owns renderer
-scopes, negotiated features, and revocable instance permits. `UnitTable` owns
+scopes, negotiated features, and revocable instance permits. `PluginRegistry` owns
 renderer claims and coordinates revocation with instance mutations under its
 existing locks. Attachment metadata parses protocol identity directly and does
-not depend on the unit table or session dispatch.
+not depend on the plugin table or session dispatch.
 
-Native units run as the owner’s uid. Manifest grants constrain authenticated unit
+Native plugins run as the owner’s uid. Manifest grants constrain authenticated plugin
 sessions; they do not sandbox hostile code, prevent another operator connection,
 or restrict that uid's filesystem access. A manifest hash verifies declaration
 agreement, not binary authenticity. The dispatch [policy table](../crates/omega-daemon/src/session/dispatch/policy.rs)
 is the operation-level authorization contract.
 
-## Units
+## Plugins
 
-A unit declares UI surfaces and command endpoints separately in its manifest.
+A plugin declares UI surfaces and command endpoints separately in its manifest.
 A widget surface renders: the daemon creates each instance with construction
-settings and pulls its first tree; the unit pushes subsequent trees. A command
-endpoint is invoked by `omega run`, a retained UI binding, or another unit with
+settings and pulls its first tree; the plugin pushes subsequent trees. A command
+endpoint is invoked by `omega run`, a retained UI binding, or another plugin with
 `CAPABILITY_SPAWN`. Commands are not UI instances.
 
 `omega-proto::CommandAnswer` defines terminal command and interaction answers:
@@ -438,7 +454,7 @@ each side answers only what it asked.
 
 Events are derived from state transitions in the daemon, not announced by each
 source, so reality and its announcements cannot disagree. They are delivered
-only to units whose manifests declare them, and are not stored.
+only to plugins whose manifests declare them, and are not stored.
 
 Actions are authorized per kind — `RunCommand` costs `CAPABILITY_SPAWN`,
 `Lock` costs `CAPABILITY_SYSTEM_CONTROL` — with the check ahead of the
@@ -449,12 +465,12 @@ kind and a field-specific `ActionError`. Live actions authorize before validatio
 then validate before routing or side effects; the daemon maps validation failures
 to `INVALID_ARGUMENT` in `refusal.rs`. This rejects missing changes/targets,
 invalid enums, non-finite volume changes, out-of-range absolute levels, false
-selected toggle/focus flags, invalid unit/command identifiers and malformed text.
+selected toggle/focus flags, invalid plugin/command identifiers and malformed text.
 Defaults with meaning remain valid: omitted window selectors mean focused,
 relative changes remain signed, and empty notification text is allowed.
 
 Desired-document validation uses the same payload rules and resolves scheduled
-unit commands against the build's manifests. Timer admission validates before
+plugin commands against the build's manifests. Timer admission validates before
 removing an existing timer, so malformed replacements preserve running schedules.
 Event-only schedules remain valid. Availability and backend-specific limitations
 are checked at execution; Hyprland refuses unsafe dispatcher delimiters and
@@ -481,7 +497,7 @@ Runtime identity is `(InstanceId, IncarnationId)`, allocated by the daemon.
 Surface IDs name declarations; placement IDs name desired configuration. Neither
 is an interaction capability. There are no automatically created unplaced widgets.
 `PresentationProvider` reconciles bar indicators, anchored popups, and configured
-standalone presentations through the same instance registry under `UnitTable`.
+standalone presentations through the same instance registry under `PluginRegistry`.
 
 Document validation limits bar placement IDs to 128 bytes, matching embedded
 presentation creation and configured standalone placement IDs. Omarchy-projected
@@ -493,35 +509,35 @@ bar IDs fail build/check validation before publication, rather than convergence.
 
 `Presentations::window` and `Presentations::overlay` in `omega-document` accept
 typed widget references. They compose with `Document::presentation`; settings
-layer over plugin settings at construction. `omega present <unit> <surface>` opens
+layer over plugin settings at construction. `omega present <plugin> <surface>` opens
 a transient singleton; `--new` creates an independent instance, and `--config`
 accepts an ordinary JSON object. Changing an existing singleton's construction
 settings or presentation is refused; configured changes destroy and recreate it.
 
 Create allocates identity and initializes the widget before exposing it. Present,
 hide, and close retain the instance; destroy removes its authority and tree before
-asking the unit to release it. Requested and observed visibility are separate.
+asking the plugin to release it. Requested and observed visibility are separate.
 Native dismissal records closed intent, so reconciliation and renderer recovery
 keep it closed. A plugin restart expires all its identities; configured instances
 are reconstructed and transient instances are lost. An uncertain creation/removal
 terminates the affected plugin session rather than keeping untracked instances.
 
-The private `units::presentation_state` value owns request, report, and disconnect
+The private `plugins::presentation_state` value owns request, report, and disconnect
 decisions. Intent can only be visible, hidden, or closed; observation additionally
 allows unknown. Closed reports set both facts to closed, other reports update only
 observation, and disconnect preserves intent. Explicit reopen can therefore leave
 visible intent with a last observation of closed until the renderer reports again.
-Instance construction chooses the initial values. UnitTable retains lifecycle
+Instance construction chooses the initial values. PluginRegistry retains lifecycle
 serialization, publication-before-commit for request/report transitions, and plugin
 acknowledgement/cancellation guards; the value owns no locks, tasks, or session state.
 
 One supervised Quickshell host per plugin renders its windows and overlays from
 embedded shared assets. Hosts restart with bounded backoff and reattach to live
-instances. Normal windows identify as `org.omega.<unit>`; initial size and focus
+instances. Normal windows identify as `org.omega.<plugin>`; initial size and focus
 remain subject to compositor policy. Overlays declare keyboard policy and an
 optional output; a missing named output keeps the overlay hidden. Closed instances
 keep their host warm until destroyed. Startup failures are logged to
-`~/.cache/omega/logs/<unit>.renderer.log`; accepted presentation intent does not
+`~/.cache/omega/logs/<plugin>.renderer.log`; accepted presentation intent does not
 promise a visible native window.
 
 The owner bootstraps a renderer on the observation socket with `AttachRenderer`.
@@ -616,10 +632,10 @@ catalogue data and does not launch desktop applications.
 
 Domain providers compute plans before applying changes. Presentation preparation
 compiles the Omarchy payload once and resolves declarations against stored
-manifests. The convergence caller captures `UnitTable::installed_presentations`,
+manifests. The convergence caller captures `PluginRegistry::installed_presentations`,
 then passes desired and installed maps to the pure `PresentationProvider::plan`.
 The snapshot copies configs, presentation specifications, and retained anchor
-addresses while holding the unit lock; transient and starting instances are
+addresses while holding the plugin lock; transient and starting instances are
 excluded. Requested/observed visibility is not a construction input, so planning
 does not reopen dismissed windows. Apply still resolves live anchors and sessions.
 
@@ -629,11 +645,11 @@ prepared contents; apply writes the retained contents through `AtomicFile`. An
 absent or empty file already satisfies an empty declaration. Other read failures
 abort planning before any provider applies changes.
 
-Unit planning takes the build's unit-name set and a captured set of supervised or
+Plugin planning takes the build's plugin-name set and a captured set of supervised or
 adopted names. Schedule planning takes captured timer declarations. Both validate
 the desired document and compare only explicit inputs. The caller captures each
 provider's facts separately; these snapshots are not an atomic system-wide view.
-Unit application retains the handover lock and live ownership checks. `Schedules`
+Plugin application retains the handover lock and live ownership checks. `Schedules`
 retains task ownership, shutdown checks, and unchanged timers; planning does not
 claim that a future application will succeed.
 Convergence runs
@@ -647,7 +663,7 @@ atomic write publishes its name in `current`. A reload resolves that name once;
 `ValidatedBuild` validates its descriptor, executable files, manifests and document
 before anything running is changed. Ordinary convergence reads no build inputs.
 
-`DocumentValidation` is shared by the CLI and daemon. Unknown units, duplicate
+`DocumentValidation` is shared by the CLI and daemon. Unknown plugins, duplicate
 identifiers, ambiguous widget surfaces, invalid cadences and invalid environment
 variables are rejected. Domains without providers are rejected explicitly.
 Environment values are encoded as literal shell data, including quotes and
@@ -655,30 +671,30 @@ newlines; the reconciler compares the complete projection rather than parsing
 shell source back into a second representation.
 
 Activation compares manifests, construction settings and executable contents.
-Only changed or removed units are stopped. Their sessions are revoked before
+Only changed or removed plugins are stopped. Their sessions are revoked before
 manifests and settings are installed together. Handshakes and development
-handovers share the activation boundary. A changed unit held by `omega dev`
-blocks activation until that lease ends. Identical units keep running, including
+handovers share the activation boundary. A changed plugin held by `omega dev`
+blocks activation until that lease ends. Identical plugins keep running, including
 through a build that changes only the environment or widget placements.
 Supervision restarts the exact executable it was given; it does not poll binary
 modification times.
 
-The worker validates all four plans before applying units, environment, schedules,
+The worker validates all four plans before applying plugins, environment, schedules,
 then instances. Their order is explicit; there is no dynamic provider registry or
-string-based executable diff. Unit changes contain parsed names and start/stop
+string-based executable diff. Plugin changes contain parsed names and start/stop
 operations, environment changes contain validated rendered contents, schedule
 changes contain full declarations or removal ids, and widget changes contain
 typed addresses and settings. Apply never looks up its payload in the document.
 
 A failed application stops the pass and retries after two seconds with fresh
-plans. A unit still held after a stop request is pending, including a disabled
-development unit until its adoption ends. Unchanged timers are left alone on
+plans. A plugin still held after a stop request is pending, including a disabled
+development plugin until its adoption ends. Unchanged timers are left alone on
 retry. Environment read errors are failures, not missing files. There is no
 separate settings provider: construction settings belong to build activation.
 
 | domain          | converges                    |
 | --------------- | ---------------------------- |
-| `units`         | which units run              |
+| `plugins`       | which plugins run            |
 | `environment`   | the session environment file |
 | `schedules`     | persistent timers            |
 | `presentations` | configured surface instances |
@@ -711,13 +727,13 @@ oversized payloads and expired deadlines are `Unavailable`, `ResourceExhausted`,
 `PayloadTooLarge` and `DeadlineExceeded`. Their numeric assignments belong to the schema.
 
 Broker requests share an 8 MiB encoded-payload budget across the daemon, alongside
-the eight queued requests per broker. Daemon-to-unit requests share another 8 MiB
-budget across units, with sixteen queued and sixteen sent requests per session.
+the eight queued requests per broker. Daemon-to-plugin requests share another 8 MiB
+budget across plugins, with sixteen queued and sixteen sent requests per session.
 Admission refuses excess work without waiting. Broker permits cover execution;
-unit-request permits and sent slots remain until a terminal result or disconnect,
+plugin-request permits and sent slots remain until a terminal result or disconnect,
 even after the caller times out or cancels. Intermediate streaming results do not
 complete the waiting caller. These are logical-work bounds, not aggregate memory
-limits. A responsive unit that never finishes its requests remains saturated until
+limits. A responsive plugin that never finishes its requests remains saturated until
 it answers or disconnects; cancelling callers cannot admit more work underneath it.
 
 Each SDK effects queue has an 8 MiB encoded-payload budget in addition to its
@@ -746,12 +762,12 @@ when less than one maximum-sized payload remains.
   generations.toml        accepted and previous generation names
   .generations.lock       publication, reference and cleanup transaction lock
   generations/<id>/       retained immutable build output
-    document.json  units.toml
+    document.json  plugins.toml
     .lease  .ready         process lease and managed-generation marker
-    units/<name>/         the binary and its unit.pb
+    plugins/<name>/         the binary and its plugin.pb
   environment             mutable runtime projection
 
-~/.cache/omega/logs/      <unit>.log
+~/.cache/omega/logs/      <plugin>.log
 ```
 
 `Layout` resolves paths; typed TOML schemas identify documents. `AtomicFile`
@@ -778,13 +794,13 @@ use `omega link`.
 
 Build generations are immutable through Omega's APIs. Publication flushes a
 private stage before replacing `current`. Acceptance is a separate durable record
-written after validation and handover preparation; it does not certify unit health
+written after validation and handover preparation; it does not certify plugin health
 or completed convergence. Startup tries `current`, then accepted and previous
 builds if the candidate is unusable, leaving a rejected pointer intact for diagnosis.
 
 The convergence worker projects live activation and reconciliation progress into
 `Deployment`. The operator-only `GetDeployment` request returns that snapshot
-with phases read from `UnitTable`; it does not infer acceptance from build files
+with phases read from `PluginRegistry`; it does not infer acceptance from build files
 or duplicate process state. `omega status` compares this snapshot
 with the locally published generation. A rejected candidate remains visible while
 the accepted build continues to converge. Shell application records its own
@@ -793,9 +809,9 @@ Ordinary `omega status` uses this operator snapshot; `--json` writes its protoco
 JSON to stdout, including generation identities and plugin health. Human-readable
 status goes to stderr; `omega status <plugin>` adds instance details and log paths.
 
-Plugin health is an on-demand projection from `UnitTable`: manifest surfaces,
+Plugin health is an on-demand projection from `PluginRegistry`: manifest surfaces,
 the latest validated placement plan, session-owned instances, and retained view
-readiness. Lifecycle and health are sampled under the same unit-table lock.
+readiness. Lifecycle and health are sampled under the same plugin-table lock.
 Missing configured instances remain waiting across session loss; unplaced means
 no desired placement or live instance. A running plugin without declared surfaces
 is a healthy background plugin. A failed render makes plugin health failed and
@@ -914,9 +930,9 @@ for interaction, host integration and node implementation.
 
 ## Retained state and history
 
-The state store retains at most 1 MiB of encoded unit records and 1 MiB of
-system topics. The separate reserves prevent unit records from consuming the
-space used for broker readings and lifecycle status. At most 4096 unit topic
+The state store retains at most 1 MiB of encoded plugin records and 1 MiB of
+system topics. The separate reserves prevent plugin records from consuming the
+space used for broker readings and lifecycle status. At most 4096 plugin topic
 addresses are retained, including unavailable values. Topics use validated
 addresses as keys. Patches are validated and budgeted as one transaction before
 changing any values, revisions, broadcasts or derived events. Smaller replacements
@@ -944,12 +960,12 @@ copies.
 
 ## Critical task failures
 
-Broker drivers, unit supervisors, convergence and schedule timers run under the
+Broker drivers, plugin supervisors, convergence and schedule timers run under the
 daemon's explicit shutdown signal. A panic records the task's identity and panic
 message, initiates shutdown immediately and remains the daemon's terminal error
 after cleanup. A later ordinary stop cannot erase it. Retryable external failures
 remain owned by brokers and supervisors; they do not trigger this panic policy.
-Task cancellation is not a failure. Unit supervision releases its token and
+Task cancellation is not a failure. Plugin supervision releases its token and
 control record when its future ends, including cancellation and unwinding.
 
 ## Endpoint ownership
@@ -991,7 +1007,7 @@ needed before adding capabilities.
 ## Dogfooding plugins
 
 The SDK examples include audio controls, media playback, Wi-Fi and a focus timer. They are ordinary
-units with indicator/panel surfaces and explicit commands. The focus timer's `tick`
+plugins with indicator/panel surfaces and explicit commands. The focus timer's `tick`
 command needs a one-second document schedule; Wi-Fi signal history uses `sample`.
 
 `derive(Form)` declares string fields, persistent labels, placeholders, help text
@@ -1033,9 +1049,9 @@ broker, and effects retain the shared capability and completion contract.
 
 The focus timer uses Linux boot time through rustix's safe API: suspend counts,
 wall-clock adjustments do not. Tick scheduling remains in the daemon and uses
-Tokio's monotonic deadlines. The timer record survives unit replacement while the
+Tokio's monotonic deadlines. The timer record survives plugin replacement while the
 daemon lives; daemon restart resets it. Completion is recorded before notification,
-so notification is at most once and may be lost if the unit crashes between them.
+so notification is at most once and may be lost if the plugin crashes between them.
 
 `Section` and `Metric` compose existing stack/text nodes; they introduce no new
 protocol kinds. `Emphasis` (primary, secondary, muted) describes importance;
@@ -1049,7 +1065,7 @@ identifiers such as `group`, `fill` and `pad` remain unchanged.
 The configuration plane's `Shell` owns the entire Omarchy `shell.json` document.
 One ordered layout contains native widgets and Omega plugin placements. Each
 plugin placement generates both its shell entry and its render-instance
-declaration; unit, surface, placement identity, panel, and settings cannot drift
+declaration; plugin, surface, placement identity, panel, and settings cannot drift
 between independently authored layouts.
 
 `derive(Surface)` supplies a `SurfaceRef<T>` whose identity is the defining crate
@@ -1057,8 +1073,8 @@ and the kebab-case type name; `#[omega(name = "...")]` pins the surface name.
 Registration (`.surface(Indicator)`) and placement
 (`PluginWidget::new("audio", audio::Indicator).panel(audio::Panel)`) consume the
 same reference. Commands cannot be passed as widgets. Registration checks the
-owning unit, and panel attachment checks that both widgets belong to the same
-unit. Manifest validation still proves that the selected widgets are registered.
+owning plugin, and panel attachment checks that both widgets belong to the same
+plugin. Manifest validation still proves that the selected widgets are registered.
 Explicit named APIs support imported and dynamic configuration.
 
 The host-specific shell declaration is carried opaquely in `StateDocument`;
@@ -1075,7 +1091,7 @@ target, allowing recovery after interruption between target and receipt writes.
 The first adoption keeps a backup. Paths come from `Layout`; `OMEGA_SHELL_CONFIG`
 selects an isolated target for tests or alternate installations.
 
-Generation activation applies the shell once; ordinary unit convergence does
+Generation activation applies the shell once; ordinary plugin convergence does
 not rewrite it. A shell conflict does not prevent valid plugins from starting.
 `omega shell diff` compares live and generated configuration, and the
 operator-only `ApplyShell` request applies a validated published generation.
@@ -1130,8 +1146,8 @@ falls back to node keys for views without that property.
 
 Source members have validated roles: `system/`, direct children of `plugins/`, or
 of `crates/`. Library crates build with the workspace but are never queried for
-unit manifests. Builds and source mutations share the workspace lock. Published
-generations use `units/` paths for runtime binaries.
+plugin manifests. Builds and source mutations share the workspace lock. Published
+generations use `plugins/` paths for runtime binaries.
 
 `omega-document` owns core desired state and the `DocumentExtension` composition
 contract. `omega-omarchy` owns shell authoring, compilation, validation of its

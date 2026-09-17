@@ -15,7 +15,7 @@ Rectangle {
     readonly property bool checked:
         swtch.optimistic === null ? swtch.published : swtch.optimistic
 
-    // The unit answered; stop second-guessing it.
+    // The plugin answered; stop second-guessing it.
     onPublishedChanged: swtch.optimistic = null
     Connections {
         target: swtch.host

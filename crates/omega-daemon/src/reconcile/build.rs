@@ -55,22 +55,22 @@ impl ValidatedBuild {
             }
         }
         let mut names = BTreeSet::new();
-        for unit in &config.units {
-            if !names.insert(&unit.name)
-                || unit.program != layout.unit_program_rel(&unit.name)
-                || unit.manifest != layout.unit_manifest_rel(&unit.name)
+        for plugin in &config.plugins {
+            if !names.insert(&plugin.name)
+                || plugin.program != layout.plugin_program_rel(&plugin.name)
+                || plugin.manifest != layout.plugin_manifest_rel(&plugin.name)
             {
                 return Err(
                     std::io::Error::other("invalid or duplicate build descriptor entry").into(),
                 );
             }
-            let path = layout.state_unit_program(&unit.name);
+            let path = layout.state_plugin_program(&plugin.name);
             let metadata = std::fs::symlink_metadata(path)?;
             use std::os::unix::fs::PermissionsExt;
             if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
                 return Err(std::io::Error::other(format!(
                     "{} is not an executable file",
-                    unit.name
+                    plugin.name
                 ))
                 .into());
             }
@@ -108,10 +108,10 @@ impl ValidatedBuild {
         result
     }
 
-    pub(super) fn changed_units(
+    pub(super) fn changed_plugins(
         &self,
         next: &Self,
-    ) -> Result<Vec<omega_proto::UnitName>, DaemonError> {
+    ) -> Result<Vec<omega_proto::PluginName>, DaemonError> {
         let mut changed = Vec::new();
         for name in self.config.names() {
             let same_manifest = self.manifests.get(name).map(|entry| &entry.hash)
@@ -119,8 +119,8 @@ impl ValidatedBuild {
             if !same_manifest
                 || self.settings(name) != next.settings(name)
                 || !Self::same_program(
-                    &self.generation.layout().state_unit_program(name),
-                    &next.generation.layout().state_unit_program(name),
+                    &self.generation.layout().state_plugin_program(name),
+                    &next.generation.layout().state_plugin_program(name),
                 )?
             {
                 changed.push(name.clone());
@@ -131,13 +131,13 @@ impl ValidatedBuild {
 
     pub(super) fn settings(
         &self,
-        name: &omega_proto::UnitName,
+        name: &omega_proto::PluginName,
     ) -> std::collections::HashMap<String, omega_proto::omega::Value> {
         self.document
-            .units
+            .plugins
             .iter()
-            .find(|unit| unit.name == name.as_str())
-            .map(|unit| unit.config.clone())
+            .find(|plugin| plugin.name == name.as_str())
+            .map(|plugin| plugin.config.clone())
             .unwrap_or_default()
     }
 

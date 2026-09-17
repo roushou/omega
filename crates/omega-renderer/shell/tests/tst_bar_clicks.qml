@@ -24,7 +24,7 @@ TestCase {
                 id: widget
                 anchors.fill: parent
                 bar: slot
-                settings: ({unit:"workspaces",surface:"indicator",module:"workspaces"})
+                settings: ({plugin:"workspaces",surface:"indicator",module:"workspaces"})
             }
             // The host owns the pointer grab for module dragging and forwards clicks
             // to registered targets before propagating them to embedded controls.
@@ -50,7 +50,7 @@ TestCase {
         var link = slot.widget.link
         tryCompare(link, "connected", true)
         link.attached = true
-        link.onLine(JSON.stringify({unit:"workspaces",surface:"indicator",
+        link.onLine(JSON.stringify({plugin:"workspaces",surface:"indicator",
             instance:{id:"workspace-instance",incarnation:"session"},requested:2,
             view:{revision:"7",root:{type:"button",key:"workspace-2",
                 props:{label:{stringValue:"2"},flat:{boolValue:true},disabled:{boolValue:disabled},width:{intValue:"20"},height:{intValue:"24"}},
@@ -84,11 +84,11 @@ TestCase {
     }
     function test_panel_indicator_keeps_host_click_forwarding() {
         var slot = indicator(false)
-        slot.widget.settings = {unit:"workspaces",surface:"indicator",module:"workspaces",panel:"panel"}
+        slot.widget.settings = {plugin:"workspaces",surface:"indicator",module:"workspaces",panel:"panel"}
         var panel = slot.widget.panelLink
         tryCompare(panel, "connected", true)
         panel.attached = true
-        panel.onLine(JSON.stringify({unit:"workspaces",surface:"panel",
+        panel.onLine(JSON.stringify({plugin:"workspaces",surface:"panel",
             instance:{id:"panel-instance",incarnation:"session"},requested:1,
             view:{revision:"1",root:{type:"text",key:"panel"}}}))
         var before = panel.socket.written.length

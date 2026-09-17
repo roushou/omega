@@ -7,19 +7,19 @@ use anyhow::{Context, bail};
 use omega_host::cargo::{Cargo, PackageSpec, Selection};
 use omega_host::fs::{Changes, Recursion};
 use omega_host::{Layout, Profile};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use omega_proto::{Handshake, Socket};
 
 use crate::build::Build;
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
 
-/// Run a unit from source in place of the built one.
+/// Run a plugin from source in place of the built one.
 #[derive(Debug, clap::Args)]
 pub struct DevCmd {
-    /// The unit to take over.
-    #[arg(value_name = "UNIT")]
-    pub unit_name: UnitName,
+    /// The plugin to take over.
+    #[arg(value_name = "PLUGIN")]
+    pub plugin_name: PluginName,
 }
 
 impl DevCmd {
@@ -28,19 +28,19 @@ impl DevCmd {
     const PROFILE: Profile = Profile::Debug;
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit_name = self.unit_name;
+        let plugin_name = self.plugin_name;
         let layout = Layout::resolve();
 
-        let source = layout.unit_src_dir(&unit_name);
+        let source = layout.plugin_src_dir(&plugin_name);
         if !source.exists() {
             bail!(
-                "no unit {unit_name} in {} — scaffold one with {}",
+                "no plugin {plugin_name} in {} — scaffold one with {}",
                 Paint::path(layout.plugins_dir()),
-                Paint::command(format!("omega new {unit_name}"))
+                Paint::command(format!("omega new {plugin_name}"))
             );
         }
 
-        Self::build(&layout, &unit_name).await?;
+        Self::build(&layout, &plugin_name).await?;
 
         let mut attached = Operator::new().attach().await.with_context(|| {
             format!(
@@ -52,13 +52,13 @@ impl DevCmd {
         // Shared library and workspace dependency edits also invalidate this plugin.
         let mut changes = Changes::watch(&[layout.config.as_path()], Recursion::Recursive)?;
 
-        let program = layout.compiled_binary(Self::PROFILE, &unit_name);
+        let program = layout.compiled_binary(Self::PROFILE, &plugin_name);
         let socket = Socket::resolve();
 
         loop {
             // A fresh token per run: a token binds to the first process that
             // presents it, and every restart is a different process.
-            let token = attached.adopt(&unit_name).await?;
+            let token = attached.adopt(&plugin_name).await?;
             let mut child = Self::spawn(&program, &socket, &token)
                 .with_context(|| format!("cannot run {}", Paint::path(&program)))?;
 
@@ -66,7 +66,7 @@ impl DevCmd {
                 Step::Adopted,
                 format!(
                     "{} — the daemon is running this process instead",
-                    Paint::name(&unit_name)
+                    Paint::name(&plugin_name)
                 ),
             );
             ui.step(Step::Watching, Paint::path(&source));
@@ -74,7 +74,7 @@ impl DevCmd {
             let restart = tokio::select! {
                 exit = child.wait() => {
                     // Wait for a source change after process exit instead of repeatedly respawning.
-                    Self::exited(ui, &unit_name, exit);
+                    Self::exited(ui, &plugin_name, exit);
                     changes.next().await.is_some()
                 }
                 Some(()) = changes.next() => {
@@ -99,9 +99,9 @@ impl DevCmd {
             ui.blank();
             ui.step(
                 Step::Changed,
-                format!("rebuilding {}", Paint::name(&unit_name)),
+                format!("rebuilding {}", Paint::name(&plugin_name)),
             );
-            if let Err(e) = Self::build(&layout, &unit_name).await {
+            if let Err(e) = Self::build(&layout, &plugin_name).await {
                 // A build that fails leaves the loop running: the next save
                 // is the fix, and exiting would throw away the adoption.
                 ui.error(&e);
@@ -113,18 +113,21 @@ impl DevCmd {
 
         ui.step(
             Step::Released,
-            format!("{} — the built unit runs again", Paint::name(&unit_name)),
+            format!(
+                "{} — the built plugin runs again",
+                Paint::name(&plugin_name)
+            ),
         );
         Ok(())
     }
 
-    async fn build(layout: &Layout, unit_name: &UnitName) -> anyhow::Result<()> {
+    async fn build(layout: &Layout, plugin_name: &PluginName) -> anyhow::Result<()> {
         let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
         Cargo::new(&layout.config)
             .build(Build::request(
                 layout,
                 Self::PROFILE,
-                Selection::Package(PackageSpec::try_from(unit_name.as_str())?),
+                Selection::Package(PackageSpec::try_from(plugin_name.as_str())?),
             ))
             .await?;
         Ok(())
@@ -143,20 +146,24 @@ impl DevCmd {
             .spawn()
     }
 
-    fn exited(ui: &mut Ui, unit_name: &UnitName, exit: std::io::Result<std::process::ExitStatus>) {
+    fn exited(
+        ui: &mut Ui,
+        plugin_name: &PluginName,
+        exit: std::io::Result<std::process::ExitStatus>,
+    ) {
         match exit {
             Ok(status) if status.success() => {
-                ui.step(Step::Done, format!("{} exited", Paint::name(unit_name)))
+                ui.step(Step::Done, format!("{} exited", Paint::name(plugin_name)))
             }
             Ok(status) => ui.step(
                 Step::Failed,
-                format!("{} {}", Paint::name(unit_name), Paint::problem(status)),
+                format!("{} {}", Paint::name(plugin_name), Paint::problem(status)),
             ),
-            Err(e) => ui.warn(format!("cannot wait for {unit_name}: {e}")),
+            Err(e) => ui.warn(format!("cannot wait for {plugin_name}: {e}")),
         }
     }
 
-    /// Ask, then insist — the same bargain the supervisor offers a unit.
+    /// Ask, then insist — the same bargain the supervisor offers a plugin.
     async fn stop(child: &mut tokio::process::Child) {
         let _ = child.start_kill();
         let _ = child.wait().await;

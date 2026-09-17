@@ -226,7 +226,7 @@ impl Command for Ping {
     }
 }
 #[test]
-fn unit_commands_bind_and_duplicate_names_are_refused() {
+fn plugin_commands_bind_and_duplicate_names_are_refused() {
     let drawn = Drawn::of_ui(Button::new("Ping").on_press(Ping).into());
     assert_eq!(drawn.node("root").unwrap().events["press"].command, "ping");
     assert!(
@@ -248,7 +248,7 @@ impl Command for Submit {
     }
 }
 #[test]
-fn unit_commands_support_forms_and_bound_inputs() {
+fn plugin_commands_support_forms_and_bound_inputs() {
     let form = Drawn::of_ui(Form::new(Submit).into());
     assert_eq!(
         form.node("root").unwrap().events["submit"].command,

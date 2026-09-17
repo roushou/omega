@@ -1,10 +1,10 @@
-//! The secret a spawned unit proves itself with.
+//! The secret a spawned plugin proves itself with.
 
 /// A one-time secret handed to exactly one spawned process.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnitToken(String);
+pub struct PluginToken(String);
 
-impl UnitToken {
+impl PluginToken {
     /// Generate a 128-bit token from OS randomness.
     /// Returns an error when the OS cannot supply randomness; no fallback is used.
     pub fn mint() -> Result<Self, TokenError> {
@@ -24,7 +24,7 @@ impl UnitToken {
     }
 }
 
-impl std::fmt::Display for UnitToken {
+impl std::fmt::Display for PluginToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
@@ -32,7 +32,7 @@ impl std::fmt::Display for UnitToken {
 
 /// OS randomness was unavailable; no token was issued.
 #[derive(Debug, thiserror::Error)]
-#[error("cannot generate a secure unit identity: {0}")]
+#[error("cannot generate a secure plugin identity: {0}")]
 pub struct TokenError(getrandom::Error);
 
 impl From<getrandom::Error> for TokenError {
@@ -47,8 +47,8 @@ mod tests {
 
     #[test]
     fn randomness_failure_never_produces_a_token() {
-        assert!(UnitToken::generate(|_| Err(getrandom::Error::UNSUPPORTED)).is_err());
-        let token = UnitToken::generate(|bytes| {
+        assert!(PluginToken::generate(|_| Err(getrandom::Error::UNSUPPORTED)).is_err());
+        let token = PluginToken::generate(|bytes| {
             bytes.fill(0xab);
             Ok(())
         })

@@ -1,7 +1,7 @@
 //! Supervise one native presentation host per plugin with live standalone instances.
 use crate::{Shutdown, hub::Hub, process::Signal};
 use omega_host::{Directory, Layout, StageDir};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -27,7 +27,7 @@ impl Hosts {
         }
     }
     pub(crate) async fn run(self) {
-        let mut hosts: BTreeMap<UnitName, Host> = BTreeMap::new();
+        let mut hosts: BTreeMap<PluginName, Host> = BTreeMap::new();
         let mut tick = tokio::time::interval(Duration::from_millis(500));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut installed = false;
@@ -46,15 +46,15 @@ impl Hosts {
                         )
                     )
                 })
-                .map(|view| view.surface.unit.clone())
+                .map(|view| view.surface.plugin.clone())
                 .collect();
             let removed: Vec<_> = hosts
                 .keys()
-                .filter(|unit| !desired.contains(*unit))
+                .filter(|plugin| !desired.contains(*plugin))
                 .cloned()
                 .collect();
-            for unit in removed {
-                if let Some(host) = hosts.remove(&unit) {
+            for plugin in removed {
+                if let Some(host) = hosts.remove(&plugin) {
                     host.stop.trigger();
                     let _ = host.task.await;
                 }
@@ -69,11 +69,11 @@ impl Hosts {
                     }
                 }
             }
-            for unit in desired {
-                hosts.entry(unit.clone()).or_insert_with(|| {
+            for plugin in desired {
+                hosts.entry(plugin.clone()).or_insert_with(|| {
                     let stop = Shutdown::new();
                     let task = tokio::spawn(Self::supervise(
-                        unit,
+                        plugin,
                         self.layout.clone(),
                         self.socket.clone(),
                         stop.clone(),
@@ -102,7 +102,7 @@ impl Hosts {
         stage.commit()
     }
     async fn supervise(
-        unit: UnitName,
+        plugin: PluginName,
         layout: Layout,
         socket: PathBuf,
         stop: Shutdown,
@@ -114,15 +114,15 @@ impl Hosts {
                 return;
             }
             let started = tokio::time::Instant::now();
-            match Self::spawn(&unit, &layout, &socket) {
+            match Self::spawn(&plugin, &layout, &socket) {
                 Ok(mut child) => {
                     tokio::select! {
-                        result = child.wait() => tracing::warn!(%unit, ?result, "presentation host exited"),
+                        result = child.wait() => tracing::warn!(%plugin, ?result, "presentation host exited"),
                         _ = stop.wait() => { Self::terminate(&mut child).await; return; }
                         _ = shutdown.wait() => { Self::terminate(&mut child).await; return; }
                     }
                 }
-                Err(error) => tracing::error!(%unit, %error, "cannot start presentation host"),
+                Err(error) => tracing::error!(%plugin, %error, "cannot start presentation host"),
             }
             if started.elapsed() > Duration::from_secs(30) {
                 delay = Duration::from_millis(250);
@@ -131,18 +131,22 @@ impl Hosts {
             delay = (delay * 2).min(Duration::from_secs(30));
         }
     }
-    fn spawn(unit: &UnitName, layout: &Layout, socket: &std::path::Path) -> std::io::Result<Child> {
+    fn spawn(
+        plugin: &PluginName,
+        layout: &Layout,
+        socket: &std::path::Path,
+    ) -> std::io::Result<Child> {
         Directory::create_all(&layout.logs_dir())?;
         let log = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(layout.renderer_log(unit))?;
+            .open(layout.renderer_log(plugin))?;
         Command::new("quickshell")
             .arg("-p")
             .arg(layout.renderer_dir())
-            .env("OMEGA_RENDERER_UNIT", unit.as_str())
+            .env("OMEGA_RENDERER_PLUGIN", plugin.as_str())
             .env("OMEGA_RENDERER_SOCKET", socket)
-            .env("QS_APP_ID", format!("org.omega.{}", unit.as_str()))
+            .env("QS_APP_ID", format!("org.omega.{}", plugin.as_str()))
             .env("QS_NO_RELOAD_POPUP", "1")
             .stdin(std::process::Stdio::null())
             .stdout(log.try_clone()?)

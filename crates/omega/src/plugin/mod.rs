@@ -95,7 +95,7 @@ impl Plugin {
     ) -> Self {
         let reference = reference.into();
         let mut entry = SurfaceEntry::of::<W>(reference.surface().into());
-        entry.unit = Some(reference.unit());
+        entry.plugin = Some(reference.plugin());
         self.surfaces.push(entry);
         self
     }
@@ -130,7 +130,7 @@ impl Plugin {
     pub fn manifest(&self) -> Result<Manifest, Error> {
         let name = self
             .name
-            .parse::<omega_proto::UnitName>()
+            .parse::<omega_proto::PluginName>()
             .map_err(|source| Error::Name(self.name.clone(), source))?;
 
         let mut capabilities = BTreeSet::new();
@@ -141,11 +141,11 @@ impl Plugin {
 
         let mut widget_names = BTreeSet::new();
         for widget in &self.surfaces {
-            if let Some(unit) = widget.unit
-                && unit != self.name
+            if let Some(plugin) = widget.plugin
+                && plugin != self.name
             {
                 return Err(Error::invalid(format!(
-                    "widget {} belongs to {unit}, not {}",
+                    "widget {} belongs to {plugin}, not {}",
                     widget.surface, self.name
                 )));
             }
@@ -240,4 +240,4 @@ impl Plugin {
 
 pub(crate) mod registry;
 mod supervision;
-pub use supervision::{UnitPhase, UnitReport, Units};
+pub use supervision::{PluginPhase, PluginReport, Plugins};

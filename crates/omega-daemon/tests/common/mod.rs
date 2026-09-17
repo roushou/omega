@@ -8,10 +8,10 @@ use omega_daemon::Shutdown;
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
+use omega_daemon::plugins::{PluginRegistry, PluginToken};
 use omega_daemon::session::{Liveness, Session};
 use omega_daemon::supervisor::Supervisor;
-use omega_daemon::units::{UnitTable, UnitToken};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use omega_proto::omega::{Capability, EventKind, Frame, SurfaceKind};
 use omega_proto::{Handshake, Socket, Transport};
 use omega_proto::{Manifest, Surface};
@@ -20,12 +20,12 @@ use omega_proto::{Manifest, Surface};
 pub struct Harness {
     pub supervisor: Supervisor,
     pub hub: Hub,
-    pub units: UnitTable,
+    pub plugins: PluginRegistry,
     /// A keepalive cadence for sessions this harness serves, when a test needs
     /// one shorter than a desktop's.
     liveness: Option<Liveness>,
-    /// The socket path spawned units are pointed at. Never bound: a test's
-    /// units connect through the pair, not through the filesystem.
+    /// The socket path spawned plugins are pointed at. Never bound: a test's
+    /// plugins connect through the pair, not through the filesystem.
     socket: Socket,
     /// Empty unless a test registers one, so an action nothing claims is
     /// refused exactly as it is on a daemon with no brokers.
@@ -36,15 +36,15 @@ impl Harness {
     pub fn new(tag: &str, manifests: ManifestStore) -> Self {
         let socket = TempSocket::new(tag).socket();
         let hub = Hub::new();
-        let units = UnitTable::detached(hub.clone());
-        units.adopt(&manifests);
-        let supervisor = Supervisor::new(socket.clone(), units.clone(), Shutdown::new());
+        let plugins = PluginRegistry::detached(hub.clone());
+        plugins.adopt(&manifests);
+        let supervisor = Supervisor::new(socket.clone(), plugins.clone(), Shutdown::new());
 
         Self {
             supervisor,
             brokers: Brokerage::new(hub.clone(), Shutdown::new()),
             hub,
-            units,
+            plugins,
             liveness: None,
             socket,
         }
@@ -66,10 +66,10 @@ impl Harness {
         &self.socket
     }
 
-    /// Register this process as a unit and take its token, the way a spawned
-    /// unit receives one in its environment.
-    pub fn register_unit(&self, name: &str) -> UnitToken {
-        self.supervisor.register(&unit_name(name)).unwrap()
+    /// Register this process as a plugin and take its token, the way a spawned
+    /// plugin receives one in its environment.
+    pub fn register_plugin(&self, name: &str) -> PluginToken {
+        self.supervisor.register(&plugin_name(name)).unwrap()
     }
 
     /// Open a connection and send `Hello`, returning the transport for the
@@ -82,7 +82,7 @@ impl Harness {
         let (peer, daemon) = tokio::net::UnixStream::pair().unwrap();
 
         let mut session = Session::new(self.supervisor.clone(), self.hub.clone())
-            .with_units(self.units.clone())
+            .with_plugins(self.plugins.clone())
             .with_brokers(self.brokers.clone());
         if let Some(liveness) = &self.liveness {
             session = session.with_liveness(liveness.clone());
@@ -106,21 +106,21 @@ pub fn surface_id(id: &str) -> omega_proto::SurfaceId {
     omega_proto::SurfaceId::try_from(id).unwrap()
 }
 
-pub fn unit_name(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+pub fn plugin_name(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
-/// A unit that declares one widget surface and reads the battery topic — the
-/// shape of every unit in the first vertical slice.
+/// A plugin that declares one widget surface and reads the battery topic — the
+/// shape of every plugin in the first vertical slice.
 pub fn widget_manifest(name: &str, surface: &str) -> Manifest {
-    Manifest::new(&unit_name(name), "0.1.0")
+    Manifest::new(&plugin_name(name), "0.1.0")
         .granting([Capability::StateRead])
         .exposing([Surface::new(&surface_id(surface), SurfaceKind::Widget)])
         .reading(["battery"])
 }
 
-/// A unit that handles power events and may run commands — the shape of a
-/// policy unit.
+/// A plugin that handles power events and may run commands — the shape of a
+/// policy plugin.
 pub fn policy_manifest(name: &str) -> Manifest {
     widget_manifest(name, "battery")
         .granting([Capability::StateRead, Capability::Spawn])
@@ -131,15 +131,15 @@ pub fn policy_manifest(name: &str) -> Manifest {
         ])
 }
 
-/// A unit that declares a command surface — something to be asked to do.
+/// A plugin that declares a command surface — something to be asked to do.
 pub fn command_manifest(name: &str, command: &str) -> Manifest {
-    Manifest::new(&unit_name(name), "0.1.0")
+    Manifest::new(&plugin_name(name), "0.1.0")
         .granting([Capability::StateRead])
         .serving([omega_proto::omega::CommandEndpoint { id: command.into() }])
         .reading(["battery"])
 }
 
-/// The same unit, plus the capability to write its own keyspace.
+/// The same plugin, plus the capability to write its own keyspace.
 pub fn writer_manifest(name: &str) -> Manifest {
     widget_manifest(name, "battery").granting([Capability::StateRead, Capability::StateWrite])
 }

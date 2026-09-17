@@ -1,15 +1,15 @@
-//! Reconcile the specifications installed in each live unit session.
+//! Reconcile the specifications installed in each live plugin session.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use omega_proto::omega::{StateDocument, Value, module};
-use omega_proto::{ModuleId, SurfaceId, UnitName};
+use omega_proto::{ModuleId, PluginName, SurfaceId};
 
 use crate::hub::SurfaceRef;
 use crate::manifest::ManifestStore;
+use crate::plugins::{InstalledInstance, PluginRegistry};
 use crate::reconcile::{Action, ProviderError};
-use crate::units::{InstalledInstance, UnitTable};
 
 #[derive(Debug, Clone)]
 pub struct InstanceChange {
@@ -30,13 +30,13 @@ pub struct DesiredInstance {
 
 #[derive(Debug)]
 pub struct PresentationProvider {
-    units: UnitTable,
+    plugins: PluginRegistry,
     manifests: Arc<ManifestStore>,
 }
 
 impl PresentationProvider {
-    pub fn new(units: UnitTable, manifests: Arc<ManifestStore>) -> Self {
-        Self { units, manifests }
+    pub fn new(plugins: PluginRegistry, manifests: Arc<ManifestStore>) -> Self {
+        Self { plugins, manifests }
     }
 
     /// Compile the host projection once and resolve declared surfaces against stored manifests.
@@ -63,16 +63,18 @@ impl PresentationProvider {
                     ) => return Err(Self::error("only widget modules have an instance provider")),
                     None => return Err(Self::error("module has no kind")),
                 };
-                let unit = widget.unit.parse::<UnitName>().map_err(Self::error)?;
+                let plugin = widget.plugin.parse::<PluginName>().map_err(Self::error)?;
                 let module = module.id.parse::<ModuleId>().map_err(Self::error)?;
-                let primary = self.surface_of(&unit, &widget.surface)?;
+                let primary = self.surface_of(&plugin, &widget.surface)?;
                 for named in std::iter::once(widget.surface.as_str())
                     .chain((!widget.panel.is_empty()).then_some(widget.panel.as_str()))
                 {
-                    let surface = self.surface_of(&unit, named)?;
-                    let address = SurfaceRef::module(unit.clone(), surface.clone(), module.clone());
-                    let anchor = (surface != primary)
-                        .then(|| SurfaceRef::module(unit.clone(), primary.clone(), module.clone()));
+                    let surface = self.surface_of(&plugin, named)?;
+                    let address =
+                        SurfaceRef::module(plugin.clone(), surface.clone(), module.clone());
+                    let anchor = (surface != primary).then(|| {
+                        SurfaceRef::module(plugin.clone(), primary.clone(), module.clone())
+                    });
                     if instances
                         .insert(
                             address,
@@ -90,10 +92,10 @@ impl PresentationProvider {
             }
         }
         for entry in &document.presentations {
-            let unit = entry.unit.parse::<UnitName>().map_err(Self::error)?;
-            let surface = self.surface_of(&unit, &entry.surface)?;
+            let plugin = entry.plugin.parse::<PluginName>().map_err(Self::error)?;
+            let surface = self.surface_of(&plugin, &entry.surface)?;
             let address = SurfaceRef::module(
-                unit,
+                plugin,
                 surface,
                 entry.id.parse::<ModuleId>().map_err(Self::error)?,
             );
@@ -121,11 +123,11 @@ impl PresentationProvider {
         Ok(instances)
     }
 
-    fn surface_of(&self, unit: &UnitName, named: &str) -> Result<SurfaceId, ProviderError> {
+    fn surface_of(&self, plugin: &PluginName, named: &str) -> Result<SurfaceId, ProviderError> {
         let entry = self
             .manifests
-            .get(unit)
-            .ok_or_else(|| Self::error(format!("unknown unit {unit}")))?;
+            .get(plugin)
+            .ok_or_else(|| Self::error(format!("unknown plugin {plugin}")))?;
         omega_document::DocumentValidation::surface(&entry.manifest, named).map_err(Self::error)
     }
 
@@ -179,7 +181,7 @@ impl PresentationProvider {
         for change in changes {
             let outcome = match change.action {
                 Action::Create | Action::Update if change.anchor.is_some() => {
-                    self.units
+                    self.plugins
                         .configure_popup(
                             &change.address,
                             change.config.clone(),
@@ -189,7 +191,7 @@ impl PresentationProvider {
                 }
                 Action::Create | Action::Update => match &change.presentation {
                     Some(presentation) => {
-                        self.units
+                        self.plugins
                             .configure_presentation(
                                 &change.address,
                                 change.config.clone(),
@@ -198,12 +200,12 @@ impl PresentationProvider {
                             .await
                     }
                     None => {
-                        self.units
+                        self.plugins
                             .configure_instance(&change.address, change.config.clone())
                             .await
                     }
                 },
-                Action::Delete => self.units.remove_instance(&change.address).await,
+                Action::Delete => self.plugins.remove_instance(&change.address).await,
             };
             if let Err(error) = outcome {
                 errors.push(format!("{}: {error}", change.address));
@@ -230,7 +232,7 @@ mod tests {
     impl Fixture {
         fn address(surface: &str) -> SurfaceRef {
             SurfaceRef::module(
-                "wifi".parse::<UnitName>().unwrap(),
+                "wifi".parse::<PluginName>().unwrap(),
                 SurfaceId::try_from(surface).unwrap(),
                 "slot".parse::<ModuleId>().unwrap(),
             )

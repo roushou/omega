@@ -101,7 +101,7 @@ impl Broker for Notifications {
     }
 
     /// None yet. What is on screen and what was dismissed is worth a topic,
-    /// and claiming one it does not fill would make a unit wait forever.
+    /// and claiming one it does not fill would make a plugin wait forever.
     fn topics(&self) -> &'static [SystemTopic] {
         &[]
     }

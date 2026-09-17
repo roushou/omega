@@ -1,10 +1,10 @@
 //! Human-readable daemon health facts. Process state takes precedence over UI readiness.
 
 use omega_host::Layout;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use omega_proto::omega::{
-    PluginHealth, PluginReadiness, PresentationState, RenderReadiness, SurfaceHealth, UnitPhase,
-    UnitStatus,
+    PluginHealth, PluginPhase, PluginReadiness, PluginStatus, PresentationState, RenderReadiness,
+    SurfaceHealth,
 };
 
 use super::{Paint, Step, Ui};
@@ -12,24 +12,26 @@ use super::{Paint, Step, Ui};
 impl Ui {
     pub(crate) fn plugin_health(
         &mut self,
-        units: &[UnitStatus],
-        plugins: &[PluginHealth],
+        plugins: &[PluginStatus],
+        health_reports: &[PluginHealth],
         layout: &Layout,
         detailed: bool,
     ) -> anyhow::Result<()> {
-        let width = Self::width(units.iter().map(|unit| unit.unit.as_str()));
+        let width = Self::width(plugins.iter().map(|plugin| plugin.plugin.as_str()));
 
-        for unit in units {
-            let name = unit.unit.parse::<UnitName>()?;
-            let health = plugins.iter().find(|plugin| plugin.unit == unit.unit);
-            let phase = UnitPhase::try_from(unit.phase).unwrap_or(UnitPhase::Unspecified);
+        for plugin in plugins {
+            let name = plugin.plugin.parse::<PluginName>()?;
+            let health = health_reports
+                .iter()
+                .find(|health| health.plugin == plugin.plugin);
+            let phase = PluginPhase::try_from(plugin.phase).unwrap_or(PluginPhase::Unspecified);
             let readiness = health.map(|health| health.readiness()).unwrap_or_default();
             let step = HealthDisplay::step(phase, readiness);
             let summary = HealthDisplay::summary(health, phase);
 
             self.step(
                 step,
-                format!("{}  {summary}", Self::column(&unit.unit, width)),
+                format!("{}  {summary}", Self::column(&plugin.plugin, width)),
             );
 
             if detailed {
@@ -46,20 +48,20 @@ impl Ui {
                 }
             }
 
-            if !unit.detail.is_empty() {
-                self.detail(&unit.detail);
+            if !plugin.detail.is_empty() {
+                self.detail(&plugin.detail);
             }
 
-            if unit.restarts > 0 {
-                self.detail(format!("Restarts: {}", unit.restarts));
+            if plugin.restarts > 0 {
+                self.detail(format!("Restarts: {}", plugin.restarts));
             }
 
             if matches!(
                 phase,
-                UnitPhase::Failed | UnitPhase::Restarting | UnitPhase::Stopped
-            ) && unit.last_exit_code >= 0
+                PluginPhase::Failed | PluginPhase::Restarting | PluginPhase::Stopped
+            ) && plugin.last_exit_code >= 0
             {
-                self.detail(format!("Last exit code: {}", unit.last_exit_code));
+                self.detail(format!("Last exit code: {}", plugin.last_exit_code));
             }
 
             if let Some(health) = health {
@@ -70,8 +72,8 @@ impl Ui {
                 }
             }
 
-            if detailed || matches!(phase, UnitPhase::Failed | UnitPhase::Restarting) {
-                self.detail(format!("Log: {}", Paint::path(layout.unit_log(&name))));
+            if detailed || matches!(phase, PluginPhase::Failed | PluginPhase::Restarting) {
+                self.detail(format!("Log: {}", Paint::path(layout.plugin_log(&name))));
             }
         }
 
@@ -82,14 +84,14 @@ impl Ui {
 struct HealthDisplay;
 
 impl HealthDisplay {
-    fn step(phase: UnitPhase, readiness: PluginReadiness) -> Step {
+    fn step(phase: PluginPhase, readiness: PluginReadiness) -> Step {
         match phase {
-            UnitPhase::Starting => Step::Starting,
-            UnitPhase::Restarting => Step::Restarting,
-            UnitPhase::Failed => Step::Failed,
-            UnitPhase::Stopped => Step::Stopped,
-            UnitPhase::Unspecified => Step::Unknown,
-            UnitPhase::Running => match readiness {
+            PluginPhase::Starting => Step::Starting,
+            PluginPhase::Restarting => Step::Restarting,
+            PluginPhase::Failed => Step::Failed,
+            PluginPhase::Stopped => Step::Stopped,
+            PluginPhase::Unspecified => Step::Unknown,
+            PluginPhase::Running => match readiness {
                 PluginReadiness::Background => Step::Healthy,
                 PluginReadiness::Failed => Step::Failed,
                 PluginReadiness::Unplaced => Step::Unplaced,
@@ -100,19 +102,19 @@ impl HealthDisplay {
         }
     }
 
-    fn phase(phase: UnitPhase) -> &'static str {
+    fn phase(phase: PluginPhase) -> &'static str {
         match phase {
-            UnitPhase::Starting => "starting (awaiting handshake)",
-            UnitPhase::Running => "running",
-            UnitPhase::Restarting => "restarting",
-            UnitPhase::Failed => "failed",
-            UnitPhase::Stopped => "stopped",
-            UnitPhase::Unspecified => "unknown",
+            PluginPhase::Starting => "starting (awaiting handshake)",
+            PluginPhase::Running => "running",
+            PluginPhase::Restarting => "restarting",
+            PluginPhase::Failed => "failed",
+            PluginPhase::Stopped => "stopped",
+            PluginPhase::Unspecified => "unknown",
         }
     }
 
-    fn summary(health: Option<&PluginHealth>, phase: UnitPhase) -> String {
-        if phase != UnitPhase::Running {
+    fn summary(health: Option<&PluginHealth>, phase: PluginPhase) -> String {
+        if phase != PluginPhase::Running {
             return Self::phase(phase).into();
         }
 
@@ -204,9 +206,9 @@ mod tests {
     struct Fixture;
 
     impl Fixture {
-        fn unit(phase: UnitPhase) -> UnitStatus {
-            UnitStatus {
-                unit: "network".into(),
+        fn plugin(phase: PluginPhase) -> PluginStatus {
+            PluginStatus {
+                plugin: "network".into(),
                 phase: phase as i32,
                 last_exit_code: -1,
                 ..Default::default()
@@ -215,16 +217,16 @@ mod tests {
 
         fn health(readiness: PluginReadiness) -> PluginHealth {
             PluginHealth {
-                unit: "network".into(),
+                plugin: "network".into(),
                 readiness: readiness as i32,
                 surfaces: vec!["indicator".into()],
                 ..Default::default()
             }
         }
 
-        fn output(unit: UnitStatus, health: PluginHealth, detailed: bool) -> String {
+        fn output(plugin: PluginStatus, health: PluginHealth, detailed: bool) -> String {
             let (mut ui, transcript) = Ui::recording();
-            ui.plugin_health(&[unit], &[health], &Layout::resolve(), detailed)
+            ui.plugin_health(&[plugin], &[health], &Layout::resolve(), detailed)
                 .unwrap();
             assert!(transcript.out().is_empty());
             transcript.err()
@@ -232,12 +234,29 @@ mod tests {
     }
 
     #[test]
+    fn health_is_matched_by_plugin_name_instead_of_report_order() {
+        let mut other = Fixture::health(PluginReadiness::Failed);
+        other.plugin = "audio".into();
+        let (mut ui, transcript) = Ui::recording();
+        ui.plugin_health(
+            &[Fixture::plugin(PluginPhase::Running)],
+            &[other, Fixture::health(PluginReadiness::Ready)],
+            &Layout::resolve(),
+            false,
+        )
+        .unwrap();
+        let output = transcript.err();
+        assert!(!output.contains("Failed"), "{output}");
+        assert!(output.contains("Ready"), "{output}");
+    }
+
+    #[test]
     fn process_failure_takes_precedence_and_explains_where_to_investigate() {
-        let mut unit = Fixture::unit(UnitPhase::Restarting);
-        unit.last_exit_code = 1;
-        unit.restarts = 3;
-        unit.detail = "process exited".into();
-        let output = Fixture::output(unit, Fixture::health(PluginReadiness::Ready), false);
+        let mut plugin = Fixture::plugin(PluginPhase::Restarting);
+        plugin.last_exit_code = 1;
+        plugin.restarts = 3;
+        plugin.detail = "process exited".into();
+        let output = Fixture::output(plugin, Fixture::health(PluginReadiness::Ready), false);
         assert!(output.contains("Restarting network"));
         assert!(output.contains("Last exit code: 1"));
         assert!(output.contains("Restarts: 3"));
@@ -262,7 +281,7 @@ mod tests {
             requested: PresentationState::Visible as i32,
             observed: PresentationState::Hidden as i32,
         });
-        let output = Fixture::output(Fixture::unit(UnitPhase::Running), health.clone(), true);
+        let output = Fixture::output(Fixture::plugin(PluginPhase::Running), health.clone(), true);
         assert!(output.contains("Waiting network"));
         assert!(output.contains("Process: running"));
         assert!(output.contains("placement wifi"));
@@ -272,7 +291,7 @@ mod tests {
         health.readiness = PluginReadiness::Ready as i32;
         health.instances[0].readiness = RenderReadiness::Ready as i32;
         health.instances[0].pending_topics.clear();
-        let output = Fixture::output(Fixture::unit(UnitPhase::Running), health, true);
+        let output = Fixture::output(Fixture::plugin(PluginPhase::Running), health, true);
         assert!(output.contains("Ready network"));
         assert!(output.contains("render ready"));
         assert!(output.contains("observed hidden"));
@@ -281,7 +300,7 @@ mod tests {
 
     #[test]
     fn background_and_unplaced_are_informational_and_legacy_is_honest() {
-        let running = Fixture::unit(UnitPhase::Running);
+        let running = Fixture::plugin(PluginPhase::Running);
         let output = Fixture::output(
             running.clone(),
             Fixture::health(PluginReadiness::Background),
@@ -313,7 +332,7 @@ mod tests {
             render_error: "binding capacity exceeded".into(),
             ..Default::default()
         });
-        let output = Fixture::output(Fixture::unit(UnitPhase::Running), health, true);
+        let output = Fixture::output(Fixture::plugin(PluginPhase::Running), health, true);
         assert!(output.contains("Failed network"));
         assert!(output.contains("Process: running"));
         assert!(output.contains("render failed"));

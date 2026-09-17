@@ -11,9 +11,9 @@ use omega_daemon::Shutdown;
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
+use omega_daemon::plugins::PluginRegistry;
 use omega_daemon::shell::ShellServer;
 use omega_daemon::supervisor::Supervisor;
-use omega_daemon::units::UnitTable;
 use omega_proto::Socket;
 use omega_proto::omega::{BatteryState, StatePatch, StateTopic, state_topic};
 
@@ -42,21 +42,21 @@ impl Observing {
         let held = TempSocket::new(tag);
         let socket = held.socket();
 
-        let units = UnitTable::detached(hub.clone());
-        units.adopt(&ManifestStore::from_manifests([widget_manifest(
+        let plugins = PluginRegistry::detached(hub.clone());
+        plugins.adopt(&ManifestStore::from_manifests([widget_manifest(
             "battery-widget",
             "battery",
         )]));
         let supervisor = Supervisor::new(
             Socket::at(socket.path().with_extension("control")),
-            units.clone(),
+            plugins.clone(),
             Shutdown::new(),
         );
         let brokers = Brokerage::new(hub.clone(), Shutdown::new());
 
         let server = ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
-            .serving(supervisor, units, brokers);
+            .serving(supervisor, plugins, brokers);
         tokio::spawn(async move {
             let _ = server.run().await;
         });
@@ -191,7 +191,7 @@ async fn an_observer_can_decline_every_topic_and_still_draw() {
 async fn an_observer_is_sent_the_topics_it_named_and_no_others() {
     // `omega status` wants the supervisor's report and nothing else.
     let mut observing = Observing::new("observe-some").await;
-    observing.subscribe_to(&["units"]).await;
+    observing.subscribe_to(&["plugins"]).await;
 
     observing.hub.publish_state(battery(0.9)).unwrap();
 
@@ -200,7 +200,7 @@ async fn an_observer_is_sent_the_topics_it_named_and_no_others() {
         None,
         "an unnamed topic reached an observer that named another"
     );
-    observing.subscribe_to(&["units"]).await;
+    observing.subscribe_to(&["plugins"]).await;
 }
 
 #[tokio::test]

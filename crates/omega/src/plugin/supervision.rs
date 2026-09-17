@@ -1,38 +1,38 @@
-//! The supervisor's report on every unit it runs.
+//! The supervisor's report on every plugin it runs.
 
 crate::wiring::reading! {
-    /// The supervisor's report on every unit it runs.
-    Units: omega_proto::omega::UnitsState
+    /// The supervisor's report on every plugin it runs.
+    Plugins: omega_proto::omega::PluginsState
 }
 
-pub use omega_proto::omega::UnitPhase;
+pub use omega_proto::omega::PluginPhase;
 
-/// What the daemon knows about one unit.
+/// What the daemon knows about one plugin.
 #[derive(Debug, Clone, PartialEq)]
-pub struct UnitReport {
-    unit: String,
-    phase: UnitPhase,
+pub struct PluginReport {
+    plugin: String,
+    phase: PluginPhase,
     restarts: u32,
     last_exit_code: i32,
     detail: String,
 }
 
-impl UnitReport {
-    fn of(status: omega_proto::omega::UnitStatus) -> Self {
+impl PluginReport {
+    fn of(status: omega_proto::omega::PluginStatus) -> Self {
         Self {
-            phase: UnitPhase::try_from(status.phase).unwrap_or(UnitPhase::Unspecified),
-            unit: status.unit,
+            phase: PluginPhase::try_from(status.phase).unwrap_or(PluginPhase::Unspecified),
+            plugin: status.plugin,
             restarts: status.restarts,
             last_exit_code: status.last_exit_code,
             detail: status.detail,
         }
     }
 
-    pub fn unit(&self) -> &str {
-        &self.unit
+    pub fn plugin(&self) -> &str {
+        &self.plugin
     }
 
-    pub fn phase(&self) -> UnitPhase {
+    pub fn phase(&self) -> PluginPhase {
         self.phase
     }
 
@@ -58,31 +58,33 @@ impl UnitReport {
     }
 
     pub fn is_running(&self) -> bool {
-        self.phase == UnitPhase::Running
+        self.phase == PluginPhase::Running
     }
 
-    /// Whether the unit is failed or waiting to restart after an exit.
+    /// Whether the plugin is failed or waiting to restart after an exit.
     pub fn is_troubled(&self) -> bool {
-        matches!(self.phase, UnitPhase::Failed | UnitPhase::Restarting)
+        matches!(self.phase, PluginPhase::Failed | PluginPhase::Restarting)
     }
 }
 
-impl Units {
-    pub fn all(&self) -> Vec<UnitReport> {
+impl Plugins {
+    pub fn all(&self) -> Vec<PluginReport> {
         self.read()
-            .map(|state| state.units.into_iter().map(UnitReport::of).collect())
+            .map(|state| state.plugins.into_iter().map(PluginReport::of).collect())
             .unwrap_or_default()
     }
 
-    pub fn of(&self, unit: &str) -> Option<UnitReport> {
-        self.all().into_iter().find(|report| report.unit == unit)
-    }
-
-    /// Return units that are failed or waiting to restart.
-    pub fn troubled(&self) -> Vec<UnitReport> {
+    pub fn of(&self, plugin: &str) -> Option<PluginReport> {
         self.all()
             .into_iter()
-            .filter(UnitReport::is_troubled)
+            .find(|report| report.plugin == plugin)
+    }
+
+    /// Return plugins that are failed or waiting to restart.
+    pub fn troubled(&self) -> Vec<PluginReport> {
+        self.all()
+            .into_iter()
+            .filter(PluginReport::is_troubled)
             .collect()
     }
 }

@@ -4,16 +4,16 @@ mod common;
 
 use std::time::Duration;
 
-use common::{TempSocket, command_manifest, unit_name, widget_manifest};
+use common::{TempSocket, command_manifest, plugin_name, widget_manifest};
 use omega_daemon::Shutdown;
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
+use omega_daemon::plugins::PluginRegistry;
 use omega_daemon::shell::ShellServer;
-use omega_daemon::supervisor::{Supervisor, UnitSpec};
-use omega_daemon::units::UnitTable;
+use omega_daemon::supervisor::{PluginSpec, Supervisor};
 use omega_proto::omega::{
-    Act, Action, ErrorCode, InvokeUnit, RestartUnit, action, frame, invoke, result,
+    Act, Action, ErrorCode, InvokePlugin, RestartPlugin, action, frame, invoke, result,
 };
 use omega_proto::{Observation, Refusal, Socket};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -32,19 +32,19 @@ impl Shell {
         let path = TempSocket::new(tag);
         let socket = path.socket();
         let hub = Hub::new();
-        let units = UnitTable::detached(hub.clone());
-        units.adopt(&ManifestStore::from_manifests([
+        let plugins = PluginRegistry::detached(hub.clone());
+        plugins.adopt(&ManifestStore::from_manifests([
             widget_manifest("sleeper", "battery"),
             command_manifest("lamp", "toggle"),
         ]));
-        let supervisor = Supervisor::new(socket.clone(), units.clone(), Shutdown::new());
+        let supervisor = Supervisor::new(socket.clone(), plugins.clone(), Shutdown::new());
 
         // No brokers are installed; brokered requests return UNIMPLEMENTED.
         let server = ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
             .serving(
                 supervisor.clone(),
-                units,
+                plugins,
                 Brokerage::new(hub, Shutdown::new()),
             );
         tokio::spawn(async move {
@@ -117,7 +117,7 @@ impl Observer {
     }
 }
 
-/// A unit that stays up until something stops it.
+/// A plugin that stays up until something stops it.
 fn sleeper(tag: &str) -> std::path::PathBuf {
     let script = std::env::temp_dir().join(format!("omega-{tag}-{}.sh", std::process::id()));
     std::fs::write(&script, "#!/bin/sh\nsleep 30\n").unwrap();
@@ -135,7 +135,7 @@ async fn a_shell_asks_in_the_protocol_it_is_already_read_in() {
     let script = sleeper("gateway-sleeper");
     shell
         .supervisor
-        .spawn(UnitSpec::new(unit_name("sleeper"), &script));
+        .spawn(PluginSpec::new(plugin_name("sleeper"), &script));
 
     let started = tokio::time::Instant::now() + Duration::from_secs(2);
     while tokio::time::Instant::now() < started && shell.supervisor.running().is_empty() {
@@ -144,26 +144,26 @@ async fn a_shell_asks_in_the_protocol_it_is_already_read_in() {
 
     let mut observer = shell.connect().await;
     let outcome = observer
-        .ask(invoke::Op::RestartUnit(RestartUnit {
-            unit: "sleeper".into(),
+        .ask(invoke::Op::RestartPlugin(RestartPlugin {
+            plugin: "sleeper".into(),
         }))
         .await;
 
     // The same op, the same policy, the same answer — a JSON request is the
     // protocol in a second encoding, not a second protocol.
     assert!(matches!(outcome, result::Outcome::Ok(_)), "{outcome:?}");
-    assert!(shell.supervisor.running().contains(&unit_name("sleeper")));
+    assert!(shell.supervisor.running().contains(&plugin_name("sleeper")));
 
     let _ = std::fs::remove_file(&script);
 }
 
-/// What a button press is: the operator asking a unit to run one of its own
+/// What a button press is: the operator asking a plugin to run one of its own
 /// commands, which is exactly what `omega run` asks for.
-fn press(unit: &str, command: &str) -> invoke::Op {
+fn press(plugin: &str, command: &str) -> invoke::Op {
     invoke::Op::Act(Act {
         action: Some(Action {
-            kind: Some(action::Kind::InvokeUnit(InvokeUnit {
-                unit: unit.into(),
+            kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                plugin: plugin.into(),
                 command: command.into(),
                 args: Vec::new(),
             })),
@@ -192,7 +192,7 @@ async fn a_request_the_policy_does_not_serve_an_operator_is_refused() {
     let shell = Shell::serving("gateway-denied");
     let mut observer = shell.connect().await;
 
-    // Publishing a view is a unit's business. The observation socket does not
+    // Publishing a view is a plugin's business. The observation socket does not
     // become a way to be one.
     let refusal = observer
         .refusal(invoke::Op::PublishView(omega_proto::omega::PublishView {
@@ -251,8 +251,8 @@ async fn a_server_that_only_streams_says_so() {
 
     // Missing supervision must produce a refusal.
     let refusal = observer
-        .refusal(invoke::Op::RestartUnit(RestartUnit {
-            unit: "sleeper".into(),
+        .refusal(invoke::Op::RestartPlugin(RestartPlugin {
+            plugin: "sleeper".into(),
         }))
         .await;
     assert_eq!(refusal.code, ErrorCode::Unimplemented);

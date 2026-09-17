@@ -4,7 +4,7 @@
   "name": "Omega View",
   "version": "0.3.6",
   "author": "Omega",
-  "description": "Renders a declarative view tree published by an Omega unit",
+  "description": "Renders a declarative view tree published by an Omega plugin",
   "kinds": [
     "bar-widget"
   ],
@@ -18,13 +18,13 @@
     "allowMultiple": true,
     "defaultSection": "center",
     "defaults": {
-      "unit": "",
+      "plugin": "",
       "surface": "",
       "panel": ""
     },
     "schema": [
       {
-        "key": "unit",
+        "key": "plugin",
         "type": "string",
         "label": "Plugin (empty = whichever is publishing)"
       },

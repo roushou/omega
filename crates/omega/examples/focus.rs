@@ -1,16 +1,16 @@
 //! Focus timer. Schedule `tick` every second in the system document.
 //!
-//! Elapsed time includes suspend and ignores wall-clock adjustments. A unit
+//! Elapsed time includes suspend and ignores wall-clock adjustments. A plugin
 //! restart resumes from the daemon's record; a daemon restart resets the timer.
 //! Completion is notified at most once; a crash between recording completion
 //! and notification may lose that notification.
 use omega::config::{Fields, Values};
 use omega::platform::notification::Notify;
-use omega::record::{Own, UnitState, Watch};
+use omega::record::{Own, PluginState, Watch};
 use omega::ui::{Button, Metric, Row, Section, Text};
 use omega::{Command, Plugin, Surface, Ui};
 
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Timer {
@@ -75,8 +75,8 @@ impl Timer {
         false
     }
 }
-impl UnitState for Timer {
-    const UNIT: &'static str = env!("CARGO_PKG_NAME");
+impl PluginState for Timer {
+    const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
     const KEY: &'static str = "timer";
 }
 impl Fields for Timer {
@@ -243,7 +243,7 @@ impl Command for Tick {
     }
 }
 pub fn plugin() -> Plugin {
-    Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
+    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<Start>()

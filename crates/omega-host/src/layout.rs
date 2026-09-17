@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::toml::{TomlFile, TomlSchema};
-use omega_proto::{Manifest, UnitName};
+use omega_proto::{Manifest, PluginName};
 
 /// Cargo build profile used for compilation and artifact lookup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -48,8 +48,8 @@ impl Layout {
     /// CLI scaffolds it, cargo builds it, and the build runs it.
     pub const SYSTEM_CRATE: &'static str = "system";
 
-    /// Path to the built-unit index inside the state directory.
-    pub const UNITS_TOML: &'static str = "units.toml";
+    /// Path to the built-plugin index inside the state directory.
+    pub const PLUGINS_TOML: &'static str = "plugins.toml";
 
     /// Resolve the three roots (env-overridable, XDG defaults).
     pub fn resolve() -> Self {
@@ -217,23 +217,23 @@ impl Layout {
     }
 
     /// `~/.config/omega/plugins/<name>`.
-    pub fn unit_src_dir(&self, name: &UnitName) -> PathBuf {
+    pub fn plugin_src_dir(&self, name: &PluginName) -> PathBuf {
         self.plugins_dir().join(name.as_str())
     }
 
     /// `~/.config/omega/plugins/<name>/Cargo.toml`.
-    pub fn unit_crate_manifest(&self, name: &UnitName) -> PathBuf {
-        self.unit_src_dir(name).join("Cargo.toml")
+    pub fn plugin_crate_manifest(&self, name: &PluginName) -> PathBuf {
+        self.plugin_src_dir(name).join("Cargo.toml")
     }
 
     /// Plugin library entry point at `plugins/<name>/src/lib.rs`.
-    pub fn unit_lib_src(&self, name: &UnitName) -> PathBuf {
-        self.unit_src_dir(name).join("src").join("lib.rs")
+    pub fn plugin_lib_src(&self, name: &PluginName) -> PathBuf {
+        self.plugin_src_dir(name).join("src").join("lib.rs")
     }
 
     /// `~/.config/omega/plugins/<name>/src/main.rs` — the program that runs it.
-    pub fn unit_main_src(&self, name: &UnitName) -> PathBuf {
-        self.unit_src_dir(name).join("src").join("main.rs")
+    pub fn plugin_main_src(&self, name: &PluginName) -> PathBuf {
+        self.plugin_src_dir(name).join("src").join("main.rs")
     }
 
     pub fn crates_dir(&self) -> PathBuf {
@@ -257,14 +257,14 @@ impl Layout {
         self.target_dir().join(profile.dir())
     }
 
-    /// `~/.cache/omega/logs` — unit output.
+    /// `~/.cache/omega/logs` — plugin output.
     ///
     /// Logs outlive both build activation and generation reclamation.
     pub fn renderer_dir(&self) -> PathBuf {
         self.cache.join("renderer")
     }
 
-    pub fn renderer_log(&self, name: &UnitName) -> PathBuf {
+    pub fn renderer_log(&self, name: &PluginName) -> PathBuf {
         self.logs_dir()
             .join(format!("{}.renderer.log", name.as_str()))
     }
@@ -274,12 +274,12 @@ impl Layout {
     }
 
     /// `~/.cache/omega/logs/<name>.log`.
-    pub fn unit_log(&self, name: &UnitName) -> PathBuf {
+    pub fn plugin_log(&self, name: &PluginName) -> PathBuf {
         self.logs_dir().join(format!("{}.log", name.as_str()))
     }
 
-    /// The compiled binary for a unit (cargo names it after the crate).
-    pub fn compiled_binary(&self, profile: Profile, name: &UnitName) -> PathBuf {
+    /// The compiled binary for a plugin (cargo names it after the crate).
+    pub fn compiled_binary(&self, profile: Profile, name: &PluginName) -> PathBuf {
         self.profile_dir(profile).join(name.as_str())
     }
 
@@ -320,42 +320,42 @@ impl Layout {
 
     // ---- assembled state ----
 
-    /// `~/.local/state/omega/units`.
-    pub fn state_units_dir(&self) -> PathBuf {
-        self.state.join("units")
+    /// `~/.local/state/omega/plugins`.
+    pub fn state_plugins_dir(&self) -> PathBuf {
+        self.state.join("plugins")
     }
 
-    /// `~/.local/state/omega/units/<name>`.
-    pub fn state_unit_dir(&self, name: &UnitName) -> PathBuf {
-        self.state_units_dir().join(name.as_str())
+    /// `~/.local/state/omega/plugins/<name>`.
+    pub fn state_plugin_dir(&self, name: &PluginName) -> PathBuf {
+        self.state_plugins_dir().join(name.as_str())
     }
 
-    /// `~/.local/state/omega/units/<name>/<name>` — the unit's binary.
-    pub fn state_unit_program(&self, name: &UnitName) -> PathBuf {
-        self.state_unit_dir(name).join(name.as_str())
+    /// `~/.local/state/omega/plugins/<name>/<name>` — the plugin's binary.
+    pub fn state_plugin_program(&self, name: &PluginName) -> PathBuf {
+        self.state_plugin_dir(name).join(name.as_str())
     }
 
-    /// `~/.local/state/omega/units/<name>/unit.pb` — the canonical manifest,
+    /// `~/.local/state/omega/plugins/<name>/plugin.pb` — the canonical manifest,
     /// as the exact bytes the plugin answered with and the daemon hashes.
-    pub fn state_unit_manifest(&self, name: &UnitName) -> PathBuf {
-        self.state_unit_dir(name).join(Manifest::FILE_NAME)
+    pub fn state_plugin_manifest(&self, name: &PluginName) -> PathBuf {
+        self.state_plugin_dir(name).join(Manifest::FILE_NAME)
     }
 
-    /// `~/.local/state/omega/units.toml` — the daemon's state config.
-    pub fn state_units_toml(&self) -> PathBuf {
-        self.state.join(Self::UNITS_TOML)
+    /// `~/.local/state/omega/plugins.toml` — the daemon's state config.
+    pub fn state_plugins_toml(&self) -> PathBuf {
+        self.state.join(Self::PLUGINS_TOML)
     }
 
-    // ---- relative paths (the shape persisted in units.toml) ----
+    // ---- relative paths (the shape persisted in plugins.toml) ----
 
-    /// `units/<name>/<name>`, relative to the state dir.
-    pub fn unit_program_rel(&self, name: &UnitName) -> PathBuf {
-        Path::new("units").join(name.as_str()).join(name.as_str())
+    /// `plugins/<name>/<name>`, relative to the state dir.
+    pub fn plugin_program_rel(&self, name: &PluginName) -> PathBuf {
+        Path::new("plugins").join(name.as_str()).join(name.as_str())
     }
 
-    /// `units/<name>/unit.pb`, relative to the state dir.
-    pub fn unit_manifest_rel(&self, name: &UnitName) -> PathBuf {
-        Path::new("units")
+    /// `plugins/<name>/plugin.pb`, relative to the state dir.
+    pub fn plugin_manifest_rel(&self, name: &PluginName) -> PathBuf {
+        Path::new("plugins")
             .join(name.as_str())
             .join(Manifest::FILE_NAME)
     }

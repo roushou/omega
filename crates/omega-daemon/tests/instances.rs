@@ -4,9 +4,9 @@ use omega_daemon::{
     broker::Brokerage,
     hub::Hub,
     manifest::ManifestStore,
+    plugins::{PluginRegistry, SessionGuard},
     shell::ShellServer,
     supervisor::Supervisor,
-    units::{SessionGuard, UnitTable},
 };
 use omega_proto::{
     IntoValue, Observation, Socket,
@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 struct Fixture {
-    units: UnitTable,
+    plugins: PluginRegistry,
     hub: Hub,
     socket: Socket,
     guard: Option<SessionGuard>,
@@ -28,26 +28,26 @@ impl Fixture {
         let path = common::TempSocket::new(tag);
         let socket = path.socket();
         let hub = Hub::new();
-        let units = UnitTable::detached(hub.clone());
+        let plugins = PluginRegistry::detached(hub.clone());
         let manifest =
             common::widget_manifest("example", "panel").serving([omega::CommandEndpoint {
                 id: "activate".into(),
             }]);
-        units.adopt(&ManifestStore::from_manifests([manifest]));
-        let guard = Self::connect_unit(&units);
+        plugins.adopt(&ManifestStore::from_manifests([manifest]));
+        let guard = Self::connect_plugin(&plugins);
         let shutdown = Shutdown::new();
         let server = ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
             .serving(
-                Supervisor::new(socket.clone(), units.clone(), shutdown.clone()),
-                units.clone(),
+                Supervisor::new(socket.clone(), plugins.clone(), shutdown.clone()),
+                plugins.clone(),
                 Brokerage::new(hub.clone(), shutdown),
             );
         let server = tokio::spawn(async move {
             server.run().await.unwrap();
         });
         Self {
-            units,
+            plugins,
             hub,
             socket,
             guard: Some(guard),
@@ -55,14 +55,14 @@ impl Fixture {
             _path: path,
         }
     }
-    fn connect_unit(units: &UnitTable) -> SessionGuard {
-        Self::connect_unit_answering(units, None)
+    fn connect_plugin(plugins: &PluginRegistry) -> SessionGuard {
+        Self::connect_plugin_answering(plugins, None)
     }
-    fn connect_unit_answering(
-        units: &UnitTable,
+    fn connect_plugin_answering(
+        plugins: &PluginRegistry,
         command_answer: Option<result::Outcome>,
     ) -> SessionGuard {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<omega_daemon::units::Request>(16);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<omega_daemon::plugins::Request>(16);
         tokio::spawn(async move {
             while let Some(request) = rx.recv().await {
                 let answer = match request.op {
@@ -85,12 +85,12 @@ impl Fixture {
                             .clone()
                             .unwrap_or_else(|| result::Outcome::Value(call.args[0].clone()))
                     }
-                    other => panic!("unexpected unit request {other:?}"),
+                    other => panic!("unexpected plugin request {other:?}"),
                 };
                 let _ = request.answer.send(Ok(answer));
             }
         });
-        units.connected(&common::unit_name("example"), tx)
+        plugins.connected(&common::plugin_name("example"), tx)
     }
     fn view(label: omega::Value) -> omega::ViewTree {
         omega::ViewTree {
@@ -115,7 +115,7 @@ impl Fixture {
     }
     fn request(singleton: &str, label: &str) -> omega::CreateInstance {
         omega::CreateInstance {
-            unit: "example".into(),
+            plugin: "example".into(),
             surface: "panel".into(),
             singleton: singleton.into(),
             config: [("label".into(), label.into_value())].into(),
@@ -140,7 +140,7 @@ impl Fixture {
     fn attachment(features: Vec<i32>) -> invoke::Op {
         invoke::Op::AttachRenderer(omega::AttachRenderer {
             build_fingerprint: String::new(),
-            scope: Some(omega::attach_renderer::Scope::Unit("example".into())),
+            scope: Some(omega::attach_renderer::Scope::Plugin("example".into())),
             features,
         })
     }
@@ -244,7 +244,7 @@ async fn independent_settings_singleton_reuse_and_dismissal_share_one_registry()
         }))
         .await;
     let closed = fixture
-        .units
+        .plugins
         .inspect_instances(None)
         .instances
         .into_iter()
@@ -256,7 +256,7 @@ async fn independent_settings_singleton_reuse_and_dismissal_share_one_registry()
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             let snapshot = fixture
-                .units
+                .plugins
                 .inspect_instances(None)
                 .instances
                 .into_iter()
@@ -325,9 +325,9 @@ async fn renderer_interactions_resolve_retained_bindings_and_reject_stale_revisi
         result::Outcome::Value("bound argument".into_value())
     );
     fixture
-        .units
+        .plugins
         .publish_instance(
-            &common::unit_name("example"),
+            &common::plugin_name("example"),
             &omega::PublishView {
                 instance: first.instance.clone(),
                 surface_id: "panel".into(),
@@ -370,9 +370,9 @@ async fn retained_interactions_share_eligibility_but_keep_command_authorization(
             parent.props.insert(case.into(), true.into_value());
         }
         fixture
-            .units
+            .plugins
             .publish_instance(
-                &common::unit_name("example"),
+                &common::plugin_name("example"),
                 &omega::PublishView {
                     instance: first.instance.clone(),
                     surface_id: "panel".into(),
@@ -384,7 +384,7 @@ async fn retained_interactions_share_eligibility_but_keep_command_authorization(
                 },
             )
             .unwrap();
-        let current = fixture.units.inspect_instances(None).instances.remove(0);
+        let current = fixture.plugins.inspect_instances(None).instances.remove(0);
         let code = match case {
             "disabled" | "busy" => omega::ErrorCode::FailedPrecondition,
             "undeclared" => omega::ErrorCode::PermissionDenied,
@@ -422,8 +422,8 @@ async fn renderer_command_answers_preserve_refusals_and_reject_unexpected_outcom
     ] {
         let mut fixture = Fixture::new("instances-command-answer");
         drop(fixture.guard.take());
-        fixture.guard = Some(Fixture::connect_unit_answering(
-            &fixture.units,
+        fixture.guard = Some(Fixture::connect_plugin_answering(
+            &fixture.plugins,
             Some(outcome),
         ));
         let mut owner = fixture.observer().await;
@@ -452,7 +452,7 @@ async fn restart_invalidates_instances_and_destroy_is_explicitly_non_idempotent(
     let first = owner.create("main", "one").await;
     drop(fixture.guard.take());
     assert!(fixture.hub.view_snapshot().is_empty());
-    fixture.guard = Some(Fixture::connect_unit(&fixture.units));
+    fixture.guard = Some(Fixture::connect_plugin(&fixture.plugins));
     let new = owner.create("main", "one").await;
     assert_ne!(first.instance, new.instance);
     let destroy = |instance| {
@@ -473,7 +473,7 @@ async fn restart_invalidates_instances_and_destroy_is_explicitly_non_idempotent(
         owner.ask(destroy(new.instance)).await,
         omega::ErrorCode::FailedPrecondition,
     );
-    assert!(fixture.units.inspect_instances(None).instances.is_empty());
+    assert!(fixture.plugins.inspect_instances(None).instances.is_empty());
 }
 
 #[tokio::test]
@@ -493,7 +493,7 @@ async fn attachment_negotiates_features_and_never_grants_an_unknown_scope() {
         owner
             .ask(invoke::Op::AttachRenderer(omega::AttachRenderer {
                 build_fingerprint: String::new(),
-                scope: Some(omega::attach_renderer::Scope::Unit("unknown".into())),
+                scope: Some(omega::attach_renderer::Scope::Plugin("unknown".into())),
                 features: vec![1, 2, 5, 7, 8],
             }))
             .await,
@@ -513,19 +513,19 @@ async fn attachment_negotiates_features_and_never_grants_an_unknown_scope() {
 async fn configured_windows_do_not_reopen_during_reconciliation() {
     let fixture = Fixture::new("instances-configured");
     let manifest = fixture
-        .units
-        .manifest(&common::unit_name("example"))
+        .plugins
+        .manifest(&common::plugin_name("example"))
         .unwrap()
         .manifest;
     let provider = omega_daemon::reconcile::PresentationProvider::new(
-        fixture.units.clone(),
+        fixture.plugins.clone(),
         std::sync::Arc::new(ManifestStore::from_manifests([manifest])),
     );
     let plan = |document: &omega::StateDocument| {
         provider.prepare(document).map(|desired| {
             omega_daemon::reconcile::PresentationProvider::plan(
                 &desired,
-                &fixture.units.installed_presentations(),
+                &fixture.plugins.installed_presentations(),
             )
         })
     };
@@ -533,7 +533,7 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
     let document = omega::StateDocument {
         presentations: vec![omega::ConfiguredPresentation {
             id: "window".into(),
-            unit: create.unit,
+            plugin: create.plugin,
             surface: create.surface,
             config: create.config,
             presentation: create.presentation,
@@ -541,7 +541,7 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
         ..Default::default()
     };
     provider.apply(&plan(&document).unwrap()).await.unwrap();
-    let snapshot = fixture.units.inspect_instances(None).instances.remove(0);
+    let snapshot = fixture.plugins.inspect_instances(None).instances.remove(0);
     let mut owner = fixture.observer().await;
     owner
         .ask(invoke::Op::ChangePresentation(omega::ChangePresentation {
@@ -556,7 +556,7 @@ async fn configured_windows_do_not_reopen_during_reconciliation() {
         .await
         .unwrap();
     assert_eq!(
-        fixture.units.inspect_instances(None).instances[0].instance,
+        fixture.plugins.inspect_instances(None).instances[0].instance,
         transient.instance
     );
 }
@@ -595,9 +595,9 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
         },
     );
     fixture
-        .units
+        .plugins
         .publish_instance(
-            &common::unit_name("example"),
+            &common::plugin_name("example"),
             &omega::PublishView {
                 instance: first.instance.clone(),
                 surface_id: "panel".into(),
@@ -605,7 +605,7 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
             },
         )
         .unwrap();
-    let snapshot = fixture.units.inspect_instances(None).instances.remove(0);
+    let snapshot = fixture.plugins.inspect_instances(None).instances.remove(0);
     let mut renderer = fixture.observer().await;
     renderer.ask(Fixture::attachment(vec![1, 2, 5, 7, 8])).await;
     let event = omega::Interact {
@@ -627,9 +627,9 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
         .unwrap()
         .command = "activate".into();
     fixture
-        .units
+        .plugins
         .publish_instance(
-            &common::unit_name("example"),
+            &common::plugin_name("example"),
             &omega::PublishView {
                 instance: first.instance,
                 surface_id: "panel".into(),
@@ -638,7 +638,7 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
         )
         .unwrap();
     let revision = fixture
-        .units
+        .plugins
         .inspect_instances(None)
         .instances
         .remove(0)
@@ -660,7 +660,7 @@ async fn a_plugin_can_dismiss_only_its_own_current_instance() {
     };
     let fixture = Fixture::new("plugin-dismiss");
     let instance = fixture
-        .units
+        .plugins
         .create_instance(&Fixture::request("", "owned"))
         .await
         .unwrap();
@@ -669,15 +669,15 @@ async fn a_plugin_can_dismiss_only_its_own_current_instance() {
         fixture.hub.clone(),
         Supervisor::new(
             fixture.socket.clone(),
-            fixture.units.clone(),
+            fixture.plugins.clone(),
             shutdown.clone(),
         ),
-        fixture.units.clone(),
+        fixture.plugins.clone(),
         Brokerage::new(fixture.hub.clone(), shutdown),
     );
-    let name = common::unit_name("example");
+    let name = common::plugin_name("example");
     let manifest = common::widget_manifest("example", "panel");
-    let peer = Peer::unit(name.clone(), &manifest).unwrap();
+    let peer = Peer::plugin(name.clone(), &manifest).unwrap();
     let mut subscriptions = Subscriptions::of(&name, &manifest);
     let request = omega::Invoke {
         op: Some(invoke::Op::ChangePresentation(omega::ChangePresentation {
@@ -685,7 +685,7 @@ async fn a_plugin_can_dismiss_only_its_own_current_instance() {
             action: omega::PresentationAction::Close as i32,
         })),
     };
-    let stranger = Peer::unit(common::unit_name("stranger"), &manifest).unwrap();
+    let stranger = Peer::plugin(common::plugin_name("stranger"), &manifest).unwrap();
     assert!(
         dispatcher
             .invoke(&stranger, &mut subscriptions, &request)
@@ -812,12 +812,12 @@ async fn invalid_renderer_fingerprints_are_refused_but_legacy_attachments_remain
 async fn required_placements_are_reported_even_without_a_renderer() {
     let fixture = Fixture::new("renderer-required-placements");
     let address = omega_daemon::hub::SurfaceRef::module(
-        common::unit_name("example"),
+        common::plugin_name("example"),
         "panel".parse::<omega_proto::SurfaceId>().unwrap(),
         "slot".parse::<omega_proto::ModuleId>().unwrap(),
     );
     fixture
-        .units
+        .plugins
         .configure_instance(&address, Default::default())
         .await
         .unwrap();
@@ -833,12 +833,12 @@ async fn required_placements_are_reported_even_without_a_renderer() {
     assert_eq!(
         status.renderer_placements,
         vec![omega::PlacementAttachment {
-            unit: "example".into(),
+            plugin: "example".into(),
             surface: "panel".into(),
             placement: "slot".into(),
         }]
     );
-    fixture.units.remove_instance(&address).await.unwrap();
+    fixture.plugins.remove_instance(&address).await.unwrap();
     let result::Outcome::Deployment(status) = operator
         .ask(invoke::Op::GetDeployment(Default::default()))
         .await
@@ -862,8 +862,11 @@ async fn deployment_reports_readiness_without_exposing_views_and_expires_session
     else {
         panic!("expected deployment snapshot");
     };
-    assert_eq!(status.plugins[0].readiness(), PluginReadiness::Ready);
-    assert_eq!(status.plugins[0].instances[0].instance, snapshot.instance);
+    assert_eq!(status.plugin_health[0].readiness(), PluginReadiness::Ready);
+    assert_eq!(
+        status.plugin_health[0].instances[0].instance,
+        snapshot.instance
+    );
     assert!(
         !serde_json::to_string(&status)
             .unwrap()
@@ -871,9 +874,9 @@ async fn deployment_reports_readiness_without_exposing_views_and_expires_session
     );
 
     fixture
-        .units
+        .plugins
         .publish_instance(
-            &common::unit_name("example"),
+            &common::plugin_name("example"),
             &omega::PublishView {
                 surface_id: "panel".into(),
                 instance: snapshot.instance.clone(),
@@ -891,8 +894,14 @@ async fn deployment_reports_readiness_without_exposing_views_and_expires_session
     else {
         panic!("expected deployment snapshot");
     };
-    assert_eq!(status.plugins[0].readiness(), PluginReadiness::Waiting);
-    assert_eq!(status.plugins[0].instances[0].pending_topics, ["network"]);
+    assert_eq!(
+        status.plugin_health[0].readiness(),
+        PluginReadiness::Waiting
+    );
+    assert_eq!(
+        status.plugin_health[0].instances[0].pending_topics,
+        ["network"]
+    );
 
     let stale = snapshot.instance;
     drop(fixture.guard.take());
@@ -902,12 +911,12 @@ async fn deployment_reports_readiness_without_exposing_views_and_expires_session
     else {
         panic!("expected deployment snapshot");
     };
-    assert!(status.plugins[0].instances.is_empty());
+    assert!(status.plugin_health[0].instances.is_empty());
     assert!(
         fixture
-            .units
+            .plugins
             .publish_instance(
-                &common::unit_name("example"),
+                &common::plugin_name("example"),
                 &omega::PublishView {
                     surface_id: "panel".into(),
                     instance: stale,

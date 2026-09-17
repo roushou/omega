@@ -31,10 +31,10 @@ impl Command for Select {
 #[test]
 fn schedule_and_keybind_share_typed_command_identity() {
     let action = Actions::invoke(Refresh);
-    let Some(action::Kind::InvokeUnit(call)) = &action.kind else {
+    let Some(action::Kind::InvokePlugin(call)) = &action.kind else {
         panic!("expected invocation")
     };
-    assert_eq!(call.unit, env!("CARGO_PKG_NAME"));
+    assert_eq!(call.plugin, env!("CARGO_PKG_NAME"));
     assert_eq!(call.command, "refresh-now");
     assert!(call.args.is_empty());
     let schedule = Schedules::every("refresh", Cadence::seconds(10), action.clone());
@@ -52,10 +52,10 @@ fn structured_input_round_trips_through_the_command_decoder() {
             count: 2,
         },
     );
-    let Some(action::Kind::InvokeUnit(call)) = action.kind else {
+    let Some(action::Kind::InvokePlugin(call)) = action.kind else {
         panic!("expected invocation")
     };
-    assert_eq!(call.unit, env!("CARGO_PKG_NAME"));
+    assert_eq!(call.plugin, env!("CARGO_PKG_NAME"));
     assert_eq!(call.command, "select");
     assert_eq!(
         Selection::decode(Args::new(call.args)).unwrap(),

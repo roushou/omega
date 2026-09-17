@@ -14,7 +14,7 @@ pub(crate) struct Sources {
 
 pub(crate) struct Compiled {
     sources: Sources,
-    units: Plugins,
+    plugins: Plugins,
 }
 
 pub(crate) struct Described {
@@ -51,7 +51,7 @@ impl Operation<Sources> for Compile {
         let layout = sources.workspace.layout();
         progress.path("Workspace:", &layout.config);
 
-        let units = Plugins::discover(layout)?;
+        let plugins = Plugins::discover(layout)?;
         Cargo::new(&layout.config)
             .build(Build::request(
                 layout,
@@ -67,7 +67,7 @@ impl Operation<Sources> for Compile {
                 },
             )?;
 
-        Ok(Compiled { sources, units })
+        Ok(Compiled { sources, plugins })
     }
 }
 
@@ -81,7 +81,7 @@ impl Operation<Compiled> for DescribePlugins {
         progress: &mut Progress<'_>,
     ) -> anyhow::Result<Described> {
         let plan = Plan::describe(
-            &compiled.units,
+            &compiled.plugins,
             compiled.sources.workspace.layout(),
             compiled.sources.profile,
         )
@@ -190,9 +190,12 @@ impl Described {
 #[cfg(test)]
 impl Compiled {
     pub(crate) fn fixture(sources: Sources) -> anyhow::Result<Self> {
-        let units = Plugins::discover(sources.workspace.layout())?;
-        anyhow::ensure!(units.is_empty(), "fixture does not compile plugin binaries");
+        let plugins = Plugins::discover(sources.workspace.layout())?;
+        anyhow::ensure!(
+            plugins.is_empty(),
+            "fixture does not compile plugin binaries"
+        );
 
-        Ok(Self { sources, units })
+        Ok(Self { sources, plugins })
     }
 }

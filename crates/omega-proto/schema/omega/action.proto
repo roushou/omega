@@ -28,7 +28,7 @@ message Action {
     SetVolume set_volume = 16;
     SetBacklight set_backlight = 17;
     Notify notify = 18;
-    InvokeUnit invoke_unit = 19;
+    InvokePlugin invoke_plugin = 19;
     ToggleFloating toggle_floating = 20;
     ToggleFullscreen toggle_fullscreen = 21;
     SetPowerProfile set_power_profile = 22;
@@ -156,9 +156,9 @@ message Notify {
   uint32 timeout_ms = 4;
 }
 
-// Ask the daemon to invoke another unit's command surface.
-message InvokeUnit {
-  string unit = 1;
+// Ask the daemon to invoke another plugin's command surface.
+message InvokePlugin {
+  string plugin = 1;
   string command = 2;
   repeated Value args = 3;
 }
@@ -195,7 +195,7 @@ enum Modifier {
 }
 
 // Completion acknowledges NetworkManager activation admission. WifiState reports
-// the connection outcome. Passwords must never be logged or stored in unit records.
+// the connection outcome. Passwords must never be logged or stored in plugin records.
 message ConnectWifi {
   string ssid = 1;
   string password = 2;

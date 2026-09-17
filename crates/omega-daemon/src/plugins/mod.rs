@@ -1,5 +1,5 @@
-//! Authoritative unit table: manifests, lifecycle, tokens, supervision, and sessions.
-//! Publish the units topic as a projection whenever these records change.
+//! Authoritative plugin table: manifests, lifecycle, tokens, supervision, and sessions.
+//! Publish the plugins topic as a projection whenever these records change.
 
 mod health;
 mod instance;
@@ -15,47 +15,47 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tokio::sync::{mpsc, oneshot};
 
+use omega_proto::PluginName;
 use omega_proto::SystemTopic;
-use omega_proto::UnitName;
 use omega_proto::omega::{
-    StatePatch, StateTopic, UnitStatus, UnitsState, Value, invoke, result, state_topic,
+    PluginStatus, PluginsState, StatePatch, StateTopic, Value, invoke, result, state_topic,
 };
 
 use crate::Shutdown;
 use crate::hub::Hub;
-use crate::manifest::{ManifestStore, UnitManifest};
+use crate::manifest::{ManifestStore, PluginManifest};
 
 pub use lifecycle::{Lifecycle, Transition};
 pub use presentations::InstalledInstance;
-pub use record::{UnitControl, UnitRecord};
+pub use record::{PluginControl, PluginRecord};
 pub use session::{Request, RequestError, SessionGuard};
-pub use token::{TokenError, UnitToken};
+pub use token::{PluginToken, TokenError};
 
 #[derive(Debug, Clone)]
-pub struct UnitTable {
+pub struct PluginRegistry {
     inner: Arc<Inner>,
 }
 
 #[derive(Debug)]
 struct Inner {
-    units: Mutex<BTreeMap<UnitName, UnitRecord>>,
+    plugins: Mutex<BTreeMap<PluginName, PluginRecord>>,
     renderers: Mutex<BTreeMap<crate::attachment::Scope, presentations::RendererLease>>,
     request_bytes: Arc<tokio::sync::Semaphore>,
     hub: Hub,
-    /// Notify waiters when a unit becomes reachable.
-    connected: mpsc::Sender<UnitName>,
+    /// Notify waiters when a plugin becomes reachable.
+    connected: mpsc::Sender<PluginName>,
 }
 
-impl UnitTable {
+impl PluginRegistry {
     const REQUEST_BYTES: usize = 8 * 1024 * 1024;
-    /// A table, and the stream of units connecting to it. Only the daemon
+    /// A table, and the stream of plugins connecting to it. Only the daemon
     /// holds the receiving end.
-    pub fn new(hub: Hub) -> (Self, mpsc::Receiver<UnitName>) {
+    pub fn new(hub: Hub) -> (Self, mpsc::Receiver<PluginName>) {
         let (connected, arrivals) = mpsc::channel(16);
         (
             Self {
                 inner: Arc::new(Inner {
-                    units: Mutex::new(BTreeMap::new()),
+                    plugins: Mutex::new(BTreeMap::new()),
                     renderers: Default::default(),
                     request_bytes: Arc::new(tokio::sync::Semaphore::new(Self::REQUEST_BYTES)),
                     hub,
@@ -73,7 +73,7 @@ impl UnitTable {
 
     // ---- the build ----
 
-    /// Adopt the manifests of a build. Units the build no longer contains
+    /// Adopt the manifests of a build. Plugins the build no longer contains
     /// keep their records only while something is still running them.
     pub fn adopt(&self, manifests: &ManifestStore) {
         self.replace_build(manifests, None);
@@ -82,7 +82,7 @@ impl UnitTable {
     pub fn activate(
         &self,
         manifests: &ManifestStore,
-        settings: HashMap<UnitName, HashMap<String, Value>>,
+        settings: HashMap<PluginName, HashMap<String, Value>>,
     ) {
         self.replace_build(manifests, Some(settings));
     }
@@ -90,30 +90,30 @@ impl UnitTable {
     fn replace_build(
         &self,
         manifests: &ManifestStore,
-        settings: Option<HashMap<UnitName, HashMap<String, Value>>>,
+        settings: Option<HashMap<PluginName, HashMap<String, Value>>>,
     ) {
         {
-            let mut units = self.lock();
+            let mut plugins = self.lock();
             for (name, manifest) in manifests.iter() {
-                units
+                plugins
                     .entry(name.clone())
-                    .or_insert_with(|| UnitRecord::new(name.clone()))
+                    .or_insert_with(|| PluginRecord::new(name.clone()))
                     .manifest = Some(manifest.clone());
             }
 
-            for record in units.values_mut() {
+            for record in plugins.values_mut() {
                 if manifests.get(&record.name).is_none() {
                     record.manifest = None;
                 }
             }
             if let Some(settings) = settings {
                 for (name, config) in settings {
-                    if let Some(record) = units.get_mut(&name) {
+                    if let Some(record) = plugins.get_mut(&name) {
                         record.config = config;
                     }
                 }
             }
-            units.retain(|_, record| {
+            plugins.retain(|_, record| {
                 record.manifest.is_some() || record.is_held() || record.is_connected()
             });
         }
@@ -121,12 +121,12 @@ impl UnitTable {
     }
 
     /// The manifest the daemon vouches for, if this build has one.
-    pub fn manifest(&self, name: &UnitName) -> Option<UnitManifest> {
+    pub fn manifest(&self, name: &PluginName) -> Option<PluginManifest> {
         self.lock().get(name)?.manifest.clone()
     }
 
-    /// Every unit this build produced.
-    pub fn built(&self) -> Vec<UnitName> {
+    /// Every plugin this build produced.
+    pub fn built(&self) -> Vec<PluginName> {
         self.lock()
             .values()
             .filter(|record| record.manifest.is_some())
@@ -136,8 +136,8 @@ impl UnitTable {
 
     // ---- what the document configured ----
 
-    /// The settings to hand a unit that is connecting.
-    pub fn config(&self, name: &UnitName) -> HashMap<String, Value> {
+    /// The settings to hand a plugin that is connecting.
+    pub fn config(&self, name: &PluginName) -> HashMap<String, Value> {
         self.lock()
             .get(name)
             .map(|record| record.config.clone())
@@ -147,30 +147,30 @@ impl UnitTable {
     // ---- identity ----
 
     /// Mint the token for a spawn that is about to happen. Issuing it before
-    /// the spawn is what makes a fast unit's first connection identifiable.
-    pub fn issue(&self, name: &UnitName) -> Result<UnitToken, TokenError> {
-        let token = UnitToken::mint()?;
+    /// the spawn is what makes a fast plugin's first connection identifiable.
+    pub fn issue(&self, name: &PluginName) -> Result<PluginToken, TokenError> {
+        let token = PluginToken::mint()?;
         Ok(self.install_token(name, false, token))
     }
 
-    /// Issue a development spawn token and reserve the unit identity.
+    /// Issue a development spawn token and reserve the plugin identity.
     /// Adopted sessions use the same manifest grants as supervised sessions.
-    pub fn adopt_unit(&self, name: &UnitName) -> Result<UnitToken, TokenError> {
-        Ok(self.adopt_with_token(name, UnitToken::mint()?))
+    pub fn adopt_plugin(&self, name: &PluginName) -> Result<PluginToken, TokenError> {
+        Ok(self.adopt_with_token(name, PluginToken::mint()?))
     }
 
-    pub(crate) fn adopt_with_token(&self, name: &UnitName, token: UnitToken) -> UnitToken {
+    pub(crate) fn adopt_with_token(&self, name: &PluginName, token: PluginToken) -> PluginToken {
         let token = self.install_token(name, true, token);
         self.publish();
         token
     }
 
-    /// Give an adopted unit back to the supervisor, and say so, so that a
+    /// Give an adopted plugin back to the supervisor, and say so, so that a
     /// convergence starts the built binary again.
-    pub fn release_adoption(&self, name: &UnitName, token: &UnitToken) {
+    pub fn release_adoption(&self, name: &PluginName, token: &PluginToken) {
         {
-            let mut units = self.lock();
-            let Some(record) = units.get_mut(name) else {
+            let mut plugins = self.lock();
+            let Some(record) = plugins.get_mut(name) else {
                 return;
             };
             if !record.adopted || record.token.as_ref() != Some(token) {
@@ -178,7 +178,7 @@ impl UnitTable {
             }
             if let Some(session) = record.session.take() {
                 session.stop.trigger();
-                self.inner.hub.forget_unit(name);
+                self.inner.hub.forget_plugin(name);
             }
             record.instances.clear();
             record.adopted = false;
@@ -192,14 +192,14 @@ impl UnitTable {
         let _ = self.inner.connected.try_send(name.clone());
     }
 
-    fn install_token(&self, name: &UnitName, adopted: bool, token: UnitToken) -> UnitToken {
-        let mut units = self.lock();
-        let record = units
+    fn install_token(&self, name: &PluginName, adopted: bool, token: PluginToken) -> PluginToken {
+        let mut plugins = self.lock();
+        let record = plugins
             .entry(name.clone())
-            .or_insert_with(|| UnitRecord::new(name.clone()));
+            .or_insert_with(|| PluginRecord::new(name.clone()));
         if let Some(session) = record.session.take() {
             session.stop.trigger();
-            self.inner.hub.forget_unit(name);
+            self.inner.hub.forget_plugin(name);
         }
         record.instances.clear();
         record.token = Some(token.clone());
@@ -208,17 +208,17 @@ impl UnitTable {
         token
     }
 
-    pub fn is_adopted(&self, name: &UnitName) -> bool {
+    pub fn is_adopted(&self, name: &PluginName) -> bool {
         self.lock().get(name).is_some_and(|record| record.adopted)
     }
 
     /// Retire the current token: its process is gone and it must never be
     /// honoured again, even if the kernel hands that pid to someone else.
-    pub fn revoke(&self, name: &UnitName) {
+    pub fn revoke(&self, name: &PluginName) {
         if let Some(record) = self.lock().get_mut(name) {
             if let Some(session) = record.session.take() {
                 session.stop.trigger();
-                self.inner.hub.forget_unit(name);
+                self.inner.hub.forget_plugin(name);
             }
             record.instances.clear();
             record.token = None;
@@ -227,49 +227,49 @@ impl UnitTable {
     }
 
     /// Bind a token to the process that now holds it.
-    pub fn bind(&self, name: &UnitName, pid: i32) {
+    pub fn bind(&self, name: &PluginName, pid: i32) {
         if let Some(record) = self.lock().get_mut(name) {
             record.pid = Some(pid);
         }
     }
 
-    /// The unit a peer may claim, if its pid and token agree with a live
+    /// The plugin a peer may claim, if its pid and token agree with a live
     /// registration.
-    pub fn identify(&self, pid: i32, token: &str) -> Option<UnitName> {
+    pub fn identify(&self, pid: i32, token: &str) -> Option<PluginName> {
         if token.is_empty() {
             return None;
         }
-        let mut units = self.lock();
-        units
+        let mut plugins = self.lock();
+        plugins
             .values_mut()
             .find_map(|record| record.claims(pid, token).then(|| record.name.clone()))
     }
 
     // ---- supervision ----
 
-    pub fn supervise(&self, name: &UnitName, control: UnitControl) {
-        let mut units = self.lock();
-        units
+    pub fn supervise(&self, name: &PluginName, control: PluginControl) {
+        let mut plugins = self.lock();
+        plugins
             .entry(name.clone())
-            .or_insert_with(|| UnitRecord::new(name.clone()))
+            .or_insert_with(|| PluginRecord::new(name.clone()))
             .control = Some(control);
     }
 
-    pub fn control(&self, name: &UnitName) -> Option<UnitControl> {
+    pub fn control(&self, name: &PluginName) -> Option<PluginControl> {
         self.lock().get(name)?.control.clone()
     }
 
-    /// The supervisor is done with this unit.
-    pub fn release(&self, name: &UnitName) {
+    /// The supervisor is done with this plugin.
+    pub fn release(&self, name: &PluginName) {
         if let Some(record) = self.lock().get_mut(name) {
             record.control = None;
         }
         self.publish();
     }
 
-    /// The units something is running: supervised, or adopted by whoever is
+    /// The plugins something is running: supervised, or adopted by whoever is
     /// working on them. What the reconciler compares the document against.
-    pub fn held(&self) -> Vec<UnitName> {
+    pub fn held(&self) -> Vec<PluginName> {
         self.lock()
             .values()
             .filter(|record| record.is_held())
@@ -277,30 +277,32 @@ impl UnitTable {
             .collect()
     }
 
-    pub fn is_supervised(&self, name: &UnitName) -> bool {
-        self.lock().get(name).is_some_and(UnitRecord::is_supervised)
+    pub fn is_supervised(&self, name: &PluginName) -> bool {
+        self.lock()
+            .get(name)
+            .is_some_and(PluginRecord::is_supervised)
     }
 
     // ---- sessions ----
 
-    /// Register a connected unit until the returned guard is dropped.
-    pub fn connected(&self, name: &UnitName, requests: mpsc::Sender<Request>) -> SessionGuard {
+    /// Register a connected plugin until the returned guard is dropped.
+    pub fn connected(&self, name: &PluginName, requests: mpsc::Sender<Request>) -> SessionGuard {
         let link = session::SessionLink {
             bytes: self.inner.request_bytes.clone(),
             requests,
             stop: Shutdown::new(),
         };
         {
-            let mut units = self.lock();
-            let record = units
+            let mut plugins = self.lock();
+            let record = plugins
                 .entry(name.clone())
-                .or_insert_with(|| UnitRecord::new(name.clone()));
+                .or_insert_with(|| PluginRecord::new(name.clone()));
             if let Some(previous) = record.session.replace(link.clone()) {
                 previous.stop.trigger();
-                self.inner.hub.forget_unit(name);
+                self.inner.hub.forget_plugin(name);
             }
             // Completing the handshake is what turns a spawned process into a
-            // unit the daemon vouches for.
+            // plugin the daemon vouches for.
             record.instances.clear();
             record.lifecycle.connected();
         }
@@ -311,10 +313,10 @@ impl UnitTable {
         SessionGuard::new(self.clone(), name.clone(), link)
     }
 
-    pub(crate) fn disconnected(&self, name: &UnitName, link: &session::SessionLink) {
+    pub(crate) fn disconnected(&self, name: &PluginName, link: &session::SessionLink) {
         {
-            let mut units = self.lock();
-            let Some(record) = units.get_mut(name) else {
+            let mut plugins = self.lock();
+            let Some(record) = plugins.get_mut(name) else {
                 return;
             };
             if !record
@@ -327,50 +329,52 @@ impl UnitTable {
             record.session = None;
             record.instances.clear();
             link.stop.trigger();
-            self.inner.hub.forget_unit(name);
+            self.inner.hub.forget_plugin(name);
         }
         self.publish();
     }
 
-    pub fn is_connected(&self, name: &UnitName) -> bool {
-        self.lock().get(name).is_some_and(UnitRecord::is_connected)
+    pub fn is_connected(&self, name: &PluginName) -> bool {
+        self.lock()
+            .get(name)
+            .is_some_and(PluginRecord::is_connected)
     }
 
-    /// Invoke an op on a unit and wait for its answer.
+    /// Invoke an op on a plugin and wait for its answer.
     pub async fn request(
         &self,
-        unit: &UnitName,
+        plugin: &PluginName,
         op: invoke::Op,
     ) -> Result<result::Outcome, RequestError> {
         let session = self
             .lock()
-            .get(unit)
+            .get(plugin)
             .and_then(|record| record.session.clone())
-            .ok_or_else(|| RequestError::Absent(unit.clone()))?;
+            .ok_or_else(|| RequestError::Absent(plugin.clone()))?;
 
-        Self::request_on(&session, unit, op).await
+        Self::request_on(&session, plugin, op).await
     }
 
     async fn request_on(
         session: &session::SessionLink,
-        unit: &UnitName,
+        plugin: &PluginName,
         op: invoke::Op,
     ) -> Result<result::Outcome, RequestError> {
         let size = op.encoded_len();
         if size > omega_proto::MAX_FRAME_LEN - 32 {
-            return Err(RequestError::TooLarge(unit.clone()));
+            return Err(RequestError::TooLarge(plugin.clone()));
         }
         let bytes = session
             .bytes
             .clone()
             .try_acquire_many_owned(size as u32)
-            .map_err(|_| RequestError::Full(unit.clone()))?;
+            .map_err(|_| RequestError::Full(plugin.clone()))?;
         let slot = session
             .requests
             .try_reserve()
             .map_err(|error| match error {
-                mpsc::error::TrySendError::Full(_) => RequestError::Full(unit.clone()),
-                mpsc::error::TrySendError::Closed(_) => RequestError::Absent(unit.clone()),
+                mpsc::error::TrySendError::Full(_) => RequestError::Full(plugin.clone()),
+                mpsc::error::TrySendError::Closed(_) => RequestError::Absent(plugin.clone()),
             })?;
         let (answer, answered) = oneshot::channel();
         let deadline = tokio::time::Instant::now() + session::REQUEST_TIMEOUT;
@@ -383,25 +387,25 @@ impl UnitTable {
         match tokio::time::timeout_at(deadline, answered).await {
             Ok(Ok(Ok(outcome))) => Ok(outcome),
             Ok(Ok(Err(refusal))) => Err(RequestError::Refused {
-                unit: unit.clone(),
+                plugin: plugin.clone(),
                 source: refusal,
             }),
             // The session ended while the request was outstanding.
-            Ok(Err(_)) => Err(RequestError::Absent(unit.clone())),
-            Err(_) => Err(RequestError::Timeout(unit.clone())),
+            Ok(Err(_)) => Err(RequestError::Absent(plugin.clone())),
+            Err(_) => Err(RequestError::Timeout(plugin.clone())),
         }
     }
 
     // ---- lifecycle ----
 
-    /// Record something that happened to a unit, and publish it if the state
+    /// Record something that happened to a plugin, and publish it if the state
     /// moved.
-    pub fn transition(&self, name: &UnitName, transition: Transition) {
+    pub fn transition(&self, name: &PluginName, transition: Transition) {
         let moved = {
-            let mut units = self.lock();
-            units
+            let mut plugins = self.lock();
+            plugins
                 .entry(name.clone())
-                .or_insert_with(|| UnitRecord::new(name.clone()))
+                .or_insert_with(|| PluginRecord::new(name.clone()))
                 .apply(transition)
         };
 
@@ -410,39 +414,39 @@ impl UnitTable {
         }
     }
 
-    pub fn lifecycle(&self, name: &UnitName) -> Option<Lifecycle> {
+    pub fn lifecycle(&self, name: &PluginName) -> Option<Lifecycle> {
         Some(self.lock().get(name)?.lifecycle.clone())
     }
 
-    pub fn statuses(&self) -> Vec<UnitStatus> {
-        self.lock().values().map(UnitRecord::status).collect()
+    pub fn statuses(&self) -> Vec<PluginStatus> {
+        self.lock().values().map(PluginRecord::status).collect()
     }
 
-    /// Whether every unit has finished stopping.
+    /// Whether every plugin has finished stopping.
     pub fn all_stopped(&self) -> bool {
         self.lock()
             .values()
             .all(|record| record.lifecycle.is_stopped() || !record.is_supervised())
     }
 
-    /// Publish the unit table, including an empty initial table.
+    /// Publish the plugin table, including an empty initial table.
     pub fn publish(&self) {
         let records = self.lock();
-        let units = records.values().map(UnitRecord::status).collect();
+        let plugins = records.values().map(PluginRecord::status).collect();
         self.inner
             .hub
             .publish_state(StatePatch {
                 topics: vec![StateTopic {
-                    topic: SystemTopic::Units.as_str().to_string(),
+                    topic: SystemTopic::Plugins.as_str().to_string(),
                     revision: 0, // the Hub assigns the real revision
-                    value: Some(state_topic::Value::Units(UnitsState { units })),
+                    value: Some(state_topic::Value::Plugins(PluginsState { plugins })),
                 }],
             })
-            .unwrap_or_else(|error| tracing::error!(%error, "unit status publication refused"));
+            .unwrap_or_else(|error| tracing::error!(%error, "plugin status publication refused"));
     }
 
-    fn lock(&self) -> MutexGuard<'_, BTreeMap<UnitName, UnitRecord>> {
+    fn lock(&self) -> MutexGuard<'_, BTreeMap<PluginName, PluginRecord>> {
         // Recover poisoned locks: table contents remain valid after unwinding.
-        self.inner.units.lock().unwrap_or_else(|e| e.into_inner())
+        self.inner.plugins.lock().unwrap_or_else(|e| e.into_inner())
     }
 }

@@ -68,11 +68,11 @@ impl Shell {
                             panel.parse::<omega_proto::SurfaceId>().map_err(|e| ShellError::Invalid(e.to_string()))?;
                         }
                         modules.push(Module { id: plugin.id.to_string(), kind: Some(module::Kind::Widget(WidgetModule {
-                            unit: plugin.unit.to_string(), surface: plugin.surface.clone(),
+                            plugin: plugin.plugin.to_string(), surface: plugin.surface.clone(),
                             panel: plugin.panel.clone().unwrap_or_default(),
                             config: plugin.settings.clone().into_iter().collect(),
                         })) });
-                        let mut value = serde_json::json!({"id":"omega.view", "unit":plugin.unit.as_str(),
+                        let mut value = serde_json::json!({"id":"omega.view", "plugin":plugin.plugin.as_str(),
                             "surface":plugin.surface, "module":plugin.id.as_str()});
                         if let Some(panel) = &plugin.panel { value["panel"] = panel.clone().into(); }
                         value

@@ -3,7 +3,7 @@ use crate::omega::{
     Action, Direction, PowerProfile, WindowSelector, action, media_key, move_to_workspace,
     set_backlight, set_volume, switch_workspace, window_selector,
 };
-use crate::{SurfaceId, UnitName};
+use crate::{PluginName, SurfaceId};
 
 /// A malformed action payload, independent of permissions or machine state.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -185,11 +185,11 @@ impl action::Kind {
                 input.string("body", &notify.body)?;
                 input.string("icon", &notify.icon)?;
             }
-            Self::InvokeUnit(call) => {
+            Self::InvokePlugin(call) => {
                 input.require(
-                    "unit",
-                    call.unit.parse::<UnitName>().is_ok(),
-                    "must be a unit identifier",
+                    "plugin",
+                    call.plugin.parse::<PluginName>().is_ok(),
+                    "must be a plugin identifier",
                 )?;
                 input.require(
                     "command",

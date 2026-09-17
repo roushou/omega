@@ -9,7 +9,7 @@ QtObject {
 
     // Replaced with the complete bundle fingerprint during installation.
     readonly property string buildFingerprint: ""
-    property string unit: ""
+    property string plugin: ""
     property string surface: ""
     property string module: ""
     property bool standalone: false
@@ -27,26 +27,26 @@ QtObject {
     property string socketPath: link.defaultSocketPath
 
     // The tree currently published for this surface. Null until the first one
-    // arrives, and null again for a unit that decided to draw nothing.
+    // arrives, and null again for a plugin that decided to draw nothing.
     property var tree: null
     property var snapshot: null
-    // Which unit published the tree currently drawn. A press goes back to it.
+    // Which plugin published the tree currently drawn. A press goes back to it.
     property string drawnBy: ""
     property bool connected: false
-    property var units: []
+    property var plugins: []
     readonly property string status: {
         if (!link.connected) return "Waiting for Omega…"
-        var name = link.unit || link.drawnBy
+        var name = link.plugin || link.drawnBy
         if (!name) return ""
-        for (var i = 0; i < link.units.length; i++) {
-            var unit = link.units[i]
-            if (unit.unit !== name) continue
-            switch (unit.phase) {
-                case "UNIT_PHASE_RUNNING": return ""
-                case "UNIT_PHASE_STARTING": return "Starting plugin…"
-                case "UNIT_PHASE_RESTARTING": return "Restarting plugin…"
-                case "UNIT_PHASE_STOPPED": return "Plugin stopped."
-                case "UNIT_PHASE_FAILED": return unit.detail || "Plugin failed to start."
+        for (var i = 0; i < link.plugins.length; i++) {
+            var plugin = link.plugins[i]
+            if (plugin.plugin !== name) continue
+            switch (plugin.phase) {
+                case "PLUGIN_PHASE_RUNNING": return ""
+                case "PLUGIN_PHASE_STARTING": return "Starting plugin…"
+                case "PLUGIN_PHASE_RESTARTING": return "Restarting plugin…"
+                case "PLUGIN_PHASE_STOPPED": return "Plugin stopped."
+                case "PLUGIN_PHASE_FAILED": return plugin.detail || "Plugin failed to start."
                 default: return "Plugin status unavailable."
             }
         }
@@ -61,7 +61,7 @@ QtObject {
         link.instance = null
         link.instances = ({})
         link.drawnBy = ""
-        link.units = []
+        link.plugins = []
         requests.disconnected(reason)
     }
     // Track inbound activity to detect stale connections even without a socket close signal.
@@ -94,8 +94,8 @@ QtObject {
             return
         }
 
-        if (msg.units) {
-            link.units = msg.units.units || []
+        if (msg.plugins) {
+            link.plugins = msg.plugins.plugins || []
             return
         }
 
@@ -105,7 +105,7 @@ QtObject {
 
     function receiveView(msg) {
         if (!msg.instance) return
-        if (link.unit !== "" && msg.unit !== link.unit) return
+        if (link.plugin !== "" && msg.plugin !== link.plugin) return
         if (!link.standalone && msg.surface !== link.surface) return
         var copy = Object.assign({}, link.instances)
         if (msg.destroyed) delete copy[msg.instance.id]
@@ -115,20 +115,20 @@ QtObject {
         link.instance = msg.instance
         link.revision = msg.view ? msg.view.revision || "0" : "0"
         link.presented = msg.requested === 2 || msg.requested === "PRESENTATION_STATE_VISIBLE"
-        link.drawnBy = msg.unit
+        link.drawnBy = msg.plugin
         link.tree = msg.view && msg.view.root ? msg.view.root : null
         link.viewUpdated(msg)
     }
 
     function attach() {
-        if (!link.unit || (!link.standalone && (!link.surface || !link.module))) return
+        if (!link.plugin || (!link.standalone && (!link.surface || !link.module))) return
         link.attachmentStream = link.allocateStream()
         var request = { features: ["RENDERER_FEATURE_INSTANCES", "RENDERER_FEATURE_SCOPED_INTERACTIONS", "RENDERER_FEATURE_LOCAL_MESSAGES", "RENDERER_FEATURE_CONTROLLED_INPUTS", "RENDERER_FEATURE_KEYBOARD_SHORTCUTS", "RENDERER_FEATURE_RESOLVED_NAVIGATION"] }
         if (link.standalone) {
-            request.unit = link.unit
+            request.plugin = link.plugin
             request.features.push("RENDERER_FEATURE_WINDOWS", "RENDERER_FEATURE_OVERLAYS")
         } else {
-            request.placement = { unit: link.unit, surface: link.surface, placement: link.module }
+            request.placement = { plugin: link.plugin, surface: link.surface, placement: link.module }
             request.features.push("RENDERER_FEATURE_EMBEDDED", "RENDERER_FEATURE_POPUPS")
         }
         request.buildFingerprint = link.buildFingerprint
@@ -141,10 +141,10 @@ QtObject {
         return stream
     }
 
-    function subscribeToUnits() {
+    function subscribeToPlugins() {
         link.send({
             streamId: link.allocateStream(),
-            invoke: { subscribe: { topics: ["units"], events: [], replace: true } }
+            invoke: { subscribe: { topics: ["plugins"], events: [], replace: true } }
         })
     }
 
@@ -214,7 +214,7 @@ QtObject {
             onConnectedChanged: {
                 if (connected) {
                     link.connected = true
-                    link.subscribeToUnits()
+                    link.subscribeToPlugins()
                     link.attach()
                 } else {
                     link.disconnected()

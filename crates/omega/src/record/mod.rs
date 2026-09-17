@@ -1,13 +1,13 @@
 //! Typed records shared through the daemon.
 //!
 //! Use [`Own`] to update records in commands or behavior and [`Watch`] to read
-//! them in surfaces. `derive(UnitState)` uses the defining package as the owner
+//! them in surfaces. `derive(PluginState)` uses the defining package as the owner
 //! and derives a key from the type name. Records survive plugin restarts while
 //! the daemon remains running; they are not persisted across daemon restarts.
 //!
 //! ```no_run
 //! # use omega::record::{Own, Watch};
-//! #[derive(omega::UnitState, Default, Clone)]
+//! #[derive(omega::PluginState, Default, Clone)]
 //! pub struct Power {
 //!     pub on: bool,
 //! }
@@ -24,16 +24,16 @@
 use omega_proto::{Address, Fields};
 
 /// A record stored in a plugin keyspace.
-/// Derive `UnitState` to use the defining package name and the type-derived key.
-pub trait UnitState: Fields + Send + Sync + 'static {
+/// Derive `PluginState` to use the defining package name and the type-derived key.
+pub trait PluginState: Fields + Send + Sync + 'static {
     /// The plugin whose keyspace this is.
-    const UNIT: &'static str;
+    const PLUGIN: &'static str;
     /// The key within it.
     const KEY: &'static str;
 
-    /// `unit.<unit>.<key>` — how the daemon addresses it.
+    /// `plugin.<plugin>.<key>` — how the daemon addresses it.
     fn address() -> String {
-        Address::of_unit(Self::UNIT, Self::KEY).to_string()
+        Address::of_plugin(Self::PLUGIN, Self::KEY).to_string()
     }
 }
 

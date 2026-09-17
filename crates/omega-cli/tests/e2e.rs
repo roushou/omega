@@ -258,7 +258,7 @@ fn a_scaffolded_config_builds_and_runs() {
         "idle":{"screensaver":150,"lock":300},
         "bar":{"position":"top","transparent":false,"layout":{
             "left":[{"id":"omarchy.menu"}],"center":[{"id":"omarchy.clock","format":"HH:mm"}],
-            "right":[{"id":"omega.view","unit":"battery-widget","module":"battery-widget"}]
+            "right":[{"id":"omega.view","plugin":"battery-widget","module":"battery-widget"}]
         }},
         "plugins":[],
         "future":{"message":"preserved"}
@@ -332,7 +332,7 @@ fn a_scaffolded_config_builds_and_runs() {
         "the daemon must bind its observation socket"
     );
 
-    // The unit the config declares is running, and the daemon says so.
+    // The plugin the config declares is running, and the daemon says so.
     let output = machine.omega(&["status"]).output().unwrap();
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -343,7 +343,7 @@ fn a_scaffolded_config_builds_and_runs() {
     );
     assert!(
         status.contains("battery-widget"),
-        "status did not report the unit:\n{status}"
+        "status did not report the plugin:\n{status}"
     );
 
     let details = machine
@@ -358,9 +358,9 @@ fn a_scaffolded_config_builds_and_runs() {
 
     let snapshot = machine.run(&["status", "battery-widget", "--json"]);
     let snapshot: omega_proto::omega::DeploymentStatus = serde_json::from_str(&snapshot).unwrap();
-    assert_eq!(snapshot.units.len(), 1);
     assert_eq!(snapshot.plugins.len(), 1);
-    assert_eq!(snapshot.plugins[0].unit, "battery-widget");
+    assert_eq!(snapshot.plugin_health.len(), 1);
+    assert_eq!(snapshot.plugin_health[0].plugin, "battery-widget");
 
     let unknown = machine
         .omega(&["status", "does-not-exist"])
@@ -505,7 +505,7 @@ fn a_scaffolded_config_builds_and_runs() {
 
     machine.run(&["restart", "battery-widget"]);
 
-    // A cycled unit is still supervised, and the restart is counted.
+    // A cycled plugin is still supervised, and the restart is counted.
     let output = machine.omega(&["status"]).output().unwrap();
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -513,10 +513,10 @@ fn a_scaffolded_config_builds_and_runs() {
     let line = status
         .lines()
         .find(|line| line.split_whitespace().nth(1) == Some("battery-widget"))
-        .unwrap_or_else(|| panic!("the unit vanished after a restart:\n{status}"));
+        .unwrap_or_else(|| panic!("the plugin vanished after a restart:\n{status}"));
     assert!(
         !line.contains("Stopped"),
-        "a cycled unit must come back: {line}"
+        "a cycled plugin must come back: {line}"
     );
 }
 
@@ -652,7 +652,7 @@ fn shell_only_configs_build_and_check_never_publishes() {
             "tick", omega_document::Cadence::seconds(1),
             omega_document::Actions::invoke_named("missing", "tick")
         )).emit()"#,
-            "unknown unit",
+            "unknown plugin",
         ),
     ] {
         std::fs::write(

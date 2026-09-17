@@ -47,7 +47,7 @@ impl Renderer {
     /// Version required by the embedded renderer manifest.
     pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    /// Draws the view tree a unit publishes, as a widget in the bar.
+    /// Draws the view tree a plugin publishes, as a widget in the bar.
     pub const VIEW: Renderer = renderer!(
         "omega.view",
         "shell",

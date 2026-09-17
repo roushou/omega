@@ -106,16 +106,16 @@ fn fields_impl(input: TokenStream) -> TokenStream {
 }
 
 /// Derive record ownership from the defining package and key from the type name.
-#[proc_macro_derive(UnitState, attributes(omega))]
-pub fn unit_state(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(PluginState, attributes(omega))]
+pub fn plugin_state(input: TokenStream) -> TokenStream {
     let fields = fields_impl(input.clone());
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
     let key = kebab(&name.to_string());
 
     let identity = quote! {
-        impl ::omega::internal::UnitState for #name {
-            const UNIT: &'static str = env!("CARGO_PKG_NAME");
+        impl ::omega::internal::PluginState for #name {
+            const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
             const KEY: &'static str = #key;
         }
     };

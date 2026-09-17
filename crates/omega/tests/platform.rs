@@ -26,7 +26,7 @@ impl Coverage {
         <omega::platform::system::System as Wiring>::TOPICS,
         <omega::platform::system::Disk as Wiring>::TOPICS,
         <omega::platform::system::Thermals as Wiring>::TOPICS,
-        <omega::plugin::Units as Wiring>::TOPICS,
+        <omega::plugin::Plugins as Wiring>::TOPICS,
     ];
 }
 #[test]

@@ -9,11 +9,13 @@ use omega_host::Layout;
 
 use super::build::ValidatedBuild;
 use crate::DaemonError;
-use crate::reconcile::{EnvironmentProvider, PresentationProvider, ScheduleProvider, UnitProvider};
+use crate::plugins::PluginRegistry;
+use crate::reconcile::{
+    EnvironmentProvider, PluginProvider, PresentationProvider, ScheduleProvider,
+};
 use crate::schedule::Schedules;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
-use crate::units::UnitTable;
 
 /// Pending convergence work. Merging combines flags into one subsequent pass.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -128,7 +130,7 @@ pub struct Context {
     pub deployment: super::deployment::Deployment,
     pub layout: Layout,
     pub supervisor: Supervisor,
-    pub units: UnitTable,
+    pub plugins: PluginRegistry,
     /// Timers must outlive individual convergence passes.
     pub schedules: Schedules,
 }
@@ -233,11 +235,11 @@ impl Worker {
     async fn activate(&mut self, build: ValidatedBuild) -> Result<(), DaemonError> {
         let _handover = self.context.supervisor.handover().await;
         let changed = match &self.build {
-            Some(previous) => previous.changed_units(&build)?,
+            Some(previous) => previous.changed_plugins(&build)?,
             None => Vec::new(),
         };
         for name in &changed {
-            if self.context.units.is_adopted(name) {
+            if self.context.plugins.is_adopted(name) {
                 return Err(std::io::Error::other(format!(
                     "{name} is held by omega dev; disconnect it before activating this build"
                 ))
@@ -246,15 +248,15 @@ impl Worker {
         }
         for name in &changed {
             self.context.supervisor.stop(name).await;
-            if self.context.units.is_supervised(name) {
+            if self.context.plugins.is_supervised(name) {
                 return Err(
                     std::io::Error::other(format!("{name} has not finished stopping")).into(),
                 );
             }
-            self.context.units.revoke(name);
+            self.context.plugins.revoke(name);
         }
         build.generation.accept()?;
-        self.context.units.activate(
+        self.context.plugins.activate(
             &build.manifests,
             build
                 .config
@@ -278,17 +280,19 @@ impl Worker {
             return Ok(());
         };
 
-        let units = UnitProvider::new(self.context.supervisor.clone(), build.generation.clone());
+        let plugins =
+            PluginProvider::new(self.context.supervisor.clone(), build.generation.clone());
         let environment = EnvironmentProvider::new(&self.context.layout);
         let schedules = ScheduleProvider::new(self.context.schedules.clone());
         let presentations =
-            PresentationProvider::new(self.context.units.clone(), build.manifests.clone());
+            PresentationProvider::new(self.context.plugins.clone(), build.manifests.clone());
 
         // Validate every plan before the first effect. A failed application
         // stops the pass; the retry plans again against actual ownership.
-        let built_units = build.config.names().cloned().collect();
-        let running_units = self.context.supervisor.running().into_iter().collect();
-        let unit_changes = UnitProvider::plan(&build.document, &built_units, &running_units)?;
+        let built_plugins = build.config.names().cloned().collect();
+        let running_plugins = self.context.supervisor.running().into_iter().collect();
+        let plugin_changes =
+            PluginProvider::plan(&build.document, &built_plugins, &running_plugins)?;
         let desired_environment = EnvironmentProvider::prepare(&build.document)?;
         let installed_environment = environment.installed()?;
         let environment_change =
@@ -296,18 +300,18 @@ impl Worker {
         let installed_schedules = self.context.schedules.declared();
         let schedule_changes = ScheduleProvider::plan(&build.document, &installed_schedules)?;
         let desired_instances = presentations.prepare(&build.document)?;
-        let installed_instances = self.context.units.installed_presentations();
+        let installed_instances = self.context.plugins.installed_presentations();
         let instance_changes = PresentationProvider::plan(&desired_instances, &installed_instances);
 
         self.context
-            .units
+            .plugins
             .expect_presentations(desired_instances.keys());
 
-        units.apply(&unit_changes).await?;
+        plugins.apply(&plugin_changes).await?;
         if let Some(change) = environment_change {
             environment.apply(&change)?;
         }
-        // The first tick is immediate, so units must be supervised first.
+        // The first tick is immediate, so plugins must be supervised first.
         schedules.apply(&schedule_changes).await?;
         presentations.apply(&instance_changes).await?;
 
@@ -345,7 +349,7 @@ mod tests {
     fn a_rebuild_upgrades_a_pending_pass() {
         let queue = Queue::default();
 
-        // A unit connected, and then a build landed before the pass ran: the
+        // A plugin connected, and then a build landed before the pass ran: the
         // pass has to re-read the build, not plan against the old one.
         queue.push(Work::CONVERGE);
         queue.push(Work::REBUILD);
@@ -381,12 +385,12 @@ mod tests {
             )
         }
 
-        fn publish_unit(&self, contents: &[u8]) -> Layout {
+        fn publish_plugin(&self, contents: &[u8]) -> Layout {
             use std::os::unix::fs::PermissionsExt;
             let root = self.layout();
             let generation = Generations::new(&root).stage().unwrap();
             let layout = Layout::at(&root.config, generation.files().path(), &root.cache);
-            let name = "example".parse::<omega_proto::UnitName>().unwrap();
+            let name = "example".parse::<omega_proto::PluginName>().unwrap();
             let manifest =
                 omega_proto::Manifest::new(&name, "1").exposing([omega_proto::Surface::new(
                     &"view".parse::<omega_proto::SurfaceId>().unwrap(),
@@ -394,16 +398,16 @@ mod tests {
                 )]);
             generation
                 .files()
-                .write(layout.unit_program_rel(&name), contents)
+                .write(layout.plugin_program_rel(&name), contents)
                 .unwrap();
             std::fs::set_permissions(
-                layout.state_unit_program(&name),
+                layout.state_plugin_program(&name),
                 std::fs::Permissions::from_mode(0o755),
             )
             .unwrap();
             generation
                 .files()
-                .write(layout.unit_manifest_rel(&name), &manifest.canonical())
+                .write(layout.plugin_manifest_rel(&name), &manifest.canonical())
                 .unwrap();
             generation
                 .files()
@@ -420,7 +424,7 @@ mod tests {
         /// A worker over this dir, with nothing built in it yet.
         fn worker(&self) -> Worker {
             let hub = Hub::new();
-            let units = UnitTable::detached(hub.clone());
+            let plugins = PluginRegistry::detached(hub.clone());
             let shutdown = Shutdown::new();
 
             Worker {
@@ -429,20 +433,20 @@ mod tests {
                 context: Context {
                     deployment: Default::default(),
                     layout: self.layout(),
-                    // Never bound: nothing here spawns a unit.
+                    // Never bound: nothing here spawns a plugin.
                     supervisor: Supervisor::new(
                         Socket::at(self.0.join("omega.sock")),
-                        units.clone(),
+                        plugins.clone(),
                         shutdown.clone(),
                     ),
                     // Never fired: nothing here converges a document.
                     schedules: Schedules::new(
                         hub.clone(),
-                        units.clone(),
+                        plugins.clone(),
                         Brokerage::new(hub, shutdown.clone()),
                         shutdown.clone(),
                     ),
-                    units,
+                    plugins,
                 },
                 shutdown,
             }
@@ -458,7 +462,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn shutdown_cancels_activation_waiting_for_handover() {
         let dir = TempDir::new("converger-shutdown");
-        dir.publish_unit(b"unused");
+        dir.publish_plugin(b"unused");
         let worker = dir.worker();
         let supervisor = worker.context.supervisor.clone();
         let _handover = supervisor.handover().await;
@@ -487,7 +491,7 @@ mod tests {
 
     #[test]
     fn a_machine_with_no_build_has_nothing_to_adopt() {
-        // Missing unit configuration is valid before the first build.
+        // Missing plugin configuration is valid before the first build.
         let dir = TempDir::new("unbuilt");
         let worker = dir.worker();
 
@@ -564,15 +568,15 @@ mod tests {
     #[tokio::test]
     async fn a_development_lease_blocks_changed_builds_until_released() {
         let dir = TempDir::new("generation-dev-hold");
-        let first = dir.publish_unit(b"first");
+        let first = dir.publish_plugin(b"first");
         let mut worker = dir.worker();
         worker
             .activate(worker.reload().unwrap().unwrap())
             .await
             .unwrap();
-        let name = "example".parse::<omega_proto::UnitName>().unwrap();
-        let token = worker.context.units.adopt_unit(&name).unwrap();
-        let second = dir.publish_unit(b"second");
+        let name = "example".parse::<omega_proto::PluginName>().unwrap();
+        let token = worker.context.plugins.adopt_plugin(&name).unwrap();
+        let second = dir.publish_plugin(b"second");
         assert!(
             worker
                 .activate(worker.reload().unwrap().unwrap())
@@ -583,7 +587,7 @@ mod tests {
             worker.build.as_ref().unwrap().generation.layout().state,
             first.state
         );
-        worker.context.units.release_adoption(&name, &token);
+        worker.context.plugins.release_adoption(&name, &token);
         worker
             .activate(worker.reload().unwrap().unwrap())
             .await
@@ -597,7 +601,7 @@ mod tests {
     #[tokio::test]
     async fn failed_acceptance_keeps_live_inputs_and_retries_after_repair() {
         let dir = TempDir::new("acceptance-failure");
-        let first = dir.publish_unit(b"first");
+        let first = dir.publish_plugin(b"first");
         let mut worker = dir.worker();
         worker
             .activate(worker.reload().unwrap().unwrap())
@@ -605,7 +609,7 @@ mod tests {
             .unwrap();
         let history = dir.layout().generation_history();
         let saved = std::fs::read(&history).unwrap();
-        let second = dir.publish_unit(b"second");
+        let second = dir.publish_plugin(b"second");
         omega_host::AtomicFile::at(&history)
             .write(b"invalid history {")
             .unwrap();
@@ -638,19 +642,19 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn a_held_disabled_unit_blocks_dependents_until_release_and_retry() {
+    async fn a_held_disabled_plugin_blocks_dependents_until_release_and_retry() {
         let dir = TempDir::new("convergence-retry");
-        dir.publish_unit(b"unused");
+        dir.publish_plugin(b"unused");
         let mut worker = dir.worker();
         worker
             .activate(worker.reload().unwrap().unwrap())
             .await
             .unwrap();
-        let name = "example".parse::<omega_proto::UnitName>().unwrap();
-        let token = worker.context.units.adopt_unit(&name).unwrap();
+        let name = "example".parse::<omega_proto::PluginName>().unwrap();
+        let token = worker.context.plugins.adopt_plugin(&name).unwrap();
         let document = &mut worker.build.as_mut().unwrap().document;
         *document = omega_document::Document::new()
-            .unit(omega_document::Units::disabled("example"))
+            .plugin(omega_document::Plugins::disabled("example"))
             .env("EDITOR", "hx")
             .into_inner();
         document
@@ -664,11 +668,11 @@ mod tests {
         assert!(!environment.exists());
         assert!(worker.context.schedules.declared().is_empty());
 
-        worker.context.units.release_adoption(&name, &token);
+        worker.context.plugins.release_adoption(&name, &token);
         let hub = Hub::new();
         worker.context.schedules = Schedules::new(
             hub.clone(),
-            worker.context.units.clone(),
+            worker.context.plugins.clone(),
             Brokerage::new(hub.clone(), worker.shutdown.clone()),
             worker.shutdown.clone(),
         );
@@ -693,9 +697,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_plan_failure_starts_no_units_and_can_be_retried_after_repair() {
+    async fn a_plan_failure_starts_no_plugins_and_can_be_retried_after_repair() {
         let dir = TempDir::new("convergence-plan-failure");
-        dir.publish_unit(b"unused");
+        dir.publish_plugin(b"unused");
         let mut worker = dir.worker();
         worker
             .activate(worker.reload().unwrap().unwrap())
@@ -707,13 +711,13 @@ mod tests {
         assert!(worker.context.supervisor.running().is_empty());
         std::fs::remove_dir(&path).unwrap();
         worker.build.as_mut().unwrap().document = omega_document::Document::new()
-            .unit(omega_document::Units::disabled("example"))
+            .plugin(omega_document::Plugins::disabled("example"))
             .into_inner();
         worker.converge().await.unwrap();
     }
 
     #[test]
-    fn a_unit_config_that_cannot_be_parsed_is_still_a_failure() {
+    fn a_plugin_config_that_cannot_be_parsed_is_still_a_failure() {
         // The half that keeps the two above honest: absent and unreadable are
         // different, and only the first one is ordinary.
         let dir = TempDir::new("unbuilt-broken");

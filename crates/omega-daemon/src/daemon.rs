@@ -1,4 +1,4 @@
-//! The daemon core: binds the sockets and ties brokers, units, sessions, and
+//! The daemon core: binds the sockets and ties brokers, plugins, sessions, and
 //! the shell together.
 
 use std::io;
@@ -12,6 +12,7 @@ use omega_proto::{Observation, Socket};
 use crate::broker::Brokerage;
 use crate::hub::Hub;
 use crate::manifest::ManifestStoreError;
+use crate::plugins::PluginRegistry;
 use crate::reconcile::{Context, Converger, Work};
 use crate::schedule::Schedules;
 use crate::session::Session;
@@ -19,7 +20,6 @@ use crate::shell::ShellError;
 use crate::shell::ShellServer;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
-use crate::units::UnitTable;
 use crate::watch::StateStamp;
 use omega_host::TomlError;
 use std::path::PathBuf;
@@ -36,17 +36,17 @@ pub struct Daemon {
     shell: ShellServer,
     deployment: crate::reconcile::deployment::Deployment,
     shutdown: Shutdown,
-    /// Everything known about the units, including how to reach them.
-    units: UnitTable,
-    /// Units announcing themselves. Taken by `run`.
-    arrivals: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<omega_proto::UnitName>>>,
+    /// Everything known about the plugins, including how to reach them.
+    plugins: PluginRegistry,
+    /// Plugins announcing themselves. Taken by `run`.
+    arrivals: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<omega_proto::PluginName>>>,
     /// Where the built state lives, so a rebuild can be picked up without a
     /// restart.
     layout: Layout,
 }
 
 impl Daemon {
-    /// How long the daemon waits for its units to exit before giving up on
+    /// How long the daemon waits for its plugins to exit before giving up on
     /// an orderly stop.
     const SHUTDOWN_GRACE: Duration = Duration::from_secs(8);
     /// How long to let a build's writes settle before adopting it.
@@ -72,7 +72,7 @@ impl Daemon {
     pub fn handle(&self) -> DaemonHandle {
         DaemonHandle {
             hub: self.hub.clone(),
-            units: self.units.clone(),
+            plugins: self.plugins.clone(),
             supervisor: self.supervisor.clone(),
             shutdown: self.shutdown.clone(),
             control: self.socket.clone(),
@@ -87,7 +87,7 @@ impl Daemon {
     }
 
     /// Run until interrupted, then shut down in order: stop accepting, ask
-    /// every unit to exit, and wait for them.
+    /// every plugin to exit, and wait for them.
     pub async fn run(self) -> Result<(), DaemonError> {
         tracing::info!(path = %self.socket.path().display(), "daemon listening");
         tracing::info!(shell = %self.shell.path().display(), "shell socket listening");
@@ -95,7 +95,7 @@ impl Daemon {
         // Run convergence separately so slow plugin requests do not block connections or signals.
         let schedules = Schedules::new(
             self.hub.clone(),
-            self.units.clone(),
+            self.plugins.clone(),
             self.brokers.clone(),
             self.shutdown.clone(),
         );
@@ -104,7 +104,7 @@ impl Daemon {
                 deployment: self.deployment.clone(),
                 layout: self.layout.clone(),
                 supervisor: self.supervisor.clone(),
-                units: self.units.clone(),
+                plugins: self.plugins.clone(),
                 schedules: schedules.clone(),
             },
             self.shutdown.clone(),
@@ -157,10 +157,10 @@ impl Daemon {
                     tracing::info!("the config was rebuilt; reconciling");
                     converger.request(Work::REBUILD);
                 }
-                // A unit that just connected can be asked for the instances
+                // A plugin that just connected can be asked for the instances
                 // the document gave it, which it could not be a moment ago.
-                Some(unit) = Self::arrived(arrivals.as_mut()) => {
-                    tracing::debug!(%unit, "unit connected; reconciling");
+                Some(plugin) = Self::arrived(arrivals.as_mut()) => {
+                    tracing::debug!(%plugin, "plugin connected; reconciling");
                     converger.request(Work::CONVERGE);
                 }
                 signal = Self::interrupted() => {
@@ -197,11 +197,11 @@ impl Daemon {
         }
     }
 
-    /// The next unit to connect, or never when the daemon is not tracking
+    /// The next plugin to connect, or never when the daemon is not tracking
     /// arrivals (a test's in-process core, say).
     async fn arrived(
-        arrivals: Option<&mut tokio::sync::mpsc::Receiver<omega_proto::UnitName>>,
-    ) -> Option<omega_proto::UnitName> {
+        arrivals: Option<&mut tokio::sync::mpsc::Receiver<omega_proto::PluginName>>,
+    ) -> Option<omega_proto::PluginName> {
         match arrivals {
             Some(arrivals) => arrivals.recv().await,
             None => std::future::pending().await,
@@ -235,12 +235,12 @@ impl Daemon {
         let deadline = tokio::time::Instant::now() + Self::SHUTDOWN_GRACE;
         while tokio::time::Instant::now() < deadline {
             if self.supervisor.all_stopped() {
-                tracing::info!("every unit stopped");
+                tracing::info!("every plugin stopped");
                 return;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        tracing::warn!("shutdown deadline reached; leaving remaining units to the kernel");
+        tracing::warn!("shutdown deadline reached; leaving remaining plugins to the kernel");
     }
 
     const CONNECTION_LIMIT: usize = 64;
@@ -257,7 +257,7 @@ impl Daemon {
                         .with_layout(self.layout.clone()).with_deployment(self.deployment.clone())
                         .with_brokers(self.brokers.clone())
                         .with_shutdown(self.shutdown.clone())
-                        .with_units(self.units.clone());
+                        .with_plugins(self.plugins.clone());
                     sessions.spawn(async move {
                         if let Err(error) = session.serve(stream).await {
                             tracing::warn!(%error, "connection ended");
@@ -279,7 +279,7 @@ pub struct DaemonBuilder {
 }
 
 impl DaemonBuilder {
-    /// Where units and the operator connect.
+    /// Where plugins and the operator connect.
     pub fn control(mut self, socket: Socket) -> Self {
         self.control = Some(socket);
         self
@@ -302,8 +302,8 @@ impl DaemonBuilder {
         let hub = Hub::new();
         let shutdown = Shutdown::new();
         let brokers = Brokerage::new(hub.clone(), shutdown.clone());
-        let (units, arrivals) = UnitTable::new(hub.clone());
-        let supervisor = Supervisor::new(socket.clone(), units.clone(), shutdown.clone());
+        let (plugins, arrivals) = PluginRegistry::new(hub.clone());
+        let supervisor = Supervisor::new(socket.clone(), plugins.clone(), shutdown.clone());
         let deployment = crate::reconcile::deployment::Deployment::default();
         let shell = ShellServer::bind_at(
             self.observation.unwrap_or_else(Observation::socket),
@@ -311,7 +311,7 @@ impl DaemonBuilder {
         )?
         // A shell draws what a plugin publishes, so it has to be able to
         // press what it drew.
-        .serving(supervisor.clone(), units.clone(), brokers.clone())
+        .serving(supervisor.clone(), plugins.clone(), brokers.clone())
         .with_layout(self.layout.clone())
         .with_deployment(deployment.clone());
 
@@ -324,7 +324,7 @@ impl DaemonBuilder {
             shell,
             deployment,
             shutdown,
-            units,
+            plugins,
             arrivals: std::sync::Mutex::new(Some(arrivals)),
             layout: self.layout,
         })
@@ -335,7 +335,7 @@ impl DaemonBuilder {
 #[derive(Debug, Clone)]
 pub struct DaemonHandle {
     pub hub: Hub,
-    pub units: UnitTable,
+    pub plugins: PluginRegistry,
     pub supervisor: Supervisor,
     shutdown: Shutdown,
     control: Socket,
@@ -376,7 +376,7 @@ pub enum DaemonError {
     },
     #[error("cannot load the state config: {0}")]
     Config(#[from] TomlError),
-    #[error("cannot load unit manifests: {0}")]
+    #[error("cannot load plugin manifests: {0}")]
     Manifests(#[from] ManifestStoreError),
     #[error("cannot load the state document: {0}")]
     Document(#[from] omega_document::DocumentError),

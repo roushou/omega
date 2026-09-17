@@ -132,7 +132,7 @@ fn every_prop_the_vocabulary_declares_is_drawn_by_something() {
         undrawn.is_empty(),
         "the vocabulary declares {undrawn:?} and no shell draws them. \
          Draw them, drop them, or name them in NOT_DRAWN with a reason — a \
-         prop nothing reads is a unit publishing into the dark."
+         prop nothing reads is a plugin publishing into the dark."
     );
 }
 

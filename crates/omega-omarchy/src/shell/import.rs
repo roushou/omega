@@ -42,16 +42,16 @@ impl Shell {
                         .ok_or_else(|| ShellError::Invalid("widget has no id".into()))?,
                 )?;
                 if id == "omega.view" {
-                    let unit: String =
-                        serde_json::from_value(entry.remove("unit").ok_or_else(|| {
-                            ShellError::Invalid("omega.view needs a unit before import".into())
+                    let plugin: String =
+                        serde_json::from_value(entry.remove("plugin").ok_or_else(|| {
+                            ShellError::Invalid("omega.view needs a plugin before import".into())
                         })?)?;
                     let module: String = serde_json::from_value(
                         entry
                             .remove("module")
-                            .unwrap_or_else(|| unit.clone().into()),
+                            .unwrap_or_else(|| plugin.clone().into()),
                     )?;
-                    let mut plugin = PluginWidget::try_new(module, unit)?;
+                    let mut plugin = PluginWidget::try_new(module, plugin)?;
                     plugin.surface = serde_json::from_value(
                         entry.remove("surface").unwrap_or_else(|| "".into()),
                     )?;

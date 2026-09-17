@@ -10,7 +10,9 @@ mod keys;
 pub use extension::DocumentExtension;
 mod validation;
 
-pub use document::{Actions, Bars, Document, Host, Keybinds, Modules, Schedules, Settings, Units};
+pub use document::{
+    Actions, Bars, Document, Host, Keybinds, Modules, Plugins, Schedules, Settings,
+};
 pub use error::{Error, Result};
 pub use file::{DocumentError, DocumentFile};
 pub use keys::Key;
@@ -21,7 +23,7 @@ pub use omega_proto::omega::StateDocument;
 pub use omega_proto::Cadence;
 /// Protocol types used by the document builders.
 pub use omega_proto::omega::{
-    Action, Bar, Edge, Keybind, Modifier, Module, Schedule, Setting, UnitRef, Value, value,
+    Action, Bar, Edge, Keybind, Modifier, Module, PluginRef, Schedule, Setting, Value, value,
 };
 
 pub mod presentations;

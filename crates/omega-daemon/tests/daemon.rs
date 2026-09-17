@@ -7,15 +7,15 @@ use std::time::Duration;
 
 use common::{TempDir, widget_manifest};
 use omega_daemon::{Daemon, DaemonHandle};
-use omega_document::{Document, DocumentFile, Units};
+use omega_document::{Document, DocumentFile, Plugins};
 use omega_host::Layout;
 use omega_host::StateConfig;
-use omega_proto::UnitName;
-use omega_proto::omega::{RestartUnit, StateDocument, invoke, result};
+use omega_proto::PluginName;
+use omega_proto::omega::{RestartPlugin, StateDocument, invoke, result};
 use omega_proto::{Client, Socket};
 
 /// A machine as `omega build` leaves it: a state dir holding a document, the
-/// config of what was built, and one directory per unit.
+/// config of what was built, and one directory per plugin.
 struct Machine {
     tmp: TempDir,
     layout: Layout,
@@ -29,18 +29,18 @@ impl Machine {
         Self { tmp, layout }
     }
 
-    /// Install a unit the way a build does: a binary, a canonical manifest,
-    /// and an entry in `units.toml`.
-    fn install(&self, name: &str, program: &str) -> UnitName {
-        let name = UnitName::try_from(name).unwrap();
+    /// Install a plugin the way a build does: a binary, a canonical manifest,
+    /// and an entry in `plugins.toml`.
+    fn install(&self, name: &str, program: &str) -> PluginName {
+        let name = PluginName::try_from(name).unwrap();
 
-        let binary = self.layout.state_unit_program(&name);
+        let binary = self.layout.state_plugin_program(&name);
         std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
         std::fs::write(&binary, program).unwrap();
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         std::fs::write(
-            self.layout.state_unit_manifest(&name),
+            self.layout.state_plugin_manifest(&name),
             widget_manifest(name.as_str(), "battery").canonical(),
         )
         .unwrap();
@@ -65,14 +65,20 @@ impl Machine {
     fn publish(&self, document: &[u8]) {
         let generation = omega_host::Generations::new(&self.layout).stage().unwrap();
         let config = self.layout.file::<StateConfig>(()).read().unwrap();
-        for unit in &config.units {
+        for plugin in &config.plugins {
             generation
                 .files()
-                .copy(&self.layout.state_unit_program(&unit.name), &unit.program)
+                .copy(
+                    &self.layout.state_plugin_program(&plugin.name),
+                    &plugin.program,
+                )
                 .unwrap();
             generation
                 .files()
-                .copy(&self.layout.state_unit_manifest(&unit.name), &unit.manifest)
+                .copy(
+                    &self.layout.state_plugin_manifest(&plugin.name),
+                    &plugin.manifest,
+                )
                 .unwrap();
         }
         generation
@@ -104,7 +110,7 @@ impl Machine {
     }
 }
 
-/// A unit that stays up until something stops it.
+/// A plugin that stays up until something stops it.
 const SLEEPER: &str = "#!/bin/sh\nsleep 30\n";
 
 /// Poll until `done`, or give up. Returns whether it happened.
@@ -130,14 +136,14 @@ async fn stop(handle: &DaemonHandle, running: tokio::task::JoinHandle<()>) {
 }
 
 #[tokio::test]
-async fn a_running_daemon_serves_its_owner_and_stops_its_units() {
+async fn a_running_daemon_serves_its_owner_and_stops_its_plugins() {
     let machine = Machine::new("daemon-serve");
     let sleeper = machine.install("sleeper", SLEEPER);
     machine.declare(Document::new().into_inner());
 
     let (handle, running) = machine.start();
 
-    // A built unit the document never mentions runs, and the daemon reports
+    // A built plugin the document never mentions runs, and the daemon reports
     // it through the same table a session reads.
     assert!(
         until(Duration::from_secs(5), || handle
@@ -153,14 +159,14 @@ async fn a_running_daemon_serves_its_owner_and_stops_its_units() {
     let (mut client, welcome) = Client::connect(handle.control(), "", "")
         .await
         .expect("the daemon must serve its owner");
-    assert!(welcome.unit_id.starts_with("operator-"), "{welcome:?}");
+    assert!(welcome.plugin_id.starts_with("operator-"), "{welcome:?}");
 
     let stream = client.allocate();
     client
         .invoke(
             stream,
-            invoke::Op::RestartUnit(RestartUnit {
-                unit: sleeper.to_string(),
+            invoke::Op::RestartPlugin(RestartPlugin {
+                plugin: sleeper.to_string(),
             }),
         )
         .await
@@ -173,7 +179,7 @@ async fn a_running_daemon_serves_its_owner_and_stops_its_units() {
     stop(&handle, running).await;
     assert!(
         handle.supervisor.all_stopped(),
-        "a daemon that has stopped is not still running units"
+        "a daemon that has stopped is not still running plugins"
     );
 }
 
@@ -183,7 +189,7 @@ async fn a_rebuilt_document_is_adopted_without_a_restart() {
     let sleeper = machine.install("sleeper", SLEEPER);
     machine.declare(
         Document::new()
-            .unit(Units::disabled("sleeper"))
+            .plugin(Plugins::disabled("sleeper"))
             .into_inner(),
     );
 
@@ -195,11 +201,15 @@ async fn a_rebuilt_document_is_adopted_without_a_restart() {
             .running()
             .is_empty())
         .await,
-        "a document that disables a unit must not start it"
+        "a document that disables a plugin must not start it"
     );
 
     // The build lands under a running daemon.
-    machine.declare(Document::new().unit(Units::enabled("sleeper")).into_inner());
+    machine.declare(
+        Document::new()
+            .plugin(Plugins::enabled("sleeper"))
+            .into_inner(),
+    );
 
     assert!(
         until(Duration::from_secs(5), || handle
@@ -248,7 +258,7 @@ async fn a_machine_nothing_has_been_built_for_yet_still_starts() {
     // The daemon must remain running before the first config build.
     let machine = Machine::new("unbuilt");
     assert!(
-        !machine.layout.state_units_toml().exists(),
+        !machine.layout.state_plugins_toml().exists(),
         "the point of this test is the file being absent"
     );
 
@@ -306,9 +316,11 @@ async fn activation_replaces_changed_binaries_and_preserves_identical_ones() {
         .await
     );
     assert!(
-        std::fs::read_to_string(first.state_unit_program(&"sleeper".parse::<UnitName>().unwrap()))
-            .unwrap()
-            .contains("first")
+        std::fs::read_to_string(
+            first.state_plugin_program(&"sleeper".parse::<PluginName>().unwrap())
+        )
+        .unwrap()
+        .contains("first")
     );
     stop(&handle, running).await;
 }
@@ -331,7 +343,7 @@ async fn editing_and_removing_settings_replace_the_process() {
     );
     machine.declare(
         Document::new()
-            .unit(Units::configured(
+            .plugin(Plugins::configured(
                 "sleeper",
                 &omega_proto::Values::new().with("label", "changed"),
             ))
@@ -343,7 +355,7 @@ async fn editing_and_removing_settings_replace_the_process() {
         .await
     );
     assert_eq!(
-        omega_proto::Values::from_map(handle.units.config(&name))
+        omega_proto::Values::from_map(handle.plugins.config(&name))
             .get::<String>("label")
             .as_deref(),
         Some("changed")
@@ -354,7 +366,7 @@ async fn editing_and_removing_settings_replace_the_process() {
             .is_ok_and(|value| value.lines().count() == 3))
         .await
     );
-    assert!(handle.units.config(&name).is_empty());
+    assert!(handle.plugins.config(&name).is_empty());
     stop(&handle, running).await;
 }
 
@@ -426,10 +438,10 @@ async fn restart_recovers_accepted_and_then_previous_when_candidates_are_invalid
 }
 
 #[tokio::test]
-async fn cleanup_keeps_an_unchanged_units_executable_across_multiple_activations() {
+async fn cleanup_keeps_an_unchanged_plugins_executable_across_multiple_activations() {
     let machine = Machine::new("live-generation-cleanup");
     let started = machine.tmp.path().join("starts");
-    let unit = machine.install(
+    let plugin = machine.install(
         "sleeper",
         &format!(
             "#!/bin/sh\nprintf 'start\\n' >> '{}'\nexec sleep 30\n",
@@ -454,7 +466,7 @@ async fn cleanup_keeps_an_unchanged_units_executable_across_multiple_activations
     }
     assert!(store.clean().unwrap().is_empty());
     assert!(first.state.exists());
-    assert!(handle.supervisor.restart(&unit));
+    assert!(handle.supervisor.restart(&plugin));
     assert!(
         until(Duration::from_secs(5), || std::fs::read_to_string(&started)
             .is_ok_and(|contents| contents == "start\nstart\n"))

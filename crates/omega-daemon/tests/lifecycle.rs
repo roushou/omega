@@ -1,70 +1,70 @@
-//! Unit lifecycle transition tests.
+//! Plugin lifecycle transition tests.
 
 use omega_daemon::hub::Hub;
-use omega_daemon::units::{Lifecycle, Transition, UnitTable};
-use omega_proto::UnitName;
-use omega_proto::omega::UnitPhase;
+use omega_daemon::plugins::{Lifecycle, PluginRegistry, Transition};
+use omega_proto::PluginName;
+use omega_proto::omega::PluginPhase;
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
-fn table() -> UnitTable {
-    UnitTable::detached(Hub::new())
+fn table() -> PluginRegistry {
+    PluginRegistry::detached(Hub::new())
 }
 
-fn phase(units: &UnitTable, name: &UnitName) -> i32 {
-    units
+fn phase(plugins: &PluginRegistry, name: &PluginName) -> i32 {
+    plugins
         .statuses()
         .into_iter()
-        .find(|status| status.unit == name.as_str())
-        .expect("the unit should be in the table")
+        .find(|status| status.plugin == name.as_str())
+        .expect("the plugin should be in the table")
         .phase
 }
 
 #[test]
-fn a_spawned_unit_is_starting_until_it_checks_in() {
-    let units = table();
-    let name = unit("battery-widget");
-    let token = units.issue(&name).unwrap();
+fn a_spawned_plugin_is_starting_until_it_checks_in() {
+    let plugins = table();
+    let name = plugin("battery-widget");
+    let token = plugins.issue(&name).unwrap();
 
-    units.transition(&name, Transition::Spawned);
+    plugins.transition(&name, Transition::Spawned);
 
     // A spawned process remains starting until admission.
-    assert_eq!(phase(&units, &name), UnitPhase::Starting as i32);
+    assert_eq!(phase(&plugins, &name), PluginPhase::Starting as i32);
 
     // The handshake is what makes it running.
     let (requests, _answers) = tokio::sync::mpsc::channel(1);
-    assert_eq!(units.identify(4242, token.as_str()), Some(name.clone()));
-    let _session = units.connected(&name, requests);
+    assert_eq!(plugins.identify(4242, token.as_str()), Some(name.clone()));
+    let _session = plugins.connected(&name, requests);
 
-    assert_eq!(phase(&units, &name), UnitPhase::Running as i32);
+    assert_eq!(phase(&plugins, &name), PluginPhase::Running as i32);
 }
 
 #[test]
-fn a_unit_that_loses_its_session_is_no_longer_running() {
-    let units = table();
-    let name = unit("battery-widget");
-    units.transition(&name, Transition::Spawned);
+fn a_plugin_that_loses_its_session_is_no_longer_running() {
+    let plugins = table();
+    let name = plugin("battery-widget");
+    plugins.transition(&name, Transition::Spawned);
 
     let (requests, _answers) = tokio::sync::mpsc::channel(1);
-    let session = units.connected(&name, requests);
-    assert_eq!(phase(&units, &name), UnitPhase::Running as i32);
+    let session = plugins.connected(&name, requests);
+    assert_eq!(phase(&plugins, &name), PluginPhase::Running as i32);
 
-    // The process may still be up, but a unit the daemon cannot reach is not
+    // The process may still be up, but a plugin the daemon cannot reach is not
     // one it should report as running.
     drop(session);
-    assert_eq!(phase(&units, &name), UnitPhase::Starting as i32);
-    assert!(!units.is_connected(&name));
+    assert_eq!(phase(&plugins, &name), PluginPhase::Starting as i32);
+    assert!(!plugins.is_connected(&name));
 }
 
 #[test]
 fn an_exit_carries_its_reason_into_the_status() {
-    let units = table();
-    let name = unit("battery-widget");
+    let plugins = table();
+    let name = plugin("battery-widget");
 
-    units.transition(&name, Transition::Spawned);
-    units.transition(
+    plugins.transition(&name, Transition::Spawned);
+    plugins.transition(
         &name,
         Transition::Exited {
             code: 101,
@@ -72,39 +72,39 @@ fn an_exit_carries_its_reason_into_the_status() {
         },
     );
 
-    let status = units
+    let status = plugins
         .statuses()
         .into_iter()
-        .find(|status| status.unit == name.as_str())
+        .find(|status| status.plugin == name.as_str())
         .unwrap();
-    assert_eq!(status.phase, UnitPhase::Restarting as i32);
+    assert_eq!(status.phase, PluginPhase::Restarting as i32);
     assert_eq!(status.last_exit_code, 101);
     assert_eq!(status.detail, "exit status: 101");
 }
 
 #[test]
 fn restarts_count_spawns_after_the_first() {
-    let units = table();
-    let name = unit("battery-widget");
+    let plugins = table();
+    let name = plugin("battery-widget");
 
-    units.transition(&name, Transition::Spawned);
-    assert_eq!(units.statuses()[0].restarts, 0);
+    plugins.transition(&name, Transition::Spawned);
+    assert_eq!(plugins.statuses()[0].restarts, 0);
 
     for expected in 1..=3 {
-        units.transition(
+        plugins.transition(
             &name,
             Transition::Exited {
                 code: 1,
                 detail: "exit status: 1".into(),
             },
         );
-        units.transition(&name, Transition::Spawned);
-        assert_eq!(units.statuses()[0].restarts, expected);
+        plugins.transition(&name, Transition::Spawned);
+        assert_eq!(plugins.statuses()[0].restarts, expected);
     }
 }
 
 #[test]
-fn a_stopped_unit_stays_stopped_until_something_spawns_it() {
+fn a_stopped_plugin_stays_stopped_until_something_spawns_it() {
     let mut lifecycle = Lifecycle::Running;
 
     assert!(lifecycle.apply(Transition::Stopped));
@@ -127,7 +127,7 @@ fn a_stopped_unit_stays_stopped_until_something_spawns_it() {
 fn a_peer_the_supervisor_never_spawned_has_no_lifecycle_to_change() {
     let mut lifecycle = Lifecycle::Idle;
 
-    // An operator's session, or a unit registered by hand in a test: being
+    // An operator's session, or a plugin registered by hand in a test: being
     // connected does not mean the supervisor is running it.
     assert!(!lifecycle.connected());
     assert_eq!(lifecycle, Lifecycle::Idle);
@@ -135,26 +135,26 @@ fn a_peer_the_supervisor_never_spawned_has_no_lifecycle_to_change() {
 
 #[tokio::test]
 async fn obsolete_session_cannot_disconnect_its_replacement() {
-    let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
-    let name = "unit".parse::<omega_proto::UnitName>().unwrap();
-    let first = units.connected(&name, tokio::sync::mpsc::channel(1).0);
-    let second = units.connected(&name, tokio::sync::mpsc::channel(1).0);
+    let plugins = omega_daemon::plugins::PluginRegistry::detached(omega_daemon::hub::Hub::new());
+    let name = "plugin".parse::<omega_proto::PluginName>().unwrap();
+    let first = plugins.connected(&name, tokio::sync::mpsc::channel(1).0);
+    let second = plugins.connected(&name, tokio::sync::mpsc::channel(1).0);
     first.cancelled().await;
     drop(first);
-    assert!(units.is_connected(&name));
+    assert!(plugins.is_connected(&name));
     assert!(second.is_current());
     drop(second);
-    assert!(!units.is_connected(&name));
+    assert!(!plugins.is_connected(&name));
 }
 
 #[test]
 fn obsolete_adoption_cannot_release_its_replacement() {
-    let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
-    let name = "unit".parse::<omega_proto::UnitName>().unwrap();
-    let old = units.adopt_unit(&name).unwrap();
-    let current = units.adopt_unit(&name).unwrap();
-    units.release_adoption(&name, &old);
-    assert!(units.held().contains(&name));
-    units.release_adoption(&name, &current);
-    assert!(!units.held().contains(&name));
+    let plugins = omega_daemon::plugins::PluginRegistry::detached(omega_daemon::hub::Hub::new());
+    let name = "plugin".parse::<omega_proto::PluginName>().unwrap();
+    let old = plugins.adopt_plugin(&name).unwrap();
+    let current = plugins.adopt_plugin(&name).unwrap();
+    plugins.release_adoption(&name, &old);
+    assert!(plugins.held().contains(&name));
+    plugins.release_adoption(&name, &current);
+    assert!(!plugins.held().contains(&name));
 }

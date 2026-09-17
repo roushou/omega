@@ -9,7 +9,7 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
-description = "The QML Omega ships to draw the view trees its units publish, independent of its desktop host."
+description = "The QML Omega ships to draw the view trees its plugins publish, independent of its desktop host."
 
 [lints]
 workspace = true

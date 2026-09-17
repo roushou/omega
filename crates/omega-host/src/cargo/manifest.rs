@@ -3,14 +3,14 @@ use super::dependency::DependencyTable;
 use super::fields::Fields;
 use super::{CargoError, Dependencies, Dependency, Inherited, Package, Workspace};
 use crate::{Layout, TomlError, TomlFile, TomlSchema};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 /// Which manifest to address through [`Layout::file`].
 #[derive(Debug, Clone, Copy)]
 pub enum CargoSlot<'a> {
     Workspace,
-    Unit(&'a UnitName),
+    Plugin(&'a PluginName),
     System,
     /// A member directory, absolute or relative to the config root.
     Member(&'a std::path::Path),
@@ -363,7 +363,7 @@ impl TomlSchema for Manifest {
     fn locate(layout: &Layout, key: Self::Key<'_>) -> TomlFile<Self> {
         TomlFile::at(match key {
             CargoSlot::Workspace => layout.workspace_manifest(),
-            CargoSlot::Unit(name) => layout.unit_crate_manifest(name),
+            CargoSlot::Plugin(name) => layout.plugin_crate_manifest(name),
             CargoSlot::System => layout.system_manifest(),
             CargoSlot::Member(directory) => layout.member_manifest(directory),
         })

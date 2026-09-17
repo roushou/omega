@@ -169,10 +169,10 @@ fn new_publication_installs_the_complete_stage() {
 #[test]
 fn separate_staging_directory_does_not_expose_unpublished_members() {
     let f = Fixture::new();
-    let destination = f.0.join("units/hello");
+    let destination = f.0.join("plugins/hello");
     let stage = StageDir::in_directory(&destination, &f.0.join("staging")).unwrap();
     stage.write("Cargo.toml", b"package").unwrap();
-    assert!(!f.0.join("units").exists());
+    assert!(!f.0.join("plugins").exists());
     stage.publish_new().unwrap();
     assert_eq!(
         std::fs::read(destination.join("Cargo.toml")).unwrap(),

@@ -1,52 +1,53 @@
-//! Built-unit index written by the CLI and loaded by the daemon.
+//! Built-plugin index written by the CLI and loaded by the daemon.
 
 use std::path::PathBuf;
 
 use crate::Layout;
 use crate::{TomlFile, TomlSchema};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use serde::{Deserialize, Serialize};
 
-/// Built unit executable with a path relative to its generation.
+/// Built plugin executable with a path relative to its generation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BuiltUnit {
-    pub name: UnitName,
+pub struct BuiltPlugin {
+    pub name: PluginName,
     pub program: PathBuf,
     pub manifest: PathBuf,
 }
 
-impl BuiltUnit {
+impl BuiltPlugin {
     /// The entry for `name`, with both relative paths taken from the layout.
-    pub fn new(layout: &Layout, name: UnitName) -> Self {
+    pub fn new(layout: &Layout, name: PluginName) -> Self {
         Self {
-            program: layout.unit_program_rel(&name),
-            manifest: layout.unit_manifest_rel(&name),
+            program: layout.plugin_program_rel(&name),
+            manifest: layout.plugin_manifest_rel(&name),
             name,
         }
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateConfig {
     #[serde(default)]
-    pub units: Vec<BuiltUnit>,
+    pub plugins: Vec<BuiltPlugin>,
 }
 
 impl StateConfig {
-    /// Filename shared by staged and published built-unit indexes.
-    pub const FILE_NAME: &'static str = Layout::UNITS_TOML;
+    /// Filename shared by staged and published built-plugin indexes.
+    pub const FILE_NAME: &'static str = Layout::PLUGINS_TOML;
 
-    pub fn new(layout: &Layout, names: impl IntoIterator<Item = UnitName>) -> Self {
+    pub fn new(layout: &Layout, names: impl IntoIterator<Item = PluginName>) -> Self {
         Self {
-            units: names
+            plugins: names
                 .into_iter()
-                .map(|name| BuiltUnit::new(layout, name))
+                .map(|name| BuiltPlugin::new(layout, name))
                 .collect(),
         }
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &UnitName> {
-        self.units.iter().map(|unit| &unit.name)
+    pub fn names(&self) -> impl Iterator<Item = &PluginName> {
+        self.plugins.iter().map(|plugin| &plugin.name)
     }
 }
 
@@ -63,6 +64,22 @@ impl TomlSchema for StateConfig {
     type Key<'a> = ();
 
     fn locate(layout: &Layout, _key: Self::Key<'_>) -> TomlFile<Self> {
-        TomlFile::at(layout.state_units_toml())
+        TomlFile::at(layout.state_plugins_toml())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn obsolete_index_fields_are_rejected_instead_of_loading_no_plugins() {
+        assert!(StateConfig::decode("units = []").is_err());
+        assert!(
+            StateConfig::decode("plugins = []")
+                .unwrap()
+                .plugins
+                .is_empty()
+        );
     }
 }

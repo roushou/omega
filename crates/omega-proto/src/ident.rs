@@ -1,4 +1,4 @@
-//! Validated identifiers for units, surfaces, modules, and instances.
+//! Validated identifiers for plugins, surfaces, modules, and instances.
 //! Parse identifiers at input boundaries and retain their typed values internally.
 
 use std::fmt;
@@ -24,24 +24,24 @@ impl Ident {
     }
 }
 
-/// Unit identifier using lowercase ASCII letters, digits, hyphens, and underscores.
+/// Plugin identifier using lowercase ASCII letters, digits, hyphens, and underscores.
 /// Must start with a letter. Serializes as a string.
 /// Parse borrowed text with [`str::parse`], or validate an owned string with
 /// [`TryFrom<String>`] to retain its allocation. Both return [`IdentError`] on
 /// invalid input; deserialization applies the same rules.
 ///
 /// ```
-/// use omega_proto::UnitName;
-/// let parsed: UnitName = "battery".parse()?;
-/// let converted = UnitName::try_from(String::from("battery"))?;
+/// use omega_proto::PluginName;
+/// let parsed: PluginName = "battery".parse()?;
+/// let converted = PluginName::try_from(String::from("battery"))?;
 /// assert_eq!(parsed, converted);
 /// # Ok::<(), omega_proto::IdentError>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
-pub struct UnitName(String);
+pub struct PluginName(String);
 
-impl std::str::FromStr for UnitName {
+impl std::str::FromStr for PluginName {
     type Err = IdentError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
@@ -49,7 +49,7 @@ impl std::str::FromStr for UnitName {
     }
 }
 
-impl TryFrom<&str> for UnitName {
+impl TryFrom<&str> for PluginName {
     type Error = IdentError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
@@ -57,28 +57,28 @@ impl TryFrom<&str> for UnitName {
     }
 }
 
-impl TryFrom<String> for UnitName {
+impl TryFrom<String> for PluginName {
     type Error = IdentError;
 
-    /// Validate and wrap a unit name.
+    /// Validate and wrap a plugin name.
     fn try_from(name: String) -> Result<Self, Self::Error> {
-        Ident::validate("unit name", name).map(Self)
+        Ident::validate("plugin name", name).map(Self)
     }
 }
 
-impl UnitName {
+impl PluginName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-impl fmt::Display for UnitName {
+impl fmt::Display for PluginName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-/// Surface identifier, unique within its declaring unit.
+/// Surface identifier, unique within its declaring plugin.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct SurfaceId(String);
@@ -172,7 +172,7 @@ pub enum IdentError {
     InvalidStart { kind: &'static str, name: String },
 }
 
-impl<'de> Deserialize<'de> for UnitName {
+impl<'de> Deserialize<'de> for PluginName {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn identifier_entry_points_share_validation_and_preserve_owned_storage() {
-        Conversions::agree("battery", "Battery", UnitName::as_str);
+        Conversions::agree("battery", "Battery", PluginName::as_str);
         Conversions::agree("panel", "", SurfaceId::as_str);
         Conversions::agree("left-clock", "left.clock", ModuleId::as_str);
         Conversions::agree("instance-1", &"a".repeat(129), InstanceId::as_str);
@@ -263,14 +263,14 @@ mod tests {
 
     #[test]
     fn deserialization_keeps_identifier_rules_and_instance_length_limits() {
-        assert!(serde_json::from_str::<UnitName>("\"Invalid\"").is_err());
+        assert!(serde_json::from_str::<PluginName>("\"Invalid\"").is_err());
         assert!(serde_json::from_str::<SurfaceId>("\"\"").is_err());
         assert!(serde_json::from_str::<ModuleId>("\"a.b\"").is_err());
         let long = "a".repeat(129);
         let json = serde_json::to_string(&long).unwrap();
         assert_eq!(
-            serde_json::from_str::<UnitName>(&json).unwrap(),
-            long.parse::<UnitName>().unwrap()
+            serde_json::from_str::<PluginName>(&json).unwrap(),
+            long.parse::<PluginName>().unwrap()
         );
         assert!(serde_json::from_str::<InstanceId>(&json).is_err());
         assert!(serde_json::from_str::<IncarnationId>(&json).is_err());

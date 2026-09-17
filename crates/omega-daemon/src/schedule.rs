@@ -15,8 +15,8 @@ use omega_proto::omega::Schedule;
 use crate::action::Actions;
 use crate::broker::Brokerage;
 use crate::hub::Hub;
+use crate::plugins::PluginRegistry;
 use crate::shutdown::Shutdown;
-use crate::units::UnitTable;
 
 /// Live timer registry shared across convergence passes.
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct Schedules {
 #[derive(Debug)]
 struct Inner {
     hub: Hub,
-    units: UnitTable,
+    plugins: PluginRegistry,
     brokers: Brokerage,
     shutdown: Shutdown,
     timers: Mutex<Timers>,
@@ -77,11 +77,11 @@ impl Drop for Running {
 }
 
 impl Schedules {
-    pub fn new(hub: Hub, units: UnitTable, brokers: Brokerage, shutdown: Shutdown) -> Self {
+    pub fn new(hub: Hub, plugins: PluginRegistry, brokers: Brokerage, shutdown: Shutdown) -> Self {
         Self {
             inner: Arc::new(Inner {
                 hub,
-                units,
+                plugins,
                 brokers,
                 shutdown,
                 timers: Mutex::new(Timers::default()),
@@ -126,7 +126,7 @@ impl Schedules {
 
         let firing = Firing {
             hub: self.inner.hub.clone(),
-            units: self.inner.units.clone(),
+            plugins: self.inner.plugins.clone(),
             brokers: self.inner.brokers.clone(),
             shutdown: self.inner.shutdown.clone(),
             schedule: schedule.clone(),
@@ -182,7 +182,7 @@ impl Schedules {
 /// One schedule's timer.
 struct Firing {
     hub: Hub,
-    units: UnitTable,
+    plugins: PluginRegistry,
     brokers: Brokerage,
     shutdown: Shutdown,
     schedule: Schedule,
@@ -226,7 +226,7 @@ impl Firing {
             return;
         };
 
-        if let Err(refusal) = Actions::new(self.units.clone(), self.brokers.clone())
+        if let Err(refusal) = Actions::new(self.plugins.clone(), self.brokers.clone())
             .perform(action)
             .await
         {
@@ -255,10 +255,10 @@ mod tests {
         fn new() -> Self {
             let hub = Hub::new();
             let shutdown = Shutdown::new();
-            let units = UnitTable::detached(hub.clone());
+            let plugins = PluginRegistry::detached(hub.clone());
             let schedules = Schedules::new(
                 hub.clone(),
-                units,
+                plugins,
                 Brokerage::new(hub, shutdown.clone()),
                 shutdown.clone(),
             );
@@ -300,7 +300,7 @@ mod tests {
         brokers.add(Box::new(BlockedAction(entered.clone())));
         let shutdown = Shutdown::new();
         let firing = Firing {
-            units: UnitTable::detached(hub.clone()),
+            plugins: PluginRegistry::detached(hub.clone()),
             hub,
             brokers: brokers.clone(),
             shutdown: shutdown.clone(),

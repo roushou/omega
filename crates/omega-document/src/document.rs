@@ -2,8 +2,8 @@
 
 use omega_proto::omega::{
     Action, Bar, BatteryModule, ClockModule, CursorSetting, Edge, EnvironmentVariable, IdleSetting,
-    InvokeUnit, Keybind, Modifier, Module, NightLightSetting, Notify, RunCommand, Schedule,
-    Setting, StateDocument, ThemeSetting, UnitRef, WidgetModule, action, idle_setting, module,
+    InvokePlugin, Keybind, Modifier, Module, NightLightSetting, Notify, PluginRef, RunCommand,
+    Schedule, Setting, StateDocument, ThemeSetting, WidgetModule, action, idle_setting, module,
     setting,
 };
 
@@ -66,8 +66,8 @@ impl Document {
     }
 
     /// Configure a built plugin. Unlisted plugins run with default settings.
-    pub fn unit(mut self, unit: UnitRef) -> Self {
-        self.inner.units.push(unit);
+    pub fn plugin(mut self, plugin: PluginRef) -> Self {
+        self.inner.plugins.push(plugin);
         self
     }
 
@@ -159,23 +159,27 @@ impl Modules {
     /// Create a bar widget placement with typed instance settings.
     pub fn widget(
         id: impl Into<String>,
-        unit: impl Into<String>,
+        plugin: impl Into<String>,
         settings: &impl Fields,
     ) -> Module {
-        Self::configured(id, unit, settings.write())
+        Self::configured(id, plugin, settings.write())
     }
 
     /// Create a bar widget placement without instance settings.
-    pub fn plain_widget(id: impl Into<String>, unit: impl Into<String>) -> Module {
-        Self::configured(id, unit, Values::new())
+    pub fn plain_widget(id: impl Into<String>, plugin: impl Into<String>) -> Module {
+        Self::configured(id, plugin, Values::new())
     }
 
     /// Create a bar widget placement using raw settings values.
-    pub fn configured(id: impl Into<String>, unit: impl Into<String>, settings: Values) -> Module {
+    pub fn configured(
+        id: impl Into<String>,
+        plugin: impl Into<String>,
+        settings: Values,
+    ) -> Module {
         Self::of(
             id,
             module::Kind::Widget(WidgetModule {
-                unit: unit.into(),
+                plugin: plugin.into(),
                 config: settings.into_map(),
                 surface: String::new(),
                 panel: String::new(),
@@ -355,24 +359,24 @@ impl Actions {
     ) -> Action {
         use ::omega::Input;
         let command = command.into();
-        Self::invoke_named_with(command.unit(), command.name(), input.encode())
+        Self::invoke_named_with(command.plugin(), command.name(), input.encode())
     }
 
     /// Invoke a dynamically named command without input. Prefer [`Self::invoke`]
     /// when the defining plugin is a dependency.
-    pub fn invoke_named(unit: impl Into<String>, command: impl Into<String>) -> Action {
-        Self::invoke_named_with(unit, command, Vec::<bool>::new())
+    pub fn invoke_named(plugin: impl Into<String>, command: impl Into<String>) -> Action {
+        Self::invoke_named_with(plugin, command, Vec::<bool>::new())
     }
 
     /// Invoke a dynamically named command with positional wire values.
     /// The daemon validates the target and input against the plugin manifest.
     pub fn invoke_named_with(
-        unit: impl Into<String>,
+        plugin: impl Into<String>,
         command: impl Into<String>,
         args: impl IntoIterator<Item = impl IntoValue>,
     ) -> Action {
-        Self::of(action::Kind::InvokeUnit(InvokeUnit {
-            unit: unit.into(),
+        Self::of(action::Kind::InvokePlugin(InvokePlugin {
+            plugin: plugin.into(),
             command: command.into(),
             args: args.into_iter().map(IntoValue::into_value).collect(),
         }))
@@ -453,14 +457,14 @@ impl Settings {
     }
 }
 
-/// Units, as the document refers to them.
+/// Plugins, as the document refers to them.
 #[derive(Debug)]
-pub struct Units;
+pub struct Plugins;
 
-impl Units {
-    /// Turn a built unit off without deleting its crate.
-    pub fn disabled(name: impl Into<String>) -> UnitRef {
-        UnitRef {
+impl Plugins {
+    /// Turn a built plugin off without deleting its crate.
+    pub fn disabled(name: impl Into<String>) -> PluginRef {
+        PluginRef {
             name: name.into(),
             enabled: false,
             config: Default::default(),
@@ -468,19 +472,19 @@ impl Units {
     }
 
     /// Enable a plugin explicitly. Built plugins are enabled by default.
-    pub fn enabled(name: impl Into<String>) -> UnitRef {
-        UnitRef {
+    pub fn enabled(name: impl Into<String>) -> PluginRef {
+        PluginRef {
             name: name.into(),
             enabled: true,
             config: Default::default(),
         }
     }
 
-    /// Enable a plugin with typed unit settings.
+    /// Enable a plugin with typed plugin settings.
     /// Settings apply to all its commands, reactions, and surfaces. Placement settings
-    /// override only the keys they provide. Changing unit settings restarts the plugin.
-    pub fn configured(name: impl Into<String>, settings: &impl Fields) -> UnitRef {
-        UnitRef {
+    /// override only the keys they provide. Changing plugin settings restarts the plugin.
+    pub fn configured(name: impl Into<String>, settings: &impl Fields) -> PluginRef {
+        PluginRef {
             name: name.into(),
             enabled: true,
             config: settings.write().into_map(),

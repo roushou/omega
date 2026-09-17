@@ -6,12 +6,12 @@ This file tracks remaining limitations and future work.
 
 ## Persistence and recovery
 
-- **Records:** replication survives unit restarts while the daemon lives, but not
+- **Records:** replication survives plugin restarts while the daemon lives, but not
   a daemon restart. Durable records need retention, schema migration and failure
   semantics before choosing a storage implementation.
 - **Activation:** accepting a build validates its inputs and prepares handover;
   it is not atomic process replacement or a health gate. A started schedule can
-  fire before its target unit completes a handshake. Readiness-gated activation
+  fire before its target plugin completes a handshake. Readiness-gated activation
   would need an explicit definition of healthy and a policy for partial failure.
 - **Filesystem recovery:** tests cover operation failures and process exits, not
   lost or reordered device writes. Interrupted stages remain until reclamation
@@ -45,7 +45,7 @@ they share a placement ID.
 ## Feature boundaries
 
 `SetSetting` and `ToggleSetting` have no handler. Settings currently construct
-units from the desired document; changing them restarts affected units. Runtime
+plugins from the desired document; changing them restarts affected plugins. Runtime
 setting changes need an owner and persistence semantics consistent with that model.
 The broker [coverage test](../crates/omega-platform/tests/coverage.rs) lists the
 unserved actions and separates broker responsibilities from daemon responsibilities.

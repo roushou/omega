@@ -49,7 +49,7 @@ impl SurfaceExpansion {
         let mut expanded = proc_macro2::TokenStream::from(wire(tokens, Marker::Reads));
         expanded.extend(quote! {
             impl ::omega::internal::SurfaceIdentity for #name {
-                const UNIT: &'static str = env!("CARGO_PKG_NAME");
+                const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
                 const SURFACE: &'static str = #surface;
             }
             #reference

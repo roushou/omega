@@ -17,9 +17,9 @@ use omega_proto::{Handshake, HandshakeError, PROTOCOL_VERSION, Refusal, Transpor
 
 use crate::broker::Brokerage;
 use crate::hub::Hub;
+use crate::plugins::{PluginRegistry, Request};
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
-use crate::units::{Request, UnitTable};
 use omega_proto::{CodecError, DaemonStreams};
 
 pub use admission::Peer;
@@ -27,7 +27,7 @@ pub use dispatch::{Dispatcher, OpKind, Response};
 pub use liveness::{Health, Liveness};
 pub use subscriptions::Subscriptions;
 
-// Caller cancellation does not cancel execution in the unit. Keep admission
+// Caller cancellation does not cancel execution in the plugin. Keep admission
 // bytes and a pending slot until a terminal reply or connection teardown.
 struct PendingRequest {
     answer: oneshot::Sender<Result<result::Outcome, Refusal>>,
@@ -41,8 +41,8 @@ pub struct Session {
     hub: Hub,
     liveness: Liveness,
     shutdown: Shutdown,
-    /// Where a connected unit registers itself, so the daemon can invoke it.
-    units: UnitTable,
+    /// Where a connected plugin registers itself, so the daemon can invoke it.
+    plugins: PluginRegistry,
     /// Broker routing. The empty default returns UNIMPLEMENTED for brokered actions.
     brokers: Brokerage,
     layout: Option<omega_host::Layout>,
@@ -57,7 +57,7 @@ impl Session {
             layout: None,
             deployment: Default::default(),
             brokers: Brokerage::new(hub.clone(), shutdown.clone()),
-            units: UnitTable::detached(hub.clone()),
+            plugins: PluginRegistry::detached(hub.clone()),
             hub,
             liveness: Liveness::new(),
             shutdown,
@@ -80,9 +80,9 @@ impl Session {
         self
     }
 
-    /// Join the table the daemon invokes units through.
-    pub fn with_units(mut self, units: UnitTable) -> Self {
-        self.units = units;
+    /// Join the table the daemon invokes plugins through.
+    pub fn with_plugins(mut self, plugins: PluginRegistry) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -137,7 +137,7 @@ impl Session {
 
         tracing::info!(
             pid,
-            unit = %peer.label(),
+            plugin = %peer.label(),
             manifest_hash = %hello.manifest_hash,
             "handshake complete"
         );
@@ -153,15 +153,15 @@ impl Session {
         let snapshot = subscriptions.filter_snapshot(snapshot);
         let mut events = self.hub.subscribe_events();
 
-        // A unit is reachable by name for as long as this session lasts.
+        // A plugin is reachable by name for as long as this session lasts.
         let (outbound, mut requests) = tokio::sync::mpsc::channel::<Request>(16);
         let registered = peer
-            .unit_name()
-            .map(|name| self.units.connected(name, outbound));
+            .plugin_name()
+            .map(|name| self.plugins.connected(name, outbound));
 
         let settings = peer
-            .unit_name()
-            .map(|name| self.units.config(name))
+            .plugin_name()
+            .map(|name| self.plugins.config(name))
             .unwrap_or_default();
         drop(handover);
 
@@ -170,7 +170,7 @@ impl Session {
                 stream_id: 0,
                 body: Some(frame::Body::Welcome(Welcome {
                     protocol_version: PROTOCOL_VERSION,
-                    unit_id: peer.label(),
+                    plugin_id: peer.label(),
                     daemon_version: env!("CARGO_PKG_VERSION").to_string(),
                     capabilities: peer.grants().wire(),
                     state: Some(snapshot),
@@ -187,7 +187,7 @@ impl Session {
             Dispatcher::new(
                 self.hub.clone(),
                 self.supervisor.clone(),
-                self.units.clone(),
+                self.plugins.clone(),
                 self.brokers.clone(),
             )
             .with_layout(self.layout.clone())
@@ -211,7 +211,7 @@ impl Session {
                         }
                         // Repair lag with a fresh snapshot and subscription.
                         Err(broadcast::error::RecvError::Lagged(missed)) => {
-                            tracing::warn!(unit = %peer.label(), missed, "state subscriber lagged; resyncing");
+                            tracing::warn!(plugin = %peer.label(), missed, "state subscriber lagged; resyncing");
                             let (snapshot, receiver) = self.hub.subscribe_state();
                             state = receiver;
                             if let Some(patch) = subscriptions.filter(&StatePatch { topics: snapshot.topics }) {
@@ -232,7 +232,7 @@ impl Session {
                         }
                         Ok(_) => {}
                         Err(broadcast::error::RecvError::Lagged(missed)) => {
-                            tracing::warn!(unit = %peer.label(), missed, "event subscriber lagged");
+                            tracing::warn!(plugin = %peer.label(), missed, "event subscriber lagged");
                         }
                         Err(broadcast::error::RecvError::Closed) => return Ok(()),
                     }
@@ -241,7 +241,7 @@ impl Session {
                     let frame = completed.map_err(|error| SessionError::Transport(CodecError::Io(std::io::Error::other(error))))?;
                     connection.send(frame).await?;
                 }
-                // The daemon asking this unit for something.
+                // The daemon asking this plugin for something.
                 Some(request) = requests.recv() => {
                     if request.answer.is_closed() { continue; }
                     if pending.len() >= 16 {
@@ -289,7 +289,7 @@ impl Session {
                 } => return Ok(()),
                 _ = keepalive.tick() => {
                     if liveness.health() == Health::Unresponsive {
-                        tracing::warn!(unit = %peer.label(), "peer stopped answering; closing");
+                        tracing::warn!(plugin = %peer.label(), "peer stopped answering; closing");
                         return Err(SessionError::Unresponsive(peer.label()));
                     }
                     connection.send(Self::ping()).await?;
@@ -300,10 +300,10 @@ impl Session {
 
     /// Allowed topics: declared plugin subscriptions or all topics for an authorized observer.
     fn subscriptions(&self, peer: &Peer) -> Subscriptions {
-        peer.unit_name()
-            .and_then(|name| self.units.manifest(name).map(|unit| (name, unit)))
-            .map_or_else(Subscriptions::watcher, |(name, unit)| {
-                Subscriptions::of(name, &unit.manifest)
+        peer.plugin_name()
+            .and_then(|name| self.plugins.manifest(name).map(|plugin| (name, plugin)))
+            .map_or_else(Subscriptions::watcher, |(name, plugin)| {
+                Subscriptions::of(name, &plugin.manifest)
             })
     }
 
@@ -323,19 +323,19 @@ impl Session {
             return Peer::operator(pid, uid);
         };
 
-        let unit = self
-            .units
+        let plugin = self
+            .plugins
             .manifest(&name)
             .ok_or_else(|| Refusal::precondition(format!("no manifest on file for {name}")))?;
 
-        if hello.manifest_hash != unit.hash {
+        if hello.manifest_hash != plugin.hash {
             return Err(Refusal::precondition(format!(
                 "manifest hash mismatch for {name}: expected {}, got {}",
-                unit.hash, hello.manifest_hash
+                plugin.hash, hello.manifest_hash
             )));
         }
 
-        Peer::unit(name, &unit.manifest)
+        Peer::plugin(name, &plugin.manifest)
     }
 
     /// Everything the daemon knows, as one patch.
@@ -437,7 +437,7 @@ impl Session {
             Ok(response) => connection.send(response.frame(frame.stream_id)).await?,
             Err(refusal) => {
                 tracing::warn!(
-                    unit = %peer.label(),
+                    plugin = %peer.label(),
                     code = ?refusal.code,
                     "refused: {}", refusal.message
                 );

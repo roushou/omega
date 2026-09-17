@@ -69,7 +69,7 @@ impl Generations {
         let _transaction = self.transaction()?;
         match self.current_id()? {
             Some(id) => self.pin_locked(id).map(Some),
-            None if self.layout.state_units_toml().exists() => Err(io::Error::other(
+            None if self.layout.state_plugins_toml().exists() => Err(io::Error::other(
                 "legacy build layout; run `omega build` to publish a generation",
             )),
             None => Ok(None),

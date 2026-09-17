@@ -11,7 +11,7 @@ QtObject {
         if (!entry) {
             var scope = JSON.parse(key)
             var connection = factory.createObject(pool, {
-                socketPath: scope[0], unit: scope[1], surface: scope[2], module: scope[3]
+                socketPath: scope[0], plugin: scope[1], surface: scope[2], module: scope[3]
             })
             if (!connection) throw new Error("Could not create placement connection")
             entry = { connection: connection, users: 0 }

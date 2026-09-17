@@ -98,7 +98,7 @@ impl Context {
         FromValue::from_value(self.read().generic(address)?)
     }
 
-    pub(crate) fn record<T: crate::record::UnitState>(&self) -> T {
+    pub(crate) fn record<T: crate::record::PluginState>(&self) -> T {
         let mut records = self.inner.records.lock().unwrap_or_else(|e| e.into_inner());
         let values = records
             .entry(T::address())
@@ -106,7 +106,7 @@ impl Context {
         T::read(values)
     }
 
-    pub(crate) fn update_record<T: crate::record::UnitState>(
+    pub(crate) fn update_record<T: crate::record::PluginState>(
         &self,
         change: impl FnOnce(&mut T),
     ) -> crate::effect::Submission {

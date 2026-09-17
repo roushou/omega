@@ -6,7 +6,7 @@ import "../../../omega-omarchy/shell" as Omarchy
 TestCase {
     id: test
     name: "PanelPresentation"
-    Component { id: connectionFactory; Core.RendererConnection { unit: "audio"; surface: "panel"; module: "audio" } }
+    Component { id: connectionFactory; Core.RendererConnection { plugin: "audio"; surface: "panel"; module: "audio" } }
     Component { id: panelFactory; Omarchy.PanelSession {} }
     property var link
     property var panel
@@ -20,7 +20,7 @@ TestCase {
         link.socket.written = ""
     }
     function snapshot(shown) {
-        link.receiveView({unit:"audio",surface:"panel",instance:{id:"panel",incarnation:"test"},requested:shown ? 2 : 1,view:{revision:"1",root:{type:"text"}}})
+        link.receiveView({plugin:"audio",surface:"panel",instance:{id:"panel",incarnation:"test"},requested:shown ? 2 : 1,view:{revision:"1",root:{type:"text"}}})
     }
     function messages() { return link.socket.written.trim().split("\n").filter(line => line !== "").map(line => JSON.parse(line)) }
     function changes() { return messages().filter(frame => frame.invoke.changePresentation !== undefined) }

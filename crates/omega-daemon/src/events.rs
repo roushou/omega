@@ -32,13 +32,13 @@ impl EventStamp {
         }
     }
 
-    /// A unit's own event. The unit name is the one the daemon authenticated,
+    /// A plugin's own event. The plugin name is the one the daemon authenticated,
     /// never the one the frame carried.
-    pub fn custom(&self, unit: &str, name: &str, payload: Option<Value>) -> Event {
+    pub fn custom(&self, plugin: &str, name: &str, payload: Option<Value>) -> Event {
         self.stamp(
             EventKind::EventCustom,
             Some(event::Detail::Custom(CustomEvent {
-                unit: unit.to_string(),
+                plugin: plugin.to_string(),
                 name: name.to_string(),
                 payload,
             })),

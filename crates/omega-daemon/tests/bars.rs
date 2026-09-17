@@ -2,22 +2,22 @@ use std::sync::Arc;
 
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
+use omega_daemon::plugins::{PluginRegistry, Request};
 use omega_daemon::reconcile::{Action, PresentationProvider};
-use omega_daemon::units::{Request, UnitTable};
 use omega_document::{Bars, Document, Modules};
 use omega_proto::omega::{StateDocument, SurfaceKind, ViewTree, invoke, module, result};
-use omega_proto::{Manifest, Surface, SurfaceId, UnitName};
+use omega_proto::{Manifest, PluginName, Surface, SurfaceId};
 
 struct Fixture {
     hub: Hub,
-    units: UnitTable,
+    plugins: PluginRegistry,
     provider: PresentationProvider,
 }
 
 impl Fixture {
     fn new() -> Self {
         let hub = Hub::new();
-        let units = UnitTable::detached(hub.clone());
+        let plugins = PluginRegistry::detached(hub.clone());
         let manifest = Manifest::new(&Self::name(), "0.1.0").exposing([
             Surface::new(
                 &"indicator".parse::<SurfaceId>().unwrap(),
@@ -28,14 +28,14 @@ impl Fixture {
                 SurfaceKind::Widget,
             ),
         ]);
-        units.adopt(&ManifestStore::from_manifests([manifest.clone()]));
+        plugins.adopt(&ManifestStore::from_manifests([manifest.clone()]));
         let provider = PresentationProvider::new(
-            units.clone(),
+            plugins.clone(),
             Arc::new(ManifestStore::from_manifests([manifest])),
         );
         Self {
             hub,
-            units,
+            plugins,
             provider,
         }
     }
@@ -50,12 +50,12 @@ impl Fixture {
         let desired = self.provider.prepare(document)?;
         Ok(PresentationProvider::plan(
             &desired,
-            &self.units.installed_presentations(),
+            &self.plugins.installed_presentations(),
         ))
     }
 
-    fn name() -> UnitName {
-        "wifi".parse::<UnitName>().unwrap()
+    fn name() -> PluginName {
+        "wifi".parse::<PluginName>().unwrap()
     }
 
     fn document() -> StateDocument {
@@ -93,7 +93,7 @@ impl Fixture {
 async fn both_surfaces_are_configured_updated_and_removed() {
     let fixture = Fixture::new();
     let (requests, inbox) = tokio::sync::mpsc::channel(8);
-    let _guard = fixture.units.connected(&Fixture::name(), requests);
+    let _guard = fixture.plugins.connected(&Fixture::name(), requests);
     let responder = tokio::spawn(Fixture::answer(inbox, 8));
     let mut document = Fixture::document();
     let plan = fixture.plan(&document).unwrap();
@@ -116,7 +116,7 @@ async fn both_surfaces_are_configured_updated_and_removed() {
     let (_, mut views) = fixture.hub.subscribe_views();
     let plan = fixture.plan(&StateDocument::default()).unwrap();
     fixture.provider.apply(&plan).await.unwrap();
-    assert!(fixture.units.instances().is_empty());
+    assert!(fixture.plugins.instances().is_empty());
     assert!(fixture.hub.view_snapshot().is_empty());
     for _ in 0..2 {
         assert!(views.recv().await.unwrap().view.root.is_none());
@@ -161,7 +161,7 @@ fn ambiguous_surface_is_a_validation_error() {
 async fn a_missing_anchor_is_retried_and_captured_facts_survive_disconnect() {
     let fixture = Fixture::new();
     let (requests, inbox) = tokio::sync::mpsc::channel(8);
-    let guard = fixture.units.connected(&Fixture::name(), requests);
+    let guard = fixture.plugins.connected(&Fixture::name(), requests);
     let responder = tokio::spawn(Fixture::answer(inbox, 2));
     let changes = fixture.plan(&Fixture::document()).unwrap();
     let popup = changes
@@ -175,12 +175,12 @@ async fn a_missing_anchor_is_retried_and_captured_facts_survive_disconnect() {
             .await
             .is_err()
     );
-    assert!(fixture.units.installed_presentations().is_empty());
+    assert!(fixture.plugins.installed_presentations().is_empty());
 
     let changes = fixture.plan(&Fixture::document()).unwrap();
     fixture.provider.apply(&changes).await.unwrap();
     responder.await.unwrap();
-    let captured = fixture.units.installed_presentations();
+    let captured = fixture.plugins.installed_presentations();
     assert_eq!(captured.len(), 2);
     let popup = changes
         .iter()
@@ -190,9 +190,9 @@ async fn a_missing_anchor_is_retried_and_captured_facts_survive_disconnect() {
     let desired = fixture.provider.prepare(&Fixture::document()).unwrap();
     assert!(PresentationProvider::plan(&desired, &captured).is_empty());
     drop(guard);
-    assert!(fixture.units.installed_presentations().is_empty());
+    assert!(fixture.plugins.installed_presentations().is_empty());
     assert!(PresentationProvider::plan(&desired, &captured).is_empty());
-    let retry = PresentationProvider::plan(&desired, &fixture.units.installed_presentations());
+    let retry = PresentationProvider::plan(&desired, &fixture.plugins.installed_presentations());
     assert_eq!(retry.len(), 2);
     assert!(retry.iter().all(|change| change.action == Action::Create));
 }
@@ -201,17 +201,17 @@ async fn a_missing_anchor_is_retried_and_captured_facts_survive_disconnect() {
 async fn an_old_render_cannot_install_into_a_new_session() {
     let fixture = Fixture::new();
     let (requests, mut inbox) = tokio::sync::mpsc::channel(1);
-    let old = fixture.units.connected(&Fixture::name(), requests);
+    let old = fixture.plugins.connected(&Fixture::name(), requests);
     let change = fixture.plan(&Fixture::document()).unwrap().remove(0);
-    let units = fixture.units.clone();
+    let plugins = fixture.plugins.clone();
     let configure = tokio::spawn(async move {
-        units
+        plugins
             .configure_instance(&change.address, change.config)
             .await
     });
     let request = inbox.recv().await.unwrap();
     let _new = fixture
-        .units
+        .plugins
         .connected(&Fixture::name(), tokio::sync::mpsc::channel(1).0);
     drop(old);
     request
@@ -219,7 +219,7 @@ async fn an_old_render_cannot_install_into_a_new_session() {
         .send(Ok(result::Outcome::View(ViewTree::default())))
         .unwrap();
     assert!(configure.await.unwrap().is_err());
-    assert!(fixture.units.instances().is_empty());
+    assert!(fixture.plugins.instances().is_empty());
     assert!(fixture.hub.view_snapshot().is_empty());
 }
 

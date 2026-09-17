@@ -16,7 +16,7 @@ Schema paths below are relative to `schema/omega/`.
 | `state/*.proto`  | State payloads grouped by domain                         |
 | `action.proto`   | Actions and keybindings                                  |
 | `event.proto`    | Events                                                   |
-| `unit.proto`     | Manifests, surfaces, and capabilities                    |
+| `plugin.proto`   | Manifests, surfaces, and capabilities                    |
 | `instance.proto` | Instance identity, presentations, renderer attachment    |
 | `ui.proto`       | Declarative view trees                                   |
 | `document.proto` | Desired desktop configuration                            |
@@ -73,12 +73,12 @@ payloads (`PAYLOAD_TOO_LARGE`). `DEADLINE_EXCEEDED` means the wait expired; it d
 not establish whether an external action completed.
 
 `GetDeployment` is an operator-only snapshot of generation acceptance, the last
-reconciliation pass, shell application, current unit phases, and plugin health.
+reconciliation pass, shell application, current plugin phases, and plugin health.
 Health projects declarations, desired placements, instance identity, readiness,
 missing readings, and presentation state without exposing view trees. It is
 independent of process phase and native renderer attachment. Shell results
 carry their own generation because explicit application can precede activation.
-A settled reconciliation pass is not a guarantee that all unit processes are
+A settled reconciliation pass is not a guarantee that all plugin processes are
 running; their phases remain authoritative.
 
 ## Verification
@@ -99,11 +99,11 @@ also require regenerating the renderer's readers and running its checks; see the
 
 `MediaKey.player_id` selects the target. Absence means automatic
 selection at execution time; a present value must parse as a `PlayerId`, and an
-unavailable explicit target is refused. Empty is invalid. Daemons and units must
+unavailable explicit target is refused. Empty is invalid. Daemons and plugins must
 be upgraded together so an older reader cannot discard the target field.
 
 `PlayerInfo.can_*` describes the endpoint's advertised transport abilities,
-independent of a unit's manifest grants. A method reply is an acknowledgement,
+independent of a plugin's manifest grants. A method reply is an acknowledgement,
 not a substitute for observing playback state.
 
 ## Bluetooth targeting
@@ -112,14 +112,14 @@ not a substitute for observing playback state.
 presence for `battery_percent`: absent is unknown, zero is empty. Bluetooth
 connect/disconnect actions require the Bluetooth capability and a validated
 device ID. A vanished endpoint is refused without selecting another adapter.
-Rebuild units and upgrade the daemon together.
+Rebuild plugins and upgrade the daemon together.
 
 ## Instances and renderer authority
 
 UI declarations and command endpoints are separate manifest fields. RenderWidget,
 RemoveWidget, and PublishView carry an explicit InstanceRef; removed module_id
 fields are reserved. Instances are allocated by the daemon and expire with their
-unit session. Placement IDs locate desired configuration, never runtime authority.
+plugin session. Placement IDs locate desired configuration, never runtime authority.
 
 AttachRenderer is owner-only on the observation socket. It narrows that connection
 to a plugin's standalone presentations or one embedded/popup placement, requiring
@@ -159,7 +159,7 @@ Action result on the requesting stream. An optional activation token is never in
 long-running daemon's inherited environment.
 
 `OverlayPresentation.dismiss_on_outside` opts into outside-click dismissal.
-Units may request Hide/Close only for their own current instance identities.
+Plugins may request Hide/Close only for their own current instance identities.
 Lifecycle acknowledgement and the original request outcome use separate streams
 on the same connection; the original request must not block frame reception.
 

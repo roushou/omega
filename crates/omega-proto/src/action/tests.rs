@@ -70,8 +70,8 @@ impl Fixture {
                 summary: "Summary".into(),
                 ..Default::default()
             }),
-            action::Kind::InvokeUnit(InvokeUnit {
-                unit: "lamp".into(),
+            action::Kind::InvokePlugin(InvokePlugin {
+                plugin: "lamp".into(),
                 command: "toggle".into(),
                 args: vec![],
             }),
@@ -197,13 +197,13 @@ fn required_strings_identifiers_selectors_and_destinations_are_checked() {
             body: "bad\0body".into(),
             ..Default::default()
         }),
-        action::Kind::InvokeUnit(InvokeUnit {
-            unit: "../lamp".into(),
+        action::Kind::InvokePlugin(InvokePlugin {
+            plugin: "../lamp".into(),
             command: "toggle".into(),
             ..Default::default()
         }),
-        action::Kind::InvokeUnit(InvokeUnit {
-            unit: "lamp".into(),
+        action::Kind::InvokePlugin(InvokePlugin {
+            plugin: "lamp".into(),
             command: "bad name".into(),
             ..Default::default()
         }),

@@ -35,7 +35,7 @@ impl Backoff {
         Self::jitter(exponential.min(self.max))
     }
 
-    /// Forget the failures: this unit ran long enough to count.
+    /// Forget the failures: this plugin ran long enough to count.
     pub fn reset(&mut self) {
         self.attempt = 0;
     }
@@ -44,7 +44,7 @@ impl Backoff {
         self.attempt
     }
 
-    /// Spread restarts so a machine waking up does not respawn every unit on
+    /// Spread restarts so a machine waking up does not respawn every plugin on
     /// the same tick. Deterministic in width, random in choice.
     fn jitter(delay: Duration) -> Duration {
         let mut byte = [0u8; 1];

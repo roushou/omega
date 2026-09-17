@@ -118,14 +118,14 @@ fn json_roundtrip() {
 
 #[test]
 fn identifiers_validate_deserialized_strings() {
-    use omega_proto::{ModuleId, SurfaceId, UnitName};
+    use omega_proto::{ModuleId, PluginName, SurfaceId};
     for value in ["", "../outside", "/absolute", "9name", "Upper"] {
         let value = serde_json::to_string(value).unwrap();
-        assert!(serde_json::from_str::<UnitName>(&value).is_err());
+        assert!(serde_json::from_str::<PluginName>(&value).is_err());
         assert!(serde_json::from_str::<SurfaceId>(&value).is_err());
         assert!(serde_json::from_str::<ModuleId>(&value).is_err());
     }
-    let name: UnitName = serde_json::from_str("\"valid-name\"").unwrap();
+    let name: PluginName = serde_json::from_str("\"valid-name\"").unwrap();
     assert_eq!(name.as_str(), "valid-name");
 }
 

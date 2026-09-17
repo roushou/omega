@@ -9,7 +9,7 @@ import "omega/event.proto";
 enum Capability {
   CAPABILITY_UNSPECIFIED = 0;
   CAPABILITY_STATE_READ = 1;
-  CAPABILITY_STATE_WRITE = 2;            // unit keyspace only
+  CAPABILITY_STATE_WRITE = 2;            // plugin keyspace only
   CAPABILITY_SPAWN = 3;                  // RunCommand / LaunchApp
   CAPABILITY_SYSTEM_CONTROL = 4;         // lock/sleep/reboot/shutdown
   CAPABILITY_MEDIA = 5;

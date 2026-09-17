@@ -3,16 +3,16 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 use crate::ui::{Paint, Step, Ui};
 
-/// Report the daemon's view of every unit.
+/// Report the daemon's view of every plugin.
 #[derive(Debug, clap::Args)]
 pub struct StatusCmd {
     /// Inspect one plugin, including its surfaces and required readings.
-    #[arg(value_name = "UNIT")]
-    pub unit_name: Option<UnitName>,
+    #[arg(value_name = "PLUGIN")]
+    pub plugin_name: Option<PluginName>,
 
     /// Show CLI, daemon, renderer, and resolved config dependency versions.
     #[arg(long)]
@@ -36,7 +36,7 @@ impl StatusCmd {
                 .context("the daemon did not report status in time")?
                 .context("cannot read daemon status; ensure omega daemon is running")?;
 
-        Self::select(&mut status, self.unit_name.as_ref())?;
+        Self::select(&mut status, self.plugin_name.as_ref())?;
 
         if self.json {
             ui.line(serde_json::to_string(&status)?);
@@ -67,14 +67,14 @@ impl StatusCmd {
         }
 
         ui.blank();
-        if status.units.is_empty() {
+        if status.plugins.is_empty() {
             ui.step(Step::Checked, "the daemon is running; no plugins");
         } else {
             ui.plugin_health(
-                &status.units,
                 &status.plugins,
+                &status.plugin_health,
                 &layout,
-                self.unit_name.is_some(),
+                self.plugin_name.is_some(),
             )?;
         }
         Ok(())
@@ -82,34 +82,34 @@ impl StatusCmd {
 
     fn select(
         status: &mut omega_proto::omega::DeploymentStatus,
-        unit_name: Option<&UnitName>,
+        plugin_name: Option<&PluginName>,
     ) -> anyhow::Result<()> {
         use omega_proto::omega::attach_renderer;
 
-        let Some(unit_name) = unit_name else {
+        let Some(plugin_name) = plugin_name else {
             return Ok(());
         };
 
         anyhow::ensure!(
             status
-                .units
+                .plugins
                 .iter()
-                .any(|status| status.unit == unit_name.as_str()),
-            "unknown plugin {unit_name}"
+                .any(|status| status.plugin == plugin_name.as_str()),
+            "unknown plugin {plugin_name}"
         );
         status
-            .units
-            .retain(|status| status.unit == unit_name.as_str());
-        status
             .plugins
-            .retain(|status| status.unit == unit_name.as_str());
+            .retain(|status| status.plugin == plugin_name.as_str());
+        status
+            .plugin_health
+            .retain(|status| status.plugin == plugin_name.as_str());
         status
             .renderer_placements
-            .retain(|placement| placement.unit == unit_name.as_str());
+            .retain(|placement| placement.plugin == plugin_name.as_str());
         status.renderers.retain(|renderer| match &renderer.scope {
-            Some(attach_renderer::Scope::Unit(name)) => name == unit_name.as_str(),
+            Some(attach_renderer::Scope::Plugin(name)) => name == plugin_name.as_str(),
             Some(attach_renderer::Scope::Placement(placement)) => {
-                placement.unit == unit_name.as_str()
+                placement.plugin == plugin_name.as_str()
             }
             None => false,
         });
@@ -210,7 +210,7 @@ impl StatusCmd {
 mod tests {
     use super::*;
     use omega_proto::omega::{
-        AttachRenderer, DeploymentStatus, PluginHealth, UnitStatus, attach_renderer,
+        AttachRenderer, DeploymentStatus, PluginHealth, PluginStatus, attach_renderer,
     };
 
     #[test]
@@ -220,16 +220,16 @@ mod tests {
             ..Default::default()
         };
         for name in ["audio", "network"] {
-            status.units.push(UnitStatus {
-                unit: name.into(),
+            status.plugins.push(PluginStatus {
+                plugin: name.into(),
                 ..Default::default()
             });
-            status.plugins.push(PluginHealth {
-                unit: name.into(),
+            status.plugin_health.push(PluginHealth {
+                plugin: name.into(),
                 ..Default::default()
             });
             status.renderers.push(AttachRenderer {
-                scope: Some(attach_renderer::Scope::Unit(name.into())),
+                scope: Some(attach_renderer::Scope::Plugin(name.into())),
                 ..Default::default()
             });
         }
@@ -237,20 +237,20 @@ mod tests {
         assert!(
             StatusCmd::select(
                 &mut status,
-                Some(&"missing".parse::<omega_proto::UnitName>().unwrap())
+                Some(&"missing".parse::<omega_proto::PluginName>().unwrap())
             )
             .is_err()
         );
-        assert_eq!(status.units.len(), 2);
+        assert_eq!(status.plugins.len(), 2);
         StatusCmd::select(
             &mut status,
-            Some(&"network".parse::<omega_proto::UnitName>().unwrap()),
+            Some(&"network".parse::<omega_proto::PluginName>().unwrap()),
         )
         .unwrap();
-        assert_eq!(status.units.len(), 1);
         assert_eq!(status.plugins.len(), 1);
+        assert_eq!(status.plugin_health.len(), 1);
         assert_eq!(status.renderers.len(), 1);
-        assert_eq!(status.units[0].unit, "network");
+        assert_eq!(status.plugins[0].plugin, "network");
         assert_eq!(status.accepted_generation, "retained");
         let json = serde_json::to_string(&status).unwrap();
         assert!(!json.contains("audio"));

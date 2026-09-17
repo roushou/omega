@@ -23,17 +23,17 @@ use omega_proto::{Observation, Refusal, Socket};
 
 use crate::broker::Brokerage;
 use crate::hub::{Heartbeat, Hub, ViewUpdate};
+use crate::plugins::PluginRegistry;
 use crate::session::admission::Peer;
 use crate::session::{Dispatcher, Subscriptions};
 use crate::supervisor::Supervisor;
-use crate::units::UnitTable;
 use std::path::PathBuf;
 
 /// What a request needs to be served, once a peer has been admitted.
 #[derive(Debug, Clone)]
 struct Gateway {
     supervisor: Supervisor,
-    units: UnitTable,
+    plugins: PluginRegistry,
     brokers: Brokerage,
     layout: Option<omega_host::Layout>,
     deployment: crate::reconcile::deployment::Deployment,
@@ -71,10 +71,15 @@ impl ShellServer {
 
     /// Serve requests as well as stream: a shell that draws a button can
     /// press it.
-    pub fn serving(mut self, supervisor: Supervisor, units: UnitTable, brokers: Brokerage) -> Self {
+    pub fn serving(
+        mut self,
+        supervisor: Supervisor,
+        plugins: PluginRegistry,
+        brokers: Brokerage,
+    ) -> Self {
         self.gateway = Some(Gateway {
             supervisor,
-            units,
+            plugins,
             brokers,
             layout: None,
             deployment: Default::default(),
@@ -206,7 +211,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
             Dispatcher::new(
                 self.hub.clone(),
                 gateway.supervisor.clone(),
-                gateway.units.clone(),
+                gateway.plugins.clone(),
                 gateway.brokers.clone(),
             )
             .with_attachment(self.attachment.clone())

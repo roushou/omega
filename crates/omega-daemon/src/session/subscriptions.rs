@@ -1,17 +1,17 @@
 //! Apply runtime subscription selection within the manifest's authorization ceiling.
-//! A unit may always access its own keyspace.
+//! A plugin may always access its own keyspace.
 
 use std::collections::HashSet;
 
 use omega_proto::Manifest;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 use omega_proto::omega::{Event, EventKind, StatePatch, StateSnapshot};
 use omega_proto::{Address, Refusal};
 
 #[derive(Debug, Clone)]
 pub struct Subscriptions {
-    /// The unit whose keyspace is implicitly readable and writable.
-    owner: Option<UnitName>,
+    /// The plugin whose keyspace is implicitly readable and writable.
+    owner: Option<PluginName>,
     /// Topics the manifest declared: the ceiling, fixed at admission.
     allowed: HashSet<String>,
     /// Selected topics, or `None` for the complete authorized set.
@@ -27,7 +27,7 @@ pub struct Subscriptions {
 impl Subscriptions {
     /// The subscription a manifest describes. The manifest was validated when
     /// it was loaded, so its topics parse.
-    pub fn of(unit: &UnitName, manifest: &Manifest) -> Self {
+    pub fn of(plugin: &PluginName, manifest: &Manifest) -> Self {
         let allowed: HashSet<String> = manifest.state_topics.iter().cloned().collect();
 
         // The manifest was validated when it was loaded, so every value here
@@ -35,7 +35,7 @@ impl Subscriptions {
         let allowed_events: HashSet<i32> = manifest.events.iter().copied().collect();
 
         Self {
-            owner: Some(unit.clone()),
+            owner: Some(plugin.clone()),
             active: Some(allowed.clone()),
             allowed,
             watches_all: false,
@@ -67,7 +67,7 @@ impl Subscriptions {
                 .map_err(|error| Refusal::invalid(error.to_string()))?;
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
-                    "topic {topic:?} is not declared by this unit"
+                    "topic {topic:?} is not declared by this plugin"
                 )));
             }
         }
@@ -93,12 +93,12 @@ impl Subscriptions {
     }
 
     /// Narrow (or restore) the event selection. As with topics, the manifest
-    /// is the ceiling: a unit handles the events it declared and no others.
+    /// is the ceiling: a plugin handles the events it declared and no others.
     pub fn subscribe_events(&mut self, events: &[i32]) -> Result<(), Refusal> {
         for kind in events {
             if !self.allowed_events.contains(kind) {
                 return Err(Refusal::denied(format!(
-                    "event {} is not declared by this unit",
+                    "event {} is not declared by this plugin",
                     Self::name(*kind)
                 )));
             }
@@ -138,7 +138,7 @@ impl Subscriptions {
         }
     }
 
-    /// A unit's own keyspace: always readable, always writable by it alone.
+    /// A plugin's own keyspace: always readable, always writable by it alone.
     pub fn owns(&self, topic: &str) -> bool {
         let (Some(owner), Ok(parsed)) = (self.owner.as_ref(), topic.parse::<Address>()) else {
             return false;
@@ -182,7 +182,7 @@ impl Subscriptions {
                 .map_err(|error| Refusal::invalid(error.to_string()))?;
             if !self.permits(topic) {
                 return Err(Refusal::denied(format!(
-                    "topic {topic:?} is not declared by this unit"
+                    "topic {topic:?} is not declared by this plugin"
                 )));
             }
         }

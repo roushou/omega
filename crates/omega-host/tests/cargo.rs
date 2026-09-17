@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use omega_host::Layout;
 use omega_host::cargo::{CargoSlot, Dependencies, Dependency, Inherited, Manifest};
 use omega_host::{Table, Toml, TomlFile};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 struct TempDir(PathBuf);
 
@@ -39,23 +39,23 @@ impl Drop for TempDir {
     }
 }
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
 #[test]
 fn schema_locates_every_instance() {
     let tmp = TempDir::new("locate");
     let layout = tmp.layout();
-    let name = unit("battery-widget");
+    let name = plugin("battery-widget");
 
     assert_eq!(
         layout.file::<Manifest>(CargoSlot::Workspace).path(),
         layout.workspace_manifest()
     );
     assert_eq!(
-        layout.file::<Manifest>(CargoSlot::Unit(&name)).path(),
-        layout.unit_crate_manifest(&name)
+        layout.file::<Manifest>(CargoSlot::Plugin(&name)).path(),
+        layout.plugin_crate_manifest(&name)
     );
 }
 

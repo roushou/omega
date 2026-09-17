@@ -2,9 +2,9 @@
 //! Operator connections do not use plugin spawn tokens.
 
 use omega_proto::omega::{
-    Act, Action, AdoptUnit, InvokeUnit, Value, action, invoke, result, value,
+    Act, Action, AdoptPlugin, InvokePlugin, Value, action, invoke, result, value,
 };
-use omega_proto::{Client, ClientError, CommandAnswer, Socket, SurfaceId, UnitName};
+use omega_proto::{Client, ClientError, CommandAnswer, PluginName, Socket, SurfaceId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
@@ -72,27 +72,29 @@ impl Operator {
         .map(|_| ())
     }
 
-    /// Ask the daemon to cycle a unit's process.
-    pub async fn restart(&self, unit_name: &UnitName) -> Result<(), OperatorError> {
-        self.invoke(invoke::Op::RestartUnit(omega_proto::omega::RestartUnit {
-            unit: unit_name.to_string(),
-        }))
+    /// Ask the daemon to cycle a plugin's process.
+    pub async fn restart(&self, plugin_name: &PluginName) -> Result<(), OperatorError> {
+        self.invoke(invoke::Op::RestartPlugin(
+            omega_proto::omega::RestartPlugin {
+                plugin: plugin_name.to_string(),
+            },
+        ))
         .await
         .map(|_| ())
     }
 
-    /// Call a unit's command surface, and hand back whatever it answered.
+    /// Call a plugin's command surface, and hand back whatever it answered.
     pub async fn run(
         &self,
-        unit_name: &UnitName,
+        plugin_name: &PluginName,
         command_id: &SurfaceId,
         args: Vec<Value>,
     ) -> Result<Option<Value>, OperatorError> {
         let outcome = self
             .invoke(invoke::Op::Act(Act {
                 action: Some(Action {
-                    kind: Some(action::Kind::InvokeUnit(InvokeUnit {
-                        unit: unit_name.to_string(),
+                    kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                        plugin: plugin_name.to_string(),
                         command: command_id.to_string(),
                         args,
                     })),
@@ -116,7 +118,7 @@ impl Operator {
 
     /// One request, on a connection that lasts exactly as long as it does.
     async fn invoke(&self, op: invoke::Op) -> Result<result::Outcome, OperatorError> {
-        // No token: the CLI is not a unit, and saying so is the point.
+        // No token: the CLI is not a plugin, and saying so is the point.
         let (mut client, _welcome) = Client::connect(&self.socket, "", "").await?;
 
         let stream = client.allocate();
@@ -133,10 +135,10 @@ pub struct Attached {
 
 impl Attached {
     /// Adopt a plugin and return its spawn token, valid until this connection closes.
-    pub async fn adopt(&mut self, unit_name: &UnitName) -> Result<String, OperatorError> {
+    pub async fn adopt(&mut self, plugin_name: &PluginName) -> Result<String, OperatorError> {
         let outcome = self
-            .request(invoke::Op::AdoptUnit(AdoptUnit {
-                unit: unit_name.to_string(),
+            .request(invoke::Op::AdoptPlugin(AdoptPlugin {
+                plugin: plugin_name.to_string(),
             }))
             .await?;
 
@@ -144,7 +146,7 @@ impl Attached {
             result::Outcome::Value(Value {
                 kind: Some(value::Kind::StringValue(token)),
             }) => Ok(token),
-            _ => Err(OperatorError::Unexpected("AdoptUnit", "a token")),
+            _ => Err(OperatorError::Unexpected("AdoptPlugin", "a token")),
         }
     }
 

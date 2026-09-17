@@ -1,6 +1,6 @@
 use super::*;
 
-/// Omarchy plugin names are distinct from Omega unit names.
+/// Omarchy plugin names are distinct from Omega plugin names.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct NativeId(String);

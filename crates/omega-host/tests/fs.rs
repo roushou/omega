@@ -42,7 +42,7 @@ fn entries(dir: &Path) -> Vec<String> {
 #[test]
 fn a_write_creates_parents_and_leaves_no_temp_behind() {
     let tmp = TempDir::new("atomic");
-    let target = tmp.path().join("nested/deep/unit.toml");
+    let target = tmp.path().join("nested/deep/plugin.toml");
 
     AtomicFile::at(&target)
         .write(b"name = \"battery\"\n")
@@ -52,20 +52,20 @@ fn a_write_creates_parents_and_leaves_no_temp_behind() {
         std::fs::read_to_string(&target).unwrap(),
         "name = \"battery\"\n"
     );
-    assert_eq!(entries(target.parent().unwrap()), vec!["unit.toml"]);
+    assert_eq!(entries(target.parent().unwrap()), vec!["plugin.toml"]);
 }
 
 #[test]
 fn a_rewrite_replaces_the_contents_entirely() {
     let tmp = TempDir::new("atomic-replace");
-    let target = tmp.path().join("units.toml");
+    let target = tmp.path().join("plugins.toml");
     let file = AtomicFile::at(&target);
 
     file.write(b"first, much longer contents").unwrap();
     file.write(b"second").unwrap();
 
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "second");
-    assert_eq!(entries(tmp.path()), vec!["units.toml"]);
+    assert_eq!(entries(tmp.path()), vec!["plugins.toml"]);
 }
 
 #[test]
@@ -73,14 +73,14 @@ fn a_dropped_stage_never_touches_the_live_directory() {
     let tmp = TempDir::new("stage-drop");
     let live = tmp.path().join("state");
     std::fs::create_dir_all(&live).unwrap();
-    std::fs::write(live.join("units.toml"), "old").unwrap();
+    std::fs::write(live.join("plugins.toml"), "old").unwrap();
 
     let stage = StageDir::new(&live).unwrap();
-    stage.write("units.toml", b"new").unwrap();
+    stage.write("plugins.toml", b"new").unwrap();
     drop(stage); // a failed build
 
     assert_eq!(
-        std::fs::read_to_string(live.join("units.toml")).unwrap(),
+        std::fs::read_to_string(live.join("plugins.toml")).unwrap(),
         "old"
     );
     assert_eq!(entries(tmp.path()), vec!["state"], "no stage left behind");
@@ -90,14 +90,14 @@ fn a_dropped_stage_never_touches_the_live_directory() {
 fn a_committed_stage_replaces_the_live_directory_wholesale() {
     let tmp = TempDir::new("stage-commit");
     let live = tmp.path().join("state");
-    std::fs::create_dir_all(live.join("units")).unwrap();
+    std::fs::create_dir_all(live.join("plugins")).unwrap();
     std::fs::write(live.join("gone.toml"), "stale").unwrap();
 
     let stage = StageDir::new(&live).unwrap();
-    stage.write("units.toml", b"new").unwrap();
+    stage.write("plugins.toml", b"new").unwrap();
     stage.commit().unwrap();
 
-    assert_eq!(entries(&live), vec!["units.toml"], "the old tree is gone");
+    assert_eq!(entries(&live), vec!["plugins.toml"], "the old tree is gone");
     assert_eq!(entries(tmp.path()), vec!["state"], "no backup left behind");
 }
 

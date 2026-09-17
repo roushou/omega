@@ -6,17 +6,17 @@ mod build;
 pub mod converger;
 pub mod deployment;
 pub mod environment;
+pub mod plugins;
 pub mod presentations;
 pub mod schedules;
 pub mod shell;
-pub mod units;
 
 pub use build::ValidatedBuild;
 pub use converger::{Context, Converger, Work};
 pub use environment::EnvironmentProvider;
+pub use plugins::PluginProvider;
 pub use presentations::PresentationProvider;
 pub use schedules::ScheduleProvider;
-pub use units::UnitProvider;
 
 /// What a change does to an entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

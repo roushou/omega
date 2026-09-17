@@ -1,4 +1,4 @@
-//! Command surfaces: the daemon asking a unit to do something.
+//! Command surfaces: the daemon asking a plugin to do something.
 
 mod common;
 
@@ -8,17 +8,18 @@ use common::{Harness, command_manifest, expect_refusal, next_result, widget_mani
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::Manifest;
 use omega_proto::omega::{
-    Act, Action, ErrorCode, Frame, Invoke, InvokeUnit, Value, action, frame, invoke, result, value,
+    Act, Action, ErrorCode, Frame, Invoke, InvokePlugin, Value, action, frame, invoke, result,
+    value,
 };
 
-fn call(stream_id: u64, unit: &str, command: &str) -> Frame {
+fn call(stream_id: u64, plugin: &str, command: &str) -> Frame {
     Frame {
         stream_id,
         body: Some(frame::Body::Invoke(Invoke {
             op: Some(invoke::Op::Act(Act {
                 action: Some(Action {
-                    kind: Some(action::Kind::InvokeUnit(InvokeUnit {
-                        unit: unit.into(),
+                    kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                        plugin: plugin.into(),
                         command: command.into(),
                         args: vec![Value {
                             kind: Some(value::Kind::StringValue("now".into())),
@@ -30,11 +31,11 @@ fn call(stream_id: u64, unit: &str, command: &str) -> Frame {
     }
 }
 
-async fn connected_unit(
+async fn connected_plugin(
     harness: &Harness,
     manifest: &Manifest,
 ) -> omega_proto::Transport<tokio::net::UnixStream> {
-    let token = harness.register_unit(manifest.name.as_str());
+    let token = harness.register_plugin(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
     transport
@@ -48,17 +49,17 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
         ManifestStore::from_manifests([manifest.clone()]),
     );
 
-    // The unit that serves the command...
-    let mut unit = connected_unit(&harness, &manifest).await;
+    // The plugin that serves the command...
+    let mut plugin = connected_plugin(&harness, &manifest).await;
 
     // ...and the operator asking for it.
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap(); // Welcome
     operator.send(call(1, "lamp", "toggle")).await.unwrap();
 
-    // The unit sees the call on one of the daemon's own streams, with the
+    // The plugin sees the call on one of the daemon's own streams, with the
     // arguments it was given.
-    let frame = tokio::time::timeout(Duration::from_secs(2), unit.recv())
+    let frame = tokio::time::timeout(Duration::from_secs(2), plugin.recv())
         .await
         .expect("the daemon should forward the call")
         .unwrap()
@@ -80,18 +81,19 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
         }]
     );
 
-    // The unit answers, and the answer reaches the operator.
-    unit.send(Frame {
-        stream_id: frame.stream_id,
-        body: Some(frame::Body::Result(omega_proto::omega::Result {
-            outcome: Some(result::Outcome::Value(Value {
-                kind: Some(value::Kind::StringValue("on".into())),
+    // The plugin answers, and the answer reaches the operator.
+    plugin
+        .send(Frame {
+            stream_id: frame.stream_id,
+            body: Some(frame::Body::Result(omega_proto::omega::Result {
+                outcome: Some(result::Outcome::Value(Value {
+                    kind: Some(value::Kind::StringValue("on".into())),
+                })),
+                done: true,
             })),
-            done: true,
-        })),
-    })
-    .await
-    .unwrap();
+        })
+        .await
+        .unwrap();
 
     let answer = next_result(&mut operator).await.unwrap();
     assert_eq!(answer.stream_id, 1, "answered on the stream that asked");
@@ -99,7 +101,7 @@ async fn an_operator_calls_a_command_and_gets_its_answer() {
         result::Outcome::Value(value) => {
             assert_eq!(value.kind, Some(value::Kind::StringValue("on".into())))
         }
-        other => panic!("expected the unit's answer, got {other:?}"),
+        other => panic!("expected the plugin's answer, got {other:?}"),
     }
 }
 
@@ -110,7 +112,7 @@ async fn unexpected_command_replies_are_refused_on_the_callers_stream() {
         "command-answer-kind",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut plugin = connected_plugin(&harness, &manifest).await;
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap();
     for (index, outcome) in [
@@ -125,12 +127,13 @@ async fn unexpected_command_replies_are_refused_on_the_callers_stream() {
     {
         let stream = 1 + 2 * index as u64;
         operator.send(call(stream, "lamp", "toggle")).await.unwrap();
-        let request = tokio::time::timeout(Duration::from_secs(2), unit.recv())
+        let request = tokio::time::timeout(Duration::from_secs(2), plugin.recv())
             .await
             .unwrap()
             .unwrap()
             .unwrap();
-        unit.send(Frame::reply(request.stream_id, outcome))
+        plugin
+            .send(Frame::reply(request.stream_id, outcome))
             .await
             .unwrap();
         let answer = next_result(&mut operator).await.unwrap();
@@ -143,13 +146,13 @@ async fn unexpected_command_replies_are_refused_on_the_callers_stream() {
 }
 
 #[tokio::test]
-async fn a_command_the_unit_never_declared_is_refused_before_it_is_asked() {
+async fn a_command_the_plugin_never_declared_is_refused_before_it_is_asked() {
     let manifest = command_manifest("lamp", "toggle");
     let harness = Harness::new(
         "command-undeclared",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let _unit = connected_unit(&harness, &manifest).await;
+    let _plugin = connected_plugin(&harness, &manifest).await;
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap(); // Welcome
@@ -162,13 +165,13 @@ async fn a_command_the_unit_never_declared_is_refused_before_it_is_asked() {
 }
 
 #[tokio::test]
-async fn a_unit_that_declares_no_commands_says_so() {
+async fn a_plugin_that_declares_no_commands_says_so() {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(
         "command-none",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let _unit = connected_unit(&harness, &manifest).await;
+    let _plugin = connected_plugin(&harness, &manifest).await;
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap(); // Welcome
@@ -182,7 +185,7 @@ async fn a_unit_that_declares_no_commands_says_so() {
 }
 
 #[tokio::test]
-async fn calling_a_unit_that_is_not_connected_is_refused() {
+async fn calling_a_plugin_that_is_not_connected_is_refused() {
     let manifest = command_manifest("lamp", "toggle");
     let harness = Harness::new("command-absent", ManifestStore::from_manifests([manifest]));
 
@@ -191,39 +194,38 @@ async fn calling_a_unit_that_is_not_connected_is_refused() {
     operator.send(call(1, "lamp", "toggle")).await.unwrap();
 
     let refusal = expect_refusal(next_result(&mut operator).await);
-    // Not a bad request: the caller asked for something reasonable of a unit
+    // Not a bad request: the caller asked for something reasonable of a plugin
     // that is not there yet.
     assert_eq!(refusal.code, ErrorCode::Unavailable);
     assert!(refusal.message.contains("not connected"), "{refusal}");
 }
 
 #[tokio::test]
-async fn a_units_own_refusal_reaches_the_caller_as_it_was() {
+async fn a_plugins_own_refusal_reaches_the_caller_as_it_was() {
     let manifest = command_manifest("lamp", "toggle");
     let harness = Harness::new(
         "command-refused",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut plugin = connected_plugin(&harness, &manifest).await;
 
     let mut operator = harness.connect("operator", "").await;
     operator.recv().await.unwrap().unwrap(); // Welcome
     operator.send(call(1, "lamp", "toggle")).await.unwrap();
 
-    let frame = tokio::time::timeout(Duration::from_secs(2), unit.recv())
+    let frame = tokio::time::timeout(Duration::from_secs(2), plugin.recv())
         .await
         .expect("the daemon should forward the call")
         .unwrap()
         .unwrap();
 
-    // The unit says no, in its own words and with its own code.
-    unit.send(
-        omega_proto::Refusal::denied("the lamp is bolted to the wall").frame(frame.stream_id),
-    )
-    .await
-    .unwrap();
+    // The plugin says no, in its own words and with its own code.
+    plugin
+        .send(omega_proto::Refusal::denied("the lamp is bolted to the wall").frame(frame.stream_id))
+        .await
+        .unwrap();
 
-    // The daemon was the messenger; flattening the unit's answer into one of
+    // The daemon was the messenger; flattening the plugin's answer into one of
     // its own would lose why.
     let refusal = expect_refusal(next_result(&mut operator).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
@@ -231,27 +233,27 @@ async fn a_units_own_refusal_reaches_the_caller_as_it_was() {
 }
 
 #[tokio::test]
-async fn a_unit_needs_a_capability_to_invoke_another() {
+async fn a_plugin_needs_a_capability_to_invoke_another() {
     let lamp = command_manifest("lamp", "toggle");
     let caller = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(
-        "command-unit-caller",
+        "command-plugin-caller",
         ManifestStore::from_manifests([lamp.clone(), caller.clone()]),
     );
-    let _lamp = connected_unit(&harness, &lamp).await;
-    let mut caller_unit = connected_unit(&harness, &caller).await;
+    let _lamp = connected_plugin(&harness, &lamp).await;
+    let mut caller_plugin = connected_plugin(&harness, &caller).await;
 
-    // Making another unit run its own code is making code run, and this
+    // Making another plugin run its own code is making code run, and this
     // manifest was never granted that.
-    caller_unit.send(call(3, "lamp", "toggle")).await.unwrap();
+    caller_plugin.send(call(3, "lamp", "toggle")).await.unwrap();
 
-    let refusal = expect_refusal(next_result(&mut caller_unit).await);
+    let refusal = expect_refusal(next_result(&mut caller_plugin).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
     assert!(refusal.message.contains("CAPABILITY_SPAWN"), "{refusal}");
 }
 
 #[tokio::test]
-async fn a_unit_can_receive_its_own_command_while_waiting_for_the_answer() {
+async fn a_plugin_can_receive_its_own_command_while_waiting_for_the_answer() {
     let manifest = command_manifest("lamp", "toggle").granting([
         omega_proto::omega::Capability::StateRead,
         omega_proto::omega::Capability::Spawn,
@@ -260,24 +262,25 @@ async fn a_unit_can_receive_its_own_command_while_waiting_for_the_answer() {
         "self-call",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let mut unit = connected_unit(&harness, &manifest).await;
-    unit.send(call(1, "lamp", "toggle")).await.unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(1), unit.recv())
+    let mut plugin = connected_plugin(&harness, &manifest).await;
+    plugin.send(call(1, "lamp", "toggle")).await.unwrap();
+    let request = tokio::time::timeout(Duration::from_secs(1), plugin.recv())
         .await
         .unwrap()
         .unwrap()
         .unwrap();
     assert!(matches!(request.body, Some(frame::Body::Invoke(_))));
-    unit.send(Frame {
-        stream_id: request.stream_id,
-        body: Some(frame::Body::Result(omega_proto::omega::Result {
-            outcome: Some(result::Outcome::Ok(Default::default())),
-            done: true,
-        })),
-    })
-    .await
-    .unwrap();
-    let answer = next_result(&mut unit).await.unwrap();
+    plugin
+        .send(Frame {
+            stream_id: request.stream_id,
+            body: Some(frame::Body::Result(omega_proto::omega::Result {
+                outcome: Some(result::Outcome::Ok(Default::default())),
+                done: true,
+            })),
+        })
+        .await
+        .unwrap();
+    let answer = next_result(&mut plugin).await.unwrap();
     assert_eq!(answer.stream_id, 1);
     common::expect_ok(Some(answer));
 }
@@ -296,27 +299,28 @@ impl PendingCalls {
     fn start(
         harness: &Harness,
         bytes: usize,
-    ) -> tokio::task::JoinHandle<Result<result::Outcome, omega_daemon::units::RequestError>> {
-        let units = harness.units.clone();
+    ) -> tokio::task::JoinHandle<Result<result::Outcome, omega_daemon::plugins::RequestError>> {
+        let plugins = harness.plugins.clone();
         tokio::spawn(async move {
-            units
+            plugins
                 .request(
-                    &"lamp".parse::<omega_proto::UnitName>().unwrap(),
+                    &"lamp".parse::<omega_proto::PluginName>().unwrap(),
                     Self::op(bytes),
                 )
                 .await
         })
     }
 
-    async fn barrier(unit: &mut omega_proto::Transport<tokio::net::UnixStream>) {
-        unit.send(Frame {
-            stream_id: 1,
-            body: Some(frame::Body::Ping(Default::default())),
-        })
-        .await
-        .unwrap();
+    async fn barrier(plugin: &mut omega_proto::Transport<tokio::net::UnixStream>) {
+        plugin
+            .send(Frame {
+                stream_id: 1,
+                body: Some(frame::Body::Ping(Default::default())),
+            })
+            .await
+            .unwrap();
         assert!(matches!(
-            unit.recv().await.unwrap().unwrap().body,
+            plugin.recv().await.unwrap().unwrap().body,
             Some(frame::Body::Pong(_))
         ));
     }
@@ -329,11 +333,11 @@ async fn abandoned_wire_requests_keep_byte_capacity_until_terminal_reply_or_disc
         "pending-bytes",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut plugin = connected_plugin(&harness, &manifest).await;
     let mut streams = Vec::new();
     for _ in 0..2 {
         let call = PendingCalls::start(&harness, 3 * 1024 * 1024);
-        streams.push(unit.recv().await.unwrap().unwrap().stream_id);
+        streams.push(plugin.recv().await.unwrap().unwrap().stream_id);
         call.abort();
         assert!(call.await.unwrap_err().is_cancelled());
     }
@@ -341,30 +345,31 @@ async fn abandoned_wire_requests_keep_byte_capacity_until_terminal_reply_or_disc
         PendingCalls::start(&harness, 3 * 1024 * 1024)
             .await
             .unwrap(),
-        Err(omega_daemon::units::RequestError::Full(_))
+        Err(omega_daemon::plugins::RequestError::Full(_))
     ));
-    unit.send(Frame::reply(
-        streams[0],
-        result::Outcome::Ok(Default::default()),
-    ))
-    .await
-    .unwrap();
-    PendingCalls::barrier(&mut unit).await;
+    plugin
+        .send(Frame::reply(
+            streams[0],
+            result::Outcome::Ok(Default::default()),
+        ))
+        .await
+        .unwrap();
+    PendingCalls::barrier(&mut plugin).await;
     let admitted = PendingCalls::start(&harness, 3 * 1024 * 1024);
     assert!(matches!(
-        unit.recv().await.unwrap().unwrap().body,
+        plugin.recv().await.unwrap().unwrap().body,
         Some(frame::Body::Invoke(_))
     ));
-    drop(unit);
+    drop(plugin);
     assert!(matches!(
         admitted.await.unwrap(),
-        Err(omega_daemon::units::RequestError::Absent(_))
+        Err(omega_daemon::plugins::RequestError::Absent(_))
     ));
-    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut plugin = connected_plugin(&harness, &manifest).await;
     for _ in 0..2 {
         let call = PendingCalls::start(&harness, 3 * 1024 * 1024);
         assert!(matches!(
-            unit.recv().await.unwrap().unwrap().body,
+            plugin.recv().await.unwrap().unwrap().body,
             Some(frame::Body::Invoke(_))
         ));
         call.abort();
@@ -379,48 +384,51 @@ async fn streamed_results_and_cancelled_callers_do_not_release_pending_slots_ear
         "pending-count",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let mut unit = connected_unit(&harness, &manifest).await;
+    let mut plugin = connected_plugin(&harness, &manifest).await;
     let first = PendingCalls::start(&harness, 0);
-    let stream = unit.recv().await.unwrap().unwrap().stream_id;
-    unit.send(Frame {
-        stream_id: stream,
-        body: Some(frame::Body::Result(omega_proto::omega::Result {
-            done: false,
-            outcome: Some(result::Outcome::Value(Default::default())),
-        })),
-    })
-    .await
-    .unwrap();
-    PendingCalls::barrier(&mut unit).await;
+    let stream = plugin.recv().await.unwrap().unwrap().stream_id;
+    plugin
+        .send(Frame {
+            stream_id: stream,
+            body: Some(frame::Body::Result(omega_proto::omega::Result {
+                done: false,
+                outcome: Some(result::Outcome::Value(Default::default())),
+            })),
+        })
+        .await
+        .unwrap();
+    PendingCalls::barrier(&mut plugin).await;
     assert!(!first.is_finished());
     first.abort();
     assert!(first.await.unwrap_err().is_cancelled());
     for _ in 1..16 {
         let call = PendingCalls::start(&harness, 0);
         assert!(matches!(
-            unit.recv().await.unwrap().unwrap().body,
+            plugin.recv().await.unwrap().unwrap().body,
             Some(frame::Body::Invoke(_))
         ));
         call.abort();
         assert!(call.await.unwrap_err().is_cancelled());
     }
     assert!(
-        matches!(PendingCalls::start(&harness, 0).await.unwrap(), Err(omega_daemon::units::RequestError::Refused { source, .. }) if source.code == ErrorCode::ResourceExhausted)
+        matches!(PendingCalls::start(&harness, 0).await.unwrap(), Err(omega_daemon::plugins::RequestError::Refused { source, .. }) if source.code == ErrorCode::ResourceExhausted)
     );
-    unit.send(Frame::reply(
-        stream,
-        result::Outcome::Ok(Default::default()),
-    ))
-    .await
-    .unwrap();
-    PendingCalls::barrier(&mut unit).await;
+    plugin
+        .send(Frame::reply(
+            stream,
+            result::Outcome::Ok(Default::default()),
+        ))
+        .await
+        .unwrap();
+    PendingCalls::barrier(&mut plugin).await;
     let admitted = PendingCalls::start(&harness, 0);
-    let stream = unit.recv().await.unwrap().unwrap().stream_id;
-    unit.send(Frame::reply(
-        stream,
-        result::Outcome::Ok(Default::default()),
-    ))
-    .await
-    .unwrap();
+    let stream = plugin.recv().await.unwrap().unwrap().stream_id;
+    plugin
+        .send(Frame::reply(
+            stream,
+            result::Outcome::Ok(Default::default()),
+        ))
+        .await
+        .unwrap();
     assert!(admitted.await.unwrap().is_ok());
 }

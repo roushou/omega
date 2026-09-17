@@ -1,7 +1,7 @@
 //! Validation shared by build publication and daemon adoption.
 
 use omega_proto::omega::{StateDocument, SurfaceKind, module};
-use omega_proto::{Manifest, ModuleId, SurfaceId, UnitName};
+use omega_proto::{Manifest, ModuleId, PluginName, SurfaceId};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
@@ -14,20 +14,20 @@ impl DocumentValidation {
     ) -> Result<(), ValidationError> {
         let mut built = BTreeMap::new();
         for manifest in manifests {
-            let name = manifest.unit().map_err(Self::cause)?;
+            let name = manifest.plugin().map_err(Self::cause)?;
             manifest.validate(&name).map_err(Self::cause)?;
             if built.insert(name, manifest).is_some() {
-                return Err(Self::error("duplicate built unit"));
+                return Err(Self::error("duplicate built plugin"));
             }
         }
-        let mut units = BTreeSet::new();
-        for unit in &document.units {
-            let name = unit.name.parse::<UnitName>().map_err(Self::cause)?;
+        let mut plugins = BTreeSet::new();
+        for plugin in &document.plugins {
+            let name = plugin.name.parse::<PluginName>().map_err(Self::cause)?;
             if !built.contains_key(&name) {
-                return Err(Self::error(format!("unknown unit {name}")));
+                return Err(Self::error(format!("unknown plugin {name}")));
             }
-            if !units.insert(name) {
-                return Err(Self::error("duplicate configured unit"));
+            if !plugins.insert(name) {
+                return Err(Self::error("duplicate configured plugin"));
             }
         }
         if !document.monitors.is_empty()
@@ -48,10 +48,13 @@ impl DocumentValidation {
                 let kind = action
                     .validate()
                     .map_err(|error| Self::error(format!("schedule {:?}: {error}", schedule.id)))?;
-                if let omega_proto::omega::action::Kind::InvokeUnit(call) = kind {
-                    let unit = call.unit.parse::<UnitName>().map_err(Self::cause)?;
-                    let manifest = built.get(&unit).ok_or_else(|| {
-                        Self::error(format!("schedule {:?}: unknown unit {unit}", schedule.id))
+                if let omega_proto::omega::action::Kind::InvokePlugin(call) = kind {
+                    let plugin = call.plugin.parse::<PluginName>().map_err(Self::cause)?;
+                    let manifest = built.get(&plugin).ok_or_else(|| {
+                        Self::error(format!(
+                            "schedule {:?}: unknown plugin {plugin}",
+                            schedule.id
+                        ))
                     })?;
                     if !manifest
                         .commands
@@ -59,7 +62,7 @@ impl DocumentValidation {
                         .any(|command| command.id == call.command)
                     {
                         return Err(Self::error(format!(
-                            "schedule {:?}: {unit} declares no command {:?}",
+                            "schedule {:?}: {plugin} declares no command {:?}",
                             schedule.id, call.command
                         )));
                     }
@@ -92,10 +95,10 @@ impl DocumentValidation {
                 let Some(module::Kind::Widget(widget)) = &entry.kind else {
                     return Err(Self::error("only widget modules have an instance provider"));
                 };
-                let name = widget.unit.parse::<UnitName>().map_err(Self::cause)?;
+                let name = widget.plugin.parse::<PluginName>().map_err(Self::cause)?;
                 let manifest = built
                     .get(&name)
-                    .ok_or_else(|| Self::error(format!("unknown widget unit {name}")))?;
+                    .ok_or_else(|| Self::error(format!("unknown widget plugin {name}")))?;
                 let surface = Self::surface(manifest, &widget.surface)?;
                 if !widget.panel.is_empty() && Self::surface(manifest, &widget.panel)? == surface {
                     return Err(Self::error(
@@ -114,10 +117,10 @@ impl DocumentValidation {
                     "presentation and bar placement ids must be unique",
                 ));
             }
-            let unit = entry.unit.parse::<UnitName>().map_err(Self::cause)?;
+            let plugin = entry.plugin.parse::<PluginName>().map_err(Self::cause)?;
             let manifest = built
-                .get(&unit)
-                .ok_or_else(|| Self::error(format!("unknown unit {unit}")))?;
+                .get(&plugin)
+                .ok_or_else(|| Self::error(format!("unknown plugin {plugin}")))?;
             Self::surface(manifest, &entry.surface)?;
             let specification = omega_proto::instance::PresentationSpec::try_from(
                 entry
@@ -128,7 +131,7 @@ impl DocumentValidation {
             .map_err(Self::cause)?;
             match specification.wire().kind.as_ref().unwrap() {
                 omega_proto::omega::presentation::Kind::Window(window) => {
-                    if window.app_id != format!("org.omega.{unit}") {
+                    if window.app_id != format!("org.omega.{plugin}") {
                         return Err(Self::error(
                             "window application identity belongs to its plugin",
                         ));
@@ -178,7 +181,7 @@ impl DocumentValidation {
                 .find(|surface| surface.as_str() == named)
                 .cloned()
                 .ok_or_else(|| ValidationError::MissingSurface {
-                    unit: manifest.name.clone(),
+                    plugin: manifest.name.clone(),
                     requested: named.into(),
                     available: widgets,
                 });
@@ -186,7 +189,7 @@ impl DocumentValidation {
         match widgets.as_slice() {
             [surface] => Ok(surface.clone()),
             _ => Err(ValidationError::AmbiguousSurface {
-                unit: manifest.name.clone(),
+                plugin: manifest.name.clone(),
                 available: widgets,
             }),
         }
@@ -207,15 +210,15 @@ pub enum ValidationError {
     Invalid(String),
     #[error("invalid desired state: {0}")]
     Cause(#[source] Box<dyn std::error::Error + Send + Sync>),
-    #[error("{unit} declares no widget {requested:?}")]
+    #[error("{plugin} declares no widget {requested:?}")]
     MissingSurface {
-        unit: String,
+        plugin: String,
         requested: String,
         available: Vec<SurfaceId>,
     },
-    #[error("{unit} requires an explicit widget surface")]
+    #[error("{plugin} requires an explicit widget surface")]
     AmbiguousSurface {
-        unit: String,
+        plugin: String,
         available: Vec<SurfaceId>,
     },
 }

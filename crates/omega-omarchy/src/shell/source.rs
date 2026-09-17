@@ -52,7 +52,7 @@ impl Shell {
                         let mut item = format!(
                             "PluginWidget::try_new({:?}, {:?})?",
                             plugin.id.as_str(),
-                            plugin.unit.as_str()
+                            plugin.plugin.as_str()
                         );
                         if !plugin.surface.is_empty() {
                             item.push_str(&format!(".surface_named({:?})", plugin.surface));

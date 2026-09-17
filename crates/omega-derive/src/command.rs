@@ -58,7 +58,7 @@ impl CommandExpansion {
         let mut wired = proc_macro2::TokenStream::from(wire(tokens, Marker::Wiring));
         wired.extend(quote! {
             impl ::omega::internal::CommandName for #name {
-                const UNIT: &'static str = env!("CARGO_PKG_NAME");
+                const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
                 const NAME: &'static str = #command_name;
             }
             #reference

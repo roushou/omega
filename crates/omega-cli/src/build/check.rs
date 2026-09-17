@@ -37,9 +37,9 @@ impl Check {
         }
 
         let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
-        let units = Plugins::discover(&layout)?;
+        let plugins = Plugins::discover(&layout)?;
 
-        ui.step(Step::Checking, Paint::count(units.len(), "plugin"));
+        ui.step(Step::Checking, Paint::count(plugins.len(), "plugin"));
         Cargo::new(&layout.config)
             .build(Build::request(&layout, Self::PROFILE, Selection::Workspace))
             .await?;
@@ -47,9 +47,9 @@ impl Check {
         // Collect validation results for every plugin.
         let describe = Describe::new(&layout, Self::PROFILE);
         let mut failures = 0;
-        let mut manifests = Vec::with_capacity(units.len());
+        let mut manifests = Vec::with_capacity(plugins.len());
 
-        for name in &units {
+        for name in &plugins {
             match describe.manifest(name).await {
                 Ok(manifest) => {
                     ui.item(
@@ -75,7 +75,7 @@ impl Check {
         if failures > 0 {
             bail!(
                 "{failures} of {} failed validation",
-                Paint::count(units.len(), "plugin")
+                Paint::count(plugins.len(), "plugin")
             );
         }
         let document = System::new(&layout).evaluate(Self::PROFILE).await?;
@@ -85,7 +85,7 @@ impl Check {
             Step::Checked,
             format!(
                 "configuration and {} validated; no generation published",
-                Paint::count(units.len(), "plugin"),
+                Paint::count(plugins.len(), "plugin"),
             ),
         );
         Ok(())

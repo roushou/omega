@@ -4,17 +4,17 @@
 use omega_host::Layout;
 use omega_host::cargo::{CargoError, Dependencies, Dependency, Inherited, Manifest};
 use omega_host::package::PackageName;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 mod dependency;
 pub use dependency::{DependencySource, DependencySpec};
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.
-const UNIT_MAIN: &str = include_str!("../../templates/unit/src/main.rs");
+const PLUGIN_MAIN: &str = include_str!("../../templates/plugin/src/main.rs");
 const SYSTEM_MAIN: &str = include_str!("../../templates/system/src/main.rs");
 
-const CRATE_TOKEN: &str = "{unit_snake}";
+const CRATE_TOKEN: &str = "{plugin_snake}";
 
 /// Bundled starting points for a plugin.
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -77,7 +77,7 @@ pub struct Scaffold {
 
 impl Scaffold {
     /// Dependencies inherited by generated plugin crates.
-    pub(crate) const UNIT_DEPENDENCIES: &'static [DependencySpec] =
+    pub(crate) const PLUGIN_DEPENDENCIES: &'static [DependencySpec] =
         &[DependencySpec::omega("omega").published_as("omega-rs")];
 
     /// Dependencies inherited by the generated system crate.
@@ -102,7 +102,7 @@ impl Scaffold {
     /// Dependency specifications patched when linking a checkout.
     /// Registry package names may differ from manifest aliases.
     pub fn omega_crates() -> impl Iterator<Item = &'static DependencySpec> {
-        Self::UNIT_DEPENDENCIES
+        Self::PLUGIN_DEPENDENCIES
             .iter()
             .chain(Self::SYSTEM_DEPENDENCIES)
             .filter(|spec| matches!(spec.source, DependencySource::OmegaCrate))
@@ -114,7 +114,7 @@ impl Scaffold {
         "/target\n/.cargo/\n"
     }
 
-    /// `~/.config/omega/Cargo.toml`: the workspace every unit crate joins.
+    /// `~/.config/omega/Cargo.toml`: the workspace every plugin crate joins.
     pub fn workspace_manifest(&self) -> Result<Manifest, CargoError> {
         let dependencies = self.workspace_dependencies();
 
@@ -132,7 +132,7 @@ impl Scaffold {
     fn workspace_dependencies(&self) -> Dependencies {
         // Deduplicate inherited dependencies by manifest alias.
         let mut dependencies = Dependencies::new();
-        for spec in Self::UNIT_DEPENDENCIES
+        for spec in Self::PLUGIN_DEPENDENCIES
             .iter()
             .chain(Self::SYSTEM_DEPENDENCIES)
         {
@@ -143,13 +143,13 @@ impl Scaffold {
     }
 
     /// `plugins/<name>/Cargo.toml`, inheriting the workspace's dependencies.
-    pub fn unit_crate_manifest(&self, name: &UnitName) -> Result<Manifest, CargoError> {
+    pub fn plugin_crate_manifest(&self, name: &PluginName) -> Result<Manifest, CargoError> {
         Manifest::new_package(
             name.as_str(),
             "0.1.0",
             Inherited::Workspace,
             &Dependencies::from_iter(
-                Self::UNIT_DEPENDENCIES
+                Self::PLUGIN_DEPENDENCIES
                     .iter()
                     .map(DependencySpec::inherited),
             ),
@@ -158,8 +158,8 @@ impl Scaffold {
 
     /// `plugins/<name>/src/main.rs`: the program, which is the library and a
     /// call.
-    pub fn unit_main(&self, name: &PackageName) -> Result<String, ScaffoldError> {
-        Self::stamp(UNIT_MAIN, name)
+    pub fn plugin_main(&self, name: &PackageName) -> Result<String, ScaffoldError> {
+        Self::stamp(PLUGIN_MAIN, name)
     }
 
     /// Generate the system crate manifest. Plugin dependencies are added by `omega new`.
@@ -178,14 +178,14 @@ impl Scaffold {
 
     /// Fully qualified placement expression for the generated plugin.
     /// Template tests verify referenced types and names.
-    pub fn placement_hint(unit: &PackageName, template: Template) -> String {
-        let krate = unit.rust_ident();
-        let unit = unit.package();
+    pub fn placement_hint(plugin: &PackageName, template: Template) -> String {
+        let krate = plugin.rust_ident();
+        let plugin = plugin.package();
         let widget = match template {
             Template::Minimal => "Hello",
             Template::Battery => "BatteryWidget",
         };
-        format!("omega_omarchy::shell::PluginWidget::new(\"{unit}\", {krate}::{widget}).into()")
+        format!("omega_omarchy::shell::PluginWidget::new(\"{plugin}\", {krate}::{widget}).into()")
     }
 
     /// Generate a system entry point with an empty bar.
@@ -203,7 +203,7 @@ impl Scaffold {
         let stamped = template.replace(CRATE_TOKEN, name.rust_ident());
 
         // Reject unmatched placeholders before writing an invalid template.
-        if stamped == template || stamped.contains("{unit") {
+        if stamped == template || stamped.contains("{plugin") {
             Err(ScaffoldError::ProgramTemplate { token: CRATE_TOKEN })
         } else {
             Ok(stamped)

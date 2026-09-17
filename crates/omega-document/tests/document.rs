@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use omega_document::{Bars, Document, DocumentFile, Modules, Settings, Units};
+use omega_document::{Bars, Document, DocumentFile, Modules, Plugins, Settings};
 
 struct TempDir(PathBuf);
 
@@ -35,7 +35,7 @@ fn document() -> omega_document::StateDocument {
             ],
         ))
         .setting(Settings::night_light("night", 3500))
-        .unit(Units::disabled("noisy-unit"))
+        .plugin(Plugins::disabled("noisy-plugin"))
         .env("EDITOR", "hx")
         .into_inner()
 }
@@ -69,7 +69,7 @@ fn a_config_without_a_document_is_a_valid_config() {
     let tmp = TempDir::new("absent");
     let file = DocumentFile::at(tmp.0.join("document.json"));
 
-    // No `system/` crate: every built unit runs and nothing is claimed.
+    // No `system/` crate: every built plugin runs and nothing is claimed.
     assert!(!file.exists());
     assert_eq!(
         file.read_or_default().unwrap(),

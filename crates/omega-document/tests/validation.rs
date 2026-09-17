@@ -1,11 +1,11 @@
-use omega_document::{Bars, Document, DocumentValidation, Modules, Units};
+use omega_document::{Bars, Document, DocumentValidation, Modules, Plugins};
 use omega_proto::omega::SurfaceKind;
-use omega_proto::{Manifest, Surface, SurfaceId, UnitName};
+use omega_proto::{Manifest, PluginName, Surface, SurfaceId};
 
 struct Fixture;
 impl Fixture {
     fn manifest() -> Manifest {
-        Manifest::new(&"clock".parse::<UnitName>().unwrap(), "1").exposing([
+        Manifest::new(&"clock".parse::<PluginName>().unwrap(), "1").exposing([
             Surface::new(&"time".parse::<SurfaceId>().unwrap(), SurfaceKind::Widget),
             Surface::new(
                 &"calendar".parse::<SurfaceId>().unwrap(),
@@ -16,13 +16,15 @@ impl Fixture {
 }
 
 #[test]
-fn unit_references_and_duplicate_declarations_are_validated() {
+fn plugin_references_and_duplicate_declarations_are_validated() {
     let manifest = Fixture::manifest();
-    let unknown = Document::new().unit(Units::enabled("missing")).into_inner();
+    let unknown = Document::new()
+        .plugin(Plugins::enabled("missing"))
+        .into_inner();
     assert!(DocumentValidation::validate(&unknown, [&manifest]).is_err());
     let duplicate = Document::new()
-        .unit(Units::enabled("clock"))
-        .unit(Units::disabled("clock"))
+        .plugin(Plugins::enabled("clock"))
+        .plugin(Plugins::disabled("clock"))
         .into_inner();
     assert!(DocumentValidation::validate(&duplicate, [&manifest]).is_err());
 }
@@ -133,8 +135,8 @@ fn schedule_payload_errors_identify_the_schedule_and_reject_empty_envelopes() {
 }
 
 #[test]
-fn scheduled_commands_must_name_a_built_units_command_surface() {
-    use omega_proto::omega::{Action, InvokeUnit, Schedule, action};
+fn scheduled_commands_must_name_a_built_plugins_command_surface() {
+    use omega_proto::omega::{Action, InvokePlugin, Schedule, action};
     let manifest = Fixture::manifest()
         .exposing([Surface::new(
             &"time".parse::<SurfaceId>().unwrap(),
@@ -143,7 +145,7 @@ fn scheduled_commands_must_name_a_built_units_command_surface() {
         .serving([omega_proto::omega::CommandEndpoint {
             id: "refresh".into(),
         }]);
-    for (unit, command, valid) in [
+    for (plugin, command, valid) in [
         ("clock", "refresh", true),
         ("missing", "refresh", false),
         ("clock", "time", false),
@@ -154,8 +156,8 @@ fn scheduled_commands_must_name_a_built_units_command_surface() {
                 id: "refresh".into(),
                 cadence: "every 1m".into(),
                 action: Some(Action {
-                    kind: Some(action::Kind::InvokeUnit(InvokeUnit {
-                        unit: unit.into(),
+                    kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                        plugin: plugin.into(),
                         command: command.into(),
                         args: vec![],
                     })),
@@ -166,7 +168,7 @@ fn scheduled_commands_must_name_a_built_units_command_surface() {
         assert_eq!(
             DocumentValidation::validate(&document, [&manifest]).is_ok(),
             valid,
-            "{unit}.{command}"
+            "{plugin}.{command}"
         );
     }
 }

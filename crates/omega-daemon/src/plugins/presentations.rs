@@ -1,12 +1,12 @@
 use super::presentation_state::Visibility;
-use super::{UnitTable, instance::Instance, session::SessionLink};
+use super::{PluginRegistry, instance::Instance, session::SessionLink};
 use crate::hub::SurfaceRef;
 use crate::refusal::{Refusable, RefusableResult};
 use omega_proto::instance::{InstanceKey, PresentationSpec, SingletonId};
 use omega_proto::omega::{
     self, PresentationAction, PresentationState, Value, invoke, presentation, result,
 };
-use omega_proto::{Refusal, SurfaceId, UnitName};
+use omega_proto::{PluginName, Refusal, SurfaceId};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug)]
@@ -23,8 +23,8 @@ pub struct InstalledInstance {
     pub anchor: Option<SurfaceRef>,
 }
 
-impl UnitTable {
-    /// Snapshot configured instances and retained anchor addresses under the unit lock.
+impl PluginRegistry {
+    /// Snapshot configured instances and retained anchor addresses under the plugin lock.
     /// Transient and still-starting instances do not participate in reconciliation.
     pub fn installed_presentations(&self) -> BTreeMap<SurfaceRef, InstalledInstance> {
         let records = self.lock();
@@ -76,12 +76,12 @@ impl UnitTable {
             .collect()
     }
 
-    pub fn inspect_instances(&self, unit: Option<&UnitName>) -> omega::InstanceList {
+    pub fn inspect_instances(&self, plugin: Option<&PluginName>) -> omega::InstanceList {
         let records = self.lock();
         omega::InstanceList {
             instances: records
                 .values()
-                .filter(|record| unit.is_none_or(|unit| unit == &record.name))
+                .filter(|record| plugin.is_none_or(|plugin| plugin == &record.name))
                 .flat_map(|record| record.instances.values())
                 .filter(|instance| instance.ready)
                 .map(|instance| {
@@ -99,7 +99,7 @@ impl UnitTable {
         &self,
         request: &omega::CreateInstance,
     ) -> Result<omega::InstanceSnapshot, Refusal> {
-        let unit = request.unit.parse::<UnitName>().or_refuse()?;
+        let plugin = request.plugin.parse::<PluginName>().or_refuse()?;
         let surface = request.surface.parse::<SurfaceId>().or_refuse()?;
         let presentation = PresentationSpec::try_from(
             request
@@ -117,7 +117,7 @@ impl UnitTable {
             ));
         }
         if let Some(presentation::Kind::Window(window)) = &presentation.wire().kind
-            && window.app_id != format!("org.omega.{unit}")
+            && window.app_id != format!("org.omega.{plugin}")
         {
             return Err(Refusal::invalid(
                 "window application identity belongs to its plugin",
@@ -129,7 +129,7 @@ impl UnitTable {
             Some(request.singleton.parse::<SingletonId>().or_refuse()?)
         };
         self.create(
-            &unit,
+            &plugin,
             surface,
             request.config.clone(),
             presentation,
@@ -141,7 +141,7 @@ impl UnitTable {
 
     async fn create(
         &self,
-        unit: &UnitName,
+        plugin: &PluginName,
         surface: SurfaceId,
         config: HashMap<String, Value>,
         presentation: PresentationSpec,
@@ -157,16 +157,16 @@ impl UnitTable {
                 .map(Instance::config_bytes)
                 .sum();
             let record = records
-                .get_mut(unit)
-                .ok_or_else(|| Refusal::invalid(format!("unknown unit {unit}")))?;
+                .get_mut(plugin)
+                .ok_or_else(|| Refusal::invalid(format!("unknown plugin {plugin}")))?;
             let session = record
                 .session
                 .clone()
-                .ok_or_else(|| Refusal::unavailable(format!("{unit} is not connected")))?;
+                .ok_or_else(|| Refusal::unavailable(format!("{plugin} is not connected")))?;
             let manifest = record
                 .manifest
                 .as_ref()
-                .ok_or_else(|| Refusal::precondition("unit has no manifest"))?;
+                .ok_or_else(|| Refusal::precondition("plugin has no manifest"))?;
             omega_document::DocumentValidation::surface(&manifest.manifest, surface.as_str())
                 .or_refuse()?;
             if let Some(existing) = record.instances.values_mut().find(|held| {
@@ -219,15 +219,15 @@ impl UnitTable {
             Admission::New(session, instance) => (session, *instance),
         };
         let mut pending = Creation {
-            units: self.clone(),
-            unit: unit.clone(),
+            plugins: self.clone(),
+            plugin: plugin.clone(),
             key: instance.key.clone(),
             session: session.clone(),
             committed: false,
         };
         let answer = Self::request_on(
             &session,
-            unit,
+            plugin,
             invoke::Op::RenderWidget(omega::RenderWidget {
                 surface_id: instance.surface.to_string(),
                 instance: Some(instance.key.wire()),
@@ -241,15 +241,15 @@ impl UnitTable {
         };
         let mut records = self.lock();
         let record = records
-            .get_mut(unit)
-            .ok_or_else(|| Refusal::unavailable("unit disappeared"))?;
+            .get_mut(plugin)
+            .ok_or_else(|| Refusal::unavailable("plugin disappeared"))?;
         if !record
             .session
             .as_ref()
             .is_some_and(|current| current.requests.same_channel(&session.requests))
         {
             return Err(Refusal::precondition(
-                "unit session changed during instance creation",
+                "plugin session changed during instance creation",
             ));
         }
         let held = record
@@ -263,7 +263,7 @@ impl UnitTable {
             .map_or(view, |published| published.view.clone());
         self.inner
             .hub
-            .publish_view(held.update(unit, view))
+            .publish_view(held.update(plugin, view))
             .or_refuse()?;
         held.ready = true;
         pending.committed = true;
@@ -283,7 +283,7 @@ impl UnitTable {
     ) -> Result<(), Refusal> {
         let key = self
             .lock()
-            .get(&anchor.unit)
+            .get(&anchor.plugin)
             .and_then(|record| {
                 record
                     .instances
@@ -312,7 +312,7 @@ impl UnitTable {
             self.remove_instance(address).await?;
         }
         self.create(
-            &address.unit,
+            &address.plugin,
             address.surface.clone(),
             config,
             presentation,
@@ -346,7 +346,7 @@ impl UnitTable {
         })
         .or_refuse()?;
         self.create(
-            &address.unit,
+            &address.plugin,
             address.surface.clone(),
             config,
             presentation,
@@ -358,7 +358,7 @@ impl UnitTable {
     }
 
     pub async fn remove_instance(&self, address: &SurfaceRef) -> Result<(), Refusal> {
-        let key = self.lock().get(&address.unit).and_then(|record| {
+        let key = self.lock().get(&address.plugin).and_then(|record| {
             record
                 .instances
                 .values()
@@ -373,13 +373,13 @@ impl UnitTable {
 
     pub fn publish_instance(
         &self,
-        unit: &UnitName,
+        plugin: &PluginName,
         publish: &omega::PublishView,
     ) -> Result<(), Refusal> {
         let key = Self::instance_key(publish.instance.as_ref())?;
         let records = self.lock();
         let instance = records
-            .get(unit)
+            .get(plugin)
             .and_then(|record| record.instances.get(&key.id))
             .filter(|instance| instance.key == key)
             .ok_or_else(|| Refusal::precondition("unknown or expired instance"))?;
@@ -390,7 +390,7 @@ impl UnitTable {
             .hub
             .publish_view(
                 instance.update(
-                    unit,
+                    plugin,
                     publish
                         .view
                         .clone()
@@ -400,9 +400,9 @@ impl UnitTable {
             .or_refuse()
     }
 
-    pub(crate) fn owns_instance(&self, unit: &UnitName, key: &InstanceKey) -> bool {
+    pub(crate) fn owns_instance(&self, plugin: &PluginName, key: &InstanceKey) -> bool {
         self.lock()
-            .get(unit)
+            .get(plugin)
             .and_then(|record| record.instances.get(&key.id))
             .is_some_and(|instance| instance.key == *key && instance.ready)
     }
@@ -505,11 +505,11 @@ impl UnitTable {
                 None
             }
         };
-        if let Some((unit, session, state)) = notification {
+        if let Some((plugin, session, state)) = notification {
             let delivery = LifecycleDelivery(Some(session.stop.clone()));
             let outcome = Self::request_on(
                 &session,
-                &unit,
+                &plugin,
                 invoke::Op::SurfaceLifecycle(omega::SurfaceLifecycle {
                     instance: Some(key.wire()),
                     state: state.wire(),
@@ -531,7 +531,7 @@ impl UnitTable {
 
     async fn destroy_instance(&self, key: &InstanceKey) -> Result<(), Refusal> {
         let _lifecycle = self.lifecycle_gate(key)?.lock_owned().await;
-        let (unit, instance, session) = {
+        let (plugin, instance, session) = {
             let mut records = self.lock();
             let record = records
                 .values_mut()
@@ -548,15 +548,15 @@ impl UnitTable {
         };
         if let Some(session) = session {
             let mut pending = Creation {
-                units: self.clone(),
-                unit: unit.clone(),
+                plugins: self.clone(),
+                plugin: plugin.clone(),
                 key: key.clone(),
                 session: session.clone(),
                 committed: false,
             };
             let answer = Self::request_on(
                 &session,
-                &unit,
+                &plugin,
                 invoke::Op::RemoveWidget(omega::RemoveWidget {
                     surface_id: instance.surface.to_string(),
                     instance: Some(key.wire()),
@@ -575,8 +575,8 @@ impl UnitTable {
 
 /// Cancellation after a request was queued cannot leave untracked SDK instances alive.
 struct Creation {
-    units: UnitTable,
-    unit: UnitName,
+    plugins: PluginRegistry,
+    plugin: PluginName,
     key: InstanceKey,
     session: SessionLink,
     committed: bool,
@@ -584,23 +584,23 @@ struct Creation {
 impl Drop for Creation {
     fn drop(&mut self) {
         if !self.committed {
-            if let Some(record) = self.units.lock().get_mut(&self.unit) {
+            if let Some(record) = self.plugins.lock().get_mut(&self.plugin) {
                 record.instances.remove(&self.key.id);
-                self.units.inner.hub.drop_instance(&self.key);
+                self.plugins.inner.hub.drop_instance(&self.key);
             }
             self.session.stop.trigger();
         }
     }
 }
 
-impl UnitTable {
+impl PluginRegistry {
     pub(crate) async fn interact(
         &self,
         permit: &crate::attachment::InstancePermit,
         event: &omega::Interact,
     ) -> Result<omega_proto::CommandAnswer, Refusal> {
         let key = &permit.key;
-        let (unit, session, call) = {
+        let (plugin, session, call) = {
             let records = self.lock();
             permit.validate()?;
             let record = records
@@ -638,7 +638,7 @@ impl UnitTable {
                     let manifest = record
                         .manifest
                         .as_ref()
-                        .ok_or_else(|| Refusal::precondition("unit has no manifest"))?;
+                        .ok_or_else(|| Refusal::precondition("plugin has no manifest"))?;
                     if !manifest
                         .manifest
                         .commands
@@ -662,17 +662,19 @@ impl UnitTable {
                 record
                     .session
                     .clone()
-                    .ok_or_else(|| Refusal::unavailable("unit disconnected"))?,
+                    .ok_or_else(|| Refusal::unavailable("plugin disconnected"))?,
                 op,
             )
         };
         omega_proto::CommandAnswer::try_from(
-            Self::request_on(&session, &unit, call).await.or_refuse()?,
+            Self::request_on(&session, &plugin, call)
+                .await
+                .or_refuse()?,
         )
     }
 }
 
-impl UnitTable {
+impl PluginRegistry {
     pub(crate) fn renderer_placements(&self) -> Vec<omega::PlacementAttachment> {
         self.lock()
             .values()
@@ -690,7 +692,7 @@ impl UnitTable {
                     .as_ref()
                     .expect("placed presentation has an address");
                 omega::PlacementAttachment {
-                    unit: placement.unit.to_string(),
+                    plugin: placement.plugin.to_string(),
                     surface: placement.surface.to_string(),
                     placement: placement
                         .module

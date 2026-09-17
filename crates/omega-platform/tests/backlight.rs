@@ -129,7 +129,7 @@ async fn a_machine_with_no_backlight_says_so_and_refuses_to_set_one() {
         "a desktop reports no reading, not a reading of zero"
     );
 
-    // Refused, not silently ignored: a unit that asked for a change and got
+    // Refused, not silently ignored: a plugin that asked for a change and got
     // nothing has no way to tell that from a change that did not stick.
     assert!(
         backlight

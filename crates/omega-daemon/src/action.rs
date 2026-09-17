@@ -1,26 +1,26 @@
 //! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
-use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke};
-use omega_proto::{ActionKind, UnitName};
+use omega_proto::omega::{CallCommand, InvokePlugin, RunCommand, action, invoke};
+use omega_proto::{ActionKind, PluginName};
 use omega_proto::{CommandAnswer, Refusal};
 
 use crate::refusal::Refusable;
 
 use crate::authorization::Grants;
 use crate::broker::Brokerage;
+use crate::plugins::PluginRegistry;
 use crate::refusal::RefusableResult;
-use crate::units::UnitTable;
 
 /// Dispatch actions to daemon handlers, plugin commands, or subsystem brokers.
 #[derive(Debug)]
 pub struct Actions {
-    units: UnitTable,
+    plugins: PluginRegistry,
     brokers: Brokerage,
 }
 
 impl Actions {
-    pub fn new(units: UnitTable, brokers: Brokerage) -> Self {
-        Self { units, brokers }
+    pub fn new(plugins: PluginRegistry, brokers: Brokerage) -> Self {
+        Self { plugins, brokers }
     }
 
     /// The capability check, which happens whether or not the action is one
@@ -42,9 +42,9 @@ impl Actions {
         action.validate().or_refuse()?;
         match action {
             // The daemon's own: spawning a process is not brokering a
-            // subsystem, and routing between units is its own job.
+            // subsystem, and routing between plugins is its own job.
             action::Kind::RunCommand(run) => Self::run(run),
-            action::Kind::InvokeUnit(invoke) => self.invoke_unit(invoke).await,
+            action::Kind::InvokePlugin(invoke) => self.invoke_plugin(invoke).await,
             other => self.broker(other).await,
         }
     }
@@ -63,16 +63,16 @@ impl Actions {
     }
 
     /// Validate the target command against the manifest before dispatching it.
-    async fn invoke_unit(&self, call: &InvokeUnit) -> Result<CommandAnswer, Refusal> {
-        let unit =
-            UnitName::try_from(call.unit.clone()).map_err(|e| Refusal::invalid(e.to_string()))?;
+    async fn invoke_plugin(&self, call: &InvokePlugin) -> Result<CommandAnswer, Refusal> {
+        let plugin = PluginName::try_from(call.plugin.clone())
+            .map_err(|e| Refusal::invalid(e.to_string()))?;
 
-        self.declares_command(&unit, &call.command)?;
+        self.declares_command(&plugin, &call.command)?;
 
         let outcome = self
-            .units
+            .plugins
             .request(
-                &unit,
+                &plugin,
                 invoke::Op::CallCommand(CallCommand {
                     command: call.command.clone(),
                     args: call.args.clone(),
@@ -84,11 +84,11 @@ impl Actions {
         CommandAnswer::try_from(outcome)
     }
 
-    /// A unit serves the commands its manifest declares, and no others.
-    fn declares_command(&self, unit: &UnitName, command: &str) -> Result<(), Refusal> {
-        let Some(entry) = self.units.manifest(unit) else {
+    /// A plugin serves the commands its manifest declares, and no others.
+    fn declares_command(&self, plugin: &PluginName, command: &str) -> Result<(), Refusal> {
+        let Some(entry) = self.plugins.manifest(plugin) else {
             return Err(Refusal::invalid(format!(
-                "{unit} is not a unit of this build"
+                "{plugin} is not a plugin of this build"
             )));
         };
 
@@ -102,10 +102,10 @@ impl Actions {
         match commands.contains(&command) {
             true => Ok(()),
             false if commands.is_empty() => Err(Refusal::invalid(format!(
-                "{unit} declares no command surfaces"
+                "{plugin} declares no command surfaces"
             ))),
             false => Err(Refusal::invalid(format!(
-                "{unit} declares no command {command:?}; it has: {}",
+                "{plugin} declares no command {command:?}; it has: {}",
                 commands.join(", ")
             ))),
         }

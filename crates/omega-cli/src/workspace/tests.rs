@@ -52,7 +52,7 @@ fn invalid_system_manifest_creates_no_plugin_or_manifest_edits() {
     f.write(f.layout.system_manifest(), "[broken");
     let before = f.root_source();
     let name = "hello".parse::<PackageName>().unwrap();
-    let path = f.layout.unit_src_dir(name.unit());
+    let path = f.layout.plugin_src_dir(name.plugin());
     assert!(f.open().prepare_plugin(name, Template::Minimal).is_err());
     assert!(!path.exists());
     assert_eq!(before, f.root_source());
@@ -182,7 +182,7 @@ fn adding_a_glob_checks_previously_unlisted_package_names() {
     let root = f.root_source();
     let name = "audio_output".parse::<PackageName>().unwrap();
     f.write(
-        f.layout.unit_crate_manifest(name.unit()),
+        f.layout.plugin_crate_manifest(name.plugin()),
         "[package]\nname = \"audio_output\"\nversion = \"0.1.0\"\n",
     );
     let error = f

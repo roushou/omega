@@ -1,7 +1,7 @@
-//! `omega run`: call a unit's command surface.
+//! `omega run`: call a plugin's command surface.
 
 use omega_proto::omega::{Value, value};
-use omega_proto::{SurfaceId, UnitName};
+use omega_proto::{PluginName, SurfaceId};
 
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
@@ -9,9 +9,9 @@ use crate::ui::{Paint, Step, Ui};
 /// Invoke a registered plugin command using that plugin's granted capabilities.
 #[derive(Debug, clap::Args)]
 pub struct RunCmd {
-    /// The unit that declares the command.
-    #[arg(value_name = "UNIT")]
-    pub unit_name: UnitName,
+    /// The plugin that declares the command.
+    #[arg(value_name = "PLUGIN")]
+    pub plugin_name: PluginName,
     /// The command surface's id, as its manifest declares it.
     #[arg(value_name = "COMMAND")]
     pub command_id: SurfaceId,
@@ -29,7 +29,7 @@ impl RunCmd {
             .collect();
 
         match Operator::new()
-            .run(&self.unit_name, &self.command_id, args)
+            .run(&self.plugin_name, &self.command_id, args)
             .await?
         {
             // The answer is data: it goes to stdout undecorated, so that
@@ -37,7 +37,7 @@ impl RunCmd {
             Some(answer) => ui.line(Self::render(&answer)),
             None => ui.step(
                 Step::Done,
-                Paint::name(format!("{} {}", self.unit_name, self.command_id)),
+                Paint::name(format!("{} {}", self.plugin_name, self.command_id)),
             ),
         }
         Ok(())

@@ -12,11 +12,11 @@ impl Handshake {
     /// How long a peer may take to send its opening frame.
     pub const TIMEOUT: Duration = Duration::from_secs(5);
 
-    /// The environment variable carrying a spawned unit's one-time token.
-    pub const TOKEN_ENV: &'static str = "OMEGA_UNIT_TOKEN";
+    /// The environment variable carrying a spawned plugin's one-time token.
+    pub const TOKEN_ENV: &'static str = "OMEGA_PLUGIN_TOKEN";
 
-    /// The unit's opening frame. The token is the one the daemon put in the
-    /// unit's environment; a peer without one is not a unit.
+    /// The plugin's opening frame. The token is the one the daemon put in the
+    /// plugin's environment; a peer without one is not a plugin.
     pub fn hello(manifest_hash: &str, token: &str) -> Frame {
         Frame {
             stream_id: 0,
@@ -97,4 +97,18 @@ pub enum HandshakeError {
     },
     #[error("protocol mismatch: peer speaks v{peer}, we serve v{oldest}..=v{newest}")]
     VersionMismatch { peer: u32, oldest: u32, newest: u32 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_namespace_requires_the_new_protocol() {
+        assert!(matches!(
+            Handshake::negotiate(7),
+            Err(HandshakeError::VersionMismatch { .. })
+        ));
+        assert_eq!(Handshake::negotiate(8).unwrap(), 8);
+    }
 }

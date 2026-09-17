@@ -41,7 +41,7 @@ impl ConfigWorkspace {
     ) -> Result<PreparedPlugin<'_>> {
         use omega_host::workspace::WorkspaceRole;
         let destination = match template {
-            Some(_) => self.layout.unit_src_dir(name.unit()),
+            Some(_) => self.layout.plugin_src_dir(name.plugin()),
             None => self.layout.library_src_dir(&name),
         };
         ensure!(
@@ -135,13 +135,13 @@ impl ConfigWorkspace {
             edit.replace(editor.to_string());
             edits.push(edit);
         }
-        let mut manifest = self.scaffold.unit_crate_manifest(name.unit())?;
+        let mut manifest = self.scaffold.plugin_crate_manifest(name.plugin())?;
         if template.is_none() {
             manifest.clear_dependencies();
         }
         let manifest = Toml::encode(&manifest)?;
         let main = template
-            .map(|_| self.scaffold.unit_main(&name))
+            .map(|_| self.scaffold.plugin_main(&name))
             .transpose()?;
         Ok(PreparedPlugin {
             workspace: self,

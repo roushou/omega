@@ -4,8 +4,8 @@
 //! Capabilities come only from the daemon's stored manifest.
 
 use omega_proto::Manifest;
+use omega_proto::PluginName;
 use omega_proto::Refusal;
-use omega_proto::UnitName;
 
 use crate::authorization::{Grants, Role};
 use crate::process::Identity;
@@ -19,17 +19,17 @@ pub struct Peer {
 
 #[derive(Debug)]
 enum PeerId {
-    /// A unit the supervisor spawned and vouches for.
-    Unit(UnitName),
-    /// The daemon's own user, holding no unit's grants.
+    /// A plugin the supervisor spawned and vouches for.
+    Plugin(PluginName),
+    /// The daemon's own user, holding no plugin's grants.
     Operator(i32),
 }
 
 impl Peer {
-    pub fn unit(name: UnitName, manifest: &Manifest) -> Result<Self, Refusal> {
+    pub fn plugin(name: PluginName, manifest: &Manifest) -> Result<Self, Refusal> {
         Ok(Self {
             grants: Grants::of(manifest)?,
-            id: PeerId::Unit(name),
+            id: PeerId::Plugin(name),
         })
     }
 
@@ -37,13 +37,13 @@ impl Peer {
     pub fn operator(pid: i32, uid: u32) -> Result<Self, Refusal> {
         if uid != Identity::uid() {
             return Err(Refusal::unauthenticated(
-                "not a unit of this daemon, and not its owner",
+                "not a plugin of this daemon, and not its owner",
             ));
         }
 
         Ok(Self {
             id: PeerId::Operator(pid),
-            // An operator holds no unit's capabilities: it may cycle a unit,
+            // An operator holds no plugin's capabilities: it may cycle a plugin,
             // not act as one.
             grants: Grants::none(),
         })
@@ -51,15 +51,15 @@ impl Peer {
 
     pub fn role(&self) -> Role {
         match self.id {
-            PeerId::Unit(_) => Role::Unit,
+            PeerId::Plugin(_) => Role::Plugin,
             PeerId::Operator(_) => Role::Operator,
         }
     }
 
-    /// The unit this peer is, if it is one.
-    pub fn unit_name(&self) -> Option<&UnitName> {
+    /// The plugin this peer is, if it is one.
+    pub fn plugin_name(&self) -> Option<&PluginName> {
         match &self.id {
-            PeerId::Unit(name) => Some(name),
+            PeerId::Plugin(name) => Some(name),
             PeerId::Operator(_) => None,
         }
     }
@@ -67,7 +67,7 @@ impl Peer {
     /// How the peer is named in logs and in `Welcome`.
     pub fn label(&self) -> String {
         match &self.id {
-            PeerId::Unit(name) => name.to_string(),
+            PeerId::Plugin(name) => name.to_string(),
             PeerId::Operator(pid) => format!("operator-{pid}"),
         }
     }

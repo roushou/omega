@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use omega_proto::omega::{
     Event, EventKind, ScheduleFired, StatePatch, StateSnapshot, ViewTree, event,
 };
-use omega_proto::{ModuleId, SurfaceId, UnitName};
+use omega_proto::{ModuleId, PluginName, SurfaceId};
 
 use crate::events::{EventStamp, PowerDetail, Transitions};
 use crate::state::StateStore;
@@ -20,7 +20,7 @@ use crate::state::StateStore;
 /// identity use `InstanceKey`, including its incarnation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub struct SurfaceRef {
-    pub unit: UnitName,
+    pub plugin: PluginName,
     pub surface: SurfaceId,
     /// None for transient presentations without a configured placement.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,18 +29,18 @@ pub struct SurfaceRef {
 
 impl SurfaceRef {
     /// An unplaced surface declaration.
-    pub fn new(unit: UnitName, surface: SurfaceId) -> Self {
+    pub fn new(plugin: PluginName, surface: SurfaceId) -> Self {
         Self {
-            unit,
+            plugin,
             surface,
             module: None,
         }
     }
 
     /// One instance of a surface, as the document declared it.
-    pub fn module(unit: UnitName, surface: SurfaceId, module: ModuleId) -> Self {
+    pub fn module(plugin: PluginName, surface: SurfaceId, module: ModuleId) -> Self {
         Self {
-            unit,
+            plugin,
             surface,
             module: Some(module),
         }
@@ -54,8 +54,8 @@ impl SurfaceRef {
 impl std::fmt::Display for SurfaceRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.module {
-            None => write!(f, "{}.{}", self.unit, self.surface),
-            Some(module) => write!(f, "{}.{}#{module}", self.unit, self.surface),
+            None => write!(f, "{}.{}", self.plugin, self.surface),
+            Some(module) => write!(f, "{}.{}#{module}", self.plugin, self.surface),
         }
     }
 }
@@ -138,7 +138,7 @@ impl ViewUpdate {
             + 8
             + self.view.render_error.len()
             + 8
-            + self.surface.unit.as_str().len()
+            + self.surface.plugin.as_str().len()
             + self.surface.surface.as_str().len()
             + self
                 .surface
@@ -230,15 +230,15 @@ impl Hub {
         ))
     }
 
-    /// A unit's own event, stamped with the identity the daemon
+    /// A plugin's own event, stamped with the identity the daemon
     /// authenticated.
     pub fn publish_custom_event(
         &self,
-        unit: &str,
+        plugin: &str,
         name: &str,
         payload: Option<omega_proto::omega::Value>,
     ) -> Result<(), PublishError> {
-        self.publish_event(self.inner.stamp.custom(unit, name, payload))
+        self.publish_event(self.inner.stamp.custom(plugin, name, payload))
     }
 
     pub fn subscribe_events(&self) -> Receiver<Event> {
@@ -293,15 +293,15 @@ impl Hub {
         Ok(())
     }
 
-    /// Remove a disconnected unit's views and invalidate its rendered instances.
+    /// Remove a disconnected plugin's views and invalidate its rendered instances.
     /// Publish empty trees to observers and allow convergence to recreate instances
-    /// after the unit reconnects.
-    pub fn forget_unit(&self, unit: &UnitName) {
+    /// after the plugin reconnects.
+    pub fn forget_plugin(&self, plugin: &PluginName) {
         let mut registry = self.views();
         let dropped: Vec<_> = registry
             .latest
             .values()
-            .filter(|view| &view.surface.unit == unit)
+            .filter(|view| &view.surface.plugin == plugin)
             .map(|view| view.instance.clone())
             .collect();
         for surface in dropped {
@@ -414,14 +414,14 @@ mod tests {
         fn view(id: &str, size: usize) -> ViewUpdate {
             {
                 let surface = SurfaceRef::new(
-                    "example".parse::<UnitName>().unwrap(),
+                    "example".parse::<PluginName>().unwrap(),
                     SurfaceId::try_from(id).unwrap(),
                 );
                 ViewUpdate {
                     instance: omega_proto::instance::InstanceKey {
                         id: omega_proto::instance::InstanceId::try_from(format!(
                             "test-{}-{}-{}",
-                            surface.unit,
+                            surface.plugin,
                             surface.surface,
                             surface
                                 .module

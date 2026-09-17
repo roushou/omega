@@ -4,7 +4,7 @@ use omega::ui::Text;
 use omega::{Plugin, Surface, View};
 use std::convert::Infallible;
 
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
 #[derive(Debug, omega::Surface)]
 pub struct Hello;

@@ -17,7 +17,7 @@ type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mu
 /// Surface identity and per-instance constructor.
 pub(crate) struct SurfaceEntry {
     pub(crate) surface: String,
-    pub(crate) unit: Option<&'static str>,
+    pub(crate) plugin: Option<&'static str>,
     declare: Declaration,
     required: fn() -> Vec<SystemTopic>,
     make: fn(&Context, &Values) -> Box<dyn MountedSurface>,
@@ -27,7 +27,7 @@ impl SurfaceEntry {
     pub(crate) fn of<S: crate::Surface>(surface: String) -> Self {
         Self {
             surface,
-            unit: None,
+            plugin: None,
             declare: |caps, topics, keys| {
                 DeclarationOf::<S>::declare(caps, topics, keys);
                 DeclarationOf::<S::Effects>::declare(caps, topics, keys);

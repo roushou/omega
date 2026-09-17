@@ -6,7 +6,7 @@ use omega::platform::notification::Notify;
 use omega::platform::power::Battery;
 use omega::platform::session::Session;
 use omega::platform::time::Clock;
-use omega::record::{Own, UnitState, Watch};
+use omega::record::{Own, PluginState, Watch};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
     Button, Choice, Field, Glyph, Graph, Grid, Header, Icon, Image, List, Progress, Row, Separator,
@@ -220,7 +220,7 @@ fn an_instance_is_configured_by_the_document() {
     assert_eq!(Warning::read(&settings), Warning { low_threshold: 20 });
 }
 
-/// Command fixture using unit-level settings.
+/// Command fixture using plugin-level settings.
 #[derive(omega::Command)]
 #[omega(name = "threshold")]
 struct Threshold {
@@ -242,7 +242,7 @@ fn answered(answer: &Result<String, omega::Error>) -> Option<String> {
 }
 
 #[tokio::test]
-async fn a_command_is_configured_by_its_unit() {
+async fn a_command_is_configured_by_its_plugin() {
     let state = State::new();
     let settings = Warning { low_threshold: 20 }.write();
 
@@ -255,7 +255,7 @@ async fn a_command_is_configured_by_its_unit() {
 }
 
 #[tokio::test]
-async fn a_unit_is_told_its_settings_at_the_handshake() {
+async fn a_plugin_is_told_its_settings_at_the_handshake() {
     let mut daemon =
         TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").command::<Threshold>());
 
@@ -276,7 +276,7 @@ async fn a_unit_is_told_its_settings_at_the_handshake() {
 }
 
 #[tokio::test]
-async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
+async fn where_a_widget_is_placed_adds_to_how_its_plugin_was_configured() {
     #[derive(omega::Config, Default, Debug, Clone, PartialEq)]
     struct Look {
         low_threshold: u8,
@@ -316,16 +316,16 @@ async fn where_a_widget_is_placed_adds_to_how_its_unit_was_configured() {
     let mut daemon =
         TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").surface_default::<Labelled>());
 
-    let unit = Look {
+    let plugin = Look {
         low_threshold: 20,
         label: "batt".to_string(),
     }
     .write();
     daemon
-        .welcome_configured(&State::new().battery(0.15, false), &unit)
+        .welcome_configured(&State::new().battery(0.15, false), &plugin)
         .await;
 
-    // Instance settings layer over the unit settings.
+    // Instance settings layer over the plugin settings.
     assert_eq!(
         daemon
             .render("battery", "test", Default::default())
@@ -510,7 +510,7 @@ async fn a_command_answers_over_the_wire() {
 
 // ---- state a plugin owns, and another plugin reads ----
 
-#[derive(omega::UnitState, Default, Debug, Clone, PartialEq)]
+#[derive(omega::PluginState, Default, Debug, Clone, PartialEq)]
 struct Mode {
     focus: bool,
 }
@@ -559,9 +559,9 @@ impl Surface for Showing {
 #[test]
 fn a_topics_address_comes_from_where_it_is_defined() {
     // Record addresses derive from the defining crate and type.
-    assert_eq!(Mode::UNIT, env!("CARGO_PKG_NAME"));
+    assert_eq!(Mode::PLUGIN, env!("CARGO_PKG_NAME"));
     assert_eq!(Mode::KEY, "mode");
-    assert_eq!(Mode::address(), format!("unit.{}.mode", Mode::UNIT));
+    assert_eq!(Mode::address(), format!("plugin.{}.mode", Mode::PLUGIN));
 }
 
 #[test]
@@ -905,7 +905,7 @@ async fn independent_instances_keep_their_own_addresses() {
 
 // ---- publishing a collection ----
 
-/// One access point, as a unit that scanned for them would report it.
+/// One access point, as a plugin that scanned for them would report it.
 #[derive(omega::Config, Debug, Clone, Default, PartialEq)]
 struct AccessPoint {
     ssid: String,
@@ -913,16 +913,16 @@ struct AccessPoint {
     secured: bool,
 }
 
-/// A unit's own state, which is a list — the shape most units actually have
+/// A plugin's own state, which is a list — the shape most plugins actually have
 /// to publish, and the one that did not compile until `Vec<T>` was a value.
-#[derive(omega::UnitState, Debug, Clone, Default, PartialEq)]
+#[derive(omega::PluginState, Debug, Clone, Default, PartialEq)]
 struct Scan {
     found: Vec<AccessPoint>,
     names: Vec<String>,
 }
 
 #[test]
-fn a_unit_can_publish_a_list() {
+fn a_plugin_can_publish_a_list() {
     let scan = Scan {
         found: vec![
             AccessPoint {
@@ -1159,7 +1159,7 @@ fn a_machine_with_no_battery_is_on_mains_not_flat() {
     assert_eq!(Drawn::of::<Situation>(&desktop).unwrap().text(), "On mains");
 }
 
-#[derive(omega::UnitState, Default, Clone)]
+#[derive(omega::PluginState, Default, Clone)]
 struct Counter {
     value: u32,
 }
@@ -1256,7 +1256,7 @@ async fn command_fixtures_complete_forwarded_record_publications() {
     assert!(called.answer.is_ok());
 }
 
-#[derive(omega::UnitState, Default)]
+#[derive(omega::PluginState, Default)]
 struct LargeRecord {
     text: String,
 }

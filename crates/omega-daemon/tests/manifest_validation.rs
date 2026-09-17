@@ -2,14 +2,14 @@
 
 use omega_proto::omega::{Capability, EventKind, SurfaceKind};
 use omega_proto::{Address, Manifest, Surface};
-use omega_proto::{SurfaceId, UnitName};
+use omega_proto::{PluginName, SurfaceId};
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
 fn manifest() -> Manifest {
-    Manifest::new(&unit("battery-widget"), "0.1.0")
+    Manifest::new(&plugin("battery-widget"), "0.1.0")
         .granting([Capability::StateRead])
         .exposing([Surface::new(
             &"battery".parse::<SurfaceId>().unwrap(),
@@ -22,7 +22,7 @@ fn manifest() -> Manifest {
 #[test]
 fn a_complete_manifest_validates() {
     let manifest = manifest();
-    manifest.validate(&unit("battery-widget")).unwrap();
+    manifest.validate(&plugin("battery-widget")).unwrap();
 
     assert_eq!(
         manifest.addresses().unwrap(),
@@ -38,14 +38,14 @@ fn a_complete_manifest_validates() {
 fn a_typo_in_a_state_topic_is_a_build_error() {
     let manifest = manifest().reading(["batery"]);
 
-    let err = manifest.validate(&unit("battery-widget")).unwrap_err();
+    let err = manifest.validate(&plugin("battery-widget")).unwrap_err();
     assert!(err.to_string().contains("batery"), "{err}");
 }
 
 #[test]
-fn a_unit_may_declare_a_keyspace_topic() {
-    let manifest = manifest().reading(["battery", "unit.clock.format"]);
-    manifest.validate(&unit("battery-widget")).unwrap();
+fn a_plugin_may_declare_a_keyspace_topic() {
+    let manifest = manifest().reading(["battery", "plugin.clock.format"]);
+    manifest.validate(&plugin("battery-widget")).unwrap();
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn an_event_this_build_cannot_name_is_refused() {
     let mut manifest = manifest();
     manifest.events = vec![9_999];
 
-    let err = manifest.validate(&unit("battery-widget")).unwrap_err();
+    let err = manifest.validate(&plugin("battery-widget")).unwrap_err();
     assert!(err.to_string().contains("9999"), "{err}");
 }
 
@@ -64,7 +64,7 @@ fn a_capability_this_build_cannot_name_is_refused() {
     let mut manifest = manifest();
     manifest.capabilities = vec![9_999];
 
-    let err = manifest.validate(&unit("battery-widget")).unwrap_err();
+    let err = manifest.validate(&plugin("battery-widget")).unwrap_err();
     assert!(err.to_string().contains("9999"), "{err}");
 }
 
@@ -78,7 +78,7 @@ fn an_unset_surface_kind_is_refused() {
         kind: SurfaceKind::Unspecified as i32,
     }];
 
-    assert!(manifest.validate(&unit("battery-widget")).is_err());
+    assert!(manifest.validate(&plugin("battery-widget")).is_err());
 }
 
 #[test]
@@ -106,11 +106,11 @@ fn the_canonical_bytes_round_trip() {
     let decoded = Manifest::decode_bytes(&manifest.canonical()).unwrap();
 
     assert_eq!(decoded.hash(), manifest.hash());
-    decoded.validate(&unit("battery-widget")).unwrap();
+    decoded.validate(&plugin("battery-widget")).unwrap();
 }
 
 #[test]
-fn a_manifest_that_names_another_unit_is_refused() {
-    let err = manifest().validate(&unit("clock")).unwrap_err();
+fn a_manifest_that_names_another_plugin_is_refused() {
+    let err = manifest().validate(&plugin("clock")).unwrap_err();
     assert!(err.to_string().contains("battery-widget"), "{err}");
 }

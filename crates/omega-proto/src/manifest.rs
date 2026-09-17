@@ -4,18 +4,18 @@
 use prost::Message as _;
 
 use crate::Address;
-use crate::ident::{IdentError, SurfaceId, UnitName};
+use crate::ident::{IdentError, PluginName, SurfaceId};
 use crate::omega::{Capability, EventKind, Manifest, Surface, SurfaceKind};
 
 impl Manifest {
     /// Flag requesting canonical manifest bytes from a compiled plugin.
     pub const DESCRIBE: &'static str = "--omega-manifest";
 
-    /// What a built unit's manifest is called beside its binary.
-    pub const FILE_NAME: &'static str = "unit.pb";
+    /// What a built plugin's manifest is called beside its binary.
+    pub const FILE_NAME: &'static str = "plugin.pb";
 
     /// Construct an empty manifest.
-    pub fn new(name: &UnitName, version: impl Into<String>) -> Self {
+    pub fn new(name: &PluginName, version: impl Into<String>) -> Self {
         Self {
             name: name.to_string(),
             version: version.into(),
@@ -55,15 +55,15 @@ impl Manifest {
         self
     }
 
-    /// Return the manifest with a different unit name.
-    pub fn with_name(mut self, name: &UnitName) -> Self {
+    /// Return the manifest with a different plugin name.
+    pub fn with_name(mut self, name: &PluginName) -> Self {
         self.name = name.to_string();
         self
     }
 
-    /// The unit this manifest describes.
-    pub fn unit(&self) -> Result<UnitName, ManifestError> {
-        UnitName::try_from(self.name.clone()).map_err(ManifestError::from)
+    /// The plugin this manifest describes.
+    pub fn plugin(&self) -> Result<PluginName, ManifestError> {
+        PluginName::try_from(self.name.clone()).map_err(ManifestError::from)
     }
 
     /// Encode deterministic manifest bytes after sorting and deduplicating repeated fields.
@@ -125,7 +125,7 @@ impl Manifest {
             .collect()
     }
 
-    /// The events this unit declares it handles.
+    /// The events this plugin declares it handles.
     pub fn event_kinds(&self) -> Result<Vec<EventKind>, ManifestError> {
         self.events
             .iter()
@@ -138,11 +138,11 @@ impl Manifest {
 
     /// Validate manifest identity, grants, topics, and surface declarations.
     /// Shared by build-time and daemon load-time validation.
-    pub fn validate(&self, unit: &UnitName) -> Result<(), ManifestError> {
-        let declared = self.unit()?;
-        if &declared != unit {
+    pub fn validate(&self, plugin: &PluginName) -> Result<(), ManifestError> {
+        let declared = self.plugin()?;
+        if &declared != plugin {
             return Err(ManifestError::NameMismatch {
-                expected: unit.clone(),
+                expected: plugin.clone(),
                 declared,
             });
         }
@@ -199,9 +199,9 @@ pub enum ManifestError {
     UnknownStateTopic(#[from] crate::AddressError),
     #[error("{0}")]
     Name(#[from] IdentError),
-    #[error("unit {expected}: manifest declares name {declared:?} — they must match")]
+    #[error("plugin {expected}: manifest declares name {declared:?} — they must match")]
     NameMismatch {
-        expected: UnitName,
-        declared: UnitName,
+        expected: PluginName,
+        declared: PluginName,
     },
 }

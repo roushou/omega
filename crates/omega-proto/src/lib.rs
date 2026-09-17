@@ -34,7 +34,7 @@ pub use codec::{CodecError, FrameCodec, MAX_FRAME_LEN};
 pub use command::CommandAnswer;
 pub use handshake::{Handshake, HandshakeError};
 pub use icons::Glyph;
-pub use ident::{IdentError, ModuleId, SurfaceId, UnitName};
+pub use ident::{IdentError, ModuleId, PluginName, SurfaceId};
 pub use interaction::Interaction;
 pub use manifest::ManifestError;
 #[cfg(feature = "json")]

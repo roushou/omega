@@ -6,14 +6,14 @@ use crate::{
     Layout,
     workspace::{WorkspaceError, WorkspaceRole},
 };
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 /// The runnable plugins of a config workspace, in deterministic (sorted) order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Plugins(Vec<UnitName>);
+pub struct Plugins(Vec<PluginName>);
 
 impl Plugins {
-    /// Read the workspace manifest and derive its units: member directories
+    /// Read the workspace manifest and derive its plugins: member directories
     /// directly under `plugins/`, minus `exclude`.
     pub fn discover(layout: &Layout) -> Result<Self, PluginsError> {
         let manifest = layout.file::<Manifest>(CargoSlot::Workspace).read()?;
@@ -24,7 +24,7 @@ impl Plugins {
         let mut names = Vec::new();
         for dir in workspace.member_dirs(&layout.config)? {
             match WorkspaceRole::at(layout, &dir)? {
-                WorkspaceRole::Plugin(name) => names.push(name.unit().clone()),
+                WorkspaceRole::Plugin(name) => names.push(name.plugin().clone()),
                 WorkspaceRole::System | WorkspaceRole::Library(_) => {}
             }
         }
@@ -42,14 +42,14 @@ impl Plugins {
         self.0.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &UnitName> {
+    pub fn iter(&self) -> impl Iterator<Item = &PluginName> {
         self.0.iter()
     }
 }
 
 impl IntoIterator for Plugins {
-    type Item = UnitName;
-    type IntoIter = std::vec::IntoIter<UnitName>;
+    type Item = PluginName;
+    type IntoIter = std::vec::IntoIter<PluginName>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -57,8 +57,8 @@ impl IntoIterator for Plugins {
 }
 
 impl<'a> IntoIterator for &'a Plugins {
-    type Item = &'a UnitName;
-    type IntoIter = std::slice::Iter<'a, UnitName>;
+    type Item = &'a PluginName;
+    type IntoIter = std::slice::Iter<'a, PluginName>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()

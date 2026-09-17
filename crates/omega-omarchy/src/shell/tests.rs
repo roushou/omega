@@ -23,7 +23,7 @@ fn placement_is_the_source_of_both_outputs() {
         let module::Kind::Widget(widget) = module.kind.as_ref().unwrap() else {
             panic!()
         };
-        assert_eq!(entry["unit"], widget.unit);
+        assert_eq!(entry["plugin"], widget.plugin);
         assert_eq!(entry["module"], module.id);
         assert_eq!(entry["surface"], widget.surface);
     }
@@ -53,7 +53,7 @@ fn import_preserves_native_options_and_unknown_fields() {
         "version":1,
         "bar":{"position":"top","transparent":false,"layout":{
             "left":[{"id":"omarchy.clock","format":"HH:mm","nested":{"unicode":"界\u{1}"}}],
-            "center":[],"right":[{"id":"omega.view","unit":"audio","module":"audio","surface":"indicator","panel":"panel"}]
+            "center":[],"right":[{"id":"omega.view","plugin":"audio","module":"audio","surface":"indicator","panel":"panel"}]
         },"custom":17},
         "idle":{"screensaver":150,"lock":300,"extra":true},
         "plugins":[{"id":"custom.service","enabled":true}],
@@ -98,7 +98,7 @@ fn document_validation_checks_shell_surfaces_against_manifests() {
         crate::DocumentValidation::validate(&document, [])
             .unwrap_err()
             .to_string()
-            .contains("unknown widget unit")
+            .contains("unknown widget plugin")
     );
 }
 

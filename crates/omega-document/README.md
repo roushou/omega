@@ -4,11 +4,11 @@ Host-independent authoring, serialization, and validation of Omega desired state
 The configuration's `system/` crate computes this document; the daemon applies it.
 
 ```rust
-use omega_document::{Document, Units};
+use omega_document::{Document, Plugins};
 
 fn main() -> omega_document::Result<()> {
     Document::new()
-        .unit(Units::enabled("audio"))
+        .plugin(Plugins::enabled("audio"))
         .env("DESKTOP_NAME", "My desktop")
         .emit()
 }

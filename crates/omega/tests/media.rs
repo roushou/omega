@@ -1,5 +1,5 @@
 use omega::platform::audio::{Media, MediaControl, PlayerId};
-use omega::record::UnitState;
+use omega::record::PluginState;
 use omega::testing::{Called, State};
 use omega::{Command, Input};
 use omega_proto::{
@@ -31,7 +31,7 @@ impl Command for Toggle {
     }
 }
 
-#[derive(omega::UnitState, Default, Clone)]
+#[derive(omega::PluginState, Default, Clone)]
 struct Selection {
     player: Option<PlayerId>,
 }

@@ -9,22 +9,22 @@ use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
 use omega_host::Layout;
 use omega_host::workspace::Plugins;
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 use crate::ui::{Paint, Step, Ui};
 
 /// Print captured plugin stdout and stderr. Works even when the daemon is stopped.
 #[derive(clap::Args, Debug)]
 pub struct LogsCmd {
-    /// The unit to read. Omit to list the units that have logs.
-    #[arg(value_name = "UNIT")]
-    pub unit_name: Option<UnitName>,
+    /// The plugin to read. Omit to list the plugins that have logs.
+    #[arg(value_name = "PLUGIN")]
+    pub plugin_name: Option<PluginName>,
 
     /// How many lines of history to print.
     #[arg(long, short = 'n', default_value_t = 50)]
     pub lines: usize,
 
-    /// Keep printing as the unit writes.
+    /// Keep printing as the plugin writes.
     #[arg(long, short)]
     pub follow: bool,
 }
@@ -36,14 +36,14 @@ impl LogsCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let layout = Layout::resolve();
 
-        let Some(unit_name) = self.unit_name.as_ref() else {
+        let Some(plugin_name) = self.plugin_name.as_ref() else {
             return Self::list(&layout, ui);
         };
 
-        let path = layout.unit_log(unit_name);
+        let path = layout.plugin_log(plugin_name);
         if !path.exists() {
             bail!(
-                "no log for {unit_name} at {} — has it run?",
+                "no log for {plugin_name} at {} — has it run?",
                 Paint::path(&path)
             );
         }
@@ -59,7 +59,7 @@ impl LogsCmd {
         }
     }
 
-    /// Read the last lines from the size-bounded unit log.
+    /// Read the last lines from the size-bounded plugin log.
     fn tail(path: &Path, lines: usize) -> anyhow::Result<String> {
         let contents = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read {}", path.display()))?;
@@ -108,18 +108,18 @@ impl LogsCmd {
             .with_context(|| format!("cannot discover plugins in {}", layout.config.display()))?;
         let logged: Vec<String> = plugins
             .iter()
-            .filter(|name| layout.unit_log(name).exists())
+            .filter(|name| layout.plugin_log(name).exists())
             .map(|name| name.to_string())
             .collect();
 
         if logged.is_empty() {
-            ui.warn("no unit has written a log yet");
+            ui.warn("no plugin has written a log yet");
             ui.next("omega daemon");
         } else {
             // The names are the answer, one per line, so the list can be
             // piped; where they live is a footnote about the answer.
-            for unit in &logged {
-                ui.line(unit);
+            for plugin in &logged {
+                ui.line(plugin);
             }
             ui.step(
                 Step::Done,
@@ -189,6 +189,6 @@ mod tests {
         let (mut ui, transcript) = Ui::recording();
         LogsCmd::list(&fixture.0, &mut ui).unwrap();
         assert!(transcript.out().is_empty());
-        assert!(transcript.err().contains("no unit has written a log yet"));
+        assert!(transcript.err().contains("no plugin has written a log yet"));
     }
 }

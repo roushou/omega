@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::omega::{ListValue, MapValue, Value, value};
 
-/// A map of named values: settings, props, a unit's own state.
+/// A map of named values: settings, props, a plugin's own state.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Values {
     entries: HashMap<String, Value>,
@@ -190,7 +190,7 @@ impl IntoValue for Values {
     }
 }
 
-/// Unit denotes the absence of a return value.
+/// Plugin denotes the absence of a return value.
 impl IntoValue for () {
     fn into_value(self) -> Value {
         Value::default()

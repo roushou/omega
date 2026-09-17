@@ -124,13 +124,13 @@ mod tests {
     #[test]
     fn identifiers_are_validated_before_dispatch() {
         for (args, argument) in [
-            (vec!["omega", "dev", "Bad"], "UNIT"),
-            (vec!["omega", "restart", "../audio"], "UNIT"),
-            (vec!["omega", "logs", "Bad"], "UNIT"),
-            (vec!["omega", "status", "Bad"], "UNIT"),
-            (vec!["omega", "run", "Bad", "set"], "UNIT"),
+            (vec!["omega", "dev", "Bad"], "PLUGIN"),
+            (vec!["omega", "restart", "../audio"], "PLUGIN"),
+            (vec!["omega", "logs", "Bad"], "PLUGIN"),
+            (vec!["omega", "status", "Bad"], "PLUGIN"),
+            (vec!["omega", "run", "Bad", "set"], "PLUGIN"),
             (vec!["omega", "run", "audio", "Bad"], "COMMAND"),
-            (vec!["omega", "present", "Bad", "panel"], "UNIT"),
+            (vec!["omega", "present", "Bad", "panel"], "PLUGIN"),
             (vec!["omega", "present", "audio", "Bad"], "SURFACE"),
             (vec!["omega", "new", "Bad"], "NAME"),
             (vec!["omega", "new", "type", "--lib"], "NAME"),

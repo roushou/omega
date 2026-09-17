@@ -3,7 +3,7 @@ mod common;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use common::{TempSocket, unit_name};
+use common::{TempSocket, plugin_name};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use omega_daemon::hub::{Hub, SurfaceRef, ViewUpdate};
@@ -46,12 +46,12 @@ fn view_with_text(text: &str) -> ViewTree {
 /// The battery widget's surface, as the daemon would qualify it.
 fn battery(text: &str) -> ViewUpdate {
     {
-        let surface = SurfaceRef::new(unit_name("battery-widget"), surface("battery"));
+        let surface = SurfaceRef::new(plugin_name("battery-widget"), surface("battery"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
                 id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
-                    surface.unit,
+                    surface.plugin,
                     surface.surface,
                     surface
                         .module
@@ -89,12 +89,12 @@ fn parse(line: &str) -> serde_json::Value {
     serde_json::from_str(line.trim()).unwrap()
 }
 
-/// The `<unit>.<surface>` a JSON line names.
+/// The `<plugin>.<surface>` a JSON line names.
 fn surface_of(line: &str) -> String {
     let line = parse(line);
     format!(
         "{}.{}",
-        line["unit"].as_str().unwrap(),
+        line["plugin"].as_str().unwrap(),
         line["surface"].as_str().unwrap()
     )
 }
@@ -135,12 +135,12 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
 
     // The global sequence also advances across different surface addresses.
     hub.publish_view({
-        let surface = SurfaceRef::new(unit_name("clock-widget"), surface("battery"));
+        let surface = SurfaceRef::new(plugin_name("clock-widget"), surface("battery"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
                 id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
-                    surface.unit,
+                    surface.plugin,
                     surface.surface,
                     surface
                         .module
@@ -174,7 +174,7 @@ async fn hub_owns_view_revisions_and_dedupes_unchanged() {
     })
     .unwrap();
     let clock = rx.recv().await.unwrap();
-    assert_eq!(clock.surface.unit, unit_name("clock-widget"));
+    assert_eq!(clock.surface.plugin, plugin_name("clock-widget"));
     assert_eq!(clock.view.revision, 3);
 }
 
@@ -278,20 +278,20 @@ fn battery_patch(level: f64) -> omega_proto::omega::StatePatch {
 }
 
 #[tokio::test]
-async fn what_a_unit_was_showing_goes_when_the_unit_does() {
+async fn what_a_plugin_was_showing_goes_when_the_plugin_does() {
     let hub = Hub::new();
-    let units = omega_daemon::units::UnitTable::detached(hub.clone());
-    let unit = unit_name("battery-widget");
+    let plugins = omega_daemon::plugins::PluginRegistry::detached(hub.clone());
+    let plugin = plugin_name("battery-widget");
 
-    // A unit connects, is asked for an instance, and shows it.
-    let guard = units.connected(&unit, tokio::sync::mpsc::channel(1).0);
+    // A plugin connects, is asked for an instance, and shows it.
+    let guard = plugins.connected(&plugin, tokio::sync::mpsc::channel(1).0);
     hub.publish_view({
-        let surface = SurfaceRef::module(unit.clone(), surface("battery"), module("top-bar-1"));
+        let surface = SurfaceRef::module(plugin.clone(), surface("battery"), module("top-bar-1"));
         ViewUpdate {
             instance: omega_proto::instance::InstanceKey {
                 id: omega_proto::instance::InstanceId::try_from(format!(
                     "test-{}-{}-{}",
-                    surface.unit,
+                    surface.plugin,
                     surface.surface,
                     surface
                         .module
@@ -332,7 +332,7 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
     // Disconnect must clear published views and instance ownership.
     assert!(
         hub.view_snapshot().is_empty(),
-        "a view outlived the unit that published it"
+        "a view outlived the plugin that published it"
     );
 
     // Disconnection must clear observer views.
@@ -340,7 +340,7 @@ async fn what_a_unit_was_showing_goes_when_the_unit_does() {
         .await
         .expect("observers are told")
         .unwrap();
-    assert_eq!(cleared.surface.unit, unit);
+    assert_eq!(cleared.surface.plugin, plugin);
     assert!(cleared.view.root.is_none(), "{cleared:?}");
 }
 
@@ -351,16 +351,16 @@ fn module(id: &str) -> ModuleId {
 struct ViewFixture;
 impl ViewFixture {
     fn server(socket: omega_proto::Socket, hub: Hub) -> ShellServer {
-        let units = omega_daemon::units::UnitTable::detached(hub.clone());
-        units.adopt(&omega_daemon::manifest::ManifestStore::from_manifests([
+        let plugins = omega_daemon::plugins::PluginRegistry::detached(hub.clone());
+        plugins.adopt(&omega_daemon::manifest::ManifestStore::from_manifests([
             common::widget_manifest("battery-widget", "battery"),
         ]));
         let stop = omega_daemon::Shutdown::new();
         ShellServer::bind_at(socket.clone(), hub.clone())
             .unwrap()
             .serving(
-                omega_daemon::supervisor::Supervisor::new(socket, units.clone(), stop.clone()),
-                units,
+                omega_daemon::supervisor::Supervisor::new(socket, plugins.clone(), stop.clone()),
+                plugins,
                 omega_daemon::broker::Brokerage::new(hub, stop),
             )
     }
@@ -369,7 +369,7 @@ impl ViewFixture {
             1,
             omega_proto::omega::invoke::Op::AttachRenderer(omega_proto::omega::AttachRenderer {
                 build_fingerprint: String::new(),
-                scope: Some(omega_proto::omega::attach_renderer::Scope::Unit(
+                scope: Some(omega_proto::omega::attach_renderer::Scope::Plugin(
                     "battery-widget".into(),
                 )),
                 features: vec![1, 2, 3, 4, 5, 6, 7, 8],

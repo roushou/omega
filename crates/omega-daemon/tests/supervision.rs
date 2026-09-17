@@ -7,22 +7,22 @@ use std::time::Duration;
 use common::widget_manifest;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::supervisor::{Backoff, Supervisor, UnitSpec};
-use omega_daemon::units::{Transition, UnitTable};
-use omega_daemon::{Shutdown, UnitToken};
-use omega_proto::UnitName;
-use omega_proto::omega::UnitPhase;
+use omega_daemon::plugins::{PluginRegistry, Transition};
+use omega_daemon::supervisor::{Backoff, PluginSpec, Supervisor};
+use omega_daemon::{PluginToken, Shutdown};
+use omega_proto::PluginName;
+use omega_proto::omega::PluginPhase;
 use omega_proto::{Socket, SystemTopic};
 
 /// Seed the supervisor’s authoritative table with the test manifests.
-fn table_with(manifests: ManifestStore) -> UnitTable {
-    let units = UnitTable::detached(Hub::new());
-    units.adopt(&manifests);
-    units
+fn table_with(manifests: ManifestStore) -> PluginRegistry {
+    let plugins = PluginRegistry::detached(Hub::new());
+    plugins.adopt(&manifests);
+    plugins
 }
 
-fn unit(name: &str) -> UnitName {
-    UnitName::try_from(name).unwrap()
+fn plugin(name: &str) -> PluginName {
+    PluginName::try_from(name).unwrap()
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn backoff_grows_and_is_capped() {
     assert!(second > first, "{second:?} should exceed {first:?}");
     assert!(third > second, "{third:?} should exceed {second:?}");
 
-    // A unit failing forever waits the cap, not forever-doubling.
+    // A plugin failing forever waits the cap, not forever-doubling.
     for _ in 0..10 {
         let delay = backoff.delay();
         assert!(
@@ -54,82 +54,85 @@ fn backoff_grows_and_is_capped() {
 #[test]
 fn a_status_change_is_published_as_a_state_topic() {
     let hub = Hub::new();
-    let units = UnitTable::detached(hub.clone());
-    let name = unit("battery-widget");
+    let plugins = PluginRegistry::detached(hub.clone());
+    let name = plugin("battery-widget");
 
-    units.transition(&name, Transition::Spawned);
+    plugins.transition(&name, Transition::Spawned);
 
     // Supervision is observable through the state plane, like everything else
     // the daemon knows.
-    let patch = hub.read_state(&[SystemTopic::Units.as_str().to_string()]);
+    let patch = hub.read_state(&[SystemTopic::Plugins.as_str().to_string()]);
     let topic = &patch.topics[0];
-    assert_eq!(topic.topic, "units");
+    assert_eq!(topic.topic, "plugins");
 
     match topic.value.as_ref().unwrap() {
-        omega_proto::omega::state_topic::Value::Units(units) => {
-            assert_eq!(units.units.len(), 1);
-            assert_eq!(units.units[0].unit, "battery-widget");
-            // Spawned is not yet running: the unit has not checked in.
-            assert_eq!(units.units[0].phase, UnitPhase::Starting as i32);
+        omega_proto::omega::state_topic::Value::Plugins(plugins) => {
+            assert_eq!(plugins.plugins.len(), 1);
+            assert_eq!(plugins.plugins[0].plugin, "battery-widget");
+            // Spawned is not yet running: the plugin has not checked in.
+            assert_eq!(plugins.plugins[0].phase, PluginPhase::Starting as i32);
         }
-        other => panic!("expected the units topic, got {other:?}"),
+        other => panic!("expected the plugins topic, got {other:?}"),
     }
 }
 
 #[test]
 fn a_repeated_status_is_not_a_new_revision() {
     let hub = Hub::new();
-    let units = UnitTable::detached(hub.clone());
-    let name = unit("battery-widget");
+    let plugins = PluginRegistry::detached(hub.clone());
+    let name = plugin("battery-widget");
 
-    units.transition(&name, Transition::Spawned);
-    units.transition(&name, Transition::Spawned);
+    plugins.transition(&name, Transition::Spawned);
+    plugins.transition(&name, Transition::Spawned);
 
-    let patch = hub.read_state(&[SystemTopic::Units.as_str().to_string()]);
+    let patch = hub.read_state(&[SystemTopic::Plugins.as_str().to_string()]);
     let revision = patch.topics[0].revision;
 
-    units.transition(
+    plugins.transition(
         &name,
         Transition::Exited {
             code: 1,
             detail: "exit status: 1".into(),
         },
     );
-    let patch = hub.read_state(&[SystemTopic::Units.as_str().to_string()]);
+    let patch = hub.read_state(&[SystemTopic::Plugins.as_str().to_string()]);
     assert!(patch.topics[0].revision > revision, "a real change is news");
 }
 
-/// Whether this patch is the table reporting a unit as failed — one arrives
+/// Whether this patch is the table reporting a plugin as failed — one arrives
 /// per spawn the supervisor could not make.
 fn is_failure(patch: &omega_proto::omega::StatePatch) -> bool {
     patch.topics.iter().any(|topic| {
         matches!(
             topic.value.as_ref(),
-            Some(omega_proto::omega::state_topic::Value::Units(units))
-                if units.units.iter().any(|s| s.phase == UnitPhase::Failed as i32)
+            Some(omega_proto::omega::state_topic::Value::Plugins(plugins))
+                if plugins.plugins.iter().any(|s| s.phase == PluginPhase::Failed as i32)
         )
     })
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
+async fn a_plugin_that_cannot_be_spawned_is_reported_failed_and_paced() {
     let shutdown = Shutdown::new();
     let hub = Hub::new();
-    let units = UnitTable::detached(hub.clone());
-    units.adopt(&ManifestStore::from_manifests([widget_manifest(
-        "missing-unit",
+    let plugins = PluginRegistry::detached(hub.clone());
+    plugins.adopt(&ManifestStore::from_manifests([widget_manifest(
+        "missing-plugin",
         "battery",
     )]));
     let supervisor = Supervisor::new(
         Socket::at("/tmp/omega-supervision-test.sock"),
-        units,
+        plugins,
         shutdown.clone(),
     );
 
     let (_, mut patches) = hub.subscribe_state();
 
     // Report missing executables and back off before retrying.
-    supervisor.spawn(UnitSpec::new(unit("missing-unit"), "/nonexistent/omega"));
+    supervisor.spawn(PluginSpec::new(
+        plugin("missing-plugin"),
+        "/nonexistent/omega",
+    ));
 
     // Nothing here sleeps for real: the clock jumps to each backoff in turn,
     // so what the assertion below measures is the pacing itself.
@@ -150,11 +153,11 @@ async fn a_unit_that_cannot_be_spawned_is_reported_failed_and_paced() {
     let waited = started.elapsed();
 
     let statuses = supervisor.statuses();
-    assert_eq!(statuses[0].unit, "missing-unit");
+    assert_eq!(statuses[0].plugin, "missing-plugin");
     // Spawn failures must include the missing binary path.
     assert!(
         statuses[0].detail.contains("/nonexistent/omega"),
-        "a unit that cannot be spawned names the program it could not run, \
+        "a plugin that cannot be spawned names the program it could not run, \
          got {:?}",
         statuses[0].detail
     );
@@ -190,22 +193,22 @@ async fn a_token_is_revoked_when_its_process_is_gone() {
         Shutdown::new(),
     );
 
-    let token: UnitToken = supervisor.register(&unit("battery-widget")).unwrap();
+    let token: PluginToken = supervisor.register(&plugin("battery-widget")).unwrap();
     assert!(supervisor.identify(1234, token.as_str()).is_some());
     assert!(supervisor.identify(1234, "another-token").is_none());
 }
 
 #[tokio::test(start_paused = true)]
-async fn cancelling_a_supervisor_releases_its_unit_and_token() {
-    let units = UnitTable::detached(Hub::new());
+async fn cancelling_a_supervisor_releases_its_plugin_and_token() {
+    let plugins = PluginRegistry::detached(Hub::new());
     let shutdown = Shutdown::new();
-    let supervisor = Supervisor::new(Socket::at("/unused"), units.clone(), shutdown.clone());
-    let name = unit("cancelled");
-    let task = supervisor.spawn(UnitSpec::new(name.clone(), "/nonexistent/omega"));
+    let supervisor = Supervisor::new(Socket::at("/unused"), plugins.clone(), shutdown.clone());
+    let name = plugin("cancelled");
+    let task = supervisor.spawn(PluginSpec::new(name.clone(), "/nonexistent/omega"));
     tokio::task::yield_now().await;
-    assert!(units.is_supervised(&name));
+    assert!(plugins.is_supervised(&name));
     task.abort();
     assert!(task.await.unwrap_err().is_cancelled());
-    assert!(!units.is_supervised(&name));
+    assert!(!plugins.is_supervised(&name));
     assert!(!shutdown.is_triggered());
 }

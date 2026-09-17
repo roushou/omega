@@ -7,31 +7,31 @@ import "omega/ui.proto";
 
 // Plugin lifecycle observations.
 
-// Daemon-owned unit status. Plugins cannot publish their own lifecycle state.
-message UnitsState {
-  repeated UnitStatus units = 1;
+// Daemon-owned plugin status. Plugins cannot publish their own lifecycle state.
+message PluginsState {
+  repeated PluginStatus plugins = 1;
 }
 
-message UnitStatus {
-  string unit = 1;
-  UnitPhase phase = 2;
+message PluginStatus {
+  string plugin = 1;
+  PluginPhase phase = 2;
   uint32 restarts = 3;          // spawns after the first
   int32 last_exit_code = 4;     // -1 when it was signalled or never ran
   string detail = 5;            // the last failure, for humans
 }
 
-enum UnitPhase {
-  UNIT_PHASE_UNSPECIFIED = 0;
-  UNIT_PHASE_STARTING = 1;
-  UNIT_PHASE_RUNNING = 2;
-  UNIT_PHASE_RESTARTING = 3;    // exited; waiting out the backoff
-  UNIT_PHASE_FAILED = 4;        // could not be spawned at all
-  UNIT_PHASE_STOPPED = 5;       // the daemon is shutting down
+enum PluginPhase {
+  PLUGIN_PHASE_UNSPECIFIED = 0;
+  PLUGIN_PHASE_STARTING = 1;
+  PLUGIN_PHASE_RUNNING = 2;
+  PLUGIN_PHASE_RESTARTING = 3;    // exited; waiting out the backoff
+  PLUGIN_PHASE_FAILED = 4;        // could not be spawned at all
+  PLUGIN_PHASE_STOPPED = 5;       // the daemon is shutting down
 }
 
 // On-demand daemon projection, separate from process lifecycle and private trees.
 message PluginHealth {
-  string unit = 1;
+  string plugin = 1;
   PluginReadiness readiness = 2;
   repeated string surfaces = 3;
   repeated SurfaceHealth instances = 4;

@@ -8,8 +8,8 @@ use omega::ui::{
 };
 use omega::{Command, Percent, Surface, Ui};
 
-/// This unit's name, for the config plane to refer to it by.
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+/// This plugin's name, for the config plane to refer to it by.
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
 /// What the document can configure an instance with.
 #[derive(omega::Config, Debug, Clone, PartialEq)]
@@ -73,7 +73,7 @@ impl Surface for Indicator {
 }
 
 /// Signal history stored in the plugin record. Retained while the daemon runs.
-#[derive(omega::UnitState, Debug, Clone, Default, PartialEq)]
+#[derive(omega::PluginState, Debug, Clone, Default, PartialEq)]
 pub struct Signal {
     pub recent: Vec<f64>,
 }
@@ -269,7 +269,7 @@ fn bars(_strength: Percent) -> Glyph {
 }
 
 pub fn plugin() -> omega::Plugin {
-    omega::Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
+    omega::Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<Connect>()

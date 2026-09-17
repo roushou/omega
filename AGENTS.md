@@ -39,7 +39,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 
 - No free functions: every operation hangs off a struct, enum, or trait.
 - Fail loud over silent drop. No `filter_map` over a closed enum.
-- Parse identifiers into newtypes at boundaries (`UnitName`, `SurfaceId`, `ModuleId`).
+- Parse identifiers into newtypes at boundaries (`PluginName`, `SurfaceId`, `ModuleId`).
   Maps use domain-specific key types.
 - Use `FromStr` for textual values and `TryFrom` for fallible owned or structured
   conversions. `From` must be infallible. Conversion and deserialization entry points
@@ -66,34 +66,34 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Every `Invoke` is answered on its own `stream_id`: an outcome or a
   `Refusal` with a closed `ErrorCode`. Never a silent drop or bare EOF.
 - Which `ErrorCode` a domain error becomes is declared once per error type in
-  `refusal.rs`. A unit's own refusal passes through unflattened.
+  `refusal.rs`. A plugin's own refusal passes through unflattened.
 - Topic and event names are validated where they enter (`str::parse::<Address>`,
   `EventKind::from_str_name`).
 - The observation socket uses the same Frame/Invoke schema and policy as the control
   socket, encoded as JSON. State reading is open; private views require a scoped
-  renderer attachment. Bootstrap and unit supervision operations require the operator.
+  renderer attachment. Bootstrap and plugin supervision operations require the operator.
   Presentation changes also accept scoped renderers; plugins may only hide or close
   their own instances.
 
 ## Trust
 
-- Authenticate units through SO_PEERCRED pid and spawn token. Resolve identity and
+- Authenticate plugins through SO_PEERCRED pid and spawn token. Resolve identity and
   grants from supervision records and the daemon manifest, never peer claims. The
   daemon uid identifies the operator; each operation declares which roles it accepts.
   Observation renderers use scoped attachments.
 - Every operation declares its authorization requirement in
   `session/dispatch/policy.rs`. Missing policy rows are refused.
-- The manifest is the ceiling; `Subscribe` narrows it and never widens. A unit
-  writes `unit.<its own name>.<key>` and nothing else.
+- The manifest is the ceiling; `Subscribe` narrows it and never widens. A plugin
+  writes `plugin.<its own name>.<key>` and nothing else.
 - Declare action capabilities once in `omega-proto::ActionKind`. Check authorization
   before handler availability.
-- A unit serves only registered commands with its own capabilities. Cross-unit
-  invocation requires CAPABILITY_SPAWN for units; the operator is authorized by uid.
+- A plugin serves only registered commands with its own capabilities. Cross-plugin
+  invocation requires CAPABILITY_SPAWN for plugins; the operator is authorized by uid.
 
 ## Daemon
 
-- `UnitTable` owns manifests, lifecycle, tokens, supervision handles, and sessions.
-  Apply lifecycle changes through Transition; the units topic projects that state.
+- `PluginRegistry` owns manifests, lifecycle, tokens, supervision handles, and sessions.
+  Apply lifecycle changes through Transition; the plugins topic projects that state.
 - A spawned process is starting until its handshake succeeds, then running.
 - Run convergence in one independent task. Merge triggers into the next pass and
   execute one pass at a time; plugin waits must not block the connection accept loop.
@@ -103,7 +103,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - A built plugin the document never mentions runs. Membership under `plugins/`
   declares execution; libraries never do. The document supplies overrides.
 - Instances and views end with the plugin session. `PresentationProvider` projects
-  configured placements into `UnitTable` instances; transient presentations use the
+  configured placements into `PluginRegistry` instances; transient presentations use the
   same registry. Runtime identity is `(InstanceId, IncarnationId)`, not a placement.
   Expiration emits tombstones so renderers cannot keep drawing stale instances.
 - Renderer attachments narrow an owner connection to one plugin's standalone views
@@ -115,7 +115,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - `Schedules` owns timers across reconciliation passes. Unchanged schedules retain
   their timers. The first tick is immediate.
 - Cadence syntax is `every <n><s|m|h|d>`. Reject unsupported cron expressions.
-- Long-lived tasks select on `Shutdown`. Units are asked to exit (SIGTERM,
+- Long-lived tasks select on `Shutdown`. Plugins are asked to exit (SIGTERM,
   then a deadline), never only killed.
 - `Changes` coalesces Create/Modify/Remove notifications into settled wakeups,
   excluding reads. Watch parent directories to detect watched directories replaced
@@ -123,7 +123,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Use tokio::time::Instant for deadlines and paused Tokio time for pacing tests.
 - Pass both socket paths into `Daemon::builder`; do not resolve them from process
   environment inside the daemon. Session tests use UnixStream::pair.
-- Write unit logs to `~/.cache/omega/logs/<unit>.log` so generation replacement
+- Write plugin logs to `~/.cache/omega/logs/<plugin>.log` so generation replacement
   preserves crash diagnostics.
 
 - A field is a **reading** (one topic, no interpretation), a **composite**
@@ -142,19 +142,19 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Derive expansions reference `::omega::internal::`, independent of public re-exports.
 - Compile `omega new` templates through `crates/omega/tests/scaffold.rs`.
 
-## Units and settings
+## Plugins and settings
 
-- Settings construct plugin fields and arrive in Welcome. Unit setting changes
-  restart the plugin. Build activation installs settings before unit convergence;
-  compare settings across builds, including units whose settings were removed.
-- Settings layer, they do not replace: `Units::configured` sets a unit's,
+- Settings construct plugin fields and arrive in Welcome. Plugin setting changes
+  restart the plugin. Build activation installs settings before plugin convergence;
+  compare settings across builds, including plugins whose settings were removed.
+- Settings layer, they do not replace: `Plugins::configured` sets a plugin's,
   `Modules::widget` sets one placement's, and an instance is the second over
   the first (`Values::over`). A command or reaction is never placed, so its
-  unit's settings are the only ones it can have.
+  plugin's settings are the only ones it can have.
 - A placement is desired configuration; an instance owns runtime identity, settings,
   and presentation state. There are no automatic unplaced widget instances.
 - The daemon creates an instance and pulls its first render with construction
-  settings; the unit pushes later trees with that instance's identity.
+  settings; the plugin pushes later trees with that instance's identity.
 
 ## SDK
 
@@ -162,7 +162,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
   `omega check` compile plugins and query their binaries with --omega-manifest.
 - Plugins expose a library target so system configuration can use typed settings,
   commands, and surface references.
-- Share records through Own<T> and Watch<T>. UnitState derives the record address
+- Share records through Own<T> and Watch<T>. PluginState derives the record address
   from the defining crate and type. Own writes require Does; Watch requires Reads.
 - Render declarations hold only readings. Commands, reactions, and stateful
   behavior may hold effects. The `Reads` bound enforces the render-side rule;
@@ -170,7 +170,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Derive Config to implement Fields for typed map boundaries. Missing fields use
   Default for forward compatibility with older writers.
 - Prefer short typed APIs and measurement values such as Percent over raw scalars.
-- `omega dev <unit>` uses operator-only AdoptUnit to replace the supervised process
+- `omega dev <plugin>` uses operator-only AdoptPlugin to replace the supervised process
   for the connection lifetime. Hold supervision during adoption and retain manifest
   grants. `omega::testing` provides isolated fixtures without a daemon.
 
@@ -201,7 +201,7 @@ omega-base     host-independent mechanisms with minimal dependencies
 omega-proto    wire format, manifest, identifiers — what crosses a socket
 omega-keyboard logical keyboard events, chords, and conflict-checked keymaps
 omega-host     files, generations, Cargo workspace documents, discovery, watching
-omega          the SDK — what a unit is written against
+omega          the SDK — what a plugin is written against
 omega-document the desired-state document
 omega-derive   proc-macros
 omega-platform  the subsystems the daemon brokers: state out, actions in
@@ -278,7 +278,7 @@ omega-cli      the binary
 - Every TOML document is a `TomlSchema` declared once with its kind and
   location. Address one with `Layout::file::<S>(key)`; never join a path at a
   call site. Invariants beyond parsing go in `Validated`.
-- Generated dependencies come from `Scaffold::UNIT_DEPENDENCIES`,
+- Generated dependencies come from `Scaffold::PLUGIN_DEPENDENCIES`,
   `SYSTEM_DEPENDENCIES`, and optional `PREVIEW_DEPENDENCIES`. Keep production
   plugin, configuration-plane, and development dependencies separate.
 
@@ -295,7 +295,7 @@ omega-cli      the binary
 
 - Config members are `system/`, `plugins/<name>/`, or `crates/<name>/`.
   Only plugins are queried for manifests and supervised. Libraries never imply
-  execution. Runtime generation paths remain `units/`.
+  execution. Runtime generation paths remain `plugins/`.
 - Source mutations and builds hold the same workspace lock.
 - `Document::with` composes a `DocumentExtension`. Core document validation never
   interprets Omarchy payloads: `omega-omarchy` handles and projects them first.

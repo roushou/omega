@@ -1,4 +1,4 @@
-//! A unit's own output, kept where a crash can be read after the restart.
+//! A plugin's own output, kept where a crash can be read after the restart.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -6,10 +6,10 @@ use std::time::Duration;
 use omega_daemon::Shutdown;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::supervisor::{Supervisor, UnitLog, UnitSpec};
-use omega_daemon::units::UnitTable;
+use omega_daemon::plugins::PluginRegistry;
+use omega_daemon::supervisor::{PluginLog, PluginSpec, Supervisor};
+use omega_proto::PluginName;
 use omega_proto::Socket;
-use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
 
@@ -24,11 +24,11 @@ impl TempDir {
         Self(dir)
     }
 
-    fn log(&self, name: &str) -> UnitLog {
-        UnitLog::at(self.0.join(format!("{name}.log")))
+    fn log(&self, name: &str) -> PluginLog {
+        PluginLog::at(self.0.join(format!("{name}.log")))
     }
 
-    /// A runnable stand-in for a compiled unit.
+    /// A runnable stand-in for a compiled plugin.
     fn executable(&self, name: &str, script: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
 
@@ -56,21 +56,22 @@ fn supervisor(tag: &str) -> (Supervisor, Shutdown) {
 }
 
 #[tokio::test]
-async fn a_units_output_survives_the_restart_that_follows_it() {
+async fn a_plugins_output_survives_the_restart_that_follows_it() {
     let tmp = TempDir::new("crash");
     let log = tmp.log("noisy");
     let (supervisor, shutdown) = supervisor("crash");
 
-    // A unit that says why it is dying, then dies.
+    // A plugin that says why it is dying, then dies.
     let script = tmp.executable(
         "noisy",
         "#!/bin/sh\necho 'the manifest hash did not match' >&2\nexit 2\n",
     );
 
-    supervisor
-        .spawn(UnitSpec::new("noisy".parse::<UnitName>().unwrap(), &script).logged(log.clone()));
+    supervisor.spawn(
+        PluginSpec::new("noisy".parse::<PluginName>().unwrap(), &script).logged(log.clone()),
+    );
 
-    // Unit logs must remain readable after process exit.
+    // Plugin logs must remain readable after process exit.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     let mut contents = String::new();
     while tokio::time::Instant::now() < deadline {
@@ -90,8 +91,8 @@ fn a_log_that_outgrows_its_cap_starts_over() {
     let tmp = TempDir::new("cap");
     let log = tmp.log("chatty");
 
-    // A crash-looping unit writes the same thing forever.
-    std::fs::write(log.path(), "x".repeat(UnitLog::MAX_BYTES as usize + 1)).unwrap();
+    // A crash-looping plugin writes the same thing forever.
+    std::fs::write(log.path(), "x".repeat(PluginLog::MAX_BYTES as usize + 1)).unwrap();
 
     // Truncate oversized logs at process restart.
     drop(log.open().unwrap());
@@ -114,8 +115,8 @@ fn a_log_within_its_cap_is_appended_to() {
 }
 
 /// Seed the supervisor’s authoritative table with the test manifests.
-fn table_with(manifests: ManifestStore) -> UnitTable {
-    let units = UnitTable::detached(Hub::new());
-    units.adopt(&manifests);
-    units
+fn table_with(manifests: ManifestStore) -> PluginRegistry {
+    let plugins = PluginRegistry::detached(Hub::new());
+    plugins.adopt(&manifests);
+    plugins
 }

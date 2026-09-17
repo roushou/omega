@@ -4,7 +4,7 @@ use omega_omarchy::{
     DocumentValidation,
     shell::{Bar, PluginWidget, Shell},
 };
-use omega_proto::{UnitName, omega::Manifest};
+use omega_proto::{PluginName, omega::Manifest};
 
 #[derive(omega::Surface)]
 struct Indicator;
@@ -54,7 +54,7 @@ impl Fixture {
             ))
             .unwrap()
     }
-    fn built(panel: bool) -> std::collections::BTreeMap<UnitName, Manifest> {
+    fn built(panel: bool) -> std::collections::BTreeMap<PluginName, Manifest> {
         let plugin = omega::plugin!().surface(Indicator);
         let plugin = if panel {
             plugin.surface(Details)
@@ -62,7 +62,7 @@ impl Fixture {
             plugin
         };
         [(
-            UnitName::try_from(env!("CARGO_PKG_NAME")).unwrap(),
+            PluginName::try_from(env!("CARGO_PKG_NAME")).unwrap(),
             plugin.manifest().unwrap(),
         )]
         .into()
@@ -73,15 +73,15 @@ impl Fixture {
 fn placement_uses_the_same_names_as_registration() {
     let placement = PluginWidget::new("main", Indicator).panel(Details);
     let json = serde_json::to_value(placement).unwrap();
-    assert_eq!(json["unit"], env!("CARGO_PKG_NAME"));
+    assert_eq!(json["plugin"], env!("CARGO_PKG_NAME"));
     assert_eq!(json["surface"], "indicator");
     assert_eq!(json["panel"], "panel");
 }
 
 #[test]
-fn a_panel_from_another_unit_is_rejected_before_compilation() {
+fn a_panel_from_another_plugin_is_rejected_before_compilation() {
     assert!(
-        PluginWidget::named("main", "another-unit")
+        PluginWidget::named("main", "another-plugin")
             .try_panel(Details)
             .is_err()
     );

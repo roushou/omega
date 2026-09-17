@@ -52,7 +52,7 @@ impl Fixture {
             },
             service: Replacement::prepare(
                 &self.root.join("omega.service"),
-                FileSnapshot::file(b"unit"),
+                FileSnapshot::file(b"plugin"),
             )
             .unwrap(),
             renderers: vec![

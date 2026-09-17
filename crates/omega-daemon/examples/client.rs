@@ -1,6 +1,6 @@
 //! Raw debug client: connect and print every frame as canonical JSON.
 //!
-//! This is not a unit — it has no token — so the daemon must be started with
+//! This is not a plugin — it has no token — so the daemon must be started with
 //! `omega daemon --allow-debug-clients` for it to be admitted at all, and it
 //! is granted nothing beyond watching state.
 

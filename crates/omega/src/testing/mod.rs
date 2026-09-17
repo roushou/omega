@@ -63,8 +63,8 @@ pub mod topic {
     pub use omega_proto::omega::{
         Application, ApplicationsState, AudioState, BacklightState, BatteryState, BluetoothDevice,
         BluetoothState, DiskState, Fan, IdleState, InputState, MainsState, MediaState,
-        MonitorsState, Mount, NetworkState, PeripheralsState, PowerProfileState, Sensor,
-        SystemState, ThermalsState, ThroughputState, TimeState, UnitsState, VpnState, WifiState,
+        MonitorsState, Mount, NetworkState, PeripheralsState, PluginsState, PowerProfileState,
+        Sensor, SystemState, ThermalsState, ThroughputState, TimeState, VpnState, WifiState,
         WindowState, WorkspacesState,
     };
 }

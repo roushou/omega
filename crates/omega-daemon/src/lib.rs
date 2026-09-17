@@ -1,4 +1,4 @@
-//! The Omega daemon: trust boundary, state owner, unit supervisor.
+//! The Omega daemon: trust boundary, state owner, plugin supervisor.
 
 pub mod action;
 pub(crate) mod attachment;
@@ -8,6 +8,7 @@ pub mod daemon;
 pub mod events;
 pub mod hub;
 pub mod manifest;
+pub mod plugins;
 mod presentations;
 pub mod process;
 pub mod reconcile;
@@ -18,14 +19,13 @@ pub mod shell;
 pub mod shutdown;
 pub mod state;
 pub mod supervisor;
-pub mod units;
 pub mod watch;
 
 pub use authorization::Role;
 pub use daemon::{Daemon, DaemonBuilder, DaemonError, DaemonHandle};
 pub use manifest::ManifestStoreError;
+pub use plugins::{Lifecycle, PluginRegistry, PluginToken, Transition};
 pub use refusal::{Refusable, RefusableResult};
 pub use session::{Liveness, Session, SessionError};
 pub use shell::ShellError;
 pub use shutdown::Shutdown;
-pub use units::{Lifecycle, Transition, UnitTable, UnitToken};

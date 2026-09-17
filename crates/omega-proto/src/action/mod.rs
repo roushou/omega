@@ -75,8 +75,8 @@ actions! {
     SetVolume => Audio,
     SetBacklight => Backlight,
     Notify => Notify,
-    /// Making another unit run its own code is making code run.
-    InvokeUnit => Spawn,
+    /// Making another plugin run its own code is making code run.
+    InvokePlugin => Spawn,
     ToggleFloating => None,
     ToggleFullscreen => None,
     SetPowerProfile => SystemControl,

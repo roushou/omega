@@ -36,7 +36,7 @@ async fn a_peer_is_declared_unresponsive_only_after_the_timeout() {
 async fn a_peer_that_stops_answering_is_closed() {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new("silent", ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
 
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
@@ -58,7 +58,7 @@ async fn a_peer_that_stops_answering_is_closed() {
 async fn the_daemon_answers_a_peer_s_ping() {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new("ping", ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
 
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome

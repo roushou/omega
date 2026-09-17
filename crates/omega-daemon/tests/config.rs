@@ -3,18 +3,18 @@ mod common;
 use common::{Harness, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::omega::frame;
-use omega_proto::{UnitName, Values};
+use omega_proto::{PluginName, Values};
 
 #[tokio::test]
-async fn a_unit_is_told_its_settings_when_it_connects() {
+async fn a_plugin_is_told_its_settings_when_it_connects() {
     let harness = Harness::new(
         "welcome-config",
-        ManifestStore::from_manifests([widget_manifest("test-unit", "battery")]),
+        ManifestStore::from_manifests([widget_manifest("test-plugin", "battery")]),
     );
-    harness.units.activate(
-        &ManifestStore::from_manifests([widget_manifest("test-unit", "battery")]),
+    harness.plugins.activate(
+        &ManifestStore::from_manifests([widget_manifest("test-plugin", "battery")]),
         [(
-            "test-unit".parse::<UnitName>().unwrap(),
+            "test-plugin".parse::<PluginName>().unwrap(),
             Values::new()
                 .with("low-threshold", 20u8)
                 .with("label", "batt")
@@ -24,8 +24,8 @@ async fn a_unit_is_told_its_settings_when_it_connects() {
         .collect(),
     );
 
-    let token = harness.register_unit("test-unit");
-    let hash = widget_manifest("test-unit", "battery").hash();
+    let token = harness.register_plugin("test-plugin");
+    let hash = widget_manifest("test-plugin", "battery").hash();
     let mut transport = harness.connect(&hash, token.as_str()).await;
 
     let welcome = match transport.recv().await.unwrap().unwrap().body {

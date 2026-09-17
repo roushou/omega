@@ -5,12 +5,12 @@ use crate::{
 };
 use omega_proto::instance::{PresentationError, PresentationSpec};
 use omega_proto::omega::{self, presentation};
-use omega_proto::{SurfaceId, UnitName};
+use omega_proto::{PluginName, SurfaceId};
 
 #[derive(Debug, clap::Args)]
 pub struct PresentCmd {
-    #[arg(value_name = "UNIT")]
-    pub unit_name: UnitName,
+    #[arg(value_name = "PLUGIN")]
+    pub plugin_name: PluginName,
     #[arg(value_name = "SURFACE")]
     pub surface_id: SurfaceId,
     /// Create an independent instance instead of reusing this entry point.
@@ -80,7 +80,7 @@ impl PresentCmd {
     }
 
     fn presentation(&self) -> Result<PresentationSpec, PresentationError> {
-        let unit_name = &self.unit_name;
+        let plugin_name = &self.plugin_name;
         let surface_id = &self.surface_id;
         let kind = if self.overlay {
             presentation::Kind::Overlay(omega::OverlayPresentation {
@@ -92,8 +92,8 @@ impl PresentCmd {
             })
         } else {
             presentation::Kind::Window(omega::WindowPresentation {
-                title: format!("{unit_name} — {surface_id}"),
-                app_id: format!("org.omega.{unit_name}"),
+                title: format!("{plugin_name} — {surface_id}"),
+                app_id: format!("org.omega.{plugin_name}"),
                 width: self.width,
                 height: self.height,
                 min_width: 1,
@@ -105,11 +105,11 @@ impl PresentCmd {
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let presentation = self.presentation()?;
-        let unit_name = self.unit_name;
+        let plugin_name = self.plugin_name;
         let surface_id = self.surface_id;
         let result = Operator::new()
             .present(omega::CreateInstance {
-                unit: unit_name.to_string(),
+                plugin: plugin_name.to_string(),
                 surface: surface_id.to_string(),
                 presentation: Some(presentation.wire().clone()),
                 config: self
@@ -129,7 +129,7 @@ impl PresentCmd {
         } else {
             ui.step(
                 Step::Requested,
-                Paint::name(format!("{unit_name}.{surface_id}")),
+                Paint::name(format!("{plugin_name}.{surface_id}")),
             );
         }
         Ok(())

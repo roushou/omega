@@ -145,7 +145,7 @@ impl Ui {
         let _ = self.out.flush();
     }
 
-    /// A unit's own output, passed through exactly as it was written.
+    /// A plugin's own output, passed through exactly as it was written.
     pub fn passthrough(&mut self, text: &str) {
         let _ = write!(self.out, "{text}");
         let _ = self.out.flush();

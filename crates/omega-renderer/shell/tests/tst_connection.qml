@@ -4,7 +4,7 @@ import "../../../omega-omarchy/shell" as Renderer
 
 TestCase {
     name: "ConnectionRecovery"
-    Component { id: factory; Renderer.Connection { unit: "audio"; surface: "panel"; module: "slot" } }
+    Component { id: factory; Renderer.Connection { plugin: "audio"; surface: "panel"; module: "slot" } }
     function init() { failOnWarning(/.*/) }
     function connection() {
         var link = createTemporaryObject(factory, this)
@@ -14,7 +14,7 @@ TestCase {
         return link
     }
     function phase(link, phase, detail) {
-        link.onLine(JSON.stringify({topic:"units",units:{units:[{unit:"audio",phase:phase,detail:detail || ""}]}}))
+        link.onLine(JSON.stringify({topic:"plugins",plugins:{plugins:[{plugin:"audio",phase:phase,detail:detail || ""}]}}))
     }
     function test_attachment_reports_the_loaded_build_identity() {
         var link = connection()
@@ -26,21 +26,21 @@ TestCase {
     }
     function test_lifecycle_status_does_not_mistake_empty_content_for_failure() {
         var link = connection()
-        phase(link, "UNIT_PHASE_STARTING")
+        phase(link, "PLUGIN_PHASE_STARTING")
         compare(link.status, "Starting plugin…")
-        phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{}}))
+        phase(link, "PLUGIN_PHASE_RUNNING")
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{}}))
         compare(link.tree, null)
         compare(link.status, "")
-        phase(link, "UNIT_PHASE_RESTARTING")
+        phase(link, "PLUGIN_PHASE_RESTARTING")
         compare(link.status, "Restarting plugin…")
-        phase(link, "UNIT_PHASE_FAILED", "Executable missing")
+        phase(link, "PLUGIN_PHASE_FAILED", "Executable missing")
         compare(link.status, "Executable missing")
     }
     function test_disconnect_clears_view_and_pending_work_then_recovers() {
         var link = connection()
-        phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
+        phase(link, "PLUGIN_PHASE_RUNNING")
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
         verify(link.press({command:"volume"}, 0.5, "slider"))
         verify(link.busy("slider"))
         link.disconnected()
@@ -51,8 +51,8 @@ TestCase {
         compare(link.status, "Waiting for Omega…")
         link.connected = true
         link.attached = true
-        phase(link, "UNIT_PHASE_RUNNING")
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
+        phase(link, "PLUGIN_PHASE_RUNNING")
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
         compare(link.status, "")
         verify(link.press({command:"volume"}, 0.4, "slider"))
         compare(link.requests.error, "")
@@ -77,8 +77,8 @@ TestCase {
     }
     function test_recreated_socket_subscribes_and_accepts_commands() {
         var link = connection()
-        verify(link.socket.written.indexOf("units") >= 0)
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
+        verify(link.socket.written.indexOf("plugins") >= 0)
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
         verify(link.press({command:"volume"}, 0.5, "slider"))
         link.reconnect()
         compare(link.socket, null)
@@ -86,8 +86,8 @@ TestCase {
         verify(!link.busy("slider"))
         tryCompare(link, "connected", true)
         link.attached = true
-        verify(link.socket.written.indexOf("units") >= 0)
-        link.onLine(JSON.stringify({unit:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
+        verify(link.socket.written.indexOf("plugins") >= 0)
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
         verify(link.press({command:"volume"}, 0.4, "slider"))
     }
 }

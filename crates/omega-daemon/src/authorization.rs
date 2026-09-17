@@ -11,8 +11,8 @@ use crate::refusal::Refusable;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Renderer,
-    /// A unit the supervisor spawned.
-    Unit,
+    /// A plugin the supervisor spawned.
+    Plugin,
     /// The user who owns the daemon.
     Operator,
 }
@@ -27,7 +27,7 @@ pub struct Grants {
 
 impl Grants {
     /// The grants a manifest describes. The manifest was validated when it was
-    /// loaded, so an unknown capability here is a daemon bug, not a unit's.
+    /// loaded, so an unknown capability here is a daemon bug, not a plugin's.
     pub(crate) fn of(manifest: &Manifest) -> Result<Self, Refusal> {
         let capabilities = manifest.granted().map_err(|e| e.refusal())?;
 

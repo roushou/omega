@@ -17,12 +17,12 @@ impl Refusal {
         }
     }
 
-    /// The peer is not a unit this daemon spawned.
+    /// The peer is not a plugin this daemon spawned.
     pub fn unauthenticated(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Unauthenticated, message)
     }
 
-    /// The op requires something the unit was not granted.
+    /// The op requires something the plugin was not granted.
     pub fn denied(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::PermissionDenied, message)
     }

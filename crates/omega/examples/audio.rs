@@ -1,9 +1,9 @@
-//! Output volume and mute controls. Run as a unit or place `indicator` and `panel`.
+//! Output volume and mute controls. Run as a plugin or place `indicator` and `panel`.
 use omega::platform::audio::{Audio, Volume};
 use omega::ui::{Button, Metric, Section, Slider, Text};
 use omega::{Command, Percent, Plugin, Surface, Ui};
 
-pub const UNIT: &str = env!("CARGO_PKG_NAME");
+pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 
 #[derive(omega::Surface, Debug)]
 pub struct Indicator {
@@ -108,7 +108,7 @@ impl Command for Mute {
 }
 
 pub fn plugin() -> Plugin {
-    Plugin::named(UNIT, env!("CARGO_PKG_VERSION"))
+    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<SetVolume>()

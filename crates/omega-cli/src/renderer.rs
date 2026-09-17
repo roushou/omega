@@ -20,7 +20,7 @@ impl RendererStatus {
                     .fingerprint()
                     .to_owned(),
             ),
-            attach_renderer::Scope::Unit(_) => {
+            attach_renderer::Scope::Plugin(_) => {
                 Some(omega_renderer::Desktop::build().fingerprint().to_owned())
             }
         }
@@ -41,7 +41,7 @@ impl RendererStatus {
             }) {
                 ui.warn(format!(
                     "{}.{}#{}: no running renderer attached",
-                    placement.unit, placement.surface, placement.placement
+                    placement.plugin, placement.surface, placement.placement
                 ));
             }
         }
@@ -57,9 +57,9 @@ impl RendererStatus {
             }
             let name = match &attachment.scope {
                 Some(attach_renderer::Scope::Placement(p)) => {
-                    format!("{}.{}#{}", p.unit, p.surface, p.placement)
+                    format!("{}.{}#{}", p.plugin, p.surface, p.placement)
                 }
-                Some(attach_renderer::Scope::Unit(unit)) => format!("{unit} desktop host"),
+                Some(attach_renderer::Scope::Plugin(plugin)) => format!("{plugin} desktop host"),
                 None => "unknown renderer".to_owned(),
             };
             if attachment.build_fingerprint.is_empty() {
@@ -211,12 +211,12 @@ mod tests {
     struct Fixture;
 
     impl Fixture {
-        fn attachment(unit: &str) -> AttachRenderer {
+        fn attachment(plugin: &str) -> AttachRenderer {
             AttachRenderer {
                 scope: Some(attach_renderer::Scope::Placement(PlacementAttachment {
-                    unit: unit.into(),
+                    plugin: plugin.into(),
                     surface: "panel".into(),
-                    placement: unit.into(),
+                    placement: plugin.into(),
                 })),
                 build_fingerprint: omega_omarchy::Renderer::VIEW.build().fingerprint().into(),
                 ..Default::default()
@@ -263,7 +263,7 @@ mod tests {
         after
             .placements
             .push(omega_proto::omega::PlacementAttachment {
-                unit: "wifi".into(),
+                plugin: "wifi".into(),
                 surface: "panel".into(),
                 placement: "wifi".into(),
             });

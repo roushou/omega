@@ -22,7 +22,7 @@ ignored = ["pbjson"]
 [features]
 default = []
 # The canonical protobuf JSON mapping: the observation socket's encoding, and
-# the only thing in this crate a unit never needs. Off by default so a plugin
+# the only thing in this crate a plugin never needs. Off by default so a plugin
 # binary does not carry serde impls for the whole ontology to speak a socket
 # it never opens.
 json = ["dep:pbjson", "dep:serde_json"]

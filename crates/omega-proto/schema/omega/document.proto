@@ -20,7 +20,7 @@ message StateDocument {
   repeated Setting settings = 6;
   repeated Schedule schedules = 7;
   repeated Policy policies = 8;
-  repeated UnitRef units = 9;
+  repeated PluginRef plugins = 9;
   repeated EnvironmentVariable environment = 10;
 
   // Omarchy-specific declaration interpreted by omega-omarchy, not by plugins.
@@ -68,7 +68,7 @@ message Module {
     BatteryModule battery = 3;
     WorkspaceModule workspaces = 4;
     TrayModule tray = 5;
-    WidgetModule widget = 6;   // a widget unit, instantiated
+    WidgetModule widget = 6;   // a widget plugin, instantiated
   }
 }
 
@@ -84,10 +84,10 @@ message WorkspaceModule {}
 message TrayModule {}
 
 message WidgetModule {
-  string unit = 1;              // unit name from its manifest
+  string plugin = 1;              // plugin name from its manifest
   map<string, Value> config = 2;
 
-  // Widget surface ID. Empty selects the unit's sole widget surface.
+  // Widget surface ID. Empty selects the plugin's sole widget surface.
   string surface = 3;
 
   // Popup surface ID anchored to this placement. Empty means no popup.
@@ -140,16 +140,16 @@ message Schedule {
   Action action = 3;
 }
 
-// Wires events to a policy unit (the runtime plane's imperative half).
+// Wires events to a policy plugin (the runtime plane's imperative half).
 message Policy {
   string id = 1;
-  string unit = 2;
+  string plugin = 2;
   repeated EventKind events = 3;
   map<string, Value> config = 4;
 }
 
-// A unit enabled in the runtime plane.
-message UnitRef {
+// A plugin enabled in the runtime plane.
+message PluginRef {
   string name = 1;
   bool enabled = 2;
   map<string, Value> config = 3;
@@ -162,7 +162,7 @@ message EnvironmentVariable {
 
 message ConfiguredPresentation {
   string id = 1;
-  string unit = 2;
+  string plugin = 2;
   string surface = 3;
   map<string, Value> config = 4;
   Presentation presentation = 5;

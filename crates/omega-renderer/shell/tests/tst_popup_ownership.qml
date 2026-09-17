@@ -27,7 +27,7 @@ TestCase {
             Component.onDestruction: controller.releaseHost(host)
         }
     }
-    Component { id: leaseFactory; Omarchy.PlacementConnection { unit: "audio"; surface: "panel"; module: "audio" } }
+    Component { id: leaseFactory; Omarchy.PlacementConnection { plugin: "audio"; surface: "panel"; module: "audio" } }
     property var laptop
     property var external
     property var link
@@ -48,7 +48,7 @@ TestCase {
         link.socket.written = ""
     }
     function snapshot(shown) {
-        link.receiveView({unit:"audio",surface:"panel",instance:{id:"panel",incarnation:"test"},requested:shown ? 2 : 1,view:{revision:"1",root:{type:"text"}}})
+        link.receiveView({plugin:"audio",surface:"panel",instance:{id:"panel",incarnation:"test"},requested:shown ? 2 : 1,view:{revision:"1",root:{type:"text"}}})
     }
     function changes() {
         return link.socket.written.trim().split("\n").filter(line => line !== "")

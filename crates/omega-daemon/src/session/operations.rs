@@ -31,7 +31,7 @@ impl Operations {
             invoke.op,
             Some(
                 invoke::Op::Act(_)
-                    | invoke::Op::AdoptUnit(_)
+                    | invoke::Op::AdoptPlugin(_)
                     | invoke::Op::CreateInstance(_)
                     | invoke::Op::Interact(_)
                     | invoke::Op::ChangePresentation(_)
@@ -68,7 +68,7 @@ impl Operations {
             let _permit = permit;
             let work = async {
                 match tokio::time::timeout(
-                    crate::units::session::REQUEST_TIMEOUT,
+                    crate::plugins::session::REQUEST_TIMEOUT,
                     dispatcher.invoke(&peer, &mut selection, &invoke),
                 )
                 .await
@@ -105,7 +105,7 @@ impl Operations {
 mod tests {
     use super::*;
     use omega_proto::{
-        Manifest, UnitName,
+        Manifest, PluginName,
         omega::{Act, Action, RunCommand, action},
     };
 
@@ -117,19 +117,19 @@ mod tests {
     impl Fixture {
         fn new() -> Self {
             let hub = crate::hub::Hub::new();
-            let units = crate::units::UnitTable::detached(hub.clone());
+            let plugins = crate::plugins::PluginRegistry::detached(hub.clone());
             let shutdown = crate::Shutdown::new();
             let supervisor = crate::supervisor::Supervisor::new(
                 omega_proto::Socket::at("/unused"),
-                units.clone(),
+                plugins.clone(),
                 shutdown.clone(),
             );
             let brokers = crate::broker::Brokerage::new(hub.clone(), shutdown);
-            let name = "example".parse::<UnitName>().unwrap();
+            let name = "example".parse::<PluginName>().unwrap();
             let manifest = Manifest::new(&name, "1");
             Self {
-                dispatcher: Arc::new(Dispatcher::new(hub, supervisor, units, brokers)),
-                peer: Arc::new(Peer::unit(name.clone(), &manifest).unwrap()),
+                dispatcher: Arc::new(Dispatcher::new(hub, supervisor, plugins, brokers)),
+                peer: Arc::new(Peer::plugin(name.clone(), &manifest).unwrap()),
                 selection: Subscriptions::of(&name, &manifest),
             }
         }

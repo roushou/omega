@@ -1,4 +1,4 @@
-//! State: last-value-wins, reads bounded by the manifest, and a unit's own
+//! State: last-value-wins, reads bounded by the manifest, and a plugin's own
 //! keyspace.
 
 mod common;
@@ -44,7 +44,7 @@ async fn connected(
     manifest: Manifest,
 ) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit(manifest.name.as_str());
+    let token = harness.register_plugin(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
     (harness, transport)
@@ -72,7 +72,7 @@ async fn the_welcome_mirror_carries_only_declared_topics() {
         ManifestStore::from_manifests([manifest.clone()]),
     );
 
-    // Two topics exist; the unit declared one of them.
+    // Two topics exist; the plugin declared one of them.
     harness.hub.publish_state(battery(0.5)).unwrap();
     harness
         .hub
@@ -89,7 +89,7 @@ async fn the_welcome_mirror_carries_only_declared_topics() {
         })
         .unwrap();
 
-    let token = harness.register_unit("reader");
+    let token = harness.register_plugin("reader");
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
 
     match transport.recv().await.unwrap().unwrap().body {
@@ -152,11 +152,11 @@ async fn reading_a_topic_the_manifest_never_declared_is_refused() {
 }
 
 #[tokio::test]
-async fn a_unit_is_woken_only_for_what_it_subscribes_to() {
+async fn a_plugin_is_woken_only_for_what_it_subscribes_to() {
     let (harness, mut transport) =
         connected("subscribe", widget_manifest("reader", "battery")).await;
 
-    // Unsubscribed: the patch is stored but this unit is not woken for it.
+    // Unsubscribed: the patch is stored but this plugin is not woken for it.
     transport
         .send(op(
             1,
@@ -174,7 +174,7 @@ async fn a_unit_is_woken_only_for_what_it_subscribes_to() {
         tokio::time::timeout(Duration::from_millis(200), transport.recv())
             .await
             .is_err(),
-        "an unsubscribed topic must not reach the unit"
+        "an unsubscribed topic must not reach the plugin"
     );
 
     // Subscribed again: the next change arrives.
@@ -231,7 +231,7 @@ async fn writing_state_without_the_capability_is_denied() {
         .send(op(
             1,
             invoke::Op::SetState(SetState {
-                topic: "unit.reader.threshold".into(),
+                topic: "plugin.reader.threshold".into(),
                 value: Some(Value {
                     kind: Some(value::Kind::IntValue(20)),
                 }),
@@ -249,14 +249,14 @@ async fn writing_state_without_the_capability_is_denied() {
 }
 
 #[tokio::test]
-async fn a_unit_writes_its_own_keyspace_and_nothing_else() {
+async fn a_plugin_writes_its_own_keyspace_and_nothing_else() {
     let (harness, mut transport) = connected("write-own", writer_manifest("writer")).await;
 
     transport
         .send(op(
             1,
             invoke::Op::SetState(SetState {
-                topic: "unit.writer.threshold".into(),
+                topic: "plugin.writer.threshold".into(),
                 value: Some(Value {
                     kind: Some(value::Kind::IntValue(20)),
                 }),
@@ -269,11 +269,11 @@ async fn a_unit_writes_its_own_keyspace_and_nothing_else() {
     // The daemon owns it now, and replicates it back like any other topic.
     let stored = harness
         .hub
-        .read_state(&["unit.writer.threshold".to_string()]);
+        .read_state(&["plugin.writer.threshold".to_string()]);
     assert_eq!(stored.topics[0].revision, 1);
 
-    // Another unit's keyspace, and the daemon's own topics, stay closed.
-    for topic in ["unit.reader.threshold", "battery"] {
+    // Another plugin's keyspace, and the daemon's own topics, stay closed.
+    for topic in ["plugin.reader.threshold", "battery"] {
         transport
             .send(op(
                 2,
@@ -305,20 +305,20 @@ async fn state_budget_refusals_are_correlated_and_leave_the_connection_usable() 
         }
     });
     for (stream, topic, size, expected) in [
-        (1, "unit.writer.first", 600_000, None),
+        (1, "plugin.writer.first", 600_000, None),
         (
             3,
-            "unit.writer.second",
+            "plugin.writer.second",
             600_000,
             Some(ErrorCode::ResourceExhausted),
         ),
         (
             5,
-            "unit.writer.second",
+            "plugin.writer.second",
             1_100_000,
             Some(ErrorCode::PayloadTooLarge),
         ),
-        (7, "unit.writer.second", 1, None),
+        (7, "plugin.writer.second", 1, None),
     ] {
         writer
             .send(op(
@@ -342,7 +342,7 @@ async fn state_budget_refusals_are_correlated_and_leave_the_connection_usable() 
             assert!(
                 harness
                     .hub
-                    .read_state(&["unit.writer.second".into()])
+                    .read_state(&["plugin.writer.second".into()])
                     .topics
                     .is_empty()
             );
@@ -353,7 +353,7 @@ async fn state_budget_refusals_are_correlated_and_leave_the_connection_usable() 
     assert_eq!(
         harness
             .hub
-            .read_state(&["unit.writer.second".into()])
+            .read_state(&["plugin.writer.second".into()])
             .topics[0]
             .revision,
         1
@@ -369,11 +369,11 @@ async fn client_and_daemon_keep_receiving_during_repeated_large_writes() {
         "duplex-state",
         ManifestStore::from_manifests([manifest.clone()]),
     );
-    let token = harness.register_unit("writer");
+    let token = harness.register_plugin("writer");
     let (peer, server) = tokio::net::UnixStream::pair().unwrap();
     let shutdown = omega_daemon::Shutdown::new();
     let session = omega_daemon::Session::new(harness.supervisor.clone(), harness.hub.clone())
-        .with_units(harness.units.clone())
+        .with_plugins(harness.plugins.clone())
         .with_shutdown(shutdown.clone());
     let serving = tokio::spawn(session.serve(server));
     let (mut client, _) = omega_proto::Client::over(peer, &manifest.hash(), token.as_str())
@@ -385,7 +385,7 @@ async fn client_and_daemon_keep_receiving_during_repeated_large_writes() {
             .invoke(
                 stream,
                 invoke::Op::SetState(SetState {
-                    topic: "unit.writer.large".into(),
+                    topic: "plugin.writer.large".into(),
                     value: Some(Value {
                         kind: Some(value::Kind::StringValue(format!(
                             "{version}{}",
@@ -402,7 +402,11 @@ async fn client_and_daemon_keep_receiving_during_repeated_large_writes() {
         ));
     }
     assert_eq!(
-        harness.hub.read_state(&["unit.writer.large".into()]).topics[0].revision,
+        harness
+            .hub
+            .read_state(&["plugin.writer.large".into()])
+            .topics[0]
+            .revision,
         6
     );
     shutdown.trigger();
@@ -418,11 +422,11 @@ async fn self_dismissal_receives_its_lifecycle_acknowledgement_on_the_same_conne
     };
     let (harness, mut transport) =
         connected("self-dismiss", widget_manifest("reader", "panel")).await;
-    let units = harness.units.clone();
+    let plugins = harness.plugins.clone();
     let creating = tokio::spawn(async move {
-        units
+        plugins
             .create_instance(&CreateInstance {
-                unit: "reader".into(),
+                plugin: "reader".into(),
                 surface: "panel".into(),
                 presentation: Some(Presentation {
                     kind: Some(presentation::Kind::Window(WindowPresentation {

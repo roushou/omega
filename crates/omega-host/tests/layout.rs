@@ -1,7 +1,7 @@
 //! The on-disk contract.
 
 use omega_host::{Layout, Profile};
-use omega_proto::UnitName;
+use omega_proto::PluginName;
 
 fn layout() -> Layout {
     Layout::at("/c", "/s", "/x")
@@ -9,7 +9,7 @@ fn layout() -> Layout {
 
 #[test]
 fn a_profile_decides_which_binaries_a_build_produced() {
-    let name = "battery".parse::<UnitName>().unwrap();
+    let name = "battery".parse::<PluginName>().unwrap();
 
     // Two profiles, two directories: an inner loop compiling debug binaries
     // must never be confused for the release ones a machine runs.

@@ -1,11 +1,11 @@
-//! The manifest is the daemon's, not the unit's: identity and grants are read
+//! The manifest is the daemon's, not the plugin's: identity and grants are read
 //! from the copy on disk and a peer's claim is only ever checked against it.
 
 mod common;
 
 use std::path::{Path, PathBuf};
 
-use common::{Harness, expect_refusal, unit_name, widget_manifest};
+use common::{Harness, expect_refusal, plugin_name, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
 use omega_host::Layout;
 use omega_host::StateConfig;
@@ -15,9 +15,9 @@ use omega_proto::omega::{Capability, ErrorCode, frame};
 struct StateDir(PathBuf);
 
 impl StateDir {
-    /// A state dir holding one built unit and its canonical manifest, the
+    /// A state dir holding one built plugin and its canonical manifest, the
     /// shape `omega build` leaves behind.
-    fn with_unit(tag: &str, manifest: &Manifest) -> Self {
+    fn with_plugin(tag: &str, manifest: &Manifest) -> Self {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -30,7 +30,7 @@ impl StateDir {
 
         let state = Self(dir);
         let layout = state.layout();
-        let path = layout.state_unit_manifest(&manifest.unit().unwrap());
+        let path = layout.state_plugin_manifest(&manifest.plugin().unwrap());
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, manifest.canonical()).unwrap();
         state
@@ -53,18 +53,18 @@ impl Drop for StateDir {
 
 fn store(state: &StateDir, manifest: &Manifest) -> ManifestStore {
     let layout = state.layout();
-    let config = StateConfig::new(&layout, [manifest.unit().unwrap()]);
+    let config = StateConfig::new(&layout, [manifest.plugin().unwrap()]);
     ManifestStore::load(&config, &layout).unwrap()
 }
 
 #[tokio::test]
-async fn a_manifest_that_lies_about_its_unit_fails_the_load() {
+async fn a_manifest_that_lies_about_its_plugin_fails_the_load() {
     let manifest = widget_manifest("battery-widget", "battery");
-    let state = StateDir::with_unit("mismatch", &manifest);
+    let state = StateDir::with_plugin("mismatch", &manifest);
 
-    // Same file, claimed for a different unit: the store refuses to vouch.
+    // Same file, claimed for a different plugin: the store refuses to vouch.
     let layout = state.layout();
-    let config = StateConfig::new(&layout, [unit_name("clock")]);
+    let config = StateConfig::new(&layout, [plugin_name("clock")]);
     let err = ManifestStore::load(&config, &layout).unwrap_err();
 
     assert!(err.to_string().contains("clock"), "{err}");
@@ -74,9 +74,9 @@ async fn a_manifest_that_lies_about_its_unit_fails_the_load() {
 #[tokio::test]
 async fn a_wrong_manifest_hash_is_refused_with_a_reason() {
     let manifest = widget_manifest("battery-widget", "battery");
-    let state = StateDir::with_unit("reject", &manifest);
+    let state = StateDir::with_plugin("reject", &manifest);
     let harness = Harness::new("manifest-reject", store(&state, &manifest));
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
 
     let mut transport = harness.connect("wrong-hash", token.as_str()).await;
 
@@ -89,15 +89,15 @@ async fn a_wrong_manifest_hash_is_refused_with_a_reason() {
 #[tokio::test]
 async fn a_matching_hash_is_granted_exactly_what_the_manifest_declares() {
     let manifest = widget_manifest("battery-widget", "battery");
-    let state = StateDir::with_unit("accept", &manifest);
+    let state = StateDir::with_plugin("accept", &manifest);
     let harness = Harness::new("manifest-accept", store(&state, &manifest));
-    let token = harness.register_unit("battery-widget");
+    let token = harness.register_plugin("battery-widget");
 
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
 
     match transport.recv().await.unwrap().unwrap().body {
         Some(frame::Body::Welcome(w)) => {
-            assert_eq!(w.unit_id, "battery-widget");
+            assert_eq!(w.plugin_id, "battery-widget");
             assert_eq!(w.capabilities, vec![Capability::StateRead as i32]);
         }
         other => panic!("expected Welcome, got {other:?}"),

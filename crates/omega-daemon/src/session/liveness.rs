@@ -20,7 +20,7 @@ pub struct Liveness {
 
 impl Liveness {
     /// Ping every 15s, give up after 45s — three missed pings, which
-    /// tolerates a unit briefly busy without holding a dead one for long.
+    /// tolerates a plugin briefly busy without holding a dead one for long.
     pub const INTERVAL: Duration = Duration::from_secs(15);
     pub const TIMEOUT: Duration = Duration::from_secs(45);
 
@@ -41,7 +41,7 @@ impl Liveness {
     }
 
     /// Any frame from the peer proves it is alive — a `Pong` is only the
-    /// answer of last resort, for a unit with nothing to say.
+    /// answer of last resort, for a plugin with nothing to say.
     pub fn seen(&mut self) {
         self.last_seen = Instant::now();
     }

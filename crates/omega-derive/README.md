@@ -9,7 +9,7 @@ directly.
 declarations from their fields. `Surface` also supplies a typed surface reference;
 `Command` supplies its typed command identity. `Effects` declares a stateful
 surface’s behavior dependencies separately from its render declaration.
-`Config` reads construction settings, `UnitState` defines plugin record identity
+`Config` reads construction settings, `PluginState` defines plugin record identity
 and serialization, `Input` decodes structured command arguments, and `Form`
 defines typed text forms.
 

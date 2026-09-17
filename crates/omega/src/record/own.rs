@@ -1,5 +1,5 @@
 //! Local optimistic record writes and publication receipts.
-use super::UnitState;
+use super::PluginState;
 use crate::{
     runtime::context::Context,
     wiring::{Does, Wiring},
@@ -11,12 +11,12 @@ use std::marker::PhantomData;
 /// Use in commands, reactions, or stateful behavior. Render declarations use
 /// [`Watch`](super::Watch) for read-only access.
 #[derive(Debug)]
-pub struct Own<T: UnitState> {
+pub struct Own<T: PluginState> {
     context: Context,
     owns: PhantomData<fn() -> T>,
 }
 
-impl<T: UnitState> Wiring for Own<T> {
+impl<T: PluginState> Wiring for Own<T> {
     const CAPABILITIES: &'static [Capability] = &[Capability::StateRead, Capability::StateWrite];
 
     /// Declare the published keyspace for manifest validation and discovery.
@@ -32,9 +32,9 @@ impl<T: UnitState> Wiring for Own<T> {
     }
 }
 
-impl<T: UnitState> Does for Own<T> {}
+impl<T: PluginState> Does for Own<T> {}
 
-impl<T: UnitState> Own<T> {
+impl<T: PluginState> Own<T> {
     /// The local record, initialized from the handshake snapshot or its default.
     /// Local writes are visible immediately; replication does not roll them back.
     pub fn get(&self) -> T {
@@ -43,10 +43,10 @@ impl<T: UnitState> Own<T> {
 
     /// Admit a new value for publication. Admission failure leaves local state
     /// unchanged. The receipt reports whether the daemon accepted publication.
-    /// Accepted state survives this unit restarting while the daemon runs.
+    /// Accepted state survives this plugin restarting while the daemon runs.
     ///
     /// ```no_run
-    /// # #[derive(omega::UnitState, Default, Clone)]
+    /// # #[derive(omega::PluginState, Default, Clone)]
     /// # struct Power { on: bool }
     /// # async fn save(power: &omega::record::Own<Power>) -> Result<(), omega::Error> {
     /// power.set(&Power { on: true }).await
@@ -65,7 +65,7 @@ impl<T: UnitState> Own<T> {
     /// even if completion fails; rolling back could overwrite a newer write.
     ///
     /// ```no_run
-    /// # #[derive(omega::UnitState, Default, Clone)]
+    /// # #[derive(omega::PluginState, Default, Clone)]
     /// # struct Power { on: bool }
     /// # async fn toggle(power: &omega::record::Own<Power>) -> Result<(), omega::Error> {
     /// power.update(|value| value.on = !value.on).await

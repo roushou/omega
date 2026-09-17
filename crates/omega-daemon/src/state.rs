@@ -12,8 +12,8 @@ use omega_proto::omega::{StatePatch, StateSnapshot, StateTopic};
 pub struct StateStore {
     topics: BTreeMap<Address, StateTopic>,
     bytes: usize,
-    unit_bytes: usize,
-    unit_topics: usize,
+    plugin_bytes: usize,
+    plugin_topics: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -53,11 +53,11 @@ impl StateStore {
             proposed.insert(topic.topic.parse::<Address>()?, topic);
         }
         let mut bytes = self.bytes;
-        let mut count = self.unit_topics;
-        let mut unit_bytes = self.unit_bytes;
+        let mut count = self.plugin_topics;
+        let mut plugin_bytes = self.plugin_bytes;
         let mut changed = Vec::new();
         for (address, mut topic) in proposed {
-            let is_unit = matches!(address, Address::Unit { .. });
+            let is_plugin = matches!(address, Address::Plugin { .. });
             let current = self.topics.get(&address);
             if current.is_some_and(|current| current.value == topic.value) {
                 continue;
@@ -72,27 +72,27 @@ impl StateStore {
             }
             if let Some(current) = current {
                 bytes -= Self::size(current);
-                if is_unit {
-                    unit_bytes -= Self::size(current);
+                if is_plugin {
+                    plugin_bytes -= Self::size(current);
                 }
-            } else if is_unit {
+            } else if is_plugin {
                 count += 1;
             }
             bytes += size;
-            if is_unit {
-                unit_bytes += size;
+            if is_plugin {
+                plugin_bytes += size;
             }
             changed.push((address, topic));
         }
-        if unit_bytes > Self::DOMAIN_BYTES
-            || bytes - unit_bytes > Self::DOMAIN_BYTES
+        if plugin_bytes > Self::DOMAIN_BYTES
+            || bytes - plugin_bytes > Self::DOMAIN_BYTES
             || count > Self::TOPIC_LIMIT
         {
             return Err(StateError::Full);
         }
         self.bytes = bytes;
-        self.unit_bytes = unit_bytes;
-        self.unit_topics = count;
+        self.plugin_bytes = plugin_bytes;
+        self.plugin_topics = count;
         let mut topics = Vec::with_capacity(changed.len());
         for (address, topic) in changed {
             self.topics.insert(address, topic.clone());
@@ -115,7 +115,7 @@ impl StateStore {
         StatePatch { topics: selected }
     }
 
-    /// The full mirror handed to a unit on connect.
+    /// The full mirror handed to a plugin on connect.
     pub fn snapshot(&self) -> StateSnapshot {
         StateSnapshot {
             topics: self.topics.values().cloned().collect(),
@@ -147,29 +147,33 @@ mod tests {
     #[test]
     fn rejected_patches_change_neither_values_nor_revisions() {
         let mut store = StateStore::new();
-        store.apply(Fixture::patch("unit.test.a", 600_000)).unwrap();
+        store
+            .apply(Fixture::patch("plugin.test.a", 600_000))
+            .unwrap();
         let before = store.snapshot();
         let rejected = StatePatch {
             topics: vec![
-                Fixture::topic("unit.test.a", 700_000),
-                Fixture::topic("unit.test.b", 700_000),
+                Fixture::topic("plugin.test.a", 700_000),
+                Fixture::topic("plugin.test.b", 700_000),
             ],
         };
         assert!(matches!(store.apply(rejected), Err(StateError::Full)));
         assert_eq!(store.snapshot(), before);
-        let accepted = store.apply(Fixture::patch("unit.test.a", 1)).unwrap();
+        let accepted = store.apply(Fixture::patch("plugin.test.a", 1)).unwrap();
         assert_eq!(accepted.topics[0].revision, 2);
-        store.apply(Fixture::patch("unit.test.b", 700_000)).unwrap();
+        store
+            .apply(Fixture::patch("plugin.test.b", 700_000))
+            .unwrap();
     }
 
     #[test]
-    fn unit_capacity_cannot_consume_the_system_reserve() {
+    fn plugin_capacity_cannot_consume_the_system_reserve() {
         let mut store = StateStore::new();
         store
-            .apply(Fixture::patch("unit.test.a", 1_000_000))
+            .apply(Fixture::patch("plugin.test.a", 1_000_000))
             .unwrap();
         assert!(matches!(
-            store.apply(Fixture::patch("unit.test.b", 100_000)),
+            store.apply(Fixture::patch("plugin.test.b", 100_000)),
             Err(StateError::Full)
         ));
         store.apply(Fixture::patch("battery", 100_000)).unwrap();
@@ -181,24 +185,24 @@ mod tests {
         let mut store = StateStore::new();
         for n in 0..StateStore::TOPIC_LIMIT {
             store
-                .apply(Fixture::patch(&format!("unit.test.key{n}"), 0))
+                .apply(Fixture::patch(&format!("plugin.test.key{n}"), 0))
                 .unwrap();
         }
         assert!(matches!(
-            store.apply(Fixture::patch("unit.test.extra", 0)),
+            store.apply(Fixture::patch("plugin.test.extra", 0)),
             Err(StateError::Full)
         ));
         store.apply(Fixture::patch("battery", 0)).unwrap();
         let removed = store
             .apply(StatePatch {
                 topics: vec![StateTopic {
-                    topic: "unit.test.key0".into(),
+                    topic: "plugin.test.key0".into(),
                     revision: 0,
                     value: None,
                 }],
             })
             .unwrap();
-        let recreated = store.apply(Fixture::patch("unit.test.key0", 1)).unwrap();
+        let recreated = store.apply(Fixture::patch("plugin.test.key0", 1)).unwrap();
         assert!(recreated.topics[0].revision > removed.topics[0].revision);
         assert_eq!(store.topics.len(), StateStore::TOPIC_LIMIT + 1);
     }

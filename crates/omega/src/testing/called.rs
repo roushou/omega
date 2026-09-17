@@ -46,7 +46,7 @@ impl Called {
         Self::configured::<C>(state, &Values::new(), args).await
     }
 
-    /// Invoke with explicit unit settings. Commands do not have placement settings.
+    /// Invoke with explicit plugin settings. Commands do not have placement settings.
     pub async fn configured<C: Command>(
         state: &State,
         settings: &Values,

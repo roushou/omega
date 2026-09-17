@@ -4,7 +4,7 @@ use crate::hub::ViewUpdate;
 use crate::refusal::RefusableResult;
 use omega_proto::instance::{InstanceKey, PlacementId, PresentationSpec};
 use omega_proto::omega::{AttachRenderer, RendererFeature, attach_renderer};
-use omega_proto::{Refusal, SurfaceId, UnitName};
+use omega_proto::{PluginName, Refusal, SurfaceId};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Attachment {
@@ -15,9 +15,9 @@ pub(crate) struct Attachment {
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Scope {
-    Unit(UnitName),
+    Plugin(PluginName),
     Placement {
-        unit: UnitName,
+        plugin: PluginName,
         surface: SurfaceId,
         placement: PlacementId,
     },
@@ -54,11 +54,11 @@ impl Attachment {
             .as_ref()
             .ok_or_else(|| Refusal::invalid("renderer scope is required"))?
         {
-            attach_renderer::Scope::Unit(unit) => {
-                Scope::Unit(unit.parse::<UnitName>().or_refuse()?)
+            attach_renderer::Scope::Plugin(plugin) => {
+                Scope::Plugin(plugin.parse::<PluginName>().or_refuse()?)
             }
             attach_renderer::Scope::Placement(placement) => Scope::Placement {
-                unit: placement.unit.parse::<UnitName>().or_refuse()?,
+                plugin: placement.plugin.parse::<PluginName>().or_refuse()?,
                 surface: placement.surface.parse::<SurfaceId>().or_refuse()?,
                 placement: placement.placement.parse::<PlacementId>().or_refuse()?,
             },
@@ -84,13 +84,13 @@ impl Attachment {
         use omega_proto::omega::PlacementAttachment;
         AttachRenderer {
             scope: Some(match &self.scope {
-                Scope::Unit(unit) => attach_renderer::Scope::Unit(unit.to_string()),
+                Scope::Plugin(plugin) => attach_renderer::Scope::Plugin(plugin.to_string()),
                 Scope::Placement {
-                    unit,
+                    plugin,
                     surface,
                     placement,
                 } => attach_renderer::Scope::Placement(PlacementAttachment {
-                    unit: unit.to_string(),
+                    plugin: plugin.to_string(),
                     surface: surface.to_string(),
                     placement: placement.to_string(),
                 }),
@@ -103,9 +103,9 @@ impl Attachment {
                 .unwrap_or_default(),
         }
     }
-    pub(crate) fn unit(&self) -> &UnitName {
+    pub(crate) fn plugin(&self) -> &PluginName {
         match &self.scope {
-            Scope::Unit(unit) | Scope::Placement { unit, .. } => unit,
+            Scope::Plugin(plugin) | Scope::Placement { plugin, .. } => plugin,
         }
     }
     pub(crate) fn accepts(&self, view: &ViewUpdate) -> bool {
@@ -113,8 +113,8 @@ impl Attachment {
             return false;
         }
         match &self.scope {
-            Scope::Unit(unit) => {
-                &view.surface.unit == unit
+            Scope::Plugin(plugin) => {
+                &view.surface.plugin == plugin
                     && matches!(
                         view.presentation.kind,
                         Some(
@@ -124,11 +124,11 @@ impl Attachment {
                     )
             }
             Scope::Placement {
-                unit,
+                plugin,
                 surface,
                 placement,
             } => {
-                &view.surface.unit == unit
+                &view.surface.plugin == plugin
                     && matches!(
                         view.presentation.kind,
                         Some(
@@ -181,7 +181,7 @@ impl Attachment {
         snapshot: &omega_proto::omega::InstanceSnapshot,
     ) -> Result<ViewUpdate, Refusal> {
         let module = match &self.scope {
-            Scope::Unit(_) => None,
+            Scope::Plugin(_) => None,
             Scope::Placement { placement, .. } => {
                 Some(omega_proto::ModuleId::try_from(placement.as_str()).or_refuse()?)
             }
@@ -195,7 +195,7 @@ impl Attachment {
             )
             .or_refuse()?,
             surface: crate::hub::SurfaceRef {
-                unit: snapshot.unit.parse::<UnitName>().or_refuse()?,
+                plugin: snapshot.plugin.parse::<PluginName>().or_refuse()?,
                 surface: snapshot.surface.parse::<SurfaceId>().or_refuse()?,
                 module,
             },
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn keyboard_features_are_required_only_for_views_using_them() {
         let mut attachment = Attachment::from_request(&AttachRenderer {
-            scope: Some(attach_renderer::Scope::Unit("example".into())),
+            scope: Some(attach_renderer::Scope::Plugin("example".into())),
             features: [
                 RendererFeature::Instances,
                 RendererFeature::ScopedInteractions,
@@ -283,7 +283,7 @@ mod tests {
                 id: "window".into(),
                 incarnation: "one".into(),
             }),
-            unit: "example".into(),
+            plugin: "example".into(),
             surface: "main".into(),
             presentation: Some(Presentation {
                 kind: Some(presentation::Kind::Window(WindowPresentation {

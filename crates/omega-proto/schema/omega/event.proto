@@ -54,7 +54,7 @@ enum EventKind {
   // schedule / keybind
   EVENT_SCHEDULE_FIRED = 40;
   EVENT_KEYBIND_TRIGGERED = 41;
-  // unit-emitted
+  // plugin-emitted
   EVENT_CUSTOM = 50;
 }
 
@@ -84,9 +84,9 @@ message KeybindTriggered {
   string keybind_id = 1;
 }
 
-// Unit-emitted, namespaced by unit. The only event kind with open semantics.
+// Plugin-emitted, namespaced by plugin. The only event kind with open semantics.
 message CustomEvent {
-  string unit = 1;
+  string plugin = 1;
   string name = 2;
   Value payload = 3;
 }

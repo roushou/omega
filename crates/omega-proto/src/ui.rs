@@ -124,7 +124,7 @@ nodes! {
         bold: Flag,
         /// Drawn quieter than its neighbours.
         dim: Flag,
-        /// Space around it, in the shell's units.
+        /// Space around it, in the shell's plugins.
         pad: Number,
         /// Original list or choice value, independent of its scoped render key.
         selection_key: Text = "null",

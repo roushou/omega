@@ -1,4 +1,4 @@
-//! Actions: what a unit may make the machine do, and what it may not.
+//! Actions: what a plugin may make the machine do, and what it may not.
 
 mod common;
 
@@ -75,14 +75,14 @@ async fn connected(
     manifest: Manifest,
 ) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit(manifest.name.as_str());
+    let token = harness.register_plugin(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
     (harness, transport)
 }
 
 #[tokio::test]
-async fn a_unit_without_the_capability_cannot_run_a_command() {
+async fn a_plugin_without_the_capability_cannot_run_a_command() {
     // This manifest grants STATE_READ only.
     let (_harness, mut transport) =
         connected("act-denied", widget_manifest("reader", "battery")).await;
@@ -176,7 +176,7 @@ async fn an_action_reaches_the_broker_that_claims_its_kind() {
     )
     .with_broker(Box::new(recorder.clone()));
 
-    let token = harness.register_unit(manifest.name.as_str());
+    let token = harness.register_plugin(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
 
@@ -211,7 +211,7 @@ async fn invalid_payloads_are_refused_before_broker_dispatch() {
         ManifestStore::from_manifests([manifest.clone()]),
     )
     .with_broker(Box::new(recorder.clone()));
-    let token = harness.register_unit(&manifest.name);
+    let token = harness.register_plugin(&manifest.name);
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap();
     for (stream, change) in [

@@ -67,7 +67,7 @@ instances sharing a transport. Disconnect clears views and reports unknown outco
 commands are never retried automatically.
 
 The daemon stages embedded core/desktop assets under its renderer cache and
-supervises one standalone host per plugin. `omega present <unit> <surface>` opens
+supervises one standalone host per plugin. `omega present <plugin> <surface>` opens
 a singleton normal window; `--new`, `--overlay`, and `--config '{"label":"Example"}'`
 select independent instances, overlays, and construction settings. Normal window
 size/focus follow compositor policy. Overlays support explicit keyboard policy and
@@ -86,7 +86,7 @@ presses. Bar width must account for the rendered content because the host button
 has no text label to size itself from.
 
 Bar replicas on multiple monitors share one connection for each socket and
-placement scope (unit, surface, and module). The Omarchy adapter retains that
+placement scope (plugin, surface, and module). The Omarchy adapter retains that
 connection until the last replica releases it, so adding or removing a monitor
 does not replace another monitor's attachment. Each replica retains its own
 controls and input drafts; views and pending transport requests are shared.

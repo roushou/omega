@@ -37,7 +37,7 @@ pub enum Step {
     Watching,
     /// The watch fired.
     Changed,
-    /// A unit was cycled.
+    /// A plugin was cycled.
     Restarted,
     /// A retained build was selected for activation.
     Restored,
@@ -49,9 +49,9 @@ pub enum Step {
     Removed,
     /// A widget was put where it will be seen.
     Enabled,
-    /// This process has taken a unit's place.
+    /// This process has taken a plugin's place.
     Adopted,
-    /// It gave the unit back.
+    /// It gave the plugin back.
     Released,
     /// The request was carried out and had nothing to say.
     Done,

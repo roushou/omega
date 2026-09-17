@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 #[derive(Debug, Clone)]
-pub struct UnitLog {
+pub struct PluginLog {
     path: PathBuf,
 }
 
-impl UnitLog {
+impl PluginLog {
     /// Maximum retained log size before truncation at process restart.
     pub const MAX_BYTES: u64 = 1024 * 1024;
 
@@ -42,7 +42,7 @@ impl UnitLog {
     }
 
     /// Both output streams of a child, pointed at this log. The kernel writes
-    /// them; the daemon never sits between a unit and its own output.
+    /// them; the daemon never sits between a plugin and its own output.
     pub fn streams(&self) -> io::Result<(Stdio, Stdio)> {
         let out = self.open()?;
         let err = out.try_clone()?;

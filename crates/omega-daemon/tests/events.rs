@@ -1,4 +1,4 @@
-//! Events: derived from state, delivered by declaration, emitted by units.
+//! Events: derived from state, delivered by declaration, emitted by plugins.
 
 mod common;
 
@@ -33,7 +33,7 @@ async fn connected(
     manifest: Manifest,
 ) -> (Harness, omega_proto::Transport<tokio::net::UnixStream>) {
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
-    let token = harness.register_unit(manifest.name.as_str());
+    let token = harness.register_plugin(manifest.name.as_str());
     let mut transport = harness.connect(&manifest.hash(), token.as_str()).await;
     transport.recv().await.unwrap().unwrap(); // Welcome
     (harness, transport)
@@ -110,7 +110,7 @@ fn a_battery_threshold_fires_on_the_way_down_and_only_once() {
 }
 
 #[tokio::test]
-async fn a_unit_receives_the_events_its_manifest_declares() {
+async fn a_plugin_receives_the_events_its_manifest_declares() {
     let (harness, mut transport) = connected("events-declared", policy_manifest("policy")).await;
 
     harness.hub.publish_state(mains(false)).unwrap();
@@ -124,7 +124,7 @@ async fn a_unit_receives_the_events_its_manifest_declares() {
 }
 
 #[tokio::test]
-async fn a_unit_is_not_woken_for_events_it_never_declared() {
+async fn a_plugin_is_not_woken_for_events_it_never_declared() {
     // This manifest declares no events at all.
     let (harness, mut transport) =
         connected("events-undeclared", widget_manifest("reader", "battery")).await;
@@ -142,7 +142,7 @@ async fn a_unit_is_not_woken_for_events_it_never_declared() {
         };
         assert!(
             !matches!(frame.body, Some(frame::Body::Event(_))),
-            "an undeclared event must not reach the unit"
+            "an undeclared event must not reach the plugin"
         );
     }
 }
@@ -183,8 +183,8 @@ async fn an_emitted_event_carries_the_identity_the_daemon_authenticated() {
             body: Some(frame::Body::Invoke(Invoke {
                 op: Some(invoke::Op::EmitEvent(EmitEvent {
                     event: Some(CustomEvent {
-                        // A lie: this unit is "policy".
-                        unit: "some-other-unit".into(),
+                        // A lie: this plugin is "policy".
+                        plugin: "some-other-plugin".into(),
                         name: "threshold-crossed".into(),
                         payload: None,
                     }),
@@ -194,12 +194,12 @@ async fn an_emitted_event_carries_the_identity_the_daemon_authenticated() {
         .await
         .unwrap();
 
-    // The unit declares EVENT_CUSTOM, so it receives its own event back.
+    // The plugin declares EVENT_CUSTOM, so it receives its own event back.
     let event = next_event(&mut transport).await;
     match event.detail {
         Some(event::Detail::Custom(custom)) => {
             assert_eq!(custom.name, "threshold-crossed");
-            assert_eq!(custom.unit, "policy", "the daemon names the emitter");
+            assert_eq!(custom.plugin, "policy", "the daemon names the emitter");
         }
         other => panic!("expected a custom event, got {other:?}"),
     }

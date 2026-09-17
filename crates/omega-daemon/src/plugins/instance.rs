@@ -1,13 +1,13 @@
-//! Instance ownership and presentation state live under the unit table's lock.
+//! Instance ownership and presentation state live under the plugin table's lock.
 
-use super::UnitToken;
+use super::PluginToken;
 use super::presentation_state::{Observation, PresentationState, Visibility};
 use crate::hub::{SurfaceRef, ViewUpdate};
 use omega_proto::instance::{
     IncarnationId, InstanceId, InstanceKey, PresentationSpec, SingletonId,
 };
 use omega_proto::omega::{self, Value, ViewTree};
-use omega_proto::{SurfaceId, UnitName};
+use omega_proto::{PluginName, SurfaceId};
 use prost::Message;
 use std::collections::HashMap;
 
@@ -40,8 +40,8 @@ impl Instance {
         } else {
             Visibility::Visible
         };
-        let id = UnitToken::mint()?;
-        let incarnation = UnitToken::mint()?;
+        let id = PluginToken::mint()?;
+        let incarnation = PluginToken::mint()?;
         Ok(Self {
             lifecycle: Default::default(),
             key: InstanceKey {
@@ -66,14 +66,14 @@ impl Instance {
             .sum()
     }
 
-    pub(crate) fn update(&self, unit: &UnitName, view: ViewTree) -> ViewUpdate {
+    pub(crate) fn update(&self, plugin: &PluginName, view: ViewTree) -> ViewUpdate {
         ViewUpdate {
             destroyed: false,
             instance: self.key.clone(),
             surface: self
                 .placement
                 .clone()
-                .unwrap_or_else(|| SurfaceRef::new(unit.clone(), self.surface.clone())),
+                .unwrap_or_else(|| SurfaceRef::new(plugin.clone(), self.surface.clone())),
             presentation: self.presentation.wire().clone(),
             requested: self.state.requested().wire(),
             observed: self.state.observed().wire(),
@@ -87,7 +87,7 @@ impl ViewUpdate {
         omega::InstanceSnapshot {
             destroyed: self.destroyed,
             instance: Some(self.instance.wire()),
-            unit: self.surface.unit.to_string(),
+            plugin: self.surface.plugin.to_string(),
             surface: self.surface.surface.to_string(),
             presentation: Some(self.presentation.clone()),
             requested: self.requested,

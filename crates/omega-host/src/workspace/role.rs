@@ -1,4 +1,4 @@
-//! Source workspace roles; runtime units remain a separate concern.
+//! Source workspace roles; runtime plugins remain a separate concern.
 
 use crate::{Layout, package::PackageName};
 use std::path::{Path, PathBuf};

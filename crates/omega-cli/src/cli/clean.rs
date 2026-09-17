@@ -13,7 +13,7 @@ use crate::ui::{Paint, Step, Ui};
 /// retained unless generation cleanup proves a directory has no references or leases.
 #[derive(Debug, clap::Args)]
 pub struct CleanCmd {
-    /// Also remove the unit logs.
+    /// Also remove the plugin logs.
     #[arg(long)]
     pub logs: bool,
 

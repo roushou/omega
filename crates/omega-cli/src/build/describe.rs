@@ -7,7 +7,7 @@ use omega_host::{
     Layout, Profile,
     process::{OutputLimits, Process},
 };
-use omega_proto::{Manifest, UnitName};
+use omega_proto::{Manifest, PluginName};
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -21,8 +21,8 @@ impl<'a> Describe<'a> {
         Self { layout, profile }
     }
 
-    /// What one built plugin declares, validated against the unit it is.
-    pub(super) async fn manifest(&self, name: &UnitName) -> anyhow::Result<Manifest> {
+    /// What one built plugin declares, validated against the plugin it is.
+    pub(super) async fn manifest(&self, name: &PluginName) -> anyhow::Result<Manifest> {
         let program = self.layout.compiled_binary(self.profile, name);
         Self::program(&program, name).await
     }
@@ -30,7 +30,7 @@ impl<'a> Describe<'a> {
     /// Describe the exact artifact that will be published.
     pub(super) async fn program(
         program: &std::path::Path,
-        name: &UnitName,
+        name: &PluginName,
     ) -> anyhow::Result<Manifest> {
         let mut command = tokio::process::Command::new(program);
         command.arg(Manifest::DESCRIBE);
@@ -43,7 +43,7 @@ impl<'a> Describe<'a> {
             .await
             .with_context(|| {
                 format!(
-                    "cannot run {} (is the crate name identical to the unit name?)",
+                    "cannot run {} (is the crate name identical to the plugin name?)",
                     program.display()
                 )
             })?;

@@ -6,7 +6,7 @@ use omega_proto::IdentError;
 use omega_proto::ManifestError;
 use omega_proto::{AddressError, Refusal};
 
-use crate::units::RequestError;
+use crate::plugins::RequestError;
 
 /// An error this daemon knows how to answer with.
 pub trait Refusable {
@@ -67,10 +67,10 @@ impl Refusable for DocumentError {
 impl Refusable for RequestError {
     fn refusal(&self) -> Refusal {
         match self {
-            // The unit's own answer, kept as it was: the daemon was only the
+            // The plugin's own answer, kept as it was: the daemon was only the
             // messenger, and flattening its code would lose why.
             Self::Refused { source, .. } => source.clone(),
-            // The caller asked for something reasonable of a unit that is not
+            // The caller asked for something reasonable of a plugin that is not
             // there yet. Availability is distinct from malformed arguments.
             Self::Absent(_) => Refusal::unavailable(self.to_string()),
             Self::Timeout(_) => Refusal::deadline(self.to_string()),
@@ -140,7 +140,7 @@ impl Refusable for crate::reconcile::shell::ShellApplyError {
     }
 }
 
-impl Refusable for crate::units::TokenError {
+impl Refusable for crate::plugins::TokenError {
     fn refusal(&self) -> Refusal {
         Refusal::unavailable(self.to_string())
     }

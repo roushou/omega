@@ -97,9 +97,9 @@ fn a_path_under_home_is_shortened_to_a_tilde() {
 
 #[test]
 fn a_count_reads_as_english() {
-    assert_eq!(Paint::count(0, "unit"), "0 units");
-    assert_eq!(Paint::count(1, "unit"), "1 unit");
-    assert_eq!(Paint::count(3, "unit"), "3 units");
+    assert_eq!(Paint::count(0, "plugin"), "0 plugins");
+    assert_eq!(Paint::count(1, "plugin"), "1 plugin");
+    assert_eq!(Paint::count(3, "plugin"), "3 plugins");
 
     // As far as the nouns this program counts: a build declares
     // capabilities, not capabilitys.
@@ -113,21 +113,21 @@ fn an_errors_causes_are_printed_under_it() {
     let (mut ui, transcript) = Ui::recording();
 
     let error = anyhow::anyhow!("the disk is full")
-        .context("cannot write unit.toml")
+        .context("cannot write plugin.toml")
         .context("the build failed");
     ui.error(&error);
 
     let written = transcript.err();
     // The cause is the half of an error that says what to do about it.
     assert!(written.contains("the build failed"), "{written}");
-    assert!(written.contains("cannot write unit.toml"), "{written}");
+    assert!(written.contains("cannot write plugin.toml"), "{written}");
     assert!(written.contains("the disk is full"), "{written}");
 }
 
 #[test]
 fn a_styled_cell_does_not_skew_its_column() {
     let mut table = Table::new(vec![
-        Column::left("UNIT"),
+        Column::left("PLUGIN"),
         Column::left("PHASE"),
         Column::right("RESTARTS"),
     ]);
@@ -142,7 +142,7 @@ fn a_styled_cell_does_not_skew_its_column() {
         Cell::plain(0),
     ]);
     table.row(vec![
-        Cell::plain("a-much-longer-unit"),
+        Cell::plain("a-much-longer-plugin"),
         Cell::plain("failed"),
         Cell::plain(12),
     ]);
@@ -165,7 +165,7 @@ fn a_styled_cell_does_not_skew_its_column() {
 
 #[test]
 fn a_column_nothing_filled_in_is_not_shown() {
-    let mut table = Table::new(vec![Column::left("UNIT"), Column::left("DETAIL")]);
+    let mut table = Table::new(vec![Column::left("PLUGIN"), Column::left("DETAIL")]);
     table.row(vec![Cell::plain("battery"), Cell::plain("")]);
     table.row(vec![Cell::plain("clock"), Cell::plain("")]);
     table.drop_empty(1);
@@ -181,7 +181,7 @@ fn a_column_nothing_filled_in_is_not_shown() {
 
 #[test]
 fn a_table_row_carries_no_trailing_whitespace() {
-    let mut table = Table::new(vec![Column::left("UNIT"), Column::left("DETAIL")]);
+    let mut table = Table::new(vec![Column::left("PLUGIN"), Column::left("DETAIL")]);
     // A styled empty cell is the trap: its escapes are not whitespace, so a
     // row ending in one ends in a gap that trimming cannot reach.
     let dim = Style::new().effects(Effects::DIMMED);
@@ -236,7 +236,7 @@ fn malformed_shell_json_has_a_source_snippet_and_keeps_context() {
 #[test]
 fn widget_errors_list_the_available_surfaces_through_configuration_errors() {
     let error = omega_document::Error::from(omega_document::ValidationError::MissingSurface {
-        unit: "audio".into(),
+        plugin: "audio".into(),
         requested: "missing".into(),
         available: vec!["indicator".parse::<omega_proto::SurfaceId>().unwrap()],
     });

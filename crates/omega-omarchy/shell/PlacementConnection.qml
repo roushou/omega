@@ -4,13 +4,13 @@ import Quickshell
 // One lease per bar replica; the transport outlives any individual monitor.
 QtObject {
     id: lease
-    property string unit: ""
+    property string plugin: ""
     property string surface: ""
     property string module: ""
     property string socketPath: ""
     readonly property string key: JSON.stringify([
         socketPath || Quickshell.env("XDG_RUNTIME_DIR") + "/omega-shell.sock",
-        unit, surface, module
+        plugin, surface, module
     ])
     property string heldKey: ""
     property bool ready: false
@@ -18,7 +18,7 @@ QtObject {
 
     function refresh() {
         if (!ready) return
-        var next = unit && surface && module ? key : ""
+        var next = plugin && surface && module ? key : ""
         if (next === heldKey) return
         connection = null
         if (heldKey) PlacementConnections.release(heldKey)
