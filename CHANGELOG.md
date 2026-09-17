@@ -1,3 +1,26 @@
+## What's Changed in 0.3.9
+* fix(renderer): match desktop themes and avoid redundant view updates
+* fix: typo
+
+### Highlights
+
+* Standalone windows and overlays use Omarchy's popup colors, fonts, spacing,
+  borders, and live theme updates. Renderer status verifies the selected theme's
+  build fingerprint.
+* Lists and stacks retain unchanged row payloads, avoiding redundant nested
+  updates while searching. Controlled text fields stay fully visible while edits
+  are pending.
+* `Field::size` selects a semantic text size for the input, label, and help text.
+  Existing fields keep their body-text default.
+
+### Upgrade notes
+
+* Update the CLI, restart the daemon with `omega daemon install`, and install the
+  matching renderer with `omega shell install`.
+* Plugins using `Field::size` require Omega 0.3.9 and the updated renderer.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.8...v0.3.9
+
 ## What's Changed in 0.3.8
 * fix(omarchy)!: namespace Omega widget settings
 * fix: unit tests and clean dependencies
