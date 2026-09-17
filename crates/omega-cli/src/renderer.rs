@@ -1,6 +1,7 @@
 //! Compare active renderer attachments with this binary's embedded bundles.
 
 use crate::ui::{Step, Ui};
+use omega_host::process::{OutputLimits, Process};
 use omega_proto::omega::{AttachRenderer, attach_renderer};
 use std::time::Duration;
 
@@ -171,15 +172,14 @@ impl RendererStatus {
 
     pub(crate) async fn restart(shell: omega_omarchy::HostShell) -> anyhow::Result<()> {
         use anyhow::Context;
-        let output = tokio::time::timeout(
-            Duration::from_secs(45),
-            tokio::process::Command::from(shell.restart_command())
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await
-        .context("shell restart timed out")?
-        .context("could not run the shell restart command")?;
+        let output = Process::new(tokio::process::Command::from(shell.restart_command()))
+            .timeout(Duration::from_secs(45))
+            .capture(OutputLimits {
+                stdout: 64 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await
+            .context("could not run the shell restart command")?;
         anyhow::ensure!(
             output.status.success(),
             "shell restart failed: {}",

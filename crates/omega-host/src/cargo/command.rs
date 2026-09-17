@@ -1,4 +1,5 @@
 use super::{BuildRequest, Metadata, MetadataRequest, TestArtifacts, TestBuildRequest};
+use crate::process::{OutputLimits, Process};
 use cargo_metadata::Message;
 use std::{
     io,
@@ -57,7 +58,10 @@ impl Cargo {
     pub async fn build(&self, request: BuildRequest) -> Result<(), InvocationError> {
         let mut command = self.command("build");
         request.apply(&mut command);
-        let status = command.status().await.map_err(|e| self.io("build", e))?;
+        let status = Process::new(command)
+            .status()
+            .await
+            .map_err(|e| self.execution("build", e))?;
         Self::success("build", status, String::new())
     }
 
@@ -67,25 +71,19 @@ impl Cargo {
         let mut command = self.command("metadata");
         command.arg("--format-version=1");
         request.resolution.apply(&mut command);
-        let mut child = command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| self.io("metadata", e))?;
-        let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
-        let (status, stdout, stderr) = tokio::try_join!(
-            child.wait(),
-            Self::read(stdout, 64 * 1024 * 1024),
-            Self::read(stderr, 64 * 1024),
-        )
-        .map_err(|e| self.io("metadata", e))?;
+        let output = Process::new(command)
+            .capture(OutputLimits {
+                stdout: 64 * 1024 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await
+            .map_err(|e| self.execution("metadata", e))?;
         Self::success(
             "metadata",
-            status,
-            String::from_utf8_lossy(&stderr).trim().into(),
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim().into(),
         )?;
-        serde_json::from_slice(&stdout).map_err(|source| InvocationError::Decode {
+        serde_json::from_slice(&output.stdout).map_err(|source| InvocationError::Decode {
             operation: "metadata",
             source,
         })
@@ -106,11 +104,14 @@ impl Cargo {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|e| self.io("test", e))?;
+            .map_err(|e| self.execution("test", crate::process::Error::Spawn(e)))?;
         let stdout = child.stdout.take().expect("piped stdout");
         let mut artifacts = TestArtifacts::new(request.package);
         Self::messages(stdout, &mut artifacts).await?;
-        let status = child.wait().await.map_err(|e| self.io("test", e))?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| self.execution("test", crate::process::Error::Wait(e)))?;
         Self::success("test", status, artifacts.diagnostics().to_owned())?;
         Ok(artifacts)
     }
@@ -125,8 +126,8 @@ impl Cargo {
         command
     }
 
-    fn io(&self, operation: &'static str, source: io::Error) -> InvocationError {
-        InvocationError::Io {
+    fn execution(&self, operation: &'static str, source: crate::process::Error) -> InvocationError {
+        InvocationError::Execution {
             operation,
             executable: self.executable.clone(),
             directory: self.directory.clone(),
@@ -148,17 +149,6 @@ impl Cargo {
                 diagnostics,
             })
         }
-    }
-
-    async fn read(reader: impl AsyncRead + Unpin, limit: u64) -> io::Result<Vec<u8>> {
-        let mut bytes = Vec::new();
-        reader.take(limit + 1).read_to_end(&mut bytes).await?;
-        if bytes.len() as u64 > limit {
-            return Err(io::Error::other(format!(
-                "Cargo output exceeded {limit} bytes"
-            )));
-        }
-        Ok(bytes)
     }
 
     async fn messages(
@@ -230,11 +220,11 @@ impl Cargo {
 #[derive(Debug, thiserror::Error)]
 pub enum InvocationError {
     #[error("cannot run {} {operation} in {}: {source}", executable.display(), directory.display())]
-    Io {
+    Execution {
         operation: &'static str,
         executable: PathBuf,
         directory: PathBuf,
-        source: io::Error,
+        source: crate::process::Error,
     },
     #[error("cargo {operation} failed ({status})\n{diagnostics}")]
     Failed {
@@ -257,38 +247,43 @@ mod tests {
     use crate::cargo::{ArtifactError, PackageId, PackageSpec, Resolution, Selection};
     use crate::{AtomicFile, Profile, TempPath};
     use serde_json::json;
-    use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
+    use std::{os::unix::fs::symlink, path::Path, time::Duration};
 
     struct Fixture {
         root: PathBuf,
-        executable: PathBuf,
+        script: PathBuf,
     }
 
     impl Fixture {
         fn new(body: &str) -> Self {
             let root = TempPath::sibling(Path::new("/tmp/omega cargo"), "test");
-            let executable = root.join("fake-cargo");
-            let script = format!(
+            let script = root.join("fake-cargo");
+            let source = format!(
                 "#!/bin/sh\npwd > \"$0.cwd\"\nprintf '%s\\n' \"$@\" > \"$0.args\"\n{body}\n"
             );
-            AtomicFile::at(&executable)
-                .write_with_permissions(script.as_bytes(), std::fs::Permissions::from_mode(0o755))
-                .unwrap();
-            Self { root, executable }
+            AtomicFile::at(&script).write(source.as_bytes()).unwrap();
+            // Keep scripts as interpreter inputs, avoiding execution of freshly written inodes.
+            symlink("/bin/sh", root.join("cargo")).unwrap();
+            for operation in ["build", "metadata", "test"] {
+                AtomicFile::at(root.join(operation))
+                    .write(format!("exec /bin/sh ./fake-cargo {operation} \"$@\"\n").as_bytes())
+                    .unwrap();
+            }
+            Self { root, script }
         }
 
         fn cargo(&self) -> Cargo {
-            Cargo::new(&self.root).executable(&self.executable)
+            Cargo::new(&self.root).executable(self.root.join("cargo"))
         }
 
         fn output(&self, bytes: &[u8]) {
-            AtomicFile::at(self.executable.with_extension("output"))
+            AtomicFile::at(self.script.with_extension("output"))
                 .write(bytes)
                 .unwrap();
         }
 
         fn arguments(&self) -> String {
-            std::fs::read_to_string(self.executable.with_extension("args")).unwrap()
+            std::fs::read_to_string(self.script.with_extension("args")).unwrap()
         }
 
         fn package() -> PackageId {
@@ -307,7 +302,7 @@ mod tests {
         async fn pid(&self) -> i32 {
             tokio::time::timeout(Duration::from_secs(5), async {
                 loop {
-                    if let Ok(pid) = std::fs::read_to_string(self.executable.with_extension("pid"))
+                    if let Ok(pid) = std::fs::read_to_string(self.script.with_extension("pid"))
                         && let Ok(pid) = pid.trim().parse()
                     {
                         return pid;
@@ -346,7 +341,7 @@ mod tests {
             "build\n--package=example@0.1.0\n--release\n--target-dir\ntarget with spaces\n--locked\n"
         );
         assert_eq!(
-            std::fs::read_to_string(fixture.executable.with_extension("cwd"))
+            std::fs::read_to_string(fixture.script.with_extension("cwd"))
                 .unwrap()
                 .trim(),
             fixture.root.to_str().unwrap()
@@ -496,7 +491,6 @@ mod tests {
                 .await,
             Err(InvocationError::Messages(_))
         ));
-        assert!(Cargo::read(&b"too much"[..], 3).await.is_err());
     }
 
     #[tokio::test]

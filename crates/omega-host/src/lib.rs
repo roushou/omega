@@ -7,6 +7,7 @@ pub mod fs;
 pub mod generation;
 pub mod layout;
 pub mod package;
+pub mod process;
 pub mod recovery;
 pub mod state;
 pub mod systemd;

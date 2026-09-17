@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::{Context, ensure};
 use omega_base::execution::{Operation, Progress};
+use omega_host::process::{OutputLimits, Process};
 use omega_host::recovery::{RecoveryStore, Replacement};
 use omega_host::systemd::{Service, ServiceUnit};
 use omega_omarchy::{
@@ -183,15 +184,16 @@ impl Operation<Inspected> for PrepareWorkspace {
 
 impl Preflight {
     async fn probe(program: &str, args: &[&str]) -> anyhow::Result<()> {
-        let output = tokio::time::timeout(
-            Duration::from_secs(10),
-            tokio::process::Command::new(program)
-                .args(args)
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await
-        .with_context(|| format!("{program} did not respond within 10s"))??;
+        let mut command = tokio::process::Command::new(program);
+        command.args(args);
+        let output = Process::new(command)
+            .timeout(Duration::from_secs(10))
+            .capture(OutputLimits {
+                stdout: 64 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await
+            .with_context(|| format!("could not probe {program}"))?;
 
         ensure!(
             output.status.success(),

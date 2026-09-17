@@ -252,6 +252,11 @@ omega-cli      the binary
 - `omega daemon` runs the daemon; `omega daemon install` installs its service.
 - Generate the systemd unit with current_exe. Daemon status compares that path with
   installed ExecStart. TimeoutStopSec must exceed the five-second plugin stop grace.
+- `omega-host::process` owns short-lived subprocess capture, output limits, and
+  timeout cleanup. Callers configure Tokio commands and choose limits, deadlines,
+  decoding, and exit-status policy. Cancellation only targets the direct child;
+  it does not supervise descendants or undo external effects. Cargo compiler-message
+  streaming and long-lived process supervision remain with their owning modules.
 - `omega-host::systemd` owns service definitions, file handles, and bounded async
   manager operations. Pass explicit names,
   scope, and unit-file paths; CLI `ServiceManager` resolves the user directory.

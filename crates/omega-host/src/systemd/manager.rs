@@ -1,10 +1,6 @@
 use super::{Status, StatusError, UnitName};
-use std::{
-    path::PathBuf,
-    process::{ExitStatus, Stdio},
-    time::Duration,
-};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use crate::process::{Error as ProcessError, OutputLimits, Process};
+use std::{path::PathBuf, process::ExitStatus, time::Duration};
 
 /// The systemd manager addressed by every operation on a handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,74 +108,51 @@ impl Manager {
         }
         let command = format!("systemctl {}", arguments.join(" "));
         let diagnose = self.diagnose_command(name);
-        let mut child = tokio::process::Command::new(&self.executable)
+        let mut process = tokio::process::Command::new(&self.executable);
+        process
             .args(&arguments)
             .env("LC_ALL", "C")
             .env("SYSTEMD_COLORS", "0")
-            .env("SYSTEMD_PAGER", "")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|source| ManagerError::Io {
-                command: command.clone(),
-                diagnose: diagnose.clone(),
-                source,
-            })?;
-        let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
-        let output = tokio::time::timeout(self.timeout, async {
-            tokio::try_join!(child.wait(), Self::read(stdout), Self::read(stderr))
-        })
-        .await;
-        let (status, stdout, stderr) = match output {
-            Err(_) => {
-                return Err(ManagerError::Timeout {
-                    command,
-                    diagnose,
-                    timeout: self.timeout,
-                });
-            }
-            Ok(Err(source)) => {
-                return Err(ManagerError::Io {
-                    command,
-                    diagnose,
+            .env("SYSTEMD_PAGER", "");
+        let output = Process::new(process)
+            .timeout(self.timeout)
+            .capture(OutputLimits {
+                stdout: 64 * 1024,
+                stderr: 64 * 1024,
+            })
+            .await
+            .map_err(|source| match source {
+                ProcessError::Timeout { duration } => ManagerError::Timeout {
+                    command: command.clone(),
+                    diagnose: diagnose.clone(),
+                    timeout: duration,
+                },
+                source => ManagerError::Execution {
+                    command: command.clone(),
+                    diagnose: diagnose.clone(),
                     source,
-                });
-            }
-            Ok(Ok(output)) => output,
-        };
-        if !status.success() {
+                },
+            })?;
+        if !output.status.success() {
             return Err(ManagerError::Refused {
                 command,
                 diagnose,
-                status,
-                stderr: String::from_utf8_lossy(&stderr).trim().to_owned(),
+                status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
             });
         }
-        Ok(stdout)
-    }
-
-    async fn read(reader: impl AsyncRead + Unpin) -> std::io::Result<Vec<u8>> {
-        const LIMIT: u64 = 64 * 1024;
-        let mut bytes = Vec::new();
-        reader.take(LIMIT + 1).read_to_end(&mut bytes).await?;
-        if bytes.len() as u64 > LIMIT {
-            return Err(std::io::Error::other("systemctl output exceeded 64 KiB"));
-        }
-        Ok(bytes)
+        Ok(output.stdout)
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManagerError {
     #[error("could not run {command}: {source}; inspect {diagnose}")]
-    Io {
+    Execution {
         command: String,
         diagnose: String,
         #[source]
-        source: std::io::Error,
+        source: ProcessError,
     },
     #[error("systemd refused {command} ({status}): {stderr}; inspect {diagnose}")]
     Refused {
@@ -369,7 +342,13 @@ mod tests {
             let fixture = Fixture::new(&format!("while :; do printf '%01024d' 0{redirect}; done"));
             let error = fixture.manager(Scope::User).reload().await.unwrap_err();
             assert!(
-                error.to_string().contains("output exceeded 64 KiB"),
+                matches!(
+                    error,
+                    ManagerError::Execution {
+                        source: ProcessError::OutputLimit { limit: 65536, .. },
+                        ..
+                    }
+                ),
                 "{error}"
             );
         }

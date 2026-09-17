@@ -109,6 +109,30 @@ evaluation, staged publication, and generation-specific activation waits. Its
 parse options and supply an explicit layout and profile. Checkout diagnostics
 belong to checkout operations, not to the link command parser.
 
+## Subprocess execution
+
+`omega-host::process::Process` accepts a Tokio command and owns short-lived process
+execution. It closes stdin and either inherits output or captures stdout and stderr
+concurrently under explicit byte limits. A limit violation is an error, never
+silent truncation. Exit status and raw bytes remain available to callers, which own
+arguments, decoding, and the meaning of a nonzero exit.
+
+There is no default timeout. A caller-selected timeout covers waiting and pipe
+draining after spawn. Execution failures and timeouts kill and reap the direct child
+before returning, reporting cleanup failures separately. Dropping the future requests
+a kill with Tokio's best-effort reaping. Neither case supervises descendants or rolls
+back effects; inherited pipes may outlive the direct child and require a timeout.
+
+Cargo builds and metadata, systemd commands, initialization probes, plugin manifest
+queries, system-document evaluation, and shell restart use this executor. Cargo's
+compiler-message reader retains its streaming child lifecycle and parsing in
+`cargo`; long-lived development and preview processes retain their own supervision.
+
+The CLI allows 10 seconds for plugin manifests and 30 seconds for system documents,
+with 8 MiB stdout and 64 KiB stderr each. Initialization probes allow 10 seconds;
+shell restart allows 45 seconds. Both capture at most 64 KiB per stream. Cargo and
+systemd limits remain with their respective clients.
+
 ## Systemd service ownership
 
 `omega-host::systemd` owns systemd integration. `ServiceUnit` renders a simple

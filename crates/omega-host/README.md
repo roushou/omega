@@ -18,6 +18,12 @@ explicit working directory. It defaults to `cargo` on PATH; `.executable(path)`
 overrides it. Requests select packages, profiles, target directories, and dependency
 resolution. Metadata and compiler artifacts use `cargo_metadata` types.
 
+`process::Process` executes Tokio commands with optional timeouts, bounded capture
+of stdout and stderr, or inherited output. It returns exit status and bytes; callers
+interpret them. Execution failures kill and reap the direct child. Cancellation
+requests a kill, with best-effort reaping; neither mechanism supervises descendants
+or reverses external effects.
+
 `workspace` owns source roles and runnable plugin
 discovery. `fs::Changes` provides settled filesystem watching when
 the optional `watch` feature is enabled; ordinary document consumers do not need it.

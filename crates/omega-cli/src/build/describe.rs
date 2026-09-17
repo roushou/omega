@@ -3,8 +3,12 @@
 
 use anyhow::{Context, bail};
 
-use omega_host::{Layout, Profile};
+use omega_host::{
+    Layout, Profile,
+    process::{OutputLimits, Process},
+};
 use omega_proto::{Manifest, UnitName};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub(super) struct Describe<'a> {
@@ -28,10 +32,14 @@ impl<'a> Describe<'a> {
         program: &std::path::Path,
         name: &UnitName,
     ) -> anyhow::Result<Manifest> {
-        let output = tokio::process::Command::new(program)
-            .arg(Manifest::DESCRIBE)
-            .kill_on_drop(true)
-            .output()
+        let mut command = tokio::process::Command::new(program);
+        command.arg(Manifest::DESCRIBE);
+        let output = Process::new(command)
+            .timeout(Duration::from_secs(10))
+            .capture(OutputLimits {
+                stdout: 8 * 1024 * 1024,
+                stderr: 64 * 1024,
+            })
             .await
             .with_context(|| {
                 format!(

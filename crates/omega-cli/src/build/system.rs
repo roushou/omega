@@ -4,7 +4,11 @@
 use anyhow::{Context, bail};
 
 use omega_document::{DocumentFile, StateDocument};
-use omega_host::{Layout, Profile};
+use omega_host::{
+    Layout, Profile,
+    process::{OutputLimits, Process},
+};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub(super) struct System<'a> {
@@ -24,9 +28,12 @@ impl<'a> System<'a> {
         }
 
         let program = self.layout.compiled_system(profile);
-        let output = tokio::process::Command::new(&program)
-            .kill_on_drop(true)
-            .output()
+        let output = Process::new(tokio::process::Command::new(&program))
+            .timeout(Duration::from_secs(30))
+            .capture(OutputLimits {
+                stdout: 8 * 1024 * 1024,
+                stderr: 64 * 1024,
+            })
             .await
             .with_context(|| format!("cannot run {}", program.display()))?;
 
