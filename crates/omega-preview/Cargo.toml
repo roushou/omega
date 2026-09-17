@@ -13,7 +13,7 @@ description = "Isolated component and surface previews for Omega"
 [lints]
 workspace = true
 [dependencies]
-omega = { path = "../omega", package = "omega-rs", version = "0.3.7" }
+omega = { path = "../omega", package = "omega-rs", version = "0.3.8" }
 omega-proto = { workspace = true, features = ["json"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "io-util", "time"] }

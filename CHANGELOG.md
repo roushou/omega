@@ -1,3 +1,26 @@
+## What's Changed in 0.3.8
+* fix(omarchy)!: namespace Omega widget settings
+* fix: unit tests and clean dependencies
+
+### Upgrade notes
+
+* Omega bar entries now store their settings inside an `omega` object. The
+  placement key is `omega.placement`, replacing top-level `module`; `plugin`,
+  `surface`, optional `panel`, and optional `socket` also move under `omega`.
+  The old top-level settings are no longer read.
+* Update configuration dependencies to 0.3.8 and rebuild with `omega build`.
+  Update the CLI, daemon (`omega daemon install`), and renderer
+  (`omega shell install`) together so the generated entries and adapter agree.
+  Rust `PluginWidget` declarations do not need changes.
+* Manually maintained `omega.view` entries must use the nested format before
+  importing them with `omega shell adopt`. For example:
+
+  ```json
+  {"id":"omega.view","omega":{"placement":"clock","plugin":"clock","surface":"indicator","panel":"panel"}}
+  ```
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.7...v0.3.8
+
 ## What's Changed in 0.3.7
 * chore(proto): reset protocol versions to 1
 * refactor!: standardize Omega terminology on plugin
