@@ -15,7 +15,7 @@ fn table() -> UnitTable {
 #[test]
 fn a_token_binds_to_the_first_process_that_uses_it() {
     let units = table();
-    let token = units.issue(&unit("battery-widget"));
+    let token = units.issue(&unit("battery-widget")).unwrap();
 
     assert_eq!(
         units.identify(100, token.as_str()),
@@ -33,7 +33,7 @@ fn a_token_binds_to_the_first_process_that_uses_it() {
 #[test]
 fn a_revoked_token_is_never_honoured_again() {
     let units = table();
-    let token = units.issue(&unit("battery-widget"));
+    let token = units.issue(&unit("battery-widget")).unwrap();
     units.bind(&unit("battery-widget"), 100);
     units.revoke(&unit("battery-widget"));
 
@@ -44,7 +44,7 @@ fn a_revoked_token_is_never_honoured_again() {
 #[test]
 fn an_unknown_token_identifies_nobody() {
     let units = table();
-    units.issue(&unit("battery-widget"));
+    units.issue(&unit("battery-widget")).unwrap();
 
     assert_eq!(units.identify(100, ""), None);
     assert_eq!(units.identify(100, "not-a-token"), None);
@@ -53,8 +53,8 @@ fn an_unknown_token_identifies_nobody() {
 #[test]
 fn every_spawn_gets_its_own_token() {
     let units = table();
-    let first = units.issue(&unit("battery-widget"));
-    let second = units.issue(&unit("battery-widget"));
+    let first = units.issue(&unit("battery-widget")).unwrap();
+    let second = units.issue(&unit("battery-widget")).unwrap();
 
     assert_ne!(first.as_str(), second.as_str());
     assert_eq!(first.as_str().len(), 32, "128 bits of hex");

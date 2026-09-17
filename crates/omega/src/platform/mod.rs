@@ -21,3 +21,6 @@ pub mod process;
 pub mod session;
 pub mod system;
 pub mod time;
+
+mod reading;
+pub use reading::{Reading, ReadingError};

@@ -33,11 +33,12 @@ pub struct BluetoothDevice {
     battery: Option<Percent>,
 }
 
-impl BluetoothDevice {
-    fn of(device: omega_proto::omega::BluetoothDevice) -> Self {
-        Self {
-            id: omega_proto::BluetoothDeviceId::try_from(device.id)
-                .expect("daemon supplied a valid Bluetooth device id"),
+impl TryFrom<omega_proto::omega::BluetoothDevice> for BluetoothDevice {
+    type Error = omega_proto::BluetoothDeviceIdError;
+
+    fn try_from(device: omega_proto::omega::BluetoothDevice) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: omega_proto::BluetoothDeviceId::try_from(device.id)?,
             can_connect: device.can_connect,
             battery: device
                 .battery_percent
@@ -47,9 +48,11 @@ impl BluetoothDevice {
             connected: device.connected,
             paired: device.paired,
             icon: device.icon,
-        }
+        })
     }
+}
 
+impl BluetoothDevice {
     /// The adapter-qualified identity to bind to a connect/disconnect command.
     pub fn id(&self) -> &omega_proto::BluetoothDeviceId {
         &self.id
@@ -91,6 +94,12 @@ impl BluetoothDevice {
 }
 
 impl Bluetooth {
+    /// Read the validated collection, distinguishing pending, unavailable, and
+    /// malformed readings from a successfully empty collection.
+    pub fn snapshot(&self) -> crate::platform::Reading<Vec<BluetoothDevice>> {
+        self.context.read().bluetooth.clone()
+    }
+
     /// Interpret the current reading once, from availability through power.
     ///
     /// ```
@@ -139,10 +148,10 @@ impl Bluetooth {
     }
 
     /// Paired or connected devices, including disconnected devices available to reconnect.
+    /// Returns an empty collection without a valid reading; [`Self::snapshot`]
+    /// distinguishes invalidity and absence from a successfully empty collection.
     pub fn known_devices(&self) -> Vec<BluetoothDevice> {
-        self.read()
-            .map(|state| state.devices.into_iter().map(BluetoothDevice::of).collect())
-            .unwrap_or_default()
+        self.snapshot().into_value().unwrap_or_default()
     }
 
     /// Return the currently connected devices.

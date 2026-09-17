@@ -99,7 +99,7 @@ impl Supervisor {
 
     /// Register a unit this supervisor did not spawn, for tests and dev. The
     /// returned token is what that process must present in `Hello`.
-    pub fn register(&self, name: &UnitName) -> UnitToken {
+    pub fn register(&self, name: &UnitName) -> Result<UnitToken, crate::units::TokenError> {
         self.inner.units.issue(name)
     }
 
@@ -158,19 +158,29 @@ impl Supervisor {
     }
 
     pub async fn adopt_unit(&self, name: &UnitName) -> Result<UnitToken, omega_proto::Refusal> {
+        self.adopt_with(name, UnitToken::mint).await
+    }
+
+    async fn adopt_with(
+        &self,
+        name: &UnitName,
+        mint: impl FnOnce() -> Result<UnitToken, crate::units::TokenError>,
+    ) -> Result<UnitToken, omega_proto::Refusal> {
         let _handover = self.handover().await;
         if self.inner.units.manifest(name).is_none() {
             return Err(omega_proto::Refusal::precondition(format!(
                 "{name} is not a unit this build contains"
             )));
         }
+        use crate::refusal::RefusableResult;
+        let token = mint().or_refuse()?;
         self.stop(name).await;
         if self.inner.units.is_supervised(name) {
             return Err(omega_proto::Refusal::precondition(format!(
                 "{name} has not finished stopping"
             )));
         }
-        Ok(self.inner.units.adopt_unit(name))
+        Ok(self.inner.units.adopt_with_token(name, token))
     }
 
     /// Give an adopted unit back, so the next convergence runs the binary the
@@ -244,14 +254,20 @@ impl UnitProcess {
     async fn run(mut self) {
         while !self.stopping() {
             tracing::info!(unit = %self.spec.name, program = %self.spec.program.display(), "spawning unit");
-            self.report(Transition::Spawned);
-
             // The token is issued before the spawn: a unit that connects the
             // instant it starts must already be identifiable.
-            let token = self.supervisor.units.issue(&self.spec.name);
             let started = Instant::now();
+            let child = self
+                .supervisor
+                .units
+                .issue(&self.spec.name)
+                .map_err(std::io::Error::other)
+                .and_then(|token| {
+                    self.report(Transition::Spawned);
+                    self.start(&token)
+                });
 
-            match self.start(&token) {
+            match child {
                 Ok(mut child) => {
                     if let Some(pid) = child.id() {
                         self.supervisor.units.bind(&self.spec.name, pid as i32);
@@ -400,5 +416,45 @@ impl Drop for UnitProcess {
         self.supervisor.units.revoke(&self.spec.name);
         self.report(Transition::Stopped);
         self.supervisor.units.release(&self.spec.name);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn failed_adoption_identity_preserves_the_supervised_session() {
+        let name: UnitName = "test".parse().unwrap();
+        let units = UnitTable::detached(crate::hub::Hub::new());
+        units.adopt(&ManifestStore::from_manifests([
+            omega_proto::Manifest::new(&name, "1"),
+        ]));
+        let token = units.issue(&name).unwrap();
+        units.bind(&name, 123);
+        let stop = Shutdown::new();
+        units.supervise(
+            &name,
+            UnitControl {
+                stop: stop.clone(),
+                cycle: watch::channel(0).0,
+            },
+        );
+        let (requests, _receiver) = tokio::sync::mpsc::channel(1);
+        let _session = units.connected(&name, requests);
+        let supervisor =
+            Supervisor::new(Socket::at("/unused.sock"), units.clone(), Shutdown::new());
+        let before = units.statuses();
+        let error = supervisor
+            .adopt_with(&name, || Err(getrandom::Error::UNSUPPORTED.into()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, omega_proto::omega::ErrorCode::Unavailable);
+        assert!(!stop.is_triggered());
+        assert!(units.is_supervised(&name));
+        assert!(units.is_connected(&name));
+        assert!(!units.is_adopted(&name));
+        assert_eq!(units.identify(123, token.as_str()), Some(name));
+        assert_eq!(units.statuses(), before);
     }
 }

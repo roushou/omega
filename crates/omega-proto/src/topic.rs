@@ -28,6 +28,11 @@ macro_rules! topics {
             /// as the variant, so it cannot omit one.
             pub const ALL: &'static [SystemTopic] = &[$(Self::$variant,)*];
 
+            /// Whether this payload belongs to the named system topic.
+            pub fn accepts(self, value: &state_topic::Value) -> bool {
+                matches!((self, value), $((Self::$variant, state_topic::Value::$variant(_)))|*)
+            }
+
             pub fn as_str(self) -> &'static str {
                 match self {
                     $(Self::$variant => $name,)*

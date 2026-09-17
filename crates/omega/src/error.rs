@@ -8,6 +8,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
+    Bindings(#[from] crate::surface::BindingError),
+    #[error(transparent)]
     View(#[from] crate::ui::ViewError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -65,6 +67,10 @@ impl Error {
 
     pub(crate) fn refusal(&self) -> Refusal {
         match self {
+            Self::Bindings(error @ crate::surface::BindingError::Poisoned) => {
+                Refusal::precondition(error.to_string())
+            }
+            Self::Bindings(error) => Refusal::exhausted(error.to_string()),
             Self::Effect(error) => error.refusal(),
             Self::Refused(refusal) | Self::Daemon(ClientError::Refused(refusal)) => refusal.clone(),
             Self::Daemon(_) | Self::Transport(_) | Self::Io(_) => {

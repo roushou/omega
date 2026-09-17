@@ -29,7 +29,7 @@ pub use lifecycle::{Lifecycle, Transition};
 pub use presentations::InstalledInstance;
 pub use record::{UnitControl, UnitRecord};
 pub use session::{Request, RequestError, SessionGuard};
-pub use token::UnitToken;
+pub use token::{TokenError, UnitToken};
 
 #[derive(Debug, Clone)]
 pub struct UnitTable {
@@ -148,14 +148,19 @@ impl UnitTable {
 
     /// Mint the token for a spawn that is about to happen. Issuing it before
     /// the spawn is what makes a fast unit's first connection identifiable.
-    pub fn issue(&self, name: &UnitName) -> UnitToken {
-        self.mint(name, false)
+    pub fn issue(&self, name: &UnitName) -> Result<UnitToken, TokenError> {
+        let token = UnitToken::mint()?;
+        Ok(self.install_token(name, false, token))
     }
 
     /// Issue a development spawn token and reserve the unit identity.
     /// Adopted sessions use the same manifest grants as supervised sessions.
-    pub fn adopt_unit(&self, name: &UnitName) -> UnitToken {
-        let token = self.mint(name, true);
+    pub fn adopt_unit(&self, name: &UnitName) -> Result<UnitToken, TokenError> {
+        Ok(self.adopt_with_token(name, UnitToken::mint()?))
+    }
+
+    pub(crate) fn adopt_with_token(&self, name: &UnitName, token: UnitToken) -> UnitToken {
+        let token = self.install_token(name, true, token);
         self.publish();
         token
     }
@@ -187,8 +192,7 @@ impl UnitTable {
         let _ = self.inner.connected.try_send(name.clone());
     }
 
-    fn mint(&self, name: &UnitName, adopted: bool) -> UnitToken {
-        let token = UnitToken::mint();
+    fn install_token(&self, name: &UnitName, adopted: bool, token: UnitToken) -> UnitToken {
         let mut units = self.lock();
         let record = units
             .entry(name.clone())

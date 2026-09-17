@@ -603,3 +603,61 @@ async fn shared_required_readings_are_reported_once() {
     assert_eq!(view.pending_topics, ["battery"]);
     assert!(view.validate_readiness().is_ok());
 }
+
+#[derive(omega::Surface)]
+struct Bounded {
+    battery: crate::platform::power::Battery,
+}
+impl Surface for Bounded {
+    type Model = ();
+    type Message = ();
+    type Effects = ();
+    fn render(&self, _: &(), events: &crate::surface::Events<()>) -> View {
+        if self
+            .battery
+            .get()
+            .is_some_and(|battery| battery.level == 0.0)
+        {
+            for _ in 0..4097 {
+                let _ = events.send(());
+            }
+        }
+        Text::new("bounded").into()
+    }
+    fn update(&self, _: &mut (), _: (), _: &()) -> crate::surface::Task<()> {
+        crate::surface::Task::none()
+    }
+}
+
+#[tokio::test]
+async fn a_failed_render_is_isolated_published_once_and_recovers_on_invalidation() {
+    use omega_proto::omega::RenderReadiness;
+    let plugin = Plugin::named("test", "1")
+        .surface_as::<Bounded>("bounded")
+        .surface_as::<Probe<0>>("healthy");
+    let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
+    assert!(peer.render("bounded", "", "").await.root.is_some());
+    assert!(peer.render("healthy", "", "").await.root.is_some());
+    peer.patch(vec![Peer::battery(2, Some(0.0))]).await;
+    let failed = peer.published("bounded", "").await;
+    assert_eq!(failed.readiness(), RenderReadiness::Failed);
+    assert!(failed.root.is_none());
+    assert!(failed.render_error.contains("4096"));
+    assert!(failed.validate_readiness().is_ok());
+    assert!(peer.published("healthy", "").await.root.is_some());
+    peer.quiet().await;
+    // A fresh pull also reports the failed instance without ending the session.
+    assert_eq!(
+        peer.render("bounded", "second", "").await.readiness(),
+        RenderReadiness::Failed
+    );
+    peer.patch(vec![Peer::battery(3, Some(0.8))]).await;
+    let ready = peer.published("bounded", "").await;
+    assert_eq!(ready.readiness(), RenderReadiness::Ready);
+    assert!(ready.render_error.is_empty());
+    assert!(ready.root.is_some());
+    assert!(peer.published("healthy", "").await.root.is_some());
+    assert!(peer.published("bounded", "second").await.root.is_some());
+    peer.quiet().await;
+    assert!(!peer.task.is_finished());
+}

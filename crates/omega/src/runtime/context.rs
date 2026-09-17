@@ -42,10 +42,14 @@ impl Context {
         snapshot: &StateSnapshot,
         effects: crate::effect::queue::EffectsSender,
     ) -> Self {
+        let mirror = Mirror::from_snapshot(snapshot);
+        for error in mirror.errors() {
+            Self::report_reading_error(error);
+        }
         Self {
             instance: None,
             inner: Arc::new(Shared {
-                state: RwLock::new(Mirror::from_snapshot(snapshot)),
+                state: RwLock::new(mirror),
                 records: Mutex::new(BTreeMap::new()),
                 effects,
                 tasks: Arc::new(tokio::sync::Semaphore::new(256)),
@@ -54,7 +58,16 @@ impl Context {
     }
 
     pub(crate) fn apply(&self, patch: &StatePatch) {
-        self.write().apply(patch);
+        let errors = self.write().apply(patch);
+        for error in errors {
+            Self::report_reading_error(&error);
+        }
+    }
+
+    fn report_reading_error(error: &crate::platform::ReadingError) {
+        use std::io::Write;
+        // The diagnostic remains available through reading_error even if stderr is closed.
+        let _ = writeln!(std::io::stderr().lock(), "{error}");
     }
 
     /// Whether the daemon has reported each topic, including explicit absence.

@@ -45,6 +45,7 @@ enum PluginReadiness {
   // Every live instance has completed a render, including deliberately empty views.
   // This is not a claim about native visibility or renderer attachment.
   PLUGIN_READINESS_READY = 4;
+  PLUGIN_READINESS_FAILED = 5;
 }
 
 message SurfaceHealth {
@@ -55,4 +56,5 @@ message SurfaceHealth {
   repeated string pending_topics = 5;
   PresentationState requested = 6;
   PresentationState observed = 7;
+  string render_error = 8;
 }

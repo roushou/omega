@@ -1,6 +1,6 @@
 use super::task::{Execution, TaskKey};
 use super::{Decoder, Events, Task, Wired};
-use crate::{Args, Error, Surface, View};
+use crate::{Args, Error, Surface};
 use std::{
     collections::BTreeMap,
     sync::Arc,
@@ -9,7 +9,7 @@ use std::{
 
 /// Type-erased surface rendering and lifecycle interface.
 pub(crate) trait MountedSurface: Send {
-    fn render(&mut self) -> View;
+    fn render(&mut self) -> Result<omega_proto::omega::ViewTree, Error>;
     fn lifecycle(&mut self, event: crate::surface::Lifecycle) -> Result<(), crate::Error>;
     fn mounted(&mut self) -> Result<(), crate::Error>;
     fn event(&mut self, binding: u64, args: Args) -> Result<(), crate::Error>;
@@ -112,11 +112,14 @@ impl<S: Surface> Instance<S> {
     }
 }
 impl<S: Surface> MountedSurface for Instance<S> {
-    fn render(&mut self) -> View {
+    fn render(&mut self) -> Result<omega_proto::omega::ViewTree, Error> {
+        self.bindings.clear();
         let events = Events::new();
         let view = self.surface.render(&self.model, &events);
-        self.bindings = events.finish();
-        view
+        let bindings = events.finish()?;
+        let tree = view.try_into_tree()?;
+        self.bindings = bindings;
+        Ok(tree)
     }
     fn lifecycle(&mut self, event: super::Lifecycle) -> Result<(), Error> {
         if event == super::Lifecycle::Closed {
@@ -180,6 +183,7 @@ impl<S: Surface> MountedSurface for Instance<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::View;
     #[derive(omega::Surface)]
     struct Worker {}
     enum Message {
@@ -233,5 +237,44 @@ mod tests {
                 .unwrap()
                 .unwrap();
         assert!(instance.work.is_empty());
+    }
+    #[derive(omega::Surface)]
+    struct Controls;
+    impl Surface for Controls {
+        type Model = usize;
+        type Message = usize;
+        type Effects = ();
+        fn render(&self, count: &usize, events: &Events<usize>) -> View {
+            let mut column = crate::ui::Column::new();
+            for index in 0..*count {
+                column = column.child(crate::ui::Button::new(index).on_press(events.send(index)));
+            }
+            column.into()
+        }
+        fn update(&self, count: &mut usize, next: usize, _: &()) -> Task<usize> {
+            *count = next;
+            Task::none()
+        }
+    }
+
+    #[test]
+    fn failed_binding_collection_revokes_old_bindings_and_allows_recovery() {
+        let (sender, _effects) = crate::effect::queue::Effects::channel();
+        let context = crate::runtime::context::Context::new(&Default::default(), sender);
+        let mut instance = Instance::<Controls>::new(&context, &Default::default());
+        instance.message(4096).unwrap();
+        instance.render().unwrap();
+        let old = *instance.bindings.keys().next().unwrap();
+        instance.message(4097).unwrap();
+        assert!(matches!(
+            instance.render(),
+            Err(Error::Bindings(super::super::BindingError::Capacity))
+        ));
+        assert!(instance.bindings.is_empty());
+        assert!(instance.event(old.get(), Args::new(vec![])).is_err());
+        instance.message(1).unwrap();
+        instance.render().unwrap();
+        assert_eq!(instance.bindings.len(), 1);
+        assert!(!instance.bindings.contains_key(&old));
     }
 }

@@ -52,6 +52,20 @@ impl Drop for SessionDirectory {
     }
 }
 impl PreviewCmd {
+    fn manifest_directory(path: &std::path::Path) -> anyhow::Result<PathBuf> {
+        let resolved = std::fs::canonicalize(path)
+            .with_context(|| format!("cannot resolve manifest {}", path.display()))?;
+        anyhow::ensure!(
+            resolved.is_file(),
+            "manifest {} must be a file",
+            path.display()
+        );
+        resolved
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .with_context(|| format!("manifest {} has no parent directory", path.display()))
+    }
+
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         if let Some(case) = &self.case {
             CaseId::try_from(case.clone())?;
@@ -60,13 +74,7 @@ impl PreviewCmd {
         let directory = self
             .manifest_path
             .as_ref()
-            .map(|p| {
-                std::fs::canonicalize(p).map(|p| {
-                    p.parent()
-                        .expect("absolute manifest has parent")
-                        .to_path_buf()
-                })
-            })
+            .map(|path| Self::manifest_directory(path))
             .transpose()?
             .unwrap_or_else(|| layout.config.clone());
         let build = Build::new(directory, &self.package).await?;
@@ -227,5 +235,27 @@ impl PreviewCmd {
         snapshot.capture_path = capture
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_paths_must_resolve_to_files() {
+        assert!(
+            PreviewCmd::manifest_directory(std::path::Path::new("/"))
+                .unwrap_err()
+                .to_string()
+                .contains("must be a file")
+        );
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(PreviewCmd::manifest_directory(root).is_err());
+        assert!(PreviewCmd::manifest_directory(&root.join("missing-manifest.toml")).is_err());
+        assert_eq!(
+            PreviewCmd::manifest_directory(&root.join("Cargo.toml")).unwrap(),
+            std::fs::canonicalize(root).unwrap()
+        );
     }
 }

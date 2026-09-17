@@ -91,6 +91,7 @@ impl HealthDisplay {
             UnitPhase::Unspecified => Step::Unknown,
             UnitPhase::Running => match readiness {
                 PluginReadiness::Background => Step::Healthy,
+                PluginReadiness::Failed => Step::Failed,
                 PluginReadiness::Unplaced => Step::Unplaced,
                 PluginReadiness::Waiting => Step::Waiting,
                 PluginReadiness::Ready => Step::Ready,
@@ -121,6 +122,7 @@ impl HealthDisplay {
 
         match health.readiness() {
             PluginReadiness::Background => "background".into(),
+            PluginReadiness::Failed => "surface render failed".into(),
             PluginReadiness::Unplaced => format!(
                 "{} surface(s) available; no placement or open instance",
                 health.surfaces.len()
@@ -159,6 +161,7 @@ impl HealthDisplay {
 
         let state = match instance.readiness() {
             RenderReadiness::Ready => "render ready",
+            RenderReadiness::Failed => "render failed",
             RenderReadiness::Waiting => "waiting for first render",
             RenderReadiness::Unspecified if instance.instance.is_none() => {
                 "awaiting instance construction"
@@ -166,6 +169,10 @@ impl HealthDisplay {
             RenderReadiness::Unspecified => "render readiness unavailable",
         };
         ui.detail(format!("{target}: {state}"));
+
+        if !instance.render_error.is_empty() {
+            ui.detail(&instance.render_error);
+        }
 
         for topic in &instance.pending_topics {
             ui.detail(format!("Required reading not received: {topic}"));
@@ -251,6 +258,7 @@ mod tests {
             }),
             readiness: RenderReadiness::Waiting as i32,
             pending_topics: vec!["network".into()],
+            render_error: String::new(),
             requested: PresentationState::Visible as i32,
             observed: PresentationState::Hidden as i32,
         });
@@ -294,5 +302,21 @@ mod tests {
         );
         assert!(output.contains("UI readiness unknown"));
         assert!(!output.contains("Ready network"));
+    }
+    #[test]
+    fn failed_render_status_includes_instance_diagnostic() {
+        let mut health = Fixture::health(PluginReadiness::Failed);
+        health.instances.push(SurfaceHealth {
+            surface: "panel".into(),
+            placement: "wifi".into(),
+            readiness: RenderReadiness::Failed as i32,
+            render_error: "binding capacity exceeded".into(),
+            ..Default::default()
+        });
+        let output = Fixture::output(Fixture::unit(UnitPhase::Running), health, true);
+        assert!(output.contains("Failed network"));
+        assert!(output.contains("Process: running"));
+        assert!(output.contains("render failed"));
+        assert!(output.contains("binding capacity exceeded"));
     }
 }

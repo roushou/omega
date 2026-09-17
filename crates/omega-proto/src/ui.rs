@@ -287,12 +287,27 @@ mod tests {
 pub struct ReadinessError(&'static str);
 
 impl crate::omega::ViewTree {
-    /// Validate startup metadata. Waiting trees have no root and name only system
-    /// topics; ready and legacy trees cannot report pending readings.
+    /// Validate render metadata. Waiting trees have no root and name only system
+    /// topics. Failed trees have no root or pending topics and carry a nonblank
+    /// diagnostic of at most 4096 bytes. Other states carry no diagnostic.
     pub fn validate_readiness(&self) -> Result<(), ReadinessError> {
         use crate::omega::RenderReadiness;
 
+        if self.readiness != RenderReadiness::Failed as i32 && !self.render_error.is_empty() {
+            return Err(ReadinessError("render errors require failed readiness"));
+        }
         match RenderReadiness::try_from(self.readiness) {
+            Ok(RenderReadiness::Failed) => {
+                if self.root.is_some()
+                    || !self.pending_topics.is_empty()
+                    || self.render_error.trim().is_empty()
+                    || self.render_error.len() > 4096
+                {
+                    return Err(ReadinessError(
+                        "failed renders require a diagnostic of at most 4096 bytes, no root, and no pending topics",
+                    ));
+                }
+            }
             Ok(RenderReadiness::Waiting) => {
                 if self.root.is_some() || self.pending_topics.is_empty() {
                     return Err(ReadinessError(
@@ -362,5 +377,44 @@ mod readiness_tests {
         assert_eq!(tree.render_readiness(), RenderReadiness::Unspecified);
         tree.root = Some(ViewNode::default());
         assert_eq!(tree.render_readiness(), RenderReadiness::Ready);
+    }
+}
+
+#[cfg(test)]
+mod failed_readiness_tests {
+    use crate::omega::{RenderReadiness, ViewNode, ViewTree};
+
+    #[test]
+    fn render_failures_are_bounded_and_cannot_retain_interactive_content() {
+        let failed = ViewTree {
+            readiness: RenderReadiness::Failed as i32,
+            render_error: "binding capacity exceeded".into(),
+            ..Default::default()
+        };
+        assert!(failed.validate_readiness().is_ok());
+        for invalid in [
+            ViewTree {
+                root: Some(ViewNode::default()),
+                ..failed.clone()
+            },
+            ViewTree {
+                pending_topics: vec!["battery".into()],
+                ..failed.clone()
+            },
+            ViewTree {
+                render_error: String::new(),
+                ..failed.clone()
+            },
+            ViewTree {
+                render_error: "x".repeat(4097),
+                ..failed.clone()
+            },
+            ViewTree {
+                readiness: RenderReadiness::Ready as i32,
+                ..failed
+            },
+        ] {
+            assert!(invalid.validate_readiness().is_err());
+        }
     }
 }

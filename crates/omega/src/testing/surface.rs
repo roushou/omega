@@ -66,7 +66,9 @@ impl<S: Surface> SurfaceHarness<S> {
         if !self.context.holds(&S::required_topics()) {
             return Drawn::of_view(crate::View::default());
         }
-        Drawn::of_view(self.instance.render())
+        Drawn {
+            tree: self.instance.render().expect("surface render failed"),
+        }
     }
     pub fn send(&mut self, message: S::Message) -> Result<(), Error> {
         self.instance.message(message)

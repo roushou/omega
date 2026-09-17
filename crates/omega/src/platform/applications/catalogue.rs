@@ -24,13 +24,18 @@ pub struct Application {
     id: ApplicationId,
     entry: omega_proto::omega::Application,
 }
-impl Application {
-    fn of(entry: omega_proto::omega::Application) -> Self {
-        Self {
-            id: ApplicationId::try_from(entry.id.clone()).expect("validated application id"),
+impl TryFrom<omega_proto::omega::Application> for Application {
+    type Error = omega_proto::ApplicationIdError;
+
+    fn try_from(entry: omega_proto::omega::Application) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: ApplicationId::try_from(entry.id.clone())?,
             entry,
-        }
+        })
     }
+}
+
+impl Application {
     /// Stable desktop-entry identity, independent of the localized label.
     pub fn id(&self) -> &ApplicationId {
         &self.id
@@ -61,8 +66,15 @@ impl Application {
     }
 }
 impl Applications {
-    /// Visible installed entries. `None` means no current catalogue; an empty
+    /// Read the validated collection, distinguishing pending, unavailable, and
+    /// malformed readings from a successfully empty collection.
+    pub fn snapshot(&self) -> crate::platform::Reading<Vec<Application>> {
+        self.context.read().applications.clone()
+    }
+
+    /// Visible installed entries. `None` means no valid current catalogue; an empty
     /// vector means the service successfully found no visible applications.
+    /// Use [`Self::snapshot`] to distinguish invalid readings from absence.
     ///
     /// ```
     /// # fn example(apps: &omega::platform::applications::Applications) {
@@ -72,12 +84,6 @@ impl Applications {
     /// # }
     /// ```
     pub fn entries(&self) -> Option<Vec<Application>> {
-        self.get().map(|state| {
-            state
-                .applications
-                .into_iter()
-                .map(Application::of)
-                .collect()
-        })
+        self.snapshot().into_value()
     }
 }

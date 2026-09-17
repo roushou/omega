@@ -56,6 +56,10 @@ impl UnitRecord {
                     .map(ToString::to_string)
                     .unwrap_or_default(),
                 readiness: readiness as i32,
+                render_error: view
+                    .as_ref()
+                    .map(|view| view.view.render_error.clone())
+                    .unwrap_or_default(),
                 pending_topics: view
                     .as_ref()
                     .map(|view| view.view.pending_topics.clone())
@@ -102,6 +106,11 @@ impl UnitRecord {
 
         let readiness = if self.manifest.is_none() {
             PluginReadiness::Unspecified
+        } else if instances
+            .iter()
+            .any(|instance| instance.readiness == RenderReadiness::Failed as i32)
+        {
+            PluginReadiness::Failed
         } else if instances.iter().any(|instance| {
             instance.readiness == RenderReadiness::Waiting as i32 || instance.instance.is_none()
         }) {
@@ -182,7 +191,8 @@ mod tests {
                 .unwrap(),
                 None,
                 Some(self.placement.clone()),
-            );
+            )
+            .unwrap();
             self.units
                 .lock()
                 .get_mut(&self.name)
@@ -286,5 +296,37 @@ mod tests {
             .unwrap();
         assert_eq!(f.health().readiness(), PluginReadiness::Waiting);
         assert_eq!(f.health().instances.len(), 2);
+    }
+    #[test]
+    fn render_failure_is_reported_without_changing_process_lifecycle() {
+        let f = Fixture::new();
+        let instance = f.instance();
+        f.hub
+            .publish_view(instance.update(
+                &f.name,
+                omega::ViewTree {
+                    readiness: RenderReadiness::Failed as i32,
+                    render_error: "binding capacity exceeded".into(),
+                    ..Default::default()
+                },
+            ))
+            .unwrap();
+        let health = f.health();
+        assert_eq!(health.readiness(), PluginReadiness::Failed);
+        assert_eq!(
+            health.instances[0].render_error,
+            "binding capacity exceeded"
+        );
+        f.hub
+            .publish_view(instance.update(
+                &f.name,
+                omega::ViewTree {
+                    readiness: RenderReadiness::Ready as i32,
+                    ..Default::default()
+                },
+            ))
+            .unwrap();
+        assert!(f.health().instances[0].render_error.is_empty());
+        assert_eq!(f.health().readiness(), PluginReadiness::Ready);
     }
 }

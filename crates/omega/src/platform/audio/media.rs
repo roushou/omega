@@ -34,17 +34,18 @@ pub struct Player {
     can_go_previous: bool,
 }
 
-impl Player {
-    fn of(player: omega_proto::omega::PlayerInfo) -> Self {
-        Self {
+impl TryFrom<omega_proto::omega::PlayerInfo> for Player {
+    type Error = omega_proto::PlayerIdError;
+
+    fn try_from(player: omega_proto::omega::PlayerInfo) -> Result<Self, Self::Error> {
+        Ok(Self {
             playback: Playback::try_from(player.playback).unwrap_or(Playback::Unspecified),
             // Convert MPRIS microseconds to the SDK duration type.
             length: match player.length_us {
                 0 => None,
                 us => Some(Remaining::of(std::time::Duration::from_micros(us))),
             },
-            id: omega_proto::PlayerId::try_from(player.id)
-                .expect("daemon supplied a valid player id"),
+            id: omega_proto::PlayerId::try_from(player.id)?,
             identity: player.identity,
             title: player.title,
             artist: player.artist,
@@ -55,9 +56,11 @@ impl Player {
             can_pause: player.can_pause,
             can_go_next: player.can_go_next,
             can_go_previous: player.can_go_previous,
-        }
+        })
     }
+}
 
+impl Player {
     /// The bus name's suffix: `chromium`. A restarted app may reuse it.
     pub fn id(&self) -> &omega_proto::PlayerId {
         &self.id
@@ -122,10 +125,16 @@ impl Player {
 }
 
 impl Media {
+    /// Read the validated collection, distinguishing pending, unavailable, and
+    /// malformed readings from a successfully empty collection.
+    pub fn snapshot(&self) -> crate::platform::Reading<Vec<Player>> {
+        self.context.read().media.clone()
+    }
+
+    /// Players in the current valid reading, or an empty collection otherwise.
+    /// Use [`Self::snapshot`] to distinguish an empty reading from invalidity or absence.
     pub fn players(&self) -> Vec<Player> {
-        self.read()
-            .map(|state| state.players.into_iter().map(Player::of).collect())
-            .unwrap_or_default()
+        self.snapshot().into_value().unwrap_or_default()
     }
 
     /// Return the active player, falling back to the first playing player.

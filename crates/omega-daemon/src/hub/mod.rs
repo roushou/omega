@@ -136,6 +136,8 @@ impl ViewUpdate {
                 .map(|topic| topic.len() + 8)
                 .sum::<usize>()
             + 8
+            + self.view.render_error.len()
+            + 8
             + self.surface.unit.as_str().len()
             + self.surface.surface.as_str().len()
             + self
@@ -261,6 +263,7 @@ impl Hub {
         if registry.latest.get(&update.instance).is_some_and(|prev| {
             prev.view.root == update.view.root
                 && prev.view.pending_topics == update.view.pending_topics
+                && prev.view.render_error == update.view.render_error
                 && prev.view.readiness == update.view.readiness
                 && prev.requested == update.requested
                 && prev.observed == update.observed

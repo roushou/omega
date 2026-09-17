@@ -39,28 +39,45 @@ impl Instance {
         })
     }
 
-    pub(super) fn view(&mut self, context: &Context) -> Result<ViewTree, crate::Error> {
+    pub(super) fn view(&mut self, context: &Context) -> ViewTree {
         let pending_topics = context.missing(&self.topics);
 
         if !pending_topics.is_empty() {
-            return Ok(ViewTree {
+            return ViewTree {
                 pending_topics,
                 readiness: omega_proto::omega::RenderReadiness::Waiting as i32,
                 ..Default::default()
-            });
+            };
         }
         if self.dirty {
-            self.cached = Some(self.widget.render().try_into_tree()?);
+            let tree = match self.widget.render() {
+                Ok(tree) => tree,
+                Err(error) => Self::failed(error),
+            };
+            self.cached = Some(tree);
             self.dirty = false;
         }
-        Ok(self
-            .cached
+        self.cached
             .clone()
-            .expect("clean instance has a cached render"))
+            .expect("clean instance has a cached render")
     }
-    pub(super) fn changed(&mut self, context: &Context) -> Result<Option<ViewTree>, crate::Error> {
-        let view = self.view(context)?;
-        Ok((self.sent.as_ref() != Some(&view)).then_some(view))
+    fn failed(error: crate::Error) -> ViewTree {
+        let mut message = error.to_string();
+        let mut end = message.len().min(4096);
+        while !message.is_char_boundary(end) {
+            end -= 1;
+        }
+        message.truncate(end);
+        ViewTree {
+            readiness: omega_proto::omega::RenderReadiness::Failed as i32,
+            render_error: message,
+            ..Default::default()
+        }
+    }
+
+    pub(super) fn changed(&mut self, context: &Context) -> Option<ViewTree> {
+        let view = self.view(context);
+        (self.sent.as_ref() != Some(&view)).then_some(view)
     }
     pub(super) fn invalidate(&mut self, patch: &omega_proto::omega::StatePatch) {
         if patch

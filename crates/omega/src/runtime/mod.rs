@@ -153,10 +153,7 @@ impl Runtime {
                                 Ok(instance) => instance,
                                 Err(error) => { self.client.send(error.refusal().frame(frame.stream_id)).await?; continue; }
                             };
-                            let view = match instance.view(&self.context) {
-                                Ok(view) => view,
-                                Err(error) => { self.client.send(error.refusal().frame(frame.stream_id)).await?; continue; }
-                            };
+                            let view = instance.view(&self.context);
                             let answer = Frame::reply(frame.stream_id, result::Outcome::View(view.clone()));
                             let rendered = matches!(&answer.body, Some(frame::Body::Result(answer)) if matches!(answer.outcome, Some(result::Outcome::View(_))));
                             self.client.send(answer).await?;
@@ -258,7 +255,7 @@ impl Runtime {
             if self.publications.len() >= 256 {
                 break;
             }
-            let Some(view) = instance.changed(&self.context)? else {
+            let Some(view) = instance.changed(&self.context) else {
                 continue;
             };
             let stream = self.client.allocate();

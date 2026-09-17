@@ -571,7 +571,7 @@ mod tests {
             .await
             .unwrap();
         let name = "example".parse::<omega_proto::UnitName>().unwrap();
-        let token = worker.context.units.adopt_unit(&name);
+        let token = worker.context.units.adopt_unit(&name).unwrap();
         let second = dir.publish_unit(b"second");
         assert!(
             worker
@@ -647,7 +647,7 @@ mod tests {
             .await
             .unwrap();
         let name = "example".parse::<omega_proto::UnitName>().unwrap();
-        let token = worker.context.units.adopt_unit(&name);
+        let token = worker.context.units.adopt_unit(&name).unwrap();
         let document = &mut worker.build.as_mut().unwrap().document;
         *document = omega_document::Document::new()
             .unit(omega_document::Units::disabled("example"))

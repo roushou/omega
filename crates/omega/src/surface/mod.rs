@@ -112,7 +112,7 @@ pub trait Surface: Wired {
 mod events;
 mod task;
 pub(crate) use events::Decoder;
-pub use events::Events;
+pub use events::{BindingError, Events};
 pub use task::Task;
 
 pub(crate) mod instance;

@@ -38,6 +38,10 @@ optional readings retain subscriptions without delaying the first render.
 `ViewTree.readiness` distinguishes waiting from a completed render, including an
 empty render. Waiting trees have no root and carry distinct, valid system-topic
 names in `pending_topics`. Ready and unspecified trees carry no pending topics.
+Failed trees have no root or pending topics and carry a nonblank `render_error`
+of at most 4096 UTF-8 bytes. Other readiness states carry no render error.
+Failure replaces the previous tree and its interactions for that instance;
+other instances in the plugin remain usable. Health includes the diagnostic.
 An unspecified legacy tree with a root proves rendering occurred; an unspecified
 empty tree is ambiguous. Readiness metadata participates in view deduplication.
 

@@ -77,6 +77,28 @@ JSON, and systemd status uses `from_show_output`. Renderer attachments use
 `from_request` to validate feature requirements and initialize revocation state.
 Platform parsers that combine inputs or produce collections retain named methods.
 
+## Reading validation and render failures
+
+The SDK mirror validates each accepted system-topic payload against its topic.
+Application, media-player, and Bluetooth-device collections are converted to
+owned, typed models once per accepted revision. `Reading<T>` distinguishes pending,
+explicit absence, invalid data, and valid data, including empty collections.
+Invalid readings replace older data atomically, expose a topic/revision diagnostic,
+and recover on a newer valid or absent reading. Production and fixture contexts
+use the same mirror; accessors never parse identifiers during rendering.
+
+A surface render collects local bindings before committing them with its validated
+tree. Capacity and identity exhaustion reject the entire render. Failed renders
+revoke the preceding bindings and publish a rootless failed tree with a bounded
+diagnostic, clearing stale UI. Failures are cached until dependency or model
+invalidation; publication acknowledgements do not retry rendering. The daemon
+projects per-instance failures into health without changing process lifecycle.
+
+Unit tokens and instance identities require OS randomness. Failure is returned to
+the caller before installing identities. Development adoption prepares its token
+before stopping the current process; supervised spawn failures follow the ordinary
+failure-reporting and backoff path.
+
 ## Workspace and build ownership
 
 `omega-host::cargo` owns `Manifest` (`Cargo.toml`) and `Config`
@@ -776,8 +798,9 @@ the latest validated placement plan, session-owned instances, and retained view
 readiness. Lifecycle and health are sampled under the same unit-table lock.
 Missing configured instances remain waiting across session loss; unplaced means
 no desired placement or live instance. A running plugin without declared surfaces
-is a healthy background plugin. One waiting instance makes the plugin waiting,
-even if another instance has rendered. This does not change the lifecycle topic
+is a healthy background plugin. A failed render makes plugin health failed and
+exposes the instance diagnostic. Otherwise, one waiting instance makes the plugin
+waiting, even if another instance has rendered. This does not change the lifecycle topic
 or feed diagnostic reads back into plugin invalidation.
 
 The SDK attaches startup readiness to each view. Waiting trees name required

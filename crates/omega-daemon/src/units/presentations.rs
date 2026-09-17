@@ -187,7 +187,8 @@ impl UnitTable {
             if record.instances.len() >= 256 || count >= 4096 {
                 return Err(Refusal::exhausted("instance capacity exhausted"));
             }
-            let instance = Instance::new(surface, config, presentation, singleton, placement);
+            let instance =
+                Instance::new(surface, config, presentation, singleton, placement).or_refuse()?;
             if instance.config_bytes() > 128 * 1024
                 || retained + instance.config_bytes() > 8 * 1024 * 1024
             {

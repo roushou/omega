@@ -69,7 +69,7 @@ impl Harness {
     /// Register this process as a unit and take its token, the way a spawned
     /// unit receives one in its environment.
     pub fn register_unit(&self, name: &str) -> UnitToken {
-        self.supervisor.register(&unit_name(name))
+        self.supervisor.register(&unit_name(name)).unwrap()
     }
 
     /// Open a connection and send `Hello`, returning the transport for the

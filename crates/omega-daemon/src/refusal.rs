@@ -140,6 +140,12 @@ impl Refusable for crate::reconcile::shell::ShellApplyError {
     }
 }
 
+impl Refusable for crate::units::TokenError {
+    fn refusal(&self) -> Refusal {
+        Refusal::unavailable(self.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -30,7 +30,13 @@ macro_rules! reading {
                 self.read().is_some()
             }
 
-            /// Return the raw protocol reading, or `None` if unavailable.
+            /// The validation failure for the latest reading, if any.
+            /// A newer valid or explicitly unavailable reading clears this error.
+            pub fn reading_error(&self) -> Option<$crate::platform::ReadingError> {
+                self.context.read().error(<$value as omega_proto::TopicValue>::TOPIC).cloned()
+            }
+
+            /// Return the raw protocol reading, or `None` if unavailable or invalid.
             /// Prefer the typed accessors for unit conversions and status interpretation.
             pub fn get(&self) -> Option<$value> {
                 self.read()

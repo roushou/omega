@@ -26,7 +26,7 @@ fn phase(units: &UnitTable, name: &UnitName) -> i32 {
 fn a_spawned_unit_is_starting_until_it_checks_in() {
     let units = table();
     let name = unit("battery-widget");
-    let token = units.issue(&name);
+    let token = units.issue(&name).unwrap();
 
     units.transition(&name, Transition::Spawned);
 
@@ -151,8 +151,8 @@ async fn obsolete_session_cannot_disconnect_its_replacement() {
 fn obsolete_adoption_cannot_release_its_replacement() {
     let units = omega_daemon::units::UnitTable::detached(omega_daemon::hub::Hub::new());
     let name = "unit".parse::<omega_proto::UnitName>().unwrap();
-    let old = units.adopt_unit(&name);
-    let current = units.adopt_unit(&name);
+    let old = units.adopt_unit(&name).unwrap();
+    let current = units.adopt_unit(&name).unwrap();
     units.release_adoption(&name, &old);
     assert!(units.held().contains(&name));
     units.release_adoption(&name, &current);

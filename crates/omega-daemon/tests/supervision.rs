@@ -190,7 +190,7 @@ async fn a_token_is_revoked_when_its_process_is_gone() {
         Shutdown::new(),
     );
 
-    let token: UnitToken = supervisor.register(&unit("battery-widget"));
+    let token: UnitToken = supervisor.register(&unit("battery-widget")).unwrap();
     assert!(supervisor.identify(1234, token.as_str()).is_some());
     assert!(supervisor.identify(1234, "another-token").is_none());
 }

@@ -31,7 +31,7 @@ impl Instance {
         presentation: PresentationSpec,
         singleton: Option<SingletonId>,
         placement: Option<SurfaceRef>,
-    ) -> Self {
+    ) -> Result<Self, super::TokenError> {
         let requested = if matches!(
             presentation.wire().kind,
             Some(omega::presentation::Kind::Popup(_))
@@ -40,12 +40,13 @@ impl Instance {
         } else {
             Visibility::Visible
         };
-        Self {
+        let id = UnitToken::mint()?;
+        let incarnation = UnitToken::mint()?;
+        Ok(Self {
             lifecycle: Default::default(),
             key: InstanceKey {
-                id: InstanceId::try_from(format!("instance-{}", UnitToken::mint()))
-                    .expect("generated ID"),
-                incarnation: IncarnationId::try_from(format!("incarnation-{}", UnitToken::mint()))
+                id: InstanceId::try_from(format!("instance-{id}")).expect("generated ID"),
+                incarnation: IncarnationId::try_from(format!("incarnation-{incarnation}"))
                     .expect("generated ID"),
             },
             surface,
@@ -55,7 +56,7 @@ impl Instance {
             placement,
             state: PresentationState::new(requested, Observation::Known(Visibility::Hidden)),
             ready: false,
-        }
+        })
     }
 
     pub(crate) fn config_bytes(&self) -> usize {
