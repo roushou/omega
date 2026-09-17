@@ -4,12 +4,13 @@
 
 use anyhow::{Context, bail};
 
+use omega_host::cargo::{Cargo, PackageSpec, Selection};
 use omega_host::fs::{Changes, Recursion};
 use omega_host::{Layout, Profile};
 use omega_proto::UnitName;
 use omega_proto::{Handshake, Socket};
 
-use crate::build::cargo::Cargo;
+use crate::build::Build;
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
 
@@ -38,8 +39,7 @@ impl DevCmd {
             );
         }
 
-        let cargo = Cargo::new(&layout);
-        Self::build(&layout, &cargo, &name).await?;
+        Self::build(&layout, &name).await?;
 
         let mut attached = Operator::new().attach().await.with_context(|| {
             format!(
@@ -97,7 +97,7 @@ impl DevCmd {
 
             ui.blank();
             ui.step(Step::Changed, format!("rebuilding {}", Paint::name(&name)));
-            if let Err(e) = Self::build(&layout, &cargo, &name).await {
+            if let Err(e) = Self::build(&layout, &name).await {
                 // A build that fails leaves the loop running: the next save
                 // is the fix, and exiting would throw away the adoption.
                 ui.error(&e);
@@ -114,9 +114,15 @@ impl DevCmd {
         Ok(())
     }
 
-    async fn build(layout: &Layout, cargo: &Cargo<'_>, name: &UnitName) -> anyhow::Result<()> {
+    async fn build(layout: &Layout, name: &UnitName) -> anyhow::Result<()> {
         let _workspace = crate::workspace::ConfigWorkspace::open(layout.clone())?;
-        cargo.build_unit(Self::PROFILE, name).await?;
+        Cargo::new(&layout.config)
+            .build(Build::request(
+                layout,
+                Self::PROFILE,
+                Selection::Package(PackageSpec::parse(name.as_str())?),
+            ))
+            .await?;
         Ok(())
     }
 

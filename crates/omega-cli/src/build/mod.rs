@@ -6,12 +6,12 @@ use crate::{
 };
 use activation::Activation;
 use anyhow::bail;
-use cargo::Cargo;
 use describe::Describe;
 use omega_base::execution::Pipeline;
 use omega_document::StateDocument;
 use omega_host::{
     Layout, Profile,
+    cargo::{BuildRequest, Selection},
     fs::{Changes, Recursion},
 };
 use plan::Plan;
@@ -19,7 +19,6 @@ use std::time::Duration;
 use system::System;
 
 pub(crate) mod activation;
-pub(crate) mod cargo;
 mod check;
 mod describe;
 mod plan;
@@ -35,6 +34,13 @@ pub(crate) struct Build {
 }
 
 impl Build {
+    /// Configuration builds share Omega's target directory and an explicit profile.
+    pub(crate) fn request(layout: &Layout, profile: Profile, selection: Selection) -> BuildRequest {
+        BuildRequest::new(selection)
+            .profile(profile)
+            .target_dir(layout.target_dir())
+    }
+
     pub(crate) async fn run(&self, ui: &mut Ui) -> anyhow::Result<()> {
         if self.watch {
             self.watch_loop(&self.layout, self.profile, ui).await

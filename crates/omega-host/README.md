@@ -13,6 +13,11 @@ formats to their locations.
 comments, formatting, and unrelated settings. Package and workspace views borrow
 from the manifest. Failed edits leave the document unchanged.
 
+`cargo::Cargo` runs builds, metadata queries, and library-test compilation in an
+explicit working directory. It defaults to `cargo` on PATH; `.executable(path)`
+overrides it. Requests select packages, profiles, target directories, and dependency
+resolution. Metadata and compiler artifacts use `cargo_metadata` types.
+
 `workspace` owns source roles and runnable plugin
 discovery. `fs::Changes` provides settled filesystem watching when
 the optional `watch` feature is enabled; ordinary document consumers do not need it.

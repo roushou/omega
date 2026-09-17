@@ -69,11 +69,8 @@ impl PreviewCmd {
             })
             .transpose()?
             .unwrap_or_else(|| layout.config.clone());
-        let build = Build {
-            directory,
-            package: self.package.clone(),
-        };
-        let mut changes = build.watch().await?;
+        let build = Build::new(directory, &self.package).await?;
+        let mut changes = build.watch()?;
         ui.step(Step::Building, format!("{} preview cases", self.package));
         let binary = build.compile().await?;
         let root = SessionDirectory(layout.preview_session());

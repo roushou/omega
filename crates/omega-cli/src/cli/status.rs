@@ -164,11 +164,15 @@ impl StatusCmd {
         }
         match tokio::time::timeout(
             Duration::from_secs(10),
-            crate::build::cargo::Cargo::new(&layout).packages(),
+            omega_host::cargo::Cargo::new(&layout.config).metadata(
+                omega_host::cargo::MetadataRequest::new()
+                    .resolution(omega_host::cargo::Resolution::OfflineLocked),
+            ),
         )
         .await
         {
-            Ok(Ok(mut packages)) => {
+            Ok(Ok(metadata)) => {
+                let mut packages = metadata.packages;
                 ui.step(Step::Checking, "resolved configuration dependencies");
                 packages.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
                 for package in packages
@@ -176,8 +180,10 @@ impl StatusCmd {
                     .filter(|p| p.name.starts_with("omega-"))
                 {
                     let source = match package.source {
-                        Some(source) => source,
-                        None => format!("path {}", Paint::path(package.manifest_path)),
+                        Some(source) => source.to_string(),
+                        None => {
+                            format!("path {}", Paint::path(package.manifest_path.as_std_path()))
+                        }
                     };
                     ui.step(
                         Step::Checking,

@@ -81,7 +81,27 @@ the shared watcher owns event filtering and settlement. It coalesces create,
 modify and remove notifications into wakeups; callers re-read state rather than
 receiving typed filesystem events.
 
-The CLI’s `build` module owns Cargo execution, manifest extraction, document
+`omega-host::cargo::Cargo` owns asynchronous Cargo invocation. Construction requires
+a working directory and defaults to `cargo` on PATH, with an explicit executable
+override. Each request owns package selection and dependency-resolution policy.
+Build requests default to the dev profile; library tests use Cargo's test profile.
+Target directories are overridden only when requested. Environment and local Cargo
+configuration are inherited. CLI `Build::request` selects Omega's target directory and
+the caller's build profile; previews retain the workspace's Cargo configuration.
+Status queries request offline, locked metadata.
+
+Metadata and compiler messages are decoded with `cargo_metadata`. Metadata capture
+is limited to 64 MiB stdout and 64 KiB stderr. Test compilation streams JSON lines
+with an 8 MiB per-line limit, retaining at most 64 KiB of diagnostics plus a truncation
+marker. Malformed known messages fail; unknown message reasons are ignored. Library
+test selection uses the requested package ID and refuses missing or ambiguous
+executables. Preview rebuilds resolve that ID again to account for manifest edits.
+
+Cargo operations have no built-in deadline. Dropping an operation kills its direct
+Cargo child, without promising descendant termination or rollback of filesystem
+effects. Workspace locking and caller deadlines remain application policy.
+
+The CLI’s `build` module owns compilation policy, manifest extraction, document
 evaluation, staged publication, and generation-specific activation waits. Its
 `Check` operation validates without publishing. Build/check command entry points
 parse options and supply an explicit layout and profile. Checkout diagnostics

@@ -227,6 +227,11 @@ omega-cli      the binary
   validation, generation planning/publication, and activation waits. Build helpers
   must not depend on command parser types or resolve their own workspace environment.
 - `omega-host::cargo` owns source-preserving Cargo documents and typed accessors.
+  Its `Cargo` handle owns asynchronous invocation and metadata/artifact decoding;
+  callers supply the working directory, package selection, profile, target directory,
+  and resolution policy. It defaults to `cargo` on PATH with an explicit executable
+  override. CLI `Build::request` owns configuration-build defaults; preview compilation
+  retains Cargo's configured target directory and selects artifacts by package ID.
   `omega-host::workspace` owns source roles and plugin discovery. `omega-host::fs`
   owns settled watching under its optional `watch` feature. The daemon owns runtime generation selection, not source-workspace tools.
 

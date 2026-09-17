@@ -4,11 +4,12 @@
 
 use anyhow::bail;
 
+use omega_host::cargo::{Cargo, Selection};
 use omega_host::workspace::Plugins;
 use omega_host::{Layout, Profile};
 use omega_proto::omega::Capability;
 
-use crate::build::cargo::Cargo;
+use super::Build;
 use crate::build::describe::Describe;
 use crate::build::system::System;
 use crate::ui::{Paint, Step, Ui};
@@ -39,7 +40,9 @@ impl Check {
         let units = Plugins::discover(&layout)?;
 
         ui.step(Step::Checking, Paint::count(units.len(), "plugin"));
-        Cargo::new(&layout).build(Self::PROFILE).await?;
+        Cargo::new(&layout.config)
+            .build(Build::request(&layout, Self::PROFILE, Selection::Workspace))
+            .await?;
 
         // Collect validation results for every plugin.
         let describe = Describe::new(&layout, Self::PROFILE);

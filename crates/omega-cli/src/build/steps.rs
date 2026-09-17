@@ -1,9 +1,10 @@
 //! Named build operations and the typed artifacts passed between them.
 
-use super::{Cargo, Plan, System};
+use super::{Build, Plan, System};
 use crate::workspace::ConfigWorkspace;
 use omega_base::execution::{Operation, Progress, Step};
 use omega_document::StateDocument;
+use omega_host::cargo::{Cargo, Selection};
 use omega_host::{GenerationId, Layout, Profile, workspace::Plugins};
 
 pub(crate) struct Sources {
@@ -51,8 +52,12 @@ impl Operation<Sources> for Compile {
         progress.path("Workspace:", &layout.config);
 
         let units = Plugins::discover(layout)?;
-        Cargo::new(layout)
-            .build(sources.profile)
+        Cargo::new(&layout.config)
+            .build(Build::request(
+                layout,
+                sources.profile,
+                Selection::Workspace,
+            ))
             .await
             .map_err(anyhow::Error::from)
             .map_err(
