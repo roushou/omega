@@ -2,9 +2,10 @@
 //! generated workspace build.
 
 use omega_cli::checkout::SourceTree;
-use omega_cli::scaffold::{PluginName, Published, Scaffold};
+use omega_cli::scaffold::{Published, Scaffold};
 use omega_host::Toml;
 use omega_host::cargo::{Inherited, Manifest};
+use omega_host::package::PackageName;
 use omega_proto::UnitName;
 
 fn unit() -> UnitName {
@@ -106,23 +107,6 @@ fn the_config_plane_is_scaffolded_as_its_own_crate() {
 }
 
 #[test]
-fn the_config_plane_reaches_a_plugin_by_path() {
-    // Scaffolding adds a system dependency on the plugin library.
-    let dependency = Scaffold::depends_on(&unit());
-
-    assert!(
-        dependency
-            .path()
-            .is_some_and(|path| path.ends_with("plugins/battery-widget")),
-        "{dependency:?}"
-    );
-    assert!(
-        !dependency.is_inherited(),
-        "a crate in this workspace has no version to inherit: {dependency:?}"
-    );
-}
-
-#[test]
 fn the_unit_crate_is_named_after_the_unit() {
     let unit_crate = Scaffold::new().unit_crate_manifest(&unit()).unwrap();
     let package = unit_crate.package().unwrap().unwrap();
@@ -136,7 +120,7 @@ fn the_unit_crate_is_named_after_the_unit() {
 #[test]
 fn the_program_is_the_library_and_a_call() {
     let main = Scaffold::new()
-        .unit_main(&PluginName::parse(unit().as_str()).unwrap())
+        .unit_main(&PackageName::parse(unit().as_str()).unwrap())
         .unwrap();
 
     // A plugin is a library so the config plane can depend on it. What is

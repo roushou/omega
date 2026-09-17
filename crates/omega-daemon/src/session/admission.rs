@@ -7,7 +7,7 @@ use omega_proto::Manifest;
 use omega_proto::Refusal;
 use omega_proto::UnitName;
 
-pub use crate::authorization::{Grants, Role};
+use crate::authorization::{Grants, Role};
 use crate::process::Identity;
 
 /// An admitted peer.

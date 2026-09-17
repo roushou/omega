@@ -97,3 +97,19 @@ pub enum PackageNameError {
     #[error("{0:?} cannot be used as a config crate name; choose a different name")]
     Reserved(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_must_work_as_rust_crates() {
+        for name in ["type", "gen", "self", "system", "omega", "proc-macro"] {
+            assert!(PackageName::parse(name).is_err(), "{name}");
+        }
+        assert_eq!(
+            PackageName::parse("audio-output").unwrap().rust_ident(),
+            "audio_output"
+        );
+    }
+}

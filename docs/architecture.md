@@ -68,6 +68,8 @@ the fields they read. Fallible edits leave the document unchanged on failure.
 `TomlSchema` supplies each document's codec and location, so `TomlFile` preserves
 the source representation through reads and atomic writes.
 
+`omega-host::package::PackageName` validates names used by both plugin and library
+scaffolding and supplies their Rust identifiers. CLI callers use that type directly.
 `cargo::PathPattern` handles member matching and directory expansion.
 `omega-host::workspace` owns source roles and `Plugins::discover`. CLI scaffolding selects editions, dependency recipes, member
 patterns, and release settings. Initialization, plugin creation, and checkout

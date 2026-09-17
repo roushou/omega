@@ -19,10 +19,9 @@ use crate::broker::Brokerage;
 use crate::hub::Hub;
 use crate::shutdown::Shutdown;
 use crate::supervisor::Supervisor;
-use crate::units::{DaemonStreams, Request, UnitTable};
-use omega_proto::CodecError;
+use crate::units::{Request, UnitTable};
+use omega_proto::{CodecError, DaemonStreams};
 
-pub use crate::authorization::Role;
 pub use admission::Peer;
 pub use dispatch::{Dispatcher, OpKind, Response};
 pub use liveness::{Health, Liveness};

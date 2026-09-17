@@ -1,13 +1,14 @@
-use super::{ConfigWorkspace, FileEdit, FileEdits, PluginName};
+use super::{ConfigWorkspace, FileEdit, FileEdits};
 use crate::scaffold::Template;
 use anyhow::{Context, Result, ensure};
 use omega_host::cargo::{CargoSlot, Dependency, Manifest};
+use omega_host::package::PackageName;
 use omega_host::{StageDir, Toml};
 
 #[derive(Debug)]
 pub(crate) struct PreparedPlugin<'a> {
     workspace: &'a ConfigWorkspace,
-    name: PluginName,
+    name: PackageName,
     manifest: String,
     library: &'static str,
     main: Option<String>,
@@ -18,7 +19,7 @@ pub(crate) struct PreparedPlugin<'a> {
 impl ConfigWorkspace {
     pub(crate) fn prepare_plugin(
         &self,
-        name: PluginName,
+        name: PackageName,
         template: Template,
     ) -> Result<PreparedPlugin<'_>> {
         self.prepare_package(name, Some(template), &[std::path::PathBuf::from("system")])
@@ -26,7 +27,7 @@ impl ConfigWorkspace {
 
     pub(crate) fn prepare_library(
         &self,
-        name: PluginName,
+        name: PackageName,
         consumers: &[std::path::PathBuf],
     ) -> Result<PreparedPlugin<'_>> {
         self.prepare_package(name, None, consumers)
@@ -34,7 +35,7 @@ impl ConfigWorkspace {
 
     fn prepare_package(
         &self,
-        name: PluginName,
+        name: PackageName,
         template: Option<Template>,
         consumers: &[std::path::PathBuf],
     ) -> Result<PreparedPlugin<'_>> {
@@ -157,7 +158,7 @@ impl ConfigWorkspace {
 }
 
 impl PreparedPlugin<'_> {
-    pub(crate) fn apply(self) -> Result<PluginName> {
+    pub(crate) fn apply(self) -> Result<PackageName> {
         let destination = self.destination;
         let stage =
             StageDir::in_directory(&destination, &self.workspace.layout.workspace_staging())?;

@@ -551,7 +551,7 @@ fn both_templates_build_with_their_printed_placements() {
         assert!(output.stdout.is_empty());
         let output = String::from_utf8_lossy(&output.stderr);
         let hint = omega_cli::scaffold::Scaffold::placement_hint(
-            &omega_cli::scaffold::PluginName::parse(name).unwrap(),
+            &omega_host::package::PackageName::parse(name).unwrap(),
             template,
         );
         assert!(output.contains(&hint), "{output}");

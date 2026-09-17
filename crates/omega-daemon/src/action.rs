@@ -1,7 +1,7 @@
 //! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
-use omega_proto::UnitName;
 use omega_proto::omega::{CallCommand, InvokeUnit, RunCommand, action, invoke};
+use omega_proto::{ActionKind, UnitName};
 use omega_proto::{CommandAnswer, Refusal};
 
 use crate::refusal::Refusable;
@@ -10,8 +10,6 @@ use crate::authorization::Grants;
 use crate::broker::Brokerage;
 use crate::refusal::RefusableResult;
 use crate::units::UnitTable;
-
-pub use omega_proto::ActionKind;
 
 /// Dispatch actions to daemon handlers, plugin commands, or subsystem brokers.
 #[derive(Debug)]

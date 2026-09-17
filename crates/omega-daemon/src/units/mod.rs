@@ -26,7 +26,6 @@ use crate::hub::Hub;
 use crate::manifest::{ManifestStore, UnitManifest};
 
 pub use lifecycle::{Lifecycle, Transition};
-pub use omega_proto::DaemonStreams;
 pub use presentations::InstalledInstance;
 pub use record::{UnitControl, UnitRecord};
 pub use session::{Request, RequestError, SessionGuard};

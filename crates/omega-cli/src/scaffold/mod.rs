@@ -3,13 +3,11 @@
 
 use omega_host::Layout;
 use omega_host::cargo::{CargoError, Dependencies, Dependency, Inherited, Manifest};
+use omega_host::package::PackageName;
 use omega_proto::UnitName;
 
 mod dependency;
 pub use dependency::{DependencySource, DependencySpec};
-
-mod name;
-pub use name::PluginName;
 
 /// The templates a new config is stamped from, compiled into the binary so a
 /// scaffold never depends on omega's source tree being present.
@@ -160,7 +158,7 @@ impl Scaffold {
 
     /// `plugins/<name>/src/main.rs`: the program, which is the library and a
     /// call.
-    pub fn unit_main(&self, name: &PluginName) -> Result<String, ScaffoldError> {
+    pub fn unit_main(&self, name: &PackageName) -> Result<String, ScaffoldError> {
         Self::stamp(UNIT_MAIN, name)
     }
 
@@ -178,14 +176,9 @@ impl Scaffold {
         )
     }
 
-    /// Generate the system crate's path dependency on a plugin.
-    pub fn depends_on(unit: &UnitName) -> Dependency {
-        Dependency::local(format!("../plugins/{unit}"), &[])
-    }
-
     /// Fully qualified placement expression for the generated plugin.
     /// Template tests verify referenced types and names.
-    pub fn placement_hint(unit: &PluginName, template: Template) -> String {
+    pub fn placement_hint(unit: &PackageName, template: Template) -> String {
         let krate = unit.rust_ident();
         let unit = unit.package();
         let widget = match template {
@@ -206,7 +199,7 @@ impl Scaffold {
     }
 
     /// Expand required template placeholders or fail if any are missing.
-    fn stamp(template: &str, name: &PluginName) -> Result<String, ScaffoldError> {
+    fn stamp(template: &str, name: &PackageName) -> Result<String, ScaffoldError> {
         let stamped = template.replace(CRATE_TOKEN, name.rust_ident());
 
         // Reject unmatched placeholders before writing an invalid template.

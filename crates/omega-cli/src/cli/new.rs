@@ -5,8 +5,9 @@
 
 use crate::scaffold::{Scaffold, Template};
 use crate::ui::{Paint, Step, Ui};
-use crate::workspace::{ConfigWorkspace, PluginName};
+use crate::workspace::ConfigWorkspace;
 use omega_host::Layout;
+use omega_host::package::PackageName;
 
 /// Scaffold a plugin into `~/.config/omega/plugins/<name>`.
 #[derive(Debug, clap::Args)]
@@ -25,7 +26,7 @@ pub struct NewCmd {
 
 impl NewCmd {
     pub fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let name = PluginName::parse(&self.name)?;
+        let name = PackageName::parse(&self.name)?;
         let workspace = ConfigWorkspace::open(Layout::resolve())?;
         if self.lib {
             let created = workspace.prepare_library(name, &self.into)?.apply()?;
@@ -47,7 +48,7 @@ impl NewCmd {
     }
 
     /// What was written, and the one line omega will not write.
-    fn report(ui: &mut Ui, layout: &Layout, name: &PluginName, template: Template) {
+    fn report(ui: &mut Ui, layout: &Layout, name: &PackageName, template: Template) {
         let path = layout
             .unit_lib_src(name.unit())
             .strip_prefix(&layout.config)

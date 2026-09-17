@@ -81,7 +81,7 @@ and reviews. These rules also apply to AI coding tools working in this repositor
   `session/dispatch/policy.rs`. Missing policy rows are refused.
 - The manifest is the ceiling; `Subscribe` narrows it and never widens. A unit
   writes `unit.<its own name>.<key>` and nothing else.
-- Declare action capabilities once in `action::ActionKind`. Check authorization
+- Declare action capabilities once in `omega-proto::ActionKind`. Check authorization
   before handler availability.
 - A unit serves only registered commands with its own capabilities. Cross-unit
   invocation requires CAPABILITY_SPAWN for units; the operator is authorized by uid.
