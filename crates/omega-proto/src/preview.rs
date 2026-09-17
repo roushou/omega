@@ -28,7 +28,7 @@ impl TryFrom<String> for CaseId {
     type Error = crate::IdentError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        crate::ident::Ident::validate("unit name", value).map(Self)
+        crate::ident::Ident::validate("preview case id", value).map(Self)
     }
 }
 

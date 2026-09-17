@@ -3,6 +3,7 @@ use crate::{
     operator::Operator,
     ui::{Paint, Step, Ui},
 };
+use omega_proto::instance::{PresentationError, PresentationSpec};
 use omega_proto::omega::{self, presentation};
 use omega_proto::{SurfaceId, UnitName};
 
@@ -78,14 +79,14 @@ impl PresentCmd {
         Ok(omega::Value { kind })
     }
 
-    pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        let unit_name = self.unit_name;
-        let surface_id = self.surface_id;
+    fn presentation(&self) -> Result<PresentationSpec, PresentationError> {
+        let unit_name = &self.unit_name;
+        let surface_id = &self.surface_id;
         let kind = if self.overlay {
             presentation::Kind::Overlay(omega::OverlayPresentation {
                 width: self.width,
                 height: self.height,
-                output: self.output.unwrap_or_default(),
+                output: self.output.clone().unwrap_or_default(),
                 dismiss_on_outside: self.dismiss_on_outside,
                 keyboard: omega::KeyboardPolicy::Exclusive as i32,
             })
@@ -99,11 +100,18 @@ impl PresentCmd {
                 min_height: 1,
             })
         };
+        PresentationSpec::try_from(omega::Presentation { kind: Some(kind) })
+    }
+
+    pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
+        let presentation = self.presentation()?;
+        let unit_name = self.unit_name;
+        let surface_id = self.surface_id;
         let result = Operator::new()
             .present(omega::CreateInstance {
                 unit: unit_name.to_string(),
                 surface: surface_id.to_string(),
-                presentation: Some(omega::Presentation { kind: Some(kind) }),
+                presentation: Some(presentation.wire().clone()),
                 config: self
                     .config
                     .map(|config| Self::settings(&config))
@@ -125,5 +133,58 @@ impl PresentCmd {
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::{Cli, Command};
+    use clap::Parser;
+
+    struct Fixture;
+
+    impl Fixture {
+        fn command(overlay: bool, dimension: &str, size: u32) -> PresentCmd {
+            let size = size.to_string();
+            let mut args = vec!["omega", "present", "audio", "panel", dimension, &size];
+            if overlay {
+                args.push("--overlay");
+            }
+            let Command::Present(command) = Cli::try_parse_from(args).unwrap().command else {
+                panic!("expected present")
+            };
+            command
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_dimensions_fail_before_contacting_the_daemon() {
+        for overlay in [false, true] {
+            for dimension in ["--width", "--height"] {
+                for size in [0, 16385, u32::MAX] {
+                    let command = Fixture::command(overlay, dimension, size);
+                    let (mut ui, _) = Ui::recording();
+                    let error = command.run(&mut ui).await.unwrap_err();
+                    assert!(matches!(
+                        error.downcast_ref::<PresentationError>(),
+                        Some(PresentationError::Size)
+                    ));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn presentation_dimension_boundaries_are_accepted() {
+        for overlay in [false, true] {
+            for dimension in ["--width", "--height"] {
+                for size in [1, 16384] {
+                    Fixture::command(overlay, dimension, size)
+                        .presentation()
+                        .unwrap();
+                }
+            }
+        }
     }
 }

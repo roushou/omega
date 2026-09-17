@@ -23,8 +23,8 @@ pub struct PreviewCmd {
     /// Exact Rust library test that registers Cases.
     #[arg(long, default_value = "previews::preview")]
     pub test: String,
-    #[arg(long)]
-    pub case: Option<String>,
+    #[arg(long = "case", value_name = "CASE")]
+    pub case_id: Option<CaseId>,
     #[arg(long)]
     pub list: bool,
     #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u32).range(64..=4096))]
@@ -34,7 +34,7 @@ pub struct PreviewCmd {
     #[arg(long, default_value = "dark", value_parser = ["dark", "light"])]
     pub theme: String,
     /// Capture the selected case offscreen and exit; requires explicit synthetic fixtures.
-    #[arg(long, requires = "case")]
+    #[arg(long, requires = "case_id")]
     pub capture: Option<PathBuf>,
     /// Compare captured pixels and environment metadata with this baseline.
     #[arg(long, requires = "capture")]
@@ -68,9 +68,6 @@ impl PreviewCmd {
     }
 
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
-        if let Some(case) = &self.case {
-            CaseId::try_from(case.clone())?;
-        }
         let layout = Layout::resolve();
         let cargo = self
             .manifest_path
@@ -91,7 +88,7 @@ impl PreviewCmd {
             &Layout::preview_file(&root.0, "runner-1.sock"),
             &self.test,
             generation,
-            self.case.as_deref(),
+            self.case_id.as_ref(),
         )
         .await?;
         if self.list {
@@ -202,7 +199,10 @@ impl PreviewCmd {
                     let candidate = match built? {
                         Ok(binary) => {
                             generation += 1;
-                            Runner::start(&binary, &Layout::preview_file(&root.0, format!("runner-{generation}.sock")), &self.test, generation, Some(&snapshot.selected)).await
+                            match snapshot.selected.parse::<CaseId>() {
+                                Ok(case_id) => Runner::start(&binary, &Layout::preview_file(&root.0, format!("runner-{generation}.sock")), &self.test, generation, Some(&case_id)).await,
+                                Err(error) => Err(error.into()),
+                            }
                         }
                         Err(error) => Err(error),
                     };

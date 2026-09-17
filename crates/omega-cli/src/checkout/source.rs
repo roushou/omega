@@ -14,6 +14,8 @@ pub enum LinkError {
     },
     #[error("{} is not an omega checkout", path.display())]
     NotACheckout { path: PathBuf },
+    #[error("checkout path cannot be encoded in Cargo TOML because it is not UTF-8: {}", path.display())]
+    NonUtf8Path { path: PathBuf },
     #[error("the checkout declares no workspace version")]
     NoVersion,
     #[error(transparent)]
@@ -103,30 +105,37 @@ impl SourceTree {
     }
 
     /// The patch that points a config's dependencies at this checkout.
+    /// Returns an error if a crate path cannot be resolved or represented as UTF-8
+    /// in Cargo's TOML configuration.
     pub fn patch(&self, preview: bool) -> Result<Dependencies, LinkError> {
         let mut patched = Dependencies::new();
         for spec in Scaffold::omega_crates()
             .chain(Scaffold::PREVIEW_DEPENDENCIES.iter().filter(|_| preview))
         {
             let path = self.crate_path(spec.name)?;
-            patched.insert(spec.package(), Dependency::local(path, &[]));
+            let encoded = path
+                .to_str()
+                .ok_or_else(|| LinkError::NonUtf8Path { path: path.clone() })?;
+            patched.insert(spec.package(), Dependency::local(encoded, &[]));
         }
         Ok(patched)
     }
 
     /// Resolve an absolute canonical path or return an error.
-    fn crate_path(&self, crate_name: &'static str) -> Result<String, LinkError> {
+    fn crate_path(&self, crate_name: &'static str) -> Result<PathBuf, LinkError> {
         let path = self.crates_dir.join(crate_name);
         let canonical = path
             .canonicalize()
             .map_err(|source| LinkError::CratePath { crate_name, source })?;
-        Ok(canonical.display().to_string())
+        Ok(canonical)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::SourceTree;
+    use super::{LinkError, SourceTree};
+    use crate::scaffold::Scaffold;
+    use std::os::unix::ffi::OsStringExt;
     use std::path::{Path, PathBuf};
 
     struct CheckoutFixture(PathBuf);
@@ -157,6 +166,44 @@ mod tests {
     impl Drop for CheckoutFixture {
         fn drop(&mut self) {
             std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn non_utf8_checkout_paths_are_rejected_when_encoding_patches() {
+        let fixture = CheckoutFixture::new();
+        let root = fixture
+            .0
+            .join(std::ffi::OsString::from_vec(b"omega-\xff".to_vec()));
+        for spec in Scaffold::omega_crates() {
+            std::fs::create_dir_all(root.join("crates").join(spec.name)).unwrap();
+        }
+        omega_host::AtomicFile::at(root.join("crates/omega/Cargo.toml"))
+            .write(b"[package]\nname = 'omega-rs'\n")
+            .unwrap();
+        let source = SourceTree::at(&root).unwrap();
+        let error = source.patch(false).unwrap_err();
+        let LinkError::NonUtf8Path { path } = error else {
+            panic!("expected an explicit path encoding error")
+        };
+        assert!(path.starts_with(root.canonicalize().unwrap()));
+        assert!(path.to_str().is_none());
+    }
+
+    #[test]
+    fn unicode_and_spaces_are_preserved_in_cargo_patch_paths() {
+        let fixture = CheckoutFixture::new();
+        let root = fixture.checkout("Omega café with spaces");
+        for spec in Scaffold::omega_crates() {
+            std::fs::create_dir_all(root.join("crates").join(spec.name)).unwrap();
+        }
+        let patches = SourceTree::at(&root).unwrap().patch(false).unwrap();
+        for spec in Scaffold::omega_crates() {
+            let expected = root.join("crates").join(spec.name).canonicalize().unwrap();
+            assert_eq!(
+                patches.get(spec.package()).unwrap().path(),
+                expected.to_str()
+            );
         }
     }
 

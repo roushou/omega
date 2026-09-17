@@ -1,7 +1,7 @@
 use anyhow::{Context, bail};
 use omega_proto::{
     omega::{PreviewRequest, PreviewSnapshot, preview_request},
-    preview::{Reader, VERSION, Writer},
+    preview::{CaseId, Reader, VERSION, Writer},
 };
 use std::{path::Path, time::Duration};
 use tokio::{
@@ -24,7 +24,7 @@ impl Runner {
         socket: &Path,
         test: &str,
         generation: u32,
-        selected: Option<&str>,
+        case_id: Option<&CaseId>,
     ) -> anyhow::Result<(Self, PreviewSnapshot)> {
         let listener = UnixListener::bind(socket)?;
         let mut child = tokio::process::Command::new(binary)
@@ -63,12 +63,12 @@ impl Runner {
             snapshot.version == VERSION,
             "preview protocol mismatch; link matching omega-preview and CLI versions"
         );
-        if let Some(selected) = selected {
+        if let Some(case_id) = case_id {
             runner
                 .write
                 .send(&PreviewRequest {
                     id: 0,
-                    command: Some(preview_request::Command::Select(selected.into())),
+                    command: Some(preview_request::Command::Select(case_id.to_string())),
                 })
                 .await?;
             snapshot = tokio::time::timeout(Duration::from_secs(10), runner.read.receive())

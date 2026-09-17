@@ -22,11 +22,20 @@ enum Action {
     /// List retained change IDs, kinds, and journal states.
     List,
     /// Show the recorded target and its current relationship to the backup.
-    Inspect { id: String },
+    Inspect {
+        #[arg(value_name = "ID")]
+        change_id: ChangeId,
+    },
     /// Confirm an interrupted write that already reached its intended state.
-    Accept { id: String },
+    Accept {
+        #[arg(value_name = "ID")]
+        change_id: ChangeId,
+    },
     /// Restore one target, refusing subsequent edits. Stop the daemon first.
-    Restore { id: String },
+    Restore {
+        #[arg(value_name = "ID")]
+        change_id: ChangeId,
+    },
 }
 
 impl RecoveryCmd {
@@ -48,10 +57,10 @@ impl RecoveryCmd {
             return Ok(());
         }
 
-        let id = match &self.action {
-            Action::Inspect { id } | Action::Accept { id } | Action::Restore { id } => {
-                ChangeId::try_from(id.clone())?
-            }
+        let change_id = match &self.action {
+            Action::Inspect { change_id }
+            | Action::Accept { change_id }
+            | Action::Restore { change_id } => change_id,
             Action::List => unreachable!("handled above"),
         };
 
@@ -66,7 +75,7 @@ impl RecoveryCmd {
             None
         };
 
-        let mut saved = store.open::<Replacement>(&id)?;
+        let mut saved = store.open::<Replacement>(change_id)?;
         match self.action {
             Action::Inspect { .. } => {
                 ui.line(format!(

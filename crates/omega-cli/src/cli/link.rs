@@ -15,7 +15,7 @@ use crate::ui::{Paint, Step, Ui};
 pub struct LinkCmd {
     /// The checkout to build against. Defaults to `$OMEGA_SOURCE`, else the
     /// tree this binary was built from.
-    pub path: Option<String>,
+    pub path: Option<std::path::PathBuf>,
 
     /// Undo it: build against the published crates, as a clone of this config
     /// would on any other machine.

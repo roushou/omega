@@ -134,6 +134,10 @@ mod tests {
             (vec!["omega", "present", "audio", "Bad"], "SURFACE"),
             (vec!["omega", "new", "Bad"], "NAME"),
             (vec!["omega", "new", "type", "--lib"], "NAME"),
+            (vec!["omega", "recovery", "inspect", "../bad"], "ID"),
+            (vec!["omega", "recovery", "accept", ".."], "ID"),
+            (vec!["omega", "recovery", "restore", "bad/id"], "ID"),
+            (vec!["omega", "preview", "example", "--case", "Bad"], "CASE"),
         ] {
             let error = Cli::try_parse_from(args).unwrap_err();
             assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
@@ -160,9 +164,49 @@ mod tests {
             ],
             vec!["omega", "new", "audio-output"],
             vec!["omega", "new", "shared-ui", "--lib", "--into", "system"],
+            vec!["omega", "recovery", "inspect", "change-1"],
+            vec!["omega", "recovery", "accept", "change-1"],
+            vec!["omega", "recovery", "restore", "change-1"],
+            vec![
+                "omega",
+                "preview",
+                "example",
+                "--case",
+                "empty-state",
+                "--capture",
+                "capture.png",
+            ],
         ] {
             Cli::try_parse_from(args).unwrap();
         }
+    }
+
+    #[test]
+    fn preview_capture_still_requires_a_case() {
+        let error =
+            Cli::try_parse_from(["omega", "preview", "example", "--capture", "capture.png"])
+                .unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+        assert!(error.to_string().contains("--case"));
+    }
+
+    #[test]
+    fn link_accepts_native_paths_without_lossy_conversion() {
+        use std::os::unix::ffi::OsStringExt;
+        let path = std::ffi::OsString::from_vec(b"/tmp/omega-\xff".to_vec());
+        let cli = Cli::try_parse_from([
+            std::ffi::OsString::from("omega"),
+            "link".into(),
+            path.clone(),
+        ])
+        .unwrap();
+        let Command::Link(link) = cli.command else {
+            panic!("expected link")
+        };
+        assert_eq!(link.path.unwrap().into_os_string(), path);
     }
 
     #[test]
