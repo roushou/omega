@@ -15,7 +15,7 @@ description = "Omega's configuration plane: the state document, and the API a co
 workspace = true
 
 [dependencies]
-omega = { package = "omega-rs", path = "../omega", version = "0.3.5" }
+omega = { package = "omega-rs", path = "../omega", version = "0.3.6" }
 omega-host.workspace = true
 omega-proto = { workspace = true, features = ["json"] }
 serde_json.workspace = true

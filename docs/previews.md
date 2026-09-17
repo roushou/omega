@@ -11,7 +11,7 @@ Add a workspace dependency and opt into it only from members that have previews:
 ```toml
 # ~/.config/omega/Cargo.toml
 [workspace.dependencies]
-omega-preview = "0.3.5"
+omega-preview = "0.3.6"
 
 # A plugin or library's Cargo.toml
 [dev-dependencies]

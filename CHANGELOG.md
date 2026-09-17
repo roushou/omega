@@ -1,3 +1,23 @@
+## What's Changed in 0.3.6
+* feat(status): report plugin health and surface readiness
+* feat(cli): report initialization changes and actionable recovery guidance
+* feat(cli): add declarative initialization pipelines with durable recovery
+* refactor(cli)!: remove legacy workspace migration
+* refactor(workspace)!: rename config libraries directory to crates
+
+### Upgrade notes
+
+* Configuration libraries now live in `crates/`. Rename any existing `libraries/`
+  directory and update workspace members and path dependencies to match.
+* `omega migrate` has been removed; there is no automatic legacy workspace migration.
+* Human-readable `omega status` output now goes to stderr. Use `omega status --json`
+  for scripts, or `omega status <plugin>` for detailed health information.
+* Rebuild plugins with the updated SDK to report missing required readings and
+  distinguish waiting surfaces from deliberately empty renders. Older plugins with
+  empty views report unknown readiness.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.5...v0.3.6
+
 ## What's Changed in 0.3.5
 * docs: update README
 * chore(dev): add mise tooling and shared CI tasks
