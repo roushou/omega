@@ -42,7 +42,6 @@ tokio = { workspace = true, features = [
   "net",
   "fs",
 ] }
-toml_edit = "0.25"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lib]
@@ -57,3 +56,4 @@ path = "src/main.rs"
 tokio = { workspace = true, features = ["test-util"] }
 # Parse workspace-inherited package metadata in packaging tests.
 toml = "1"
+toml_edit = "0.25"

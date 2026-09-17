@@ -1,10 +1,8 @@
-mod editor;
 mod files;
 mod init;
 mod plugin;
 
 pub(crate) use crate::scaffold::PluginName;
-pub(crate) use editor::CargoEditor;
 pub(crate) use files::{FileEdit, FileEdits};
 pub(crate) use init::InitialShell;
 

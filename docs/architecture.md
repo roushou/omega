@@ -60,11 +60,19 @@ the separate configuration process arrive as stderr text, not typed diagnostics.
 
 ## Workspace and build ownership
 
-`omega-host::workspace` owns source roles, Cargo documents, member-pattern
-expansion, and `Plugins::discover`. Cargo schemas keep manifest, local config,
-dependency, package, and profile concepts in separate modules. CLI scaffolding,
-linking, checking, and builds use this same model. Runtime unit supervision does
-not own a second source-workspace model.
+`omega-host::cargo` owns `Manifest` (`Cargo.toml`) and `Config`
+(`.cargo/config.toml`). Each retains one source document, including comments and
+unknown fields. Package and workspace views borrow from that document; dependency
+accessors return typed values. Parsing checks TOML syntax, and accessors validate
+the fields they read. Fallible edits leave the document unchanged on failure.
+`TomlSchema` supplies each document's codec and location, so `TomlFile` preserves
+the source representation through reads and atomic writes.
+
+`cargo::PathPattern` handles member matching and directory expansion.
+`omega-host::workspace` owns source roles and `Plugins::discover`. CLI scaffolding selects editions, dependency recipes, member
+patterns, and release settings. Initialization, plugin creation, and checkout
+linking edit the host Cargo documents; workspace locks and recoverable file
+publication remain in the CLI's workspace operations.
 
 Settled filesystem watching lives in `omega-host::fs` behind the optional `watch`
 feature, enabled by CLI and daemon. Document-only consumers do not enable native

@@ -121,7 +121,7 @@ pub struct DependencyDetail {
     pub features: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace: Option<bool>,
-    /// `git`, `optional`, `default-features`, … kept verbatim.
+    /// Additional Cargo options, such as `optional` and `default-features`.
     #[serde(flatten)]
     pub rest: Table<toml::Value>,
 }
@@ -132,66 +132,48 @@ impl DependencyDetail {
     }
 }
 
-/// Where a generated dependency comes from. The declaration; [`Dependency`]
-/// is the resolved result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DependencySource {
-    /// A crates.io requirement.
-    Registry(&'static str),
-    /// One of omega's own crates, path-resolved against the source tree.
-    OmegaCrate,
-}
+/// Conversion at the source-document boundary; callers never reserialize the whole manifest.
+pub(super) struct DependencyTable;
 
-/// One line of a generator's dependency table.
-#[derive(Debug, Clone, Copy)]
-pub struct DependencySpec {
-    pub name: &'static str,
-    /// What the registry calls it, when that is not `name`.
-    pub package: Option<&'static str>,
-    pub source: DependencySource,
-    pub features: &'static [&'static str],
-}
-
-impl DependencySpec {
-    pub const fn registry(name: &'static str, version: &'static str) -> Self {
-        Self {
-            name,
-            package: None,
-            source: DependencySource::Registry(version),
-            features: &[],
+impl DependencyTable {
+    pub(super) fn read(
+        table: Option<&dyn toml_edit::TableLike>,
+        path: &str,
+    ) -> Result<Dependencies, super::CargoError> {
+        use serde::de::IntoDeserializer;
+        let mut result = Dependencies::new();
+        if let Some(table) = table {
+            for (name, item) in table.iter() {
+                let value = item.clone().into_value().map_err(|_| {
+                    super::CargoError::new(format!("{path}.{name}"), "invalid dependency")
+                })?;
+                let dependency =
+                    Dependency::deserialize(value.into_deserializer()).map_err(|error| {
+                        super::CargoError::new(format!("{path}.{name}"), error.to_string())
+                    })?;
+                result.insert(name, dependency);
+            }
         }
+        Ok(result)
     }
 
-    pub const fn omega(name: &'static str) -> Self {
-        Self {
-            name,
-            package: None,
-            source: DependencySource::OmegaCrate,
-            features: &[],
+    pub(super) fn item(dependency: &Dependency) -> Result<toml_edit::Item, super::CargoError> {
+        let mut value = dependency
+            .serialize(toml_edit::ser::ValueSerializer::new())
+            .map_err(|error| super::CargoError::new("dependency", error.to_string()))?;
+        if let Some(table) = value.as_inline_table_mut() {
+            table.fmt();
         }
+        Ok(toml_edit::Item::Value(value))
     }
 
-    /// Called one thing in a manifest, published as another.
-    pub const fn published_as(mut self, package: &'static str) -> Self {
-        self.package = Some(package);
-        self
-    }
-
-    /// What the registry — and so a `[patch]` table — calls this crate.
-    pub const fn package(&self) -> &'static str {
-        match self.package {
-            Some(package) => package,
-            None => self.name,
+    pub(super) fn table(
+        dependencies: &Dependencies,
+    ) -> Result<toml_edit::Table, super::CargoError> {
+        let mut table = toml_edit::Table::new();
+        for (name, dependency) in dependencies.iter() {
+            table.insert(name, Self::item(dependency)?);
         }
-    }
-
-    pub const fn with_features(mut self, features: &'static [&'static str]) -> Self {
-        self.features = features;
-        self
-    }
-
-    /// Construct a workspace-inherited dependency entry.
-    pub fn inherited(&self) -> (&'static str, Dependency) {
-        (self.name, Dependency::inherited())
+        Ok(table)
     }
 }

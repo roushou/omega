@@ -18,7 +18,7 @@ pub enum TomlError {
         kind: &'static str,
         path: PathBuf,
         #[source]
-        source: Box<toml::de::Error>,
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
     #[error("cannot write {kind} {}: {source}", path.display())]
     Write {
@@ -31,7 +31,7 @@ pub enum TomlError {
     Decode {
         kind: &'static str,
         #[source]
-        source: Box<toml::de::Error>,
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
     #[error("cannot encode {kind}: {source}")]
     Encode {
@@ -42,6 +42,17 @@ pub enum TomlError {
 }
 
 impl TomlError {
+    pub(super) fn at_path(self, path: &std::path::Path) -> Self {
+        match self {
+            Self::Decode { kind, source } => Self::Parse {
+                kind,
+                path: path.to_path_buf(),
+                source,
+            },
+            other => other,
+        }
+    }
+
     pub fn is_not_found(&self) -> bool {
         matches!(self, Self::Read { source, .. } if source.kind() == std::io::ErrorKind::NotFound)
     }

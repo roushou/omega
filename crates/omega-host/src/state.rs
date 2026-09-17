@@ -51,6 +51,14 @@ impl StateConfig {
 }
 
 impl TomlSchema for StateConfig {
+    fn decode(source: &str) -> Result<Self, crate::TomlError> {
+        crate::Toml::deserialize(source)
+    }
+
+    fn encode(&self) -> Result<String, crate::TomlError> {
+        crate::Toml::serialize(self)
+    }
+
     const KIND: &'static str = "state config";
     type Key<'a> = ();
 

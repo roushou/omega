@@ -1,18 +1,17 @@
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
 use crate::layout::Layout;
 use crate::toml::file::TomlFile;
 
-/// A TOML document's kind, location, and formatting.
+/// A TOML document's kind, location, and codec.
 /// Use [`Layout::file`] to locate a [`TomlFile`] for the schema.
-pub trait TomlSchema: Serialize + DeserializeOwned + Sized {
+pub trait TomlSchema: Sized {
     /// How the document is named in errors: "unit manifest", "cargo manifest".
     const KIND: &'static str;
 
-    /// Dotted paths to tables whose entries use inline-table syntax,
-    /// such as `omega = { workspace = true }`.
-    const INLINE_ENTRIES: &'static [&'static str] = &[];
+    /// Parse the document without reading the filesystem.
+    fn decode(source: &str) -> Result<Self, super::TomlError>;
+
+    /// Render the document, preserving source formatting when the schema supports it.
+    fn encode(&self) -> Result<String, super::TomlError>;
 
     /// Everything needed to address one instance. `()` for singletons; an
     /// enum when a schema has more than one home.

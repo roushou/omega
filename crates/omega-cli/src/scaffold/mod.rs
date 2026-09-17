@@ -2,11 +2,11 @@
 //! Generated member dependencies inherit the shared declarations.
 
 use omega_host::Layout;
-use omega_host::workspace::cargo::{
-    CargoManifest, Dependencies, Dependency, DependencySource, DependencySpec, Edition, Package,
-    Profile, ReleaseProfile, Workspace, WorkspacePackage,
-};
+use omega_host::cargo::{CargoError, Dependencies, Dependency, Inherited, Manifest};
 use omega_proto::UnitName;
+
+mod dependency;
+pub use dependency::{DependencySource, DependencySpec};
 
 mod name;
 pub use name::PluginName;
@@ -117,7 +117,21 @@ impl Scaffold {
     }
 
     /// `~/.config/omega/Cargo.toml`: the workspace every unit crate joins.
-    pub fn workspace_manifest(&self) -> CargoManifest {
+    pub fn workspace_manifest(&self) -> Result<Manifest, CargoError> {
+        let dependencies = self.workspace_dependencies();
+
+        let mut manifest =
+            Manifest::new_workspace("3", EDITION, &[Layout::SYSTEM_CRATE], &dependencies)?;
+        manifest.set_release_profile(true, "thin")?;
+        Ok(manifest)
+    }
+
+    /// Fill absent workspace defaults without overwriting existing user choices.
+    pub(crate) fn complete_workspace(&self, manifest: &mut Manifest) -> Result<(), CargoError> {
+        manifest.ensure_workspace_defaults(EDITION, &self.workspace_dependencies())
+    }
+
+    fn workspace_dependencies(&self) -> Dependencies {
         // Deduplicate inherited dependencies by manifest alias.
         let mut dependencies = Dependencies::new();
         for spec in Self::UNIT_DEPENDENCIES
@@ -127,40 +141,21 @@ impl Scaffold {
             dependencies.insert(spec.name, self.resolve(spec));
         }
 
-        CargoManifest {
-            workspace: Some(Workspace {
-                resolver: Some("3".into()),
-                package: Some(WorkspacePackage {
-                    edition: Some(EDITION.into()),
-                    ..Default::default()
-                }),
-                members: vec![Layout::SYSTEM_CRATE.to_string()],
-                dependencies,
-                ..Default::default()
-            }),
-            profile: Some(Profile {
-                release: Some(ReleaseProfile {
-                    strip: Some(true),
-                    lto: Some("thin".into()),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }
+        dependencies
     }
 
     /// `plugins/<name>/Cargo.toml`, inheriting the workspace's dependencies.
-    pub fn unit_crate_manifest(&self, name: &UnitName) -> CargoManifest {
-        CargoManifest {
-            package: Some(Package::new(name.as_str(), "0.1.0", Edition::inherited())),
-            dependencies: Dependencies::from_iter(
+    pub fn unit_crate_manifest(&self, name: &UnitName) -> Result<Manifest, CargoError> {
+        Manifest::new_package(
+            name.as_str(),
+            "0.1.0",
+            Inherited::Workspace,
+            &Dependencies::from_iter(
                 Self::UNIT_DEPENDENCIES
                     .iter()
                     .map(DependencySpec::inherited),
             ),
-            ..Default::default()
-        }
+        )
     }
 
     /// `plugins/<name>/src/main.rs`: the program, which is the library and a
@@ -170,20 +165,17 @@ impl Scaffold {
     }
 
     /// Generate the system crate manifest. Plugin dependencies are added by `omega new`.
-    pub fn system_manifest(&self) -> CargoManifest {
-        CargoManifest {
-            package: Some(Package::new(
-                Layout::SYSTEM_CRATE,
-                "0.1.0",
-                Edition::inherited(),
-            )),
-            dependencies: Dependencies::from_iter(
+    pub fn system_manifest(&self) -> Result<Manifest, CargoError> {
+        Manifest::new_package(
+            Layout::SYSTEM_CRATE,
+            "0.1.0",
+            Inherited::Workspace,
+            &Dependencies::from_iter(
                 Self::SYSTEM_DEPENDENCIES
                     .iter()
                     .map(DependencySpec::inherited),
             ),
-            ..Default::default()
-        }
+        )
     }
 
     /// Generate the system crate's path dependency on a plugin.

@@ -1,6 +1,6 @@
 use toml_edit::{DocumentMut, Item, Table, Value};
 
-/// Apply schema-defined table formatting after serialization.
+/// Normalize generated data documents after serialization.
 /// Promote nested maps to sections except entries declared inline by the schema.
 pub(super) struct Formatter<'a> {
     inline_entries: &'a [&'static str],

@@ -1,7 +1,7 @@
-use super::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits, PluginName};
+use super::{ConfigWorkspace, FileEdit, FileEdits, PluginName};
 use crate::scaffold::Template;
 use anyhow::{Context, Result, ensure};
-use omega_host::workspace::cargo::CargoManifest;
+use omega_host::cargo::{CargoSlot, Dependency, Manifest};
 use omega_host::{StageDir, Toml};
 
 #[derive(Debug)]
@@ -53,9 +53,9 @@ impl ConfigWorkspace {
             root.exists(),
             "this is not a config workspace; run omega init first"
         );
-        let mut editor = CargoEditor::parse(root.source())?;
-        editor.workspace(&self.scaffold.workspace_manifest())?;
-        editor.member(
+        let mut editor = Manifest::parse(root.source())?;
+        self.scaffold.complete_workspace(&mut editor)?;
+        editor.ensure_member(
             destination
                 .strip_prefix(&self.layout.config)?
                 .to_str()
@@ -66,23 +66,21 @@ impl ConfigWorkspace {
                 None => "crates/*",
             },
         )?;
-        let updated = editor.finish();
-        // Discovery needs only workspace fields, not a model of user package inheritance.
-        let document: toml_edit::DocumentMut = updated.parse()?;
-        let mut workspace_only = toml_edit::DocumentMut::new();
-        workspace_only["workspace"] = document["workspace"].clone();
-        let manifest = Toml::decode::<CargoManifest>(&workspace_only.to_string())?;
-        let members = manifest
-            .workspace
+        let updated = editor.to_string();
+        let members = editor
+            .workspace()?
             .context("missing workspace")?
             .member_dirs(&self.layout.config)?;
         for directory in &members {
             WorkspaceRole::at(&self.layout, directory)?;
-            let path = directory.join("Cargo.toml");
+            let path = self
+                .layout
+                .file::<Manifest>(CargoSlot::Member(directory))
+                .into_path();
             if path.try_exists()? {
                 let source = std::fs::read_to_string(&path)?;
-                let member = CargoEditor::parse(&source)?;
-                let existing = member.package_name()?;
+                let member = Manifest::parse(&source)?;
+                let existing = member.package()?.context("missing package")?.name()?;
                 ensure!(
                     existing.replace('-', "_") != name.rust_ident(),
                     "workspace package {existing} conflicts with {}",
@@ -117,27 +115,28 @@ impl ConfigWorkspace {
                 WorkspaceRole::Plugin(_) | WorkspaceRole::Library(_) => "../..",
             };
             let relative = destination.strip_prefix(&self.layout.config)?;
-            let mut edit = FileEdit::read(directory.join("Cargo.toml"))?;
+            let mut edit = FileEdit::read(
+                self.layout
+                    .file::<Manifest>(CargoSlot::Member(&directory))
+                    .into_path(),
+            )?;
             ensure!(
                 edit.exists(),
                 "consumer {} has no Cargo.toml",
                 consumer.display()
             );
-            let mut editor = CargoEditor::parse(edit.source())?;
-            editor.package_name()?;
-            editor.dependency(
+            let mut editor = Manifest::parse(edit.source())?;
+            editor.package()?.context("missing package")?.name()?;
+            editor.ensure_path_dependency(
                 name.package(),
-                &omega_host::workspace::cargo::Dependency::local(
-                    format!("{prefix}/{}", relative.display()),
-                    &[],
-                ),
+                &Dependency::local(format!("{prefix}/{}", relative.display()), &[]),
             )?;
-            edit.replace(editor.finish());
+            edit.replace(editor.to_string());
             edits.push(edit);
         }
-        let mut manifest = self.scaffold.unit_crate_manifest(name.unit());
+        let mut manifest = self.scaffold.unit_crate_manifest(name.unit())?;
         if template.is_none() {
-            manifest.dependencies = Default::default();
+            manifest.clear_dependencies();
         }
         let manifest = Toml::encode(&manifest)?;
         let main = template

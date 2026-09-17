@@ -9,8 +9,12 @@ a replacement before exposing it to readers. Generation types manage staged
 artifacts and rollback, while `TomlSchema` and `TomlFile` bind configuration
 formats to their locations.
 
-`workspace` owns Cargo schemas, source roles, member-pattern expansion, and
-runnable plugin discovery. `fs::Changes` provides settled filesystem watching when
+`cargo::Manifest` and `cargo::Config` read and edit Cargo files while retaining
+comments, formatting, and unrelated settings. Package and workspace views borrow
+from the manifest. Failed edits leave the document unchanged.
+
+`workspace` owns source roles and runnable plugin
+discovery. `fs::Changes` provides settled filesystem watching when
 the optional `watch` feature is enabled; ordinary document consumers do not need it.
 
 These APIs serve Omega's host processes. Plugin authors use

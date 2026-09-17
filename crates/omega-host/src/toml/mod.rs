@@ -1,11 +1,11 @@
 //! Typed TOML document access.
 //!
-//! - [`TomlSchema`] declares document names, paths, and formatting.
+//! - [`TomlSchema`] declares document names, paths, and codecs.
 //! - [`TomlFile`] provides atomic read/write/edit operations at a typed path.
 //! - [`TomlDoc`] retains a loaded value for edits spanning multiple steps.
 //! - [`Toml`] encodes and decodes schema values.
 //!
-//! [`Toml::encode`] applies [`TomlSchema::INLINE_ENTRIES`] for deterministic output.
+//! Each schema owns its codec; source documents retain their original formatting.
 
 mod doc;
 mod error;
@@ -27,25 +27,34 @@ pub use table::Table;
 pub struct Toml;
 
 impl Toml {
-    /// Decode a document from a string. The canonical inverse of
-    /// [`encode`](Self::encode).
+    /// Decode using the schema's codec.
     pub fn decode<S: TomlSchema>(src: &str) -> Result<S, TomlError> {
+        S::decode(src)
+    }
+
+    /// Encode using the schema's codec.
+    pub fn encode<S: TomlSchema>(value: &S) -> Result<String, TomlError> {
+        value.encode()
+    }
+
+    /// Decode a data schema through Serde.
+    pub fn deserialize<S: TomlSchema + serde::de::DeserializeOwned>(
+        src: &str,
+    ) -> Result<S, TomlError> {
         toml::from_str(src).map_err(|source| TomlError::Decode {
             kind: S::KIND,
             source: Box::new(source),
         })
     }
 
-    /// Encode a document to its canonical string form, shaped by the
-    /// schema's [`INLINE_ENTRIES`](TomlSchema::INLINE_ENTRIES).
-    pub fn encode<S: TomlSchema>(value: &S) -> Result<String, TomlError> {
+    /// Encode a data schema with deterministic table formatting.
+    pub fn serialize<S: TomlSchema + serde::Serialize>(value: &S) -> Result<String, TomlError> {
         let mut document =
             toml_edit::ser::to_document(value).map_err(|source| TomlError::Encode {
                 kind: S::KIND,
                 source: Box::new(source),
             })?;
-
-        Formatter::new(S::INLINE_ENTRIES).apply(&mut document);
+        Formatter::new(&[]).apply(&mut document);
         Ok(document.to_string())
     }
 }

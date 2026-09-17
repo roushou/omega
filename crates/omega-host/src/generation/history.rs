@@ -10,6 +10,14 @@ pub(super) struct History {
     pub previous: Option<GenerationId>,
 }
 impl TomlSchema for History {
+    fn decode(source: &str) -> Result<Self, crate::TomlError> {
+        crate::Toml::deserialize(source)
+    }
+
+    fn encode(&self) -> Result<String, crate::TomlError> {
+        crate::Toml::serialize(self)
+    }
+
     const KIND: &'static str = "generation history";
     type Key<'a> = ();
     fn locate(layout: &Layout, _: ()) -> TomlFile<Self> {

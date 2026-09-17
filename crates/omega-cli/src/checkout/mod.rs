@@ -3,10 +3,10 @@ pub use source::{LinkError, SourceTree};
 
 use crate::scaffold::Scaffold;
 use crate::ui::Paint;
-use crate::workspace::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits};
+use crate::workspace::{ConfigWorkspace, FileEdit, FileEdits};
 use anyhow::Result;
-use omega_host::workspace::cargo::CargoConfig;
-use omega_host::{Layout, Toml};
+use omega_host::Layout;
+use omega_host::cargo::{Config, Dependencies, Manifest};
 
 /// Local Cargo overrides, independent of CLI arguments and reporting.
 #[derive(Debug)]
@@ -24,10 +24,15 @@ impl<'a> CheckoutLink<'a> {
     /// Report whether missing local overrides could explain dependency-resolution failure.
     pub(crate) fn unlinked(layout: &Layout) -> Option<String> {
         let linked = layout
-            .file::<CargoConfig>(())
+            .file::<Config>(())
             .read_or_default()
             .ok()
-            .and_then(|config| config.patched().map(|patched| !patched.is_empty()))
+            .and_then(|config| {
+                config
+                    .patches(Config::REGISTRY)
+                    .ok()
+                    .map(|patched| !patched.is_empty())
+            })
             .unwrap_or(false);
 
         if linked {
@@ -46,37 +51,42 @@ impl<'a> CheckoutLink<'a> {
     pub(crate) fn prepare(&self, source: Option<&SourceTree>) -> Result<PreparedLink<'a>> {
         let layout = self.workspace.layout();
         let mut config = FileEdit::read(layout.cargo_config())?;
-        let mut editor = CargoEditor::parse(config.source())?;
+        let mut editor = Config::parse(config.source())?;
         let root_source = FileEdit::read(layout.workspace_manifest())?;
-        let root_editor = CargoEditor::parse(root_source.source())?;
+        let root_editor = Manifest::parse(root_source.source())?;
+        let dependencies = root_editor
+            .workspace()?
+            .map(|workspace| workspace.dependencies())
+            .transpose()?
+            .unwrap_or_default();
         let preview = Scaffold::PREVIEW_DEPENDENCIES
             .iter()
-            .any(|s| root_editor.has_workspace_dependency(s.name));
-        let mut generated = CargoConfig::default();
-        if let Some(source) = source {
-            generated.replace_patch(source.patch(preview)?);
-        }
-        let patch = CargoEditor::parse(&Toml::encode(&generated)?)?;
+            .any(|spec| dependencies.contains(spec.name));
+        let patch = match source {
+            Some(source) => source.patch(preview)?,
+            None => Dependencies::new(),
+        };
         let specs = Scaffold::omega_crates()
             .chain(Scaffold::PREVIEW_DEPENDENCIES.iter().filter(|_| preview))
             .collect::<Vec<_>>();
-        editor.link(
-            &patch,
+        editor.update_patches(
+            Config::REGISTRY,
             &Scaffold::omega_crates()
                 .chain(Scaffold::PREVIEW_DEPENDENCIES)
                 .map(|s| s.package())
                 .collect::<Vec<_>>(),
+            &patch,
         )?;
-        config.replace(editor.finish());
+        config.replace(editor.to_string());
         let mut edits = Vec::new();
         if let Some(source) = source {
             let mut root = FileEdit::read(layout.workspace_manifest())?;
-            let mut editor = CargoEditor::parse(root.source())?;
-            editor.require(
+            let mut editor = Manifest::parse(root.source())?;
+            editor.require_versions(
                 &specs.iter().map(|s| s.name).collect::<Vec<_>>(),
                 &source.version()?,
             )?;
-            root.replace(editor.finish());
+            root.replace(editor.to_string());
             edits.push(root);
         }
         // Do not create an empty Cargo config when there was no local override.

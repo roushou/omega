@@ -3,9 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use omega_host::Layout;
-use omega_host::workspace::cargo::{
-    CargoManifest, CargoSlot, Dependencies, Dependency, DependencySpec, Package, Workspace,
-};
+use omega_host::cargo::{CargoSlot, Dependencies, Dependency, Inherited, Manifest};
 use omega_host::{Table, Toml, TomlFile};
 use omega_proto::UnitName;
 
@@ -52,11 +50,11 @@ fn schema_locates_every_instance() {
     let name = unit("battery-widget");
 
     assert_eq!(
-        layout.file::<CargoManifest>(CargoSlot::Workspace).path(),
+        layout.file::<Manifest>(CargoSlot::Workspace).path(),
         layout.workspace_manifest()
     );
     assert_eq!(
-        layout.file::<CargoManifest>(CargoSlot::Unit(&name)).path(),
+        layout.file::<Manifest>(CargoSlot::Unit(&name)).path(),
         layout.unit_crate_manifest(&name)
     );
 }
@@ -64,7 +62,7 @@ fn schema_locates_every_instance() {
 #[test]
 fn unmodelled_cargo_keys_survive_a_rewrite() {
     let tmp = TempDir::new("rest");
-    let file = TomlFile::<CargoManifest>::at(tmp.path().join("Cargo.toml"));
+    let file = TomlFile::<Manifest>::at(tmp.path().join("Cargo.toml"));
     std::fs::write(
         file.path(),
         r#"
@@ -86,11 +84,8 @@ serde = { path = "vendor/serde" }
 
     file.edit(|manifest| {
         manifest
-            .workspace
-            .as_mut()
+            .ensure_member("crates/shared", "crates/shared")
             .unwrap()
-            .members
-            .push("crates/shared".into())
     })
     .unwrap();
 
@@ -102,30 +97,36 @@ serde = { path = "vendor/serde" }
     assert!(rewritten.contains("optional = true"), "{rewritten}");
 
     let manifest = file.read().unwrap();
-    let deps = &manifest.workspace.as_ref().unwrap().dependencies;
+    let deps = manifest
+        .workspace()
+        .unwrap()
+        .unwrap()
+        .dependencies()
+        .unwrap();
     assert_eq!(deps.get("serde").unwrap().version(), Some("1"));
     assert_eq!(deps.get("tracing").unwrap().version(), Some("0.1"));
 }
 
 #[test]
 fn cargo_manifest_encodes_the_shape_cargo_expects() {
-    let manifest = CargoManifest {
-        package: Some(Package::new(
-            "battery-widget",
-            "0.1.0",
-            omega_host::workspace::cargo::Edition::Explicit("2024".into()),
-        )),
-        dependencies: Dependencies::from_iter([
+    let manifest = Manifest::new_package(
+        "battery-widget",
+        "0.1.0",
+        Inherited::Value("2024"),
+        &Dependencies::from_iter([
             ("omega", Dependency::inherited()),
             ("tokio", Dependency::registry("1", &["macros"])),
             ("anyhow", Dependency::registry("1", &[])),
             ("local", Dependency::local("/src/local", &[])),
         ]),
-        ..Default::default()
-    };
+    )
+    .unwrap();
 
     let encoded = Toml::encode(&manifest).unwrap();
-    assert_eq!(Toml::decode::<CargoManifest>(&encoded).unwrap(), manifest);
+    assert_eq!(
+        Toml::decode::<Manifest>(&encoded).unwrap().to_string(),
+        manifest.to_string()
+    );
     assert!(!encoded.contains("[rest]"), "{encoded}");
 
     // Dependencies are inline entries under one `[dependencies]` section,
@@ -144,22 +145,6 @@ omega = { workspace = true }
 tokio = { version = "1", features = ["macros"] }
 "#
     );
-}
-
-#[test]
-fn a_member_crate_inherits_exactly_the_declared_dependencies() {
-    const SPECS: &[DependencySpec] = &[
-        DependencySpec::registry("tokio", "1").with_features(&["macros"]),
-        DependencySpec::omega("omega"),
-    ];
-
-    let inherited = Dependencies::from_iter(SPECS.iter().map(DependencySpec::inherited));
-
-    assert_eq!(
-        inherited.names().collect::<Vec<_>>(),
-        vec!["omega", "tokio"]
-    );
-    assert!(inherited.iter().all(|(_, d)| d.is_inherited()));
 }
 
 #[test]
@@ -187,13 +172,19 @@ fn workspace_members_expand_globs_and_honour_exclude() {
         std::fs::create_dir_all(tmp.path().join(dir)).unwrap();
     }
 
-    let workspace = Workspace {
-        members: vec!["plugins/*".into(), "crates/shared".into()],
-        exclude: vec!["plugins/beta".into()],
-        ..Default::default()
-    };
-
-    let dirs = workspace.member_dirs(tmp.path()).unwrap();
+    let manifest = Manifest::parse(
+        r#"[workspace]
+members = ["plugins/*", "crates/shared"]
+exclude = ["plugins/beta"]
+"#,
+    )
+    .unwrap();
+    let dirs = manifest
+        .workspace()
+        .unwrap()
+        .unwrap()
+        .member_dirs(tmp.path())
+        .unwrap();
     assert_eq!(
         dirs,
         vec![
@@ -202,4 +193,41 @@ fn workspace_members_expand_globs_and_honour_exclude() {
             tmp.path().join("plugins/alpha"),
         ]
     );
+}
+
+#[test]
+fn typed_file_roundtrips_preserve_source_bytes_and_report_parse_paths() {
+    use omega_host::cargo::Config;
+
+    let tmp = TempDir::new("source-codec");
+    let layout = tmp.layout();
+    let manifest = layout.file::<Manifest>(CargoSlot::Workspace);
+    let config = layout.file::<Config>(());
+    let manifest_source = "# user manifest\n[package]\nname = 'desktop'\nversion.workspace = true # inheritance\n[workspace]\nmembers = []\n";
+    let config_source = "# user settings\n[build]\njobs = 2 # keep\n";
+
+    manifest
+        .write(&Manifest::parse(manifest_source).unwrap())
+        .unwrap();
+    config
+        .write(&Config::parse(config_source).unwrap())
+        .unwrap();
+    manifest.open().unwrap().save().unwrap();
+    config.open().unwrap().save().unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(manifest.path()).unwrap(),
+        manifest_source
+    );
+    assert_eq!(
+        std::fs::read_to_string(config.path()).unwrap(),
+        config_source
+    );
+
+    std::fs::write(manifest.path(), "[broken").unwrap();
+    let error = manifest.read().unwrap_err();
+    assert_eq!(error.path(), Some(manifest.path()));
+    assert!(error.to_string().contains("cargo manifest"));
+    assert!(error.to_string().contains("line 1"));
+    assert!(!error.to_string().contains("cannot decode"));
 }

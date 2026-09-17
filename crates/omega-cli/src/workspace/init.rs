@@ -1,6 +1,7 @@
-use super::{CargoEditor, ConfigWorkspace, FileEdit, FileEdits};
-use anyhow::{Result, ensure};
+use super::{ConfigWorkspace, FileEdit, FileEdits};
+use anyhow::{Context, Result, ensure};
 use omega_host::Toml;
+use omega_host::cargo::Manifest;
 
 #[derive(Debug)]
 pub(crate) enum InitialShell {
@@ -33,18 +34,21 @@ impl ConfigWorkspace {
         let mut root = FileEdit::read(self.layout.workspace_manifest())?;
         let founded = !root.exists();
         if founded {
-            root.replace(Toml::encode(&self.scaffold.workspace_manifest())?);
+            root.replace(Toml::encode(&self.scaffold.workspace_manifest()?)?);
         }
-        let mut editor = CargoEditor::parse(root.source())?;
-        editor.workspace(&self.scaffold.workspace_manifest())?;
-        editor.member("system", "system")?;
-        root.replace(editor.finish());
+        let mut editor = Manifest::parse(root.source())?;
+        self.scaffold.complete_workspace(&mut editor)?;
+        editor.ensure_member("system", "system")?;
+        root.replace(editor.to_string());
 
         let mut system = FileEdit::read(self.layout.system_manifest())?;
         if !system.exists() {
-            system.replace(Toml::encode(&self.scaffold.system_manifest())?);
+            system.replace(Toml::encode(&self.scaffold.system_manifest()?)?);
         }
-        CargoEditor::parse(system.source())?.package_name()?;
+        Manifest::parse(system.source())?
+            .package()?
+            .context("missing package")?
+            .name()?;
         let mut main = FileEdit::read(self.layout.system_main())?;
         let source_created = !main.exists();
         let mut edits = vec![root, system];

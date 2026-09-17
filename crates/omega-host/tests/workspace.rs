@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use omega_host::Layout;
+use omega_host::cargo::{CargoSlot, Manifest};
 use omega_host::workspace::Plugins;
-use omega_host::workspace::cargo::{CargoManifest, CargoSlot, Workspace};
 use omega_proto::UnitName;
 
 struct TempDir(PathBuf);
@@ -36,17 +36,13 @@ impl Drop for TempDir {
 }
 
 fn workspace(layout: &Layout, members: &[&str], exclude: &[&str]) {
-    let manifest = CargoManifest {
-        workspace: Some(Workspace {
-            resolver: Some("3".into()),
-            members: members.iter().map(|m| (*m).to_string()).collect(),
-            exclude: exclude.iter().map(|e| (*e).to_string()).collect(),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
+    let source = format!(
+        "[workspace]\nresolver = \"3\"\nmembers = {:?}\nexclude = {:?}\n",
+        members, exclude
+    );
+    let manifest = Manifest::parse(&source).unwrap();
     layout
-        .file::<CargoManifest>(CargoSlot::Workspace)
+        .file::<Manifest>(CargoSlot::Workspace)
         .write(&manifest)
         .unwrap();
 }

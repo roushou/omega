@@ -155,6 +155,11 @@ impl Layout {
 
     // ---- source ----
 
+    /// Cargo manifest for a member directory, relative to this config or absolute.
+    pub fn member_manifest(&self, directory: &std::path::Path) -> PathBuf {
+        self.config.join(directory).join("Cargo.toml")
+    }
+
     /// `~/.config/omega/Cargo.toml` — the workspace manifest.
     pub fn workspace_manifest(&self) -> PathBuf {
         self.config.join("Cargo.toml")

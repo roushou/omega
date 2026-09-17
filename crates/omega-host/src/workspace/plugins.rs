@@ -1,8 +1,7 @@
 //! Discover runnable plugins from config workspace members and globs.
 
 use crate::TomlError;
-use crate::workspace::cargo::{CargoManifest, CargoSlot};
-use crate::workspace::pattern::PatternError;
+use crate::cargo::{CargoError, CargoSlot, Manifest, MembersError};
 use crate::{
     Layout,
     workspace::{WorkspaceError, WorkspaceRole},
@@ -17,8 +16,11 @@ impl Plugins {
     /// Read the workspace manifest and derive its units: member directories
     /// directly under `plugins/`, minus `exclude`.
     pub fn discover(layout: &Layout) -> Result<Self, PluginsError> {
-        let manifest = layout.file::<CargoManifest>(CargoSlot::Workspace).read()?;
-        let workspace = manifest.workspace.unwrap_or_default();
+        let manifest = layout.file::<Manifest>(CargoSlot::Workspace).read()?;
+        let workspace = manifest.workspace()?.ok_or_else(|| CargoError {
+            field: "workspace".into(),
+            reason: "is required".into(),
+        })?;
         let mut names = Vec::new();
         for dir in workspace.member_dirs(&layout.config)? {
             match WorkspaceRole::at(layout, &dir)? {
@@ -71,5 +73,7 @@ pub enum PluginsError {
     #[error(transparent)]
     Manifest(#[from] TomlError),
     #[error(transparent)]
-    Pattern(#[from] PatternError),
+    Members(#[from] MembersError),
+    #[error(transparent)]
+    Cargo(#[from] CargoError),
 }

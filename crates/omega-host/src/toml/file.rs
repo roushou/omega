@@ -53,11 +53,7 @@ impl<S: TomlSchema> TomlFile<S> {
             path: self.path.clone(),
             source,
         })?;
-        toml::from_str(&src).map_err(|source| TomlError::Parse {
-            kind: S::KIND,
-            path: self.path.clone(),
-            source: Box::new(source),
-        })
+        S::decode(&src).map_err(|error| error.at_path(&self.path))
     }
 
     /// Read the document, or its default when the file does not exist. Any

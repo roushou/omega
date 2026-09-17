@@ -2,6 +2,7 @@
 //! [`Layout`] resolves paths, [`TomlFile`] accesses typed documents, and
 //! [`AtomicFile`] publishes file contents atomically.
 
+pub mod cargo;
 pub mod fs;
 pub mod generation;
 pub mod layout;

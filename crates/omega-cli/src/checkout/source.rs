@@ -1,6 +1,6 @@
 use crate::scaffold::Scaffold;
-use omega_host::workspace::cargo::{CargoManifest, Dependencies, Dependency};
-use omega_host::{Toml, TomlError};
+use omega_host::TomlError;
+use omega_host::cargo::{CargoError, Dependencies, Dependency, Manifest};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +18,8 @@ pub enum LinkError {
     NoVersion,
     #[error(transparent)]
     Toml(#[from] TomlError),
+    #[error(transparent)]
+    Cargo(#[from] CargoError),
 }
 
 /// A local Omega checkout used for machine-local Cargo patches.
@@ -94,11 +96,10 @@ impl SourceTree {
             source,
         })?;
 
-        Toml::decode::<CargoManifest>(&source)?
-            .workspace
-            .and_then(|workspace| workspace.package)
-            .and_then(|package| package.version)
-            .ok_or(LinkError::NoVersion)
+        let manifest = Manifest::parse(&source)?;
+        let workspace = manifest.workspace()?.ok_or(LinkError::NoVersion)?;
+        let version = workspace.version()?.ok_or(LinkError::NoVersion)?;
+        Ok(version.to_owned())
     }
 
     /// The patch that points a config's dependencies at this checkout.

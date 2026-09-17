@@ -226,9 +226,9 @@ omega-cli      the binary
 - `cli/` owns arguments and command entry points. `build/` owns compilation,
   validation, generation planning/publication, and activation waits. Build helpers
   must not depend on command parser types or resolve their own workspace environment.
-- `omega-host::workspace` owns Cargo schemas, member patterns, roles, and plugin
-  discovery. `omega-host::fs` owns settled watching under its optional `watch`
-  feature. The daemon owns runtime generation selection, not source-workspace tools.
+- `omega-host::cargo` owns source-preserving Cargo documents and typed accessors.
+  `omega-host::workspace` owns source roles and plugin discovery. `omega-host::fs`
+  owns settled watching under its optional `watch` feature. The daemon owns runtime generation selection, not source-workspace tools.
 
 - Route CLI output through ui::Ui: decoration to stderr, machine-readable answers
   to stdout. Use Step verbs, twelve-column alignment, home-relative paths, anstream
