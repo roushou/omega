@@ -1,17 +1,18 @@
 use super::Initialize;
 use crate::{
     checkout::SourceTree,
-    service::{Service, ServiceManager},
+    service::{DaemonService, ServiceManager},
     workspace::{ConfigWorkspace, InitialShell},
 };
 use anyhow::{Context, ensure};
 use omega_base::execution::{Operation, Progress};
-use omega_host::recovery::{RecoveryStore, Replacement, Snapshot};
+use omega_host::recovery::{RecoveryStore, Replacement};
+use omega_host::systemd::{Service, ServiceUnit};
 use omega_omarchy::{
     HostShell, Renderer,
     installation::{InstallationState, ShellInstallation},
 };
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 pub(super) struct Preflight;
 pub(super) struct PrepareWorkspace;
@@ -38,9 +39,8 @@ pub(super) struct HostPlan {
 }
 
 pub(super) struct Host {
-    pub(super) manager: ServiceManager,
-    pub(super) program: PathBuf,
-    pub(super) unit_path: PathBuf,
+    pub(super) service: Service,
+    pub(super) definition: ServiceUnit,
     pub(super) shell: HostShell,
 }
 
@@ -67,16 +67,15 @@ impl Operation<Initialize> for Preflight {
                     })?;
             }
 
-            let manager = ServiceManager::detect().context(
+            let manager = ServiceManager::detect()?.context(
                 "no systemd user manager; use omega init --bare to create only the workspace",
             )?;
-            Self::probe("systemctl", &["--user", "show-environment"])
-                .await
-                .context(
-                    "the systemd user manager is unavailable; use omega init --bare for workspace-only setup",
-                )?;
+            let service = manager.service(DaemonService::name())?;
+            service.manager().probe().await.context(
+                "the systemd user manager is unavailable; use omega init --bare for workspace-only setup",
+            )?;
             ensure!(
-                !request.socket.is_live() || manager.is_active(),
+                !request.socket.is_live() || service.status().await?.active.is_active(),
                 "a foreground daemon owns {}; stop it before initialization to avoid starting a second daemon",
                 request.socket.path().display()
             );
@@ -90,12 +89,9 @@ impl Operation<Initialize> for Preflight {
                     "Omarchy is required to restart the shell; use omega init --bare for workspace-only setup",
                 )?;
 
-            let program = Service::program()?;
-            let unit_path = manager.unit_path();
-            let service = Replacement::prepare(
-                &unit_path,
-                Snapshot::file(Service::unit(&program).into_bytes()),
-            )?;
+            let program = DaemonService::program()?;
+            let definition = DaemonService::definition(&program)?;
+            let service_file = service.prepare_install(&definition)?;
             let renderers = Renderer::ALL
                 .iter()
                 .map(|renderer| renderer.prepare(&shell.plugins()))
@@ -103,12 +99,11 @@ impl Operation<Initialize> for Preflight {
 
             Some(HostPlan {
                 host: Host {
-                    manager,
-                    program,
-                    unit_path,
+                    service,
+                    definition,
                     shell,
                 },
-                service,
+                service: service_file,
                 renderers,
             })
         };

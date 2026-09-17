@@ -39,6 +39,9 @@ cp "$TEST_EMITTER" "$OMEGA_CONFIG_DIR/target/debug/system"
             r#"
 echo "systemctl $*" >> "$TEST_EVENTS"
 [ "$TEST_FAILURE" = service ] && [ "$2" = daemon-reload ] && exit 9
+if [ "$2" = show ]; then
+    printf 'LoadState=loaded\nActiveState=active\nUnitFileState=enabled\nSubState=running\nFragmentPath=%s/omega.service\nNeedDaemonReload=no\n' "$OMEGA_SERVICE_DIR"
+fi
 exit 0
 "#,
         );

@@ -11,12 +11,13 @@ use crate::{
     checkout::CheckoutLink,
     operator::Operator,
     renderer::{RendererStatus, Snapshot},
-    service::{Installed, Service},
+    service::DaemonService,
     workspace::ConfigWorkspace,
 };
 use anyhow::{Context, ensure};
 use omega_base::execution::{Operation, Progress};
 use omega_host::recovery::{RecoveryStore, Replacement};
+use omega_host::systemd::Installed;
 use omega_omarchy::installation::ShellInstallation;
 use omega_proto::Socket;
 use std::time::Duration;
@@ -254,10 +255,10 @@ impl Operation<(Runtime, Validated)> for StartDaemon {
     ) -> anyhow::Result<Self::Output> {
         let runtime = &input.0;
         ensure!(
-            !runtime.socket.is_live() || runtime.host.manager.is_active(),
+            !runtime.socket.is_live() || runtime.host.service.status().await?.active.is_active(),
             "a foreground daemon appeared during initialization; stop it before retrying"
         );
-        runtime.host.manager.activate().await?;
+        DaemonService::activate(&runtime.host.service).await?;
         Ok(input)
     }
 }
@@ -275,8 +276,7 @@ impl Operation<(Runtime, Validated)> for VerifyDaemon {
     ) -> anyhow::Result<Self::Output> {
         let runtime = &input.0;
         ensure!(
-            Service::installed(&runtime.host.unit_path, &runtime.host.program)
-                == Installed::Current,
+            runtime.host.service.installed(&runtime.host.definition)? == Installed::Current,
             "the daemon service file changed during initialization"
         );
 

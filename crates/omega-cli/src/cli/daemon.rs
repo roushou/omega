@@ -8,8 +8,9 @@ use omega_host::recovery::RecoveryStore;
 use omega_platform::Brokers;
 use omega_proto::Socket;
 
-use crate::service::{Installed, Service, ServiceManager};
+use crate::service::{DaemonService, ServiceManager};
 use crate::ui::{Paint, Step, Ui};
+use omega_host::systemd::{Installed, Service};
 
 /// Run the daemon, or install it as a service.
 #[derive(Debug, clap::Args)]
@@ -45,9 +46,9 @@ impl DaemonCmd {
 
         match action {
             Action::Run => Self::serve().await,
-            Action::Install(install) => Self::install(install, Self::manager()?, ui).await,
-            Action::Status => Self::status(Self::manager()?, ui),
-            Action::Uninstall => Self::uninstall(Self::manager()?, ui).await,
+            Action::Install(install) => Self::install(install, Self::service()?, ui).await,
+            Action::Status => Self::status(Self::service()?, ui).await,
+            Action::Uninstall => Self::uninstall(Self::service()?, ui).await,
         }
     }
 
@@ -64,26 +65,29 @@ impl DaemonCmd {
         Ok(())
     }
 
-    fn manager() -> anyhow::Result<ServiceManager> {
-        ServiceManager::detect().context(
+    fn service() -> anyhow::Result<Service> {
+        let manager = ServiceManager::detect()?.context(
             "no service manager to install into — omega knows systemd, and this machine has no user manager running",
-        )
+        )?;
+        Ok(manager.service(DaemonService::name())?)
     }
 
-    async fn install(install: Install, manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
-        let program = Service::program()?;
+    async fn install(install: Install, service: Service, ui: &mut Ui) -> anyhow::Result<()> {
+        let program = DaemonService::program()?;
 
         // A service is a promise to run this again after a reboot, and a path
         // under a build directory is a promise `cargo clean` breaks.
-        if Service::is_a_build_artifact(&program) {
+        if DaemonService::is_a_build_artifact(&program) {
             ui.warn(format!(
                 "{} is a build directory — a service pointed there stops working when it is cleaned",
                 Paint::path(&program)
             ));
         }
 
+        let running = service.status().await?.active.is_active();
+        let definition = DaemonService::definition(&program)?;
         let recovery = RecoveryStore::new(&omega_host::Layout::resolve());
-        let installed = Service::install(&manager.unit_path(), &program, &recovery)?;
+        let installed = service.prepare_install(&definition)?.install(&recovery)?;
         if let Some(recovery) = &installed.recovery {
             ui.detail(format!(
                 "Recovery record: {}",
@@ -100,21 +104,25 @@ impl DaemonCmd {
             },
             format!(
                 "{} — {} daemon",
-                Paint::name(Service::NAME),
+                Paint::name(DaemonService::NAME),
                 Paint::path(&program)
             ),
         );
 
         // Do not start a second daemon if a foreground process already owns the socket.
-        let running = manager.is_active();
         let foreign = !install.no_start && !running && Socket::resolve().is_live();
 
-        manager.reload().await?;
-        manager.enable(!install.no_start && !foreign).await?;
+        service.manager().reload().await.with_context(|| {
+            format!(
+                "inspect {}",
+                service.manager().diagnose_command(Some(service.name()))
+            )
+        })?;
+        service.enable(!install.no_start && !foreign).await?;
 
         // An active service must restart to use the newly installed executable.
         if running && !install.no_start {
-            manager.restart().await?;
+            service.restart().await?;
         }
 
         if foreign {
@@ -136,62 +144,72 @@ impl DaemonCmd {
         Ok(())
     }
 
-    fn status(manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
-        let program = Service::program()?;
+    async fn status(service: Service, ui: &mut Ui) -> anyhow::Result<()> {
+        let program = DaemonService::program()?;
         ui.step(
             Step::Checking,
-            format!("{} — {}", manager.name(), Paint::path(manager.unit_path())),
+            format!("systemd — {}", Paint::path(service.path())),
         );
 
-        let installed = Service::installed(&manager.unit_path(), &program);
+        let installed = service.installed(&DaemonService::definition(&program)?)?;
         match &installed {
             Installed::Current => ui.item(
                 true,
                 format!(
                     "{}  {} {}",
-                    Paint::name(Service::NAME),
-                    Paint::dim("runs"),
+                    Paint::name(DaemonService::NAME),
+                    Paint::dim("configured for"),
                     Paint::path(&program)
                 ),
             ),
             Installed::Missing => ui.item(
                 false,
-                format!("{}  not installed", Paint::name(Service::NAME)),
+                format!("{}  not installed", Paint::name(DaemonService::NAME)),
             ),
-            Installed::Stale { program: runs } => ui.item(
+            Installed::Stale { exec_start: runs } => ui.item(
                 false,
                 format!(
-                    "{}  runs {}, and this omega is {}",
-                    Paint::name(Service::NAME),
-                    runs.as_deref().unwrap_or("something else"),
+                    "{}  declares {}, and this omega is {}",
+                    Paint::name(DaemonService::NAME),
+                    runs.as_deref().unwrap_or("an unrecognized ExecStart"),
                     Paint::path(&program)
                 ),
             ),
         }
 
-        // Query enablement only for an installed service.
-        let (enabled, active) = match installed {
-            Installed::Missing => (false, false),
-            _ => (manager.is_enabled(), manager.is_active()),
-        };
+        let status = service.status().await?;
+        let enabled = status.enablement.is_persistent();
+        let active = status.active.is_active();
+        ui.item(
+            enabled && active,
+            Paint::dim(format!(
+                "{}, {} ({})",
+                status.enablement.as_str(),
+                status.active.as_str(),
+                status.sub_state
+            )),
+        );
 
-        if installed != Installed::Missing {
-            ui.item(
-                enabled && active,
-                Paint::dim(format!(
-                    "{}, {}",
-                    if enabled {
-                        "starts at login"
-                    } else {
-                        "does not start at login"
-                    },
-                    if active { "running now" } else { "not running" }
-                )),
-            );
+        if status.needs_reload {
+            ui.warn("systemd has not loaded the current unit-file contents");
+        }
+        if let Some(fragment) = &status.fragment
+            && fragment != service.path()
+        {
+            ui.warn(format!(
+                "systemd loaded a different unit file: {}",
+                Paint::path(fragment)
+            ));
         }
 
         // Report installed, enabled, and active states independently.
-        match (installed == Installed::Current, enabled, active) {
+        match (
+            installed == Installed::Current
+                && !status.needs_reload
+                && status.fragment.as_deref() == Some(service.path()),
+            enabled,
+            active,
+        ) {
             (true, true, true) => ui.step(Step::Checked, "the daemon is part of this session"),
             (true, true, false) => ui.next("systemctl --user start omega.service"),
             _ => ui.next("omega daemon install"),
@@ -199,26 +217,35 @@ impl DaemonCmd {
         Ok(())
     }
 
-    async fn uninstall(manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
+    async fn uninstall(service: Service, ui: &mut Ui) -> anyhow::Result<()> {
         // Stop and disable the service before removing its unit file.
-        if manager.unit_path().exists() {
-            manager.disable().await?;
+        if service.path().try_exists()? {
+            service.disable(true).await?;
         }
 
-        let path = manager.unit_path();
-        if Service::uninstall(&path)? {
+        let path = service.path();
+        if service.remove()? {
             ui.step(
                 Step::Removed,
-                format!("{} from {}", Paint::name(Service::NAME), Paint::path(path)),
+                format!(
+                    "{} from {}",
+                    Paint::name(DaemonService::NAME),
+                    Paint::path(path)
+                ),
             );
         } else {
             ui.step(
                 Step::Done,
-                format!("{} was not installed", Paint::name(Service::NAME)),
+                format!("{} was not installed", Paint::name(DaemonService::NAME)),
             );
         }
 
-        manager.reload().await?;
+        service.manager().reload().await.with_context(|| {
+            format!(
+                "inspect {}",
+                service.manager().diagnose_command(Some(service.name()))
+            )
+        })?;
         Ok(())
     }
 }

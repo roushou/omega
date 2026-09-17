@@ -87,6 +87,36 @@ evaluation, staged publication, and generation-specific activation waits. Its
 parse options and supply an explicit layout and profile. Checkout diagnostics
 belong to checkout operations, not to the link command parser.
 
+## Systemd service ownership
+
+`omega-host::systemd` owns systemd integration. `ServiceUnit` renders a simple
+service definition from a literal `ExecStart` and explicit dependencies, restart
+policy, and stop deadline. Command words are quoted, environment expansion is
+disabled, and percent specifiers are escaped. `UnitName` rejects paths, patterns,
+and option-like names.
+
+`Manager` owns the user/system scope, systemctl executable, and per-command
+30-second deadline. It invokes systemctl directly, limits each output stream to
+64 KiB, and preserves failed exit status and stderr. Dropping or timing out an
+operation kills the local systemctl process; an already submitted systemd job
+can still finish. Callers inspect state before retrying an uncertain operation.
+`Status` reads load, activity, enablement, fragment path, and reload state from
+one `systemctl show` call. Inactive or missing services are data; transport errors
+and malformed responses are errors. Unknown future state names are retained.
+
+`Service` binds a manager, unit name, and absolute unit-file path. Its file
+inspection distinguishes absence from read errors. Installation returns a
+`Replacement` for the existing recovery machinery. Removal synchronizes the
+parent directory. Neither operation reloads systemd or changes service state.
+Installed file contents, loaded manager state, and application readiness remain
+separate observations.
+
+The CLI's `DaemonService` defines Omega's graphical-session binding and shutdown
+timeout. `ServiceManager` resolves the user unit directory once, including
+`OMEGA_SERVICE_DIR`. Daemon commands and initialization construct the same host
+handles. The CLI selects activation order, checks foreground daemon conflicts,
+publishes file replacements, and verifies the daemon protocol after activation.
+
 ## The plugin API
 
 `omega::platform` groups SDK handles by external service domain. `audio` owns

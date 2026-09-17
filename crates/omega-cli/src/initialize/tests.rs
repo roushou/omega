@@ -5,7 +5,7 @@ use super::{
     steps::*,
     summary::Changes,
 };
-use crate::{build::steps as build, renderer::Snapshot, service::ServiceManager};
+use crate::{build::steps as build, renderer::Snapshot, service::DaemonService};
 use omega_base::execution::{
     Carry, FailureCause, Operation, Outcome, Progress,
     testing::{Event, Pass, Pending, Recorder, Stub},
@@ -41,9 +41,13 @@ impl Fixture {
         let mut steps = Steps::isolated();
         let host = (!self.request.bare).then(|| HostPlan {
             host: Host {
-                manager: ServiceManager::Systemd,
-                program: self.root.join("omega"),
-                unit_path: self.root.join("omega.service"),
+                service: omega_host::systemd::Service::new(
+                    omega_host::systemd::Manager::new(omega_host::systemd::Scope::User),
+                    DaemonService::name(),
+                    self.root.join("omega.service"),
+                )
+                .unwrap(),
+                definition: DaemonService::definition(&self.root.join("omega")).unwrap(),
                 shell: omega_omarchy::HostShell::Omarchy,
             },
             service: Replacement::prepare(

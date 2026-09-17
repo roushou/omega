@@ -153,6 +153,11 @@ impl Layout {
         self.system_dir().join("src/shell_import.rs")
     }
 
+    /// Unit-file location selected by the caller's service-manager boundary.
+    pub fn service_file(directory: &Path, name: &crate::systemd::UnitName) -> PathBuf {
+        directory.join(name.as_str())
+    }
+
     // ---- source ----
 
     /// Cargo manifest for a member directory, relative to this config or absolute.

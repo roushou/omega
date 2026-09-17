@@ -16,7 +16,7 @@ workspace = true
 
 [features]
 default = []
-watch = ["dep:notify", "dep:tokio", "dep:tracing"]
+watch = ["dep:notify", "dep:tracing"]
 
 [dependencies]
 libc = "0.2"
@@ -25,10 +25,10 @@ omega-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync", "time"], optional = true }
+tokio = { workspace = true, features = ["sync", "time", "process", "io-util", "macros"] }
 toml = "1"
 toml_edit = { version = "0.25", features = ["serde"] }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros", "time"] }
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }

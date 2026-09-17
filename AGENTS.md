@@ -247,7 +247,12 @@ omega-cli      the binary
 - `omega daemon` runs the daemon; `omega daemon install` installs its service.
 - Generate the systemd unit with current_exe. Daemon status compares that path with
   installed ExecStart. TimeoutStopSec must exceed the five-second plugin stop grace.
-- Pass a unit-file path into Service. ServiceManager alone resolves its location.
+- `omega-host::systemd` owns service definitions, file handles, and bounded async
+  manager operations. Pass explicit names,
+  scope, and unit-file paths; CLI `ServiceManager` resolves the user directory.
+  `DaemonService` owns Omega's definition and activation policy. File state,
+  manager state, and daemon protocol readiness are separate; failed status queries
+  are errors, not inactive services. Cancellation cannot undo an admitted systemd job.
 - Let the caller select build profile; do not hardcode --release.
 
 ## Config workspace

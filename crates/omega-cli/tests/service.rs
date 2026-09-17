@@ -2,7 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use omega_cli::service::{Installed, Service};
+use omega_cli::service::DaemonService;
+use omega_host::systemd::{Installed, Manager, Scope, Service};
 
 /// A unit file of its own, so a test never writes where systemd reads — and
 /// never has to reach for a process-wide variable that its neighbours share.
@@ -13,7 +14,7 @@ fn unit_path(label: &str) -> PathBuf {
         .as_nanos();
     let dir = std::env::temp_dir().join(format!("omega-service-{label}-{nanos}"));
     std::fs::create_dir_all(&dir).unwrap();
-    dir.join(Service::NAME)
+    dir.join(DaemonService::NAME)
 }
 
 fn omega() -> PathBuf {
@@ -22,11 +23,11 @@ fn omega() -> PathBuf {
 
 #[test]
 fn a_service_runs_the_omega_that_installed_it() {
-    let unit = Service::unit(&omega());
+    let unit = DaemonService::definition(&omega()).unwrap().to_string();
 
     // Generated service files must reference the installing executable.
     assert!(
-        unit.contains("ExecStart=/usr/local/bin/omega daemon"),
+        unit.contains("ExecStart=\":/usr/local/bin/omega\" \"daemon\""),
         "{unit}"
     );
 
@@ -37,15 +38,18 @@ fn a_service_runs_the_omega_that_installed_it() {
 
 #[test]
 fn systemd_outwaits_the_daemons_own_shutdown() {
-    let unit = Service::unit(&omega());
+    let unit = DaemonService::definition(&omega()).unwrap().to_string();
 
     // The service stop timeout must exceed plugin shutdown grace.
     let timeout: u64 = unit
         .lines()
         .find_map(|line| line.trim().strip_prefix("TimeoutStopSec="))
         .expect("the unit says how long to wait")
-        .parse()
-        .expect("...as a number of seconds");
+        .strip_suffix("us")
+        .unwrap()
+        .parse::<u64>()
+        .expect("...as a number of microseconds")
+        / 1_000_000;
     assert!(timeout > 5, "{timeout} is not longer than the daemon's own");
 }
 
@@ -54,13 +58,20 @@ fn a_fresh_install_is_current() {
     let path = unit_path("fresh");
 
     assert_eq!(
-        Service::installed(&path, &omega()),
+        TestInstallation::service(&path)
+            .installed(&DaemonService::definition(&omega()).unwrap())
+            .unwrap(),
         Installed::Missing,
         "nothing is installed until something installs it"
     );
 
     TestInstallation::install(&path, &omega()).unwrap();
-    assert_eq!(Service::installed(&path, &omega()), Installed::Current);
+    assert_eq!(
+        TestInstallation::service(&path)
+            .installed(&DaemonService::definition(&omega()).unwrap())
+            .unwrap(),
+        Installed::Current
+    );
 }
 
 #[test]
@@ -70,9 +81,11 @@ fn a_service_running_another_omega_says_which() {
 
     // Detect a service installed from a different executable.
     assert_eq!(
-        Service::installed(&path, &omega()),
+        TestInstallation::service(&path)
+            .installed(&DaemonService::definition(&omega()).unwrap())
+            .unwrap(),
         Installed::Stale {
-            program: Some("/home/someone/.cargo/bin/omega".to_string())
+            exec_start: Some("\":/home/someone/.cargo/bin/omega\" \"daemon\"".to_string())
         }
     );
 }
@@ -90,9 +103,11 @@ fn a_hand_edited_unit_is_not_mistaken_for_this_one() {
     // It still runs the right binary, so the program it reports is this one —
     // and it is still not what this omega would have written.
     assert_eq!(
-        Service::installed(&path, &omega()),
+        TestInstallation::service(&path)
+            .installed(&DaemonService::definition(&omega()).unwrap())
+            .unwrap(),
         Installed::Stale {
-            program: Some("/usr/local/bin/omega".to_string())
+            exec_start: Some("\":/usr/local/bin/omega\" \"daemon\"".to_string())
         }
     );
 }
@@ -102,11 +117,16 @@ fn uninstall_takes_away_what_was_installed() {
     let path = unit_path("gone");
     TestInstallation::install(&path, &omega()).unwrap();
 
-    assert!(Service::uninstall(&path).unwrap());
-    assert_eq!(Service::installed(&path, &omega()), Installed::Missing);
+    assert!(TestInstallation::service(&path).remove().unwrap());
+    assert_eq!(
+        TestInstallation::service(&path)
+            .installed(&DaemonService::definition(&omega()).unwrap())
+            .unwrap(),
+        Installed::Missing
+    );
 
     // Removing what is not there is not a failure, and says so.
-    assert!(!Service::uninstall(&path).unwrap());
+    assert!(!TestInstallation::service(&path).remove().unwrap());
 }
 
 #[test]
@@ -116,13 +136,19 @@ fn a_binary_in_a_build_directory_is_not_somewhere_to_point_a_service() {
     std::fs::create_dir_all(target.join("release")).unwrap();
     std::fs::write(target.join("CACHEDIR.TAG"), "Signature: 8a477f597d28d172").unwrap();
 
-    assert!(Service::is_a_build_artifact(&target.join("release/omega")));
-    assert!(!Service::is_a_build_artifact(&omega()));
+    assert!(DaemonService::is_a_build_artifact(
+        &target.join("release/omega")
+    ));
+    assert!(!DaemonService::is_a_build_artifact(&omega()));
 }
 
 struct TestInstallation;
 
 impl TestInstallation {
+    fn service(path: &Path) -> Service {
+        Service::new(Manager::new(Scope::User), DaemonService::name(), path).unwrap()
+    }
+
     fn install(
         path: &Path,
         program: &Path,
@@ -130,10 +156,9 @@ impl TestInstallation {
         let root = path.parent().unwrap();
         let layout =
             omega_host::Layout::at(root.join("config"), root.join("state"), root.join("cache"));
-        Service::install(
-            path,
-            program,
-            &omega_host::recovery::RecoveryStore::new(&layout),
-        )
+        Self::service(path)
+            .prepare_install(&DaemonService::definition(program)?)?
+            .install(&omega_host::recovery::RecoveryStore::new(&layout))
+            .map_err(Into::into)
     }
 }

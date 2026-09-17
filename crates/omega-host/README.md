@@ -17,6 +17,13 @@ from the manifest. Failed edits leave the document unchanged.
 discovery. `fs::Changes` provides settled filesystem watching when
 the optional `watch` feature is enabled; ordinary document consumers do not need it.
 
+The `systemd` module provides service definitions, explicit unit-file
+handles, and asynchronous manager operations. `systemd::Manager` accepts a scope,
+systemctl executable, and deadline. `systemd::Service` keeps file installation
+separate from manager activation; callers choose when to publish recovery records,
+reload definitions, and start services. No session or executable discovery happens
+inside these handles.
+
 These APIs serve Omega's host processes. Plugin authors use
 [omega-rs](https://crates.io/crates/omega-rs) and do not need host filesystem
 machinery in their plugins.

@@ -57,7 +57,10 @@ a user service, and `omega daemon status` checks the installed service. Service
 installation and removal stop with a nonzero exit status when systemd rejects an
 operation. Errors include the failed operation, systemd's output, and a diagnostic
 command. Files already installed and any recovery records remain in place. A
-failed stop/disable leaves the service file in place.
+failed stop/disable leaves the service file in place. Status distinguishes missing
+files, stale definitions, failed services, and temporary enablement. A failed
+manager query is reported as an error. A command timeout does not prove that the
+systemd job stopped; inspect service status before retrying.
 
 Use `omega link /path/to/omega` to build your configuration against a source checkout,
 or `omega link --published` to return to registry dependencies.
