@@ -1,3 +1,44 @@
+## What's Changed in 0.3.7
+* chore(proto): reset protocol versions to 1
+* refactor!: standardize Omega terminology on plugin
+* fix(cli)!: validate inputs and preserve native checkout paths
+* fix(cli): report discovery errors and honor preview manifests
+* refactor(cli)!: validate identifiers at argument parsing
+* fix!: handle invalid readings and isolate render failures
+* refactor!: adopt standard Rust conversion traits
+* fix(cli)!: bound shell rescans and preview probes
+* refactor(host)!: centralize subprocess execution
+* refactor(cli)!: remove build watch mode
+* refactor!: remove obsolete aliases and scaffold helpers
+* refactor(host): centralize typed Cargo invocation
+* refactor(host): extract typed systemd service management
+* refactor(host)!: unify Cargo document access and editing
+* fix(cli): propagate daemon service operation failures
+
+### Upgrade notes
+
+* Omega now uses `plugin` throughout its APIs and wire format. Update configuration
+  code and plugins to use `PluginName`, `PluginState`, `omega_document::Plugins`,
+  and the renamed plugin references and operations. There are no legacy aliases.
+* Rebuild configurations and plugins with 0.3.7 and update the CLI, daemon, and
+  renderer together. Run `omega build` and reinstall the renderer with
+  `omega shell install`. Generations now use `plugins.toml` and
+  `plugins/<name>/plugin.pb`; older generations cannot be used for rollback.
+* Production and preview protocol versions restart at 1. This is a new baseline,
+  not compatibility with older releases that also used version 1.
+* Script consumers must use the renamed `plugin` fields and `plugins` lifecycle
+  topic. Deployment JSON separates process status in `plugins` from UI health in
+  `pluginHealth`. Record addresses now start with `plugin.<name>.<key>`.
+* Parsing APIs use standard Rust conversion traits (`FromStr` and `TryFrom`).
+  Secure token generation and related registration APIs now return `Result`.
+  CLI argument fields use typed identifiers and explicit names.
+* `omega build --watch` has been removed. Use `omega dev <plugin>` for the
+  per-plugin development loop.
+* Invalid platform readings and surface render failures now report diagnostics
+  instead of crashing the plugin. Check `omega status <plugin>` for render failures.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.6...v0.3.7
+
 ## What's Changed in 0.3.6
 * feat(status): report plugin health and surface readiness
 * feat(cli): report initialization changes and actionable recovery guidance

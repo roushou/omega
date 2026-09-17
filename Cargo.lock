@@ -932,11 +932,11 @@ dependencies = [
 
 [[package]]
 name = "omega-base"
-version = "0.3.6"
+version = "0.3.7"
 
 [[package]]
 name = "omega-cli"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anstream",
  "anstyle",
@@ -964,7 +964,7 @@ dependencies = [
 
 [[package]]
 name = "omega-daemon"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "omega-derive"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "omega-document"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "omega-host",
  "omega-proto",
@@ -1006,7 +1006,7 @@ dependencies = [
 
 [[package]]
 name = "omega-host"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "cargo_metadata",
  "libc",
@@ -1023,11 +1023,11 @@ dependencies = [
 
 [[package]]
 name = "omega-keyboard"
-version = "0.3.6"
+version = "0.3.7"
 
 [[package]]
 name = "omega-omarchy"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "omega-document",
@@ -1043,7 +1043,7 @@ dependencies = [
 
 [[package]]
 name = "omega-platform"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "omega-preview"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "omega-proto",
  "omega-rs",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "omega-proto"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "omega-renderer"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "omega-keyboard",
  "omega-proto",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "omega-rs"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "omega-derive",
  "omega-keyboard",
