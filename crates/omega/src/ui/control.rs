@@ -114,6 +114,17 @@ pub struct Field {
 }
 
 impl Field {
+    /// Set the semantic size of the input, label, and help text. Defaults to body text.
+    ///
+    /// ```
+    /// use omega::ui::{Field, Size};
+    /// let search = Field::new("Search").size(Size::Title);
+    /// ```
+    pub fn size(mut self, size: super::Size) -> Self {
+        self.node = self.node.text_prop("size", size.as_str());
+        self
+    }
+
     /// Route Up/Down and Enter to the list with this ID in the same component scope.
     ///
     /// The list may be nested inside layouts. Missing IDs and non-list targets

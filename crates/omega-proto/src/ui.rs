@@ -176,6 +176,7 @@ nodes! {
     /// Text input with optional model value and controlled-edit metadata.
     Form => "form" { label: Text },
     Field => "field" {
+        size: Text,
         navigation: Text, controlled: Flag, edit_revision: Number, reset_revision: Number, autofocus: Flag,
         label: Text,
         help: Text,

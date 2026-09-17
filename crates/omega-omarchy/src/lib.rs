@@ -1,5 +1,8 @@
 //! Omarchy shell authoring and host integration for Omega.
 
+mod desktop;
+pub use desktop::DesktopRenderer;
+
 mod host;
 pub mod shell;
 mod validation;

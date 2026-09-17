@@ -10,13 +10,25 @@ impl Build {
     const MARKER: &'static str = "readonly property string buildFingerprint: \"\"";
 
     pub fn of<'a>(version: &str, assets: impl IntoIterator<Item = &'a Asset>) -> Self {
-        let mut assets: Vec<_> = assets.into_iter().collect();
-        assets.sort_by_key(|asset| asset.name);
+        Self::of_sources(
+            version,
+            assets.into_iter().map(|asset| (asset.name, asset.contents)),
+        )
+    }
+
+    /// Identify a bundle including host-generated sources. File names and contents
+    /// participate in the fingerprint; their input order does not.
+    pub fn of_sources<'a>(
+        version: &str,
+        sources: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Self {
+        let mut assets: Vec<_> = sources.into_iter().collect();
+        assets.sort_by_key(|asset| asset.0);
         let mut hash = Sha256::new();
         for bytes in std::iter::once(version.as_bytes()).chain(
             assets
                 .iter()
-                .flat_map(|asset| [asset.name.as_bytes(), asset.contents.as_bytes()]),
+                .flat_map(|asset| [asset.0.as_bytes(), asset.1.as_bytes()]),
         ) {
             hash.update((bytes.len() as u64).to_le_bytes());
             hash.update(bytes);

@@ -690,7 +690,12 @@ fn every_node() -> Ui {
         .child(Button::new("Connect").on_press(UiConnect.with("home".to_string())))
         .child(Slider::new(Percent::whole(60)).on_change(UiVolume))
         .child(Toggle::new(true).on_change(UiMute))
-        .child(Field::new("Passphrase").secret().on_submit(UiConnect))
+        .child(
+            Field::new("Passphrase")
+                .size(omega::ui::Size::Title)
+                .secret()
+                .on_submit(UiConnect),
+        )
         .child(
             List::new()
                 .child(Text::new("home").key("home"))
@@ -768,6 +773,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     // A field says how it draws, not what it holds: the buffer is the
     // shell's until the user commits it.
     assert_eq!(children[7]["type"], "field");
+    assert_eq!(children[7]["props"]["size"]["stringValue"], "title");
     assert_eq!(children[7]["props"]["label"]["stringValue"], "Passphrase");
     assert_eq!(children[7]["props"]["secret"]["boolValue"], true);
     assert_eq!(children[7]["events"]["submit"]["command"], "connect");

@@ -1,6 +1,6 @@
 //! Supervise one native presentation host per plugin with live standalone instances.
 use crate::{Shutdown, hub::Hub, process::Signal};
-use omega_host::{Directory, Layout, StageDir};
+use omega_host::{Directory, Layout};
 use omega_proto::PluginName;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -91,15 +91,7 @@ impl Hosts {
         }
     }
     fn install(layout: &Layout) -> std::io::Result<()> {
-        let stage = StageDir::new(&layout.renderer_dir())?;
-        let build = omega_renderer::Desktop::build();
-        for asset in omega_renderer::Core::FILES
-            .iter()
-            .chain(omega_renderer::Desktop::FILES)
-        {
-            stage.write(asset.name, build.contents(asset).as_bytes())?;
-        }
-        stage.commit()
+        omega_omarchy::DesktopRenderer::discover()?.install(layout)
     }
     async fn supervise(
         plugin: PluginName,

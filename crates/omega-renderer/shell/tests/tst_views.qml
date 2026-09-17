@@ -45,6 +45,55 @@ TestCase {
             {type:"text",key:"office",props:{text:{stringValue:"Office"}}}
         ]})
     }
+    SignalSpy { id: payloadChanges; signalName: "modelChanged" }
+
+    function nodeWithKey(item, key) {
+        if (item.model && item.model.key === key) return item
+        for (var i = 0; i < item.children.length; i++) {
+            var found = nodeWithKey(item.children[i], key)
+            if (found) return found
+        }
+        return null
+    }
+
+    function test_retained_list_payloads_skip_updates_but_refresh_bindings() {
+        var row = nodeWithKey(listView, "home")
+        verify(row !== null)
+        payloadChanges.target = row
+        payloadChanges.clear()
+        var next = JSON.parse(JSON.stringify(listView.model))
+        next.children.reverse()
+        listView.model = next
+        compare(payloadChanges.count, 0)
+        compare(nodeWithKey(listView, "home"), row)
+
+        next = JSON.parse(JSON.stringify(listView.model))
+        var home = next.children.filter(function(node) { return node.key === "home" })[0]
+        home.events = { click: { local: "42" } }
+        listView.model = next
+        compare(payloadChanges.count, 1)
+        compare(row.model.events.click.local, "42")
+        payloadChanges.target = null
+    }
+
+    function test_retained_stack_payloads_skip_updates_but_refresh_content() {
+        var field = findChild(view, "draft")
+        var row = field.host
+        payloadChanges.target = row
+        payloadChanges.clear()
+        var next = JSON.parse(JSON.stringify(view.model))
+        next.children.reverse()
+        view.model = next
+        compare(payloadChanges.count, 0)
+        next = JSON.parse(JSON.stringify(view.model))
+        var draft = next.children.filter(function(node) { return node.key === "draft" })[0]
+        draft.props.placeholder.stringValue = "Updated placeholder"
+        view.model = next
+        compare(payloadChanges.count, 1)
+        compare(field.host.model.props.placeholder.stringValue, "Updated placeholder")
+        payloadChanges.target = null
+    }
+
     function test_list_selection_follows_network_identity_after_reorder() {
         failOnWarning(/.*/)
         verify(listView.implicitWidth > 0)

@@ -12,22 +12,24 @@ pub(crate) struct Snapshot {
 }
 
 impl RendererStatus {
-    pub(crate) fn expected(attachment: &AttachRenderer) -> Option<String> {
-        match attachment.scope.as_ref()? {
-            attach_renderer::Scope::Placement(_) => Some(
-                omega_omarchy::Renderer::VIEW
-                    .build()
-                    .fingerprint()
-                    .to_owned(),
-            ),
-            attach_renderer::Scope::Plugin(_) => {
-                Some(omega_renderer::Desktop::build().fingerprint().to_owned())
-            }
-        }
+    pub(crate) fn expected(attachment: &AttachRenderer) -> std::io::Result<Option<String>> {
+        let Some(scope) = attachment.scope.as_ref() else {
+            return Ok(None);
+        };
+        Ok(Some(match scope {
+            attach_renderer::Scope::Placement(_) => omega_omarchy::Renderer::VIEW
+                .build()
+                .fingerprint()
+                .to_owned(),
+            attach_renderer::Scope::Plugin(_) => omega_omarchy::DesktopRenderer::discover()?
+                .build()
+                .fingerprint()
+                .to_owned(),
+        }))
     }
 
     pub(crate) fn current(attachment: &AttachRenderer) -> bool {
-        Self::expected(attachment).is_some_and(|expected| expected == attachment.build_fingerprint)
+        matches!(Self::expected(attachment), Ok(Some(expected)) if expected == attachment.build_fingerprint)
     }
 
     pub(crate) fn show(
@@ -51,7 +53,16 @@ impl RendererStatus {
         }
         let mut current = 0;
         for attachment in attachments {
-            if Self::current(attachment) {
+            let expected = match Self::expected(attachment) {
+                Ok(expected) => expected,
+                Err(error) => {
+                    ui.warn(format!(
+                        "standalone renderer unverified: cannot resolve host theme: {error}"
+                    ));
+                    continue;
+                }
+            };
+            if expected.is_some_and(|value| value == attachment.build_fingerprint) {
                 current += 1;
                 continue;
             }

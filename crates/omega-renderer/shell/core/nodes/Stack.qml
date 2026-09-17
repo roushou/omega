@@ -51,6 +51,7 @@ Loader {
 
         for (var target = 0; target < wanted.length; target++) {
             var key = keyOf(wanted[target])
+            var payload = JSON.stringify(wanted[target])
 
             var found = -1
             for (var j = target; j < rows.count; j++) {
@@ -58,13 +59,15 @@ Loader {
             }
 
             if (found === -1) {
-                rows.insert(target, { "key": key, "node": wanted[target] })
+                rows.insert(target, { "key": key, "node": wanted[target], "payload": payload })
                 continue
             }
             if (found !== target) rows.move(found, target, 1)
-            // The node object changes every render even when its key does not,
-            // so the delegate is kept and its data replaced.
-            rows.setProperty(target, "node", wanted[target])
+            // Include bindings and descendants: only identical wire payloads can be retained.
+            if (rows.get(target).payload !== payload) {
+                rows.setProperty(target, "node", wanted[target])
+                rows.setProperty(target, "payload", payload)
+            }
         }
 
         while (rows.count > wanted.length) rows.remove(rows.count - 1)

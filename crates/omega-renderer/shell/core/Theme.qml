@@ -12,6 +12,9 @@ QtObject {
     property var font: ({family: "sans-serif", body: 14, caption: 12,
         icon: 16, subtitle: 16, title: 18, heading: 22, display: 28})
     property int cornerRadius: 6
+    property int surfacePadding: 16
+    property int surfaceBorderWidth: 0
+    property color surfaceBorderColor: foreground
 
     function space(value) { return Math.round(value * scale) }
     function alpha(color, amount) { return Qt.rgba(color.r, color.g, color.b, color.a * amount) }

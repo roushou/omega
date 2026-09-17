@@ -21,14 +21,26 @@ TestCase {
     Component { id: factory; Renderer.ViewNode { width: 350; session: testSession } }
     function model(text, revision, reset, binding) { return { type:"field",key:"query",props:{name:{stringValue:"query"},controlled:{boolValue:true},value:{stringValue:text},edit_revision:{intValue:String(revision)},reset_revision:{intValue:String(reset)},autofocus:{boolValue:true}},events:{change:{local:String(binding)}}} }
     function init() { calls = []; requestState.pending = ({}); requestState.error = ""; failOnWarning(/.*/) }
+    function test_field_size_uses_theme_and_keeps_body_default() {
+        var next = model("",0,0,1)
+        var view = createTemporaryObject(factory,test,{model:next})
+        var editor = findChild(view,"editor")
+        compare(editor.font.pixelSize,view.theme.font.body)
+        next = model("",0,0,1)
+        next.props.size = {stringValue:"title"}
+        view.model = next
+        compare(editor.font.pixelSize,view.theme.font.title)
+    }
     function test_delayed_values_preserve_newer_typing_and_coalesce_pending_edits() {
         var view = createTemporaryObject(factory, test, {model:model("",0,0,1)})
         var field = findChild(view,"query")
         tryVerify(function() { return findChild(field,"editor").activeFocus })
         keyClick(Qt.Key_A)
         tryVerify(function() { return test.calls.length === 1 })
+        compare(view.opacity, 1)
         keyClick(Qt.Key_B)
         compare(field.text,"ab")
+        compare(view.opacity, 1)
         view.model = model("a",1,0,2)
         compare(field.text,"ab")
         requestState.finish(1,{done:true})

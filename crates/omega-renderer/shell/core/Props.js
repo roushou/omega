@@ -179,6 +179,10 @@ function formLabel(node) {
 
 // ---- field ----
 
+function fieldSize(node) {
+    return readText(node, "size", "")
+}
+
 function fieldNavigation(node) {
     return readText(node, "navigation", "")
 }

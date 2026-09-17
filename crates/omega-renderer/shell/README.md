@@ -210,3 +210,12 @@ adapter identities and matching against that corpus.
 Resolved navigation uses exact node keys in `ViewNode.navigation_target` and
 requires `RENDERER_FEATURE_RESOLVED_NAVIGATION`. The SDK validates ID references
 before publication; legacy navigation properties retain their relative lookup.
+
+## Standalone theme contract
+
+The desktop entry point creates one `DesktopTheme` and shares it with window and
+overlay contents. The component implements `core/Theme.qml`, including surface
+padding and border tokens. `Desktop::build_with_theme` fingerprints the selected
+component along with the renderer sources. Host-specific theme discovery and
+atomic installation are owned by `omega-omarchy::DesktopRenderer`; shared
+controls do not import Omarchy modules.

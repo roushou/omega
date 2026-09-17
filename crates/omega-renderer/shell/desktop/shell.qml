@@ -11,7 +11,7 @@ ShellRoot {
         socketPath: Quickshell.env("OMEGA_RENDERER_SOCKET")
         standalone: true
     }
-    Theme { id: theme }
+    DesktopTheme { id: desktopTheme }
     Assets { id: desktopAssets; iconResolver: name => Quickshell.iconPath(name, "application-x-executable") }
     Variants {
         model: Object.keys(link.instances)
@@ -35,11 +35,11 @@ ShellRoot {
                 implicitHeight: instance.presentation.window ? instance.presentation.window.height : 320
                 minimumSize: Qt.size(instance.presentation.window ? instance.presentation.window.minWidth : 1,
                     instance.presentation.window ? instance.presentation.window.minHeight : 1)
-                color: theme.background
+                color: desktopTheme.background
                 onVisibleChanged: if (instance.presentation.window) instance.report(visible)
                 onClosed: link.report(instance.identity, "PRESENTATION_STATE_CLOSED")
-                Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: theme.urgent; wrapMode: Text.Wrap; z: 1 }
-                ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: desktopTheme; session: instance.session; Theme { id: desktopTheme } }
+                Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: desktopTheme.urgent; wrapMode: Text.Wrap; z: 1 }
+                ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: desktopTheme.surfacePadding; model: instance.tree; theme: desktopTheme; session: instance.session; }
             }
             PanelWindow {
                 id: overlay
@@ -72,14 +72,16 @@ ShellRoot {
                     anchors.centerIn: parent
                     width: overlay.modal ? Math.min(overlay.spec.width, parent.width - 32) : parent.width
                     height: overlay.modal ? Math.min(overlay.spec.height, parent.height - 32) : parent.height
-                    color: theme.background
-                    radius: theme.cornerRadius
+                    color: desktopTheme.background
+                    radius: desktopTheme.cornerRadius
+                    border.width: desktopTheme.surfaceBorderWidth
+                    border.color: desktopTheme.surfaceBorderColor
                     focus: true
                     // Consume clicks in padding without dismissing the content.
                     MouseArea { anchors.fill: parent }
-                    Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: theme.urgent; wrapMode: Text.Wrap; z: 1 }
+                    Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; text: instance.session.requests.error; color: desktopTheme.urgent; wrapMode: Text.Wrap; z: 1 }
                     Keys.onEscapePressed: link.report(instance.identity, "PRESENTATION_STATE_CLOSED")
-                    ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: 16; model: instance.tree; theme: overlayTheme; session: instance.session; Theme { id: overlayTheme } }
+                    ViewNode { focus: true; assets: desktopAssets; anchors.fill: parent; anchors.margins: desktopTheme.surfacePadding; model: instance.tree; theme: desktopTheme; session: instance.session; }
                 }
             }
         }

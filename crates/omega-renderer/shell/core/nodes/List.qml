@@ -74,16 +74,21 @@ Rectangle {
 
         for (var target = 0; target < wanted.length; target++) {
             var key = list.keyOf(wanted[target])
+            var payload = JSON.stringify(wanted[target])
             var found = -1
             for (var j = target; j < held.count; j++) {
                 if (held.get(j).key === key) { found = j; break }
             }
             if (found === -1) {
-                held.insert(target, { "key": key, "node": wanted[target] })
+                held.insert(target, { "key": key, "node": wanted[target], "payload": payload })
                 continue
             }
             if (found !== target) held.move(found, target, 1)
-            held.setProperty(target, "node", wanted[target])
+            // Include bindings and descendants: only identical wire payloads can be retained.
+            if (held.get(target).payload !== payload) {
+                held.setProperty(target, "node", wanted[target])
+                held.setProperty(target, "payload", payload)
+            }
         }
 
         while (held.count > wanted.length) held.remove(held.count - 1)

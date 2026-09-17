@@ -67,6 +67,7 @@ Item {
                     readonly property int fontSize: rootForm.host.fontSize
                     readonly property real radius: rootForm.host.radius
                     function space(value) { return rootForm.host.space(value) }
+                    function typeSize(role, fallback) { return rootForm.host.typeSize(role, fallback) }
                     function controlFill(focused, hot) { return rootForm.host.controlFill(focused, hot) }
                 }
             }

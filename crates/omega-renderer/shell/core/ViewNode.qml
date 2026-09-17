@@ -95,7 +95,9 @@ FocusScope {
         ? node.fixedHeight
         : content.implicitHeight + node.padding * 2
 
-    opacity: node.interactive ? 1.0 : 0.5
+    // Controlled editors keep accepting local drafts while a change is in flight.
+    readonly property bool localEditing: node.model && node.model.type === "field" && Props.fieldControlled(node.model)
+    opacity: node.enabled && (node.localEditing || !node.pending) ? 1.0 : 0.5
 
     function delegateFor(type) {
         switch (type) {

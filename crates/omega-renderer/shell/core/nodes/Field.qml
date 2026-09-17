@@ -11,6 +11,7 @@ Item {
     readonly property var bound: Props.bind(host.model, "submit")
     readonly property string given: Props.fieldValue(host.model)
     property alias text: input.text
+    readonly property int textSize: host.typeSize(Props.fieldSize(host.model), host.fontSize)
     readonly property bool secret: Props.fieldSecret(host.model)
 
     readonly property bool controlled: Props.fieldControlled(host.model)
@@ -83,7 +84,7 @@ Item {
         color: field.host.ink
         opacity: 0.65
         font.family: field.host.fontFamily
-        font.pixelSize: field.host.fontSize
+        font.pixelSize: field.textSize
     }
     Text {
         id: fieldLabel
@@ -93,7 +94,7 @@ Item {
         wrapMode: Text.Wrap
         color: field.host.ink
         font.family: field.host.fontFamily
-        font.pixelSize: field.host.fontSize
+        font.pixelSize: field.textSize
     }
     Rectangle {
         anchors.fill: parent
@@ -117,7 +118,7 @@ Item {
             clip: true
             color: field.host.ink
             font.family: field.host.fontFamily
-            font.pixelSize: field.host.fontSize
+            font.pixelSize: field.textSize
             selectByMouse: true
             activeFocusOnTab: true
             readOnly: (field.controlled ? !field.enabled : !field.host.interactive) || (field.host.form && !field.host.form.host.interactive)
@@ -142,7 +143,7 @@ Item {
                 text: Props.fieldPlaceholder(field.host.model)
                 color: Qt.darker(field.host.ink, 1.4)
                 font.family: field.host.fontFamily
-                font.pixelSize: field.host.fontSize
+                font.pixelSize: field.textSize
                 visible: input.text === ""
             }
         }

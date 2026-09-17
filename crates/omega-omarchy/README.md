@@ -68,6 +68,19 @@ Generate this file through `Shell` rather than editing it alongside the Rust
 configuration. Import expects the nested format and refuses unsupported Omega
 options instead of dropping them.
 
+## Standalone windows and overlays
+
+On Omarchy, `omega present` uses the installed shell's `Commons` theme module.
+Standalone views share the popup palette, typography, spacing, corner radius,
+and control styling used by the bar panels. Theme selection and theme-file edits
+reload those values; user `shell.toml` overrides remain handled by Omarchy.
+
+`OMARCHY_PATH` can select a different installation root. An explicit root without
+`shell/Commons/qmldir` is an error. Without an override, Omega checks
+`/usr/share/omarchy`; systems without Omarchy use the renderer's default theme.
+The theme adapter participates in the standalone renderer fingerprint. Restart
+the daemon after updating Omega to install the matching standalone bundle.
+
 ## Shell ownership
 
 Shell ownership is opt-in. `omega shell adopt` backs up the current file and
