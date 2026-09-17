@@ -45,9 +45,9 @@ impl DaemonCmd {
 
         match action {
             Action::Run => Self::serve().await,
-            Action::Install(install) => Self::install(install, Self::manager()?, ui),
+            Action::Install(install) => Self::install(install, Self::manager()?, ui).await,
             Action::Status => Self::status(Self::manager()?, ui),
-            Action::Uninstall => Self::uninstall(Self::manager()?, ui),
+            Action::Uninstall => Self::uninstall(Self::manager()?, ui).await,
         }
     }
 
@@ -70,7 +70,7 @@ impl DaemonCmd {
         )
     }
 
-    fn install(install: Install, manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
+    async fn install(install: Install, manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
         let program = Service::program()?;
 
         // A service is a promise to run this again after a reboot, and a path
@@ -109,16 +109,12 @@ impl DaemonCmd {
         let running = manager.is_active();
         let foreign = !install.no_start && !running && Socket::resolve().is_live();
 
-        // Stop installation reporting if the service manager rejects an operation.
-        if !Self::tell(manager.reload(), manager, ui)?
-            || !Self::tell(manager.enable(!install.no_start && !foreign), manager, ui)?
-        {
-            return Ok(());
-        }
+        manager.reload().await?;
+        manager.enable(!install.no_start && !foreign).await?;
 
         // An active service must restart to use the newly installed executable.
-        if running && !install.no_start && !Self::tell(manager.restart(), manager, ui)? {
-            return Ok(());
+        if running && !install.no_start {
+            manager.restart().await?;
         }
 
         if foreign {
@@ -203,10 +199,10 @@ impl DaemonCmd {
         Ok(())
     }
 
-    fn uninstall(manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
+    async fn uninstall(manager: ServiceManager, ui: &mut Ui) -> anyhow::Result<()> {
         // Stop and disable the service before removing its unit file.
         if manager.unit_path().exists() {
-            Self::tell(manager.disable(), manager, ui)?;
+            manager.disable().await?;
         }
 
         let path = manager.unit_path();
@@ -222,28 +218,7 @@ impl DaemonCmd {
             );
         }
 
-        Self::tell(manager.reload(), manager, ui)?;
+        manager.reload().await?;
         Ok(())
-    }
-
-    /// Report service-manager stderr when an operation fails.
-    fn tell(
-        result: std::io::Result<std::process::Output>,
-        manager: ServiceManager,
-        ui: &mut Ui,
-    ) -> anyhow::Result<bool> {
-        let output = result.with_context(|| format!("could not run {}", manager.name()))?;
-        if output.status.success() {
-            return Ok(true);
-        }
-
-        let said = String::from_utf8_lossy(&output.stderr);
-        ui.warn(format!(
-            "{} refused: {}",
-            manager.name(),
-            said.trim().lines().next().unwrap_or("no reason given")
-        ));
-        ui.next(&manager.diagnose_command());
-        Ok(false)
     }
 }

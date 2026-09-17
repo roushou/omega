@@ -53,8 +53,13 @@ the offending source location. Diagnostics go to stderr, keeping command results
 on stdout available for scripts.
 
 `omega daemon` runs the daemon in the foreground. `omega daemon install` makes it
-a user service, and `omega daemon status` checks the installed service. Use
-`omega link /path/to/omega` to build your configuration against a source checkout,
+a user service, and `omega daemon status` checks the installed service. Service
+installation and removal stop with a nonzero exit status when systemd rejects an
+operation. Errors include the failed operation, systemd's output, and a diagnostic
+command. Files already installed and any recovery records remain in place. A
+failed stop/disable leaves the service file in place.
+
+Use `omega link /path/to/omega` to build your configuration against a source checkout,
 or `omega link --published` to return to registry dependencies.
 
 `omega new <name>` starts with a minimal text widget. Use

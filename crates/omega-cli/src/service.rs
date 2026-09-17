@@ -148,12 +148,14 @@ impl ServiceManager {
         .await
         .context(
             "systemd operation timed out; inspect systemctl --user status omega.service before retrying",
-        )??;
+        )?
+        .with_context(|| format!("could not run systemctl --user {}; inspect {}", args.join(" "), self.diagnose_command()))?;
 
         anyhow::ensure!(
             output.status.success(),
-            "systemd refused {}: {}; inspect {}",
+            "systemd refused {} ({}): {}; inspect {}",
             args.join(" "),
+            output.status,
             String::from_utf8_lossy(&output.stderr).trim(),
             self.diagnose_command()
         );
@@ -206,26 +208,26 @@ impl ServiceManager {
     }
 
     /// Tell the manager to re-read what is on disk.
-    pub fn reload(self) -> std::io::Result<Output> {
-        self.run(&["daemon-reload"])
+    pub async fn reload(self) -> anyhow::Result<()> {
+        self.checked(&["daemon-reload"]).await
     }
 
     /// Run it at every login from now on, and — unless told otherwise — now.
-    pub fn enable(self, start: bool) -> std::io::Result<Output> {
+    pub async fn enable(self, start: bool) -> anyhow::Result<()> {
         if start {
-            self.run(&["enable", "--now", Service::NAME])
+            self.checked(&["enable", "--now", Service::NAME]).await
         } else {
-            self.run(&["enable", Service::NAME])
+            self.checked(&["enable", Service::NAME]).await
         }
     }
 
-    pub fn disable(self) -> std::io::Result<Output> {
-        self.run(&["disable", "--now", Service::NAME])
+    pub async fn disable(self) -> anyhow::Result<()> {
+        self.checked(&["disable", "--now", Service::NAME]).await
     }
 
     /// Restart the service to activate updated unit-file contents.
-    pub fn restart(self) -> std::io::Result<Output> {
-        self.run(&["restart", Service::NAME])
+    pub async fn restart(self) -> anyhow::Result<()> {
+        self.checked(&["restart", Service::NAME]).await
     }
 
     /// Whether it is set to start at login.
