@@ -603,7 +603,7 @@ name = "renamed_library"
             )
             .unwrap();
         AtomicFile::at(fixture.root.join("src/lib.rs"))
-            .write(b"#[test] fn must_not_run() { let unused = 42; panic!(\"compilation must not execute tests\"); }")
+            .write(b"#[test] fn must_not_run() { panic!(\"compilation must not execute tests\"); }")
             .unwrap();
         AtomicFile::at(fixture.root.join(".cargo/config.toml"))
             .write(b"[build]\ntarget-dir = 'configured-target'\n")
@@ -629,10 +629,9 @@ name = "renamed_library"
                 .starts_with(fixture.root.join("configured-target"))
         );
         assert!(artifacts.library_test().unwrap().is_file());
-        assert!(artifacts.diagnostics().contains("unused"));
         let artifacts = cargo
             .compile_tests(
-                TestBuildRequest::library(package)
+                TestBuildRequest::library(package.clone())
                     .target_dir(fixture.root.join("override-target"))
                     .resolution(Resolution::OfflineLocked),
             )
@@ -644,5 +643,18 @@ name = "renamed_library"
                 .unwrap()
                 .starts_with(fixture.root.join("override-target"))
         );
+
+        AtomicFile::at(fixture.root.join("src/lib.rs"))
+            .write(b"compile_error!(\"fixture compilation failed\");")
+            .unwrap();
+        let error = cargo
+            .compile_tests(TestBuildRequest::library(package).resolution(Resolution::OfflineLocked))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            InvocationError::Failed { operation: "test", status, diagnostics }
+                if !status.success() && diagnostics.contains("fixture compilation failed")
+        ));
     }
 }
