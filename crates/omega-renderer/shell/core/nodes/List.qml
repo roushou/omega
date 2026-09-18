@@ -155,6 +155,8 @@ Rectangle {
 
             Loader {
                 id: child
+                // Incubate result subtrees between frames so filtering cannot block typing.
+                asynchronous: true
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: list.host.space(8)
@@ -162,17 +164,12 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
 
                 Component.onCompleted: setSource("../ViewNode.qml", {
-                    "model": row.node,
+                    "model": Qt.binding(function() { return row.node }),
                     "session": Qt.binding(function() { return list.host.session }),
-"theme": Qt.binding(function() { return list.host.theme }),
-"assets": Qt.binding(function() { return list.host.assets }),
+                    "theme": Qt.binding(function() { return list.host.theme }),
+                    "assets": Qt.binding(function() { return list.host.assets }),
                     "foreground": Qt.binding(function() { return list.host.ink })
                 })
-            }
-
-            Connections {
-                target: row
-                function onNodeChanged() { if (child.item) child.item.model = row.node }
             }
 
             MouseArea {

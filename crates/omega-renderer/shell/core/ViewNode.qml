@@ -161,6 +161,9 @@ FocusScope {
         Component.onCompleted: content.load()
 
         function load() {
+            // Both the URL binding and completion can request the initial load.
+            var resolved = delegateUrl === "" ? "" : Qt.resolvedUrl(delegateUrl).toString()
+            if (source.toString() === resolved) return
             if (delegateUrl === "") {
                 setSource("")
                 return
