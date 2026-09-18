@@ -290,16 +290,20 @@ impl PluginRegistry {
 
     /// Register a connected plugin until the returned guard is dropped.
     pub fn connected(&self, name: &PluginName, requests: mpsc::Sender<Request>) -> SessionGuard {
-        let link = session::SessionLink {
-            bytes: self.inner.request_bytes.clone(),
-            requests,
-            stop: Shutdown::new(),
-        };
-        {
+        let link = {
             let mut plugins = self.lock();
             let record = plugins
                 .entry(name.clone())
                 .or_insert_with(|| PluginRecord::new(name.clone()));
+            let link = session::SessionLink {
+                manifest: record
+                    .manifest
+                    .as_ref()
+                    .map(|m| std::sync::Arc::new(m.manifest.clone())),
+                bytes: self.inner.request_bytes.clone(),
+                requests,
+                stop: Shutdown::new(),
+            };
             if let Some(previous) = record.session.replace(link.clone()) {
                 previous.stop.trigger();
                 self.inner.hub.forget_plugin(name);
@@ -308,7 +312,8 @@ impl PluginRegistry {
             // plugin the daemon vouches for.
             record.instances.clear();
             record.lifecycle.connected();
-        }
+            link
+        };
         self.publish();
 
         // A full trigger channel already represents pending convergence.
@@ -453,3 +458,5 @@ impl PluginRegistry {
         self.inner.plugins.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
+
+mod commands;

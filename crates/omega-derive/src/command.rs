@@ -42,7 +42,7 @@ impl CommandExpansion {
                 }
                 impl #name {
                     /// Bind this command's input for a button.
-                    pub fn with(self, input: <Self as ::omega::internal::Command>::Input) -> ::omega::internal::Bind<()> {
+                    pub fn with(self, input: <Self as ::omega::internal::Command>::Input) -> ::omega::internal::Invocation<Self> {
                         ::omega::internal::CommandRef::<Self>::INSTANCE.with(input)
                     }
                 }

@@ -31,6 +31,9 @@ impl Fixture {
         let plugins = PluginRegistry::detached(hub.clone());
         let manifest =
             common::widget_manifest("example", "panel").serving([omega::CommandEndpoint {
+                input: Some(Default::default()),
+                output: Some(Default::default()),
+                description: String::new(),
                 id: "activate".into(),
             }]);
         plugins.adopt(&ManifestStore::from_manifests([manifest]));
@@ -104,6 +107,8 @@ impl Fixture {
                     omega::Bind {
                         local: 0,
                         command: "activate".into(),
+                        plugin: "example".into(),
+                        signature: Vec::new(),
                         args: vec![label],
                     },
                 )]
@@ -928,4 +933,74 @@ async fn deployment_reports_readiness_without_exposing_views_and_expires_session
             )
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn a_foreign_binding_preserves_its_owner_and_uses_the_source_plugins_grants() {
+    for granted in [false, true] {
+        let mut fixture = Fixture::new("foreign-binding");
+        let target = common::command_manifest("target", "activate");
+        let mut source =
+            common::widget_manifest("example", "panel").serving(target.commands.clone());
+        if granted {
+            source
+                .command_dependencies
+                .push(target.commands[0].dependency("target"));
+        }
+        drop(fixture.guard.take());
+        fixture
+            .plugins
+            .adopt(&ManifestStore::from_manifests([source, target.clone()]));
+        fixture.guard = Some(Fixture::connect_plugin(&fixture.plugins));
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<omega_daemon::plugins::Request>(16);
+        let _target = fixture
+            .plugins
+            .connected(&common::plugin_name("target"), tx);
+        let handler = tokio::spawn(async move {
+            while let Some(request) = rx.recv().await {
+                assert!(matches!(request.op, invoke::Op::CallCommand(_)));
+                let _ = request
+                    .answer
+                    .send(Ok(result::Outcome::Value("foreign target".into_value())));
+            }
+        });
+        let mut owner = fixture.observer().await;
+        let instance = owner.create("", "local target").await;
+        let mut view = Fixture::view("local target".into_value());
+        let binding = view.root.as_mut().unwrap().events.get_mut("press").unwrap();
+        binding.plugin = "target".into();
+        binding.signature = target.commands[0].signature("target");
+        fixture
+            .plugins
+            .publish_instance(
+                &common::plugin_name("example"),
+                &omega::PublishView {
+                    instance: instance.instance.clone(),
+                    surface_id: "panel".into(),
+                    view: Some(view),
+                },
+            )
+            .unwrap();
+        let snapshot = fixture.plugins.inspect_instances(None).instances.remove(0);
+        let mut renderer = fixture.observer().await;
+        renderer.ask(Fixture::attachment(vec![1, 2, 5, 7, 8])).await;
+        let answer = renderer
+            .ask(invoke::Op::Interact(omega::Interact {
+                instance: instance.instance,
+                revision: snapshot.view.unwrap().revision,
+                node: "button".into(),
+                event: "press".into(),
+                value: None,
+            }))
+            .await;
+        if granted {
+            assert_eq!(
+                answer,
+                result::Outcome::Value("foreign target".into_value())
+            );
+        } else {
+            Fixture::refusal(answer, omega::ErrorCode::PermissionDenied);
+        }
+        handler.abort();
+    }
 }

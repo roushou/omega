@@ -36,6 +36,8 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bind<I> {
     command: String,
+    plugin: String,
+    signature: Vec<u8>,
     local: u64,
     args: Vec<Value>,
     input: PhantomData<fn(I)>,
@@ -44,6 +46,8 @@ impl<C: Command> From<CommandRef<C>> for Bind<C::Input> {
     fn from(_: CommandRef<C>) -> Self {
         Self {
             command: C::NAME.to_string(),
+            plugin: C::PLUGIN.into(),
+            signature: CommandRef::<C>::INSTANCE.descriptor().signature(C::PLUGIN),
             local: 0,
             args: Vec::new(),
             input: PhantomData,
@@ -51,18 +55,11 @@ impl<C: Command> From<CommandRef<C>> for Bind<C::Input> {
     }
 }
 impl<I> Bind<I> {
-    pub(crate) fn command(name: &str, args: Vec<Value>) -> Self {
-        Self {
-            command: name.into(),
-            local: 0,
-            args,
-            input: PhantomData,
-        }
-    }
-
     pub(crate) fn local(id: u64) -> Self {
         Self {
             command: String::new(),
+            plugin: String::new(),
+            signature: Vec::new(),
             args: Vec::new(),
             local: id,
             input: PhantomData,
@@ -71,8 +68,24 @@ impl<I> Bind<I> {
     pub(crate) fn into_wire(self) -> WireBind {
         WireBind {
             command: self.command,
+            plugin: self.plugin,
+            signature: self.signature,
             local: self.local,
             args: self.args,
+        }
+    }
+}
+
+impl<C: Command> From<crate::command::Invocation<C>> for Bind<()> {
+    fn from(invocation: crate::command::Invocation<C>) -> Self {
+        let call = invocation.into_wire();
+        Self {
+            command: call.command,
+            plugin: call.plugin,
+            signature: call.signature,
+            args: call.args,
+            local: 0,
+            input: PhantomData,
         }
     }
 }

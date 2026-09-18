@@ -22,6 +22,7 @@ impl Manifest {
             capabilities: Vec::new(),
             surfaces: Vec::new(),
             commands: Vec::new(),
+            command_dependencies: Vec::new(),
             state_topics: Vec::new(),
             storage: Vec::new(),
             events: Vec::new(),
@@ -85,6 +86,20 @@ impl Manifest {
         canonical.surfaces.dedup();
         canonical.commands.sort_unstable_by(|a, b| a.id.cmp(&b.id));
         canonical.commands.dedup();
+        for command in &mut canonical.commands {
+            command.input = command
+                .input
+                .as_ref()
+                .map(crate::omega::CommandType::canonical);
+            command.output = command
+                .output
+                .as_ref()
+                .map(crate::omega::CommandType::canonical);
+        }
+        canonical
+            .command_dependencies
+            .sort_by_key(prost::Message::encode_to_vec);
+        canonical.command_dependencies.dedup();
 
         canonical.encode_to_vec()
     }
@@ -152,8 +167,27 @@ impl Manifest {
         crate::storage::StorageContracts::collect(&self.storage)?;
         self.granted()?;
         self.surface_kinds()?;
+        let mut commands = std::collections::BTreeSet::new();
         for command in &self.commands {
-            command.id.parse::<SurfaceId>()?;
+            if !commands.insert(command.validate()?) {
+                return Err(
+                    crate::CommandContractError::Invalid("duplicate command".into()).into(),
+                );
+            }
+        }
+        let mut dependencies = std::collections::BTreeMap::new();
+        for dependency in &self.command_dependencies {
+            let address = crate::CommandAddress::try_from(dependency)?;
+            if dependency.signature.len() != 32
+                || dependencies
+                    .insert(address, &dependency.signature)
+                    .is_some_and(|old| old != &dependency.signature)
+            {
+                return Err(crate::CommandContractError::Invalid(
+                    "invalid or conflicting command dependency".into(),
+                )
+                .into());
+            }
         }
         for surface in &self.surfaces {
             surface.surface_id()?;
@@ -191,6 +225,8 @@ impl Surface {
 /// Invalid manifest identity, capability, topic, or surface declaration.
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
+    #[error(transparent)]
+    Command(#[from] crate::CommandContractError),
     #[error(transparent)]
     Storage(#[from] crate::storage::StorageError),
     #[error("not a manifest: {0}")]

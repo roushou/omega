@@ -20,6 +20,12 @@ impl Refusable for IdentError {
     }
 }
 
+impl Refusable for omega_proto::CommandContractError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
 impl Refusable for omega_document::ValidationError {
     fn refusal(&self) -> Refusal {
         Refusal::invalid(self.to_string())

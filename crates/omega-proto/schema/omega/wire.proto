@@ -61,6 +61,7 @@ message Welcome {
 // Bidirectional request, correlated by Frame.stream_id. One request per stream.
 message Invoke {
   oneof op {
+    ListCommands list_commands = 27;
     // ---- plugin -> daemon: daemon services ----
     StorageRequest storage = 23;
     StorageSubscribe storage_subscribe = 24;
@@ -166,6 +167,7 @@ message RenderWidget {
 // Result frames; the last carries done = true.
 message Result {
   oneof outcome {
+    CommandCatalogue commands = 10;
     Error error = 1;
     StatePatch state = 2;           // GetState
     ViewTree view = 3;              // RenderWidget

@@ -1,7 +1,7 @@
 //! `omega run`: call a plugin's command surface.
 
 use omega_proto::omega::{Value, value};
-use omega_proto::{PluginName, SurfaceId};
+use omega_proto::{CommandId, PluginName};
 
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
@@ -14,7 +14,7 @@ pub struct RunCmd {
     pub plugin_name: PluginName,
     /// The command surface's id, as its manifest declares it.
     #[arg(value_name = "COMMAND")]
-    pub command_id: SurfaceId,
+    pub command_id: CommandId,
     /// Arguments decoded by the command: e.g. 40%, balanced, true, or text.
     #[arg(allow_negative_numbers = true)]
     pub args: Vec<String>,

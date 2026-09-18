@@ -172,3 +172,12 @@ independent of the production handshake. Case epochs identify a fresh model
 lifetime; revisions identify its rendered bindings. Input from an old revision
 is refused. Effect IDs resolve once, and snapshots expose operation kinds rather
 than arguments. A reset invalidates pending effects and renderer-local drafts.
+
+## Command contracts
+
+`CommandEndpoint` carries input/output shapes and a description. Dependencies name
+an exact plugin and command with its canonical signature. `Bind` retains that
+owner and signature; a local message has neither. `InvokePlugin` routes through
+the same authority checks for SDK calls, retained bindings, and operator actions.
+`ListCommands` returns a `CommandCatalogue` outcome on the request stream. Listing
+is caller-scoped and grants no access. These contracts require protocol version 2.

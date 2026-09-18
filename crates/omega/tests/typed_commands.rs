@@ -95,7 +95,7 @@ impl Surface for Controls {
 
 #[test]
 fn bindings_share_registration_identity_without_acquiring_command_capabilities() {
-    let plugin = Plugin::named("audio", "1")
+    let plugin = Plugin::named(env!("CARGO_PKG_NAME"), "1")
         .surface_default::<Controls>()
         .command::<SetVolume>();
     let manifest = plugin.manifest().unwrap();
@@ -106,7 +106,7 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
             .any(|surface| surface.id == "volume")
     );
     assert!(
-        Plugin::named("controls", "1")
+        Plugin::named(env!("CARGO_PKG_NAME"), "1")
             .surface_default::<Controls>()
             .manifest()
             .unwrap()
@@ -230,7 +230,7 @@ fn plugin_commands_bind_and_duplicate_names_are_refused() {
     let drawn = Drawn::of_ui(Button::new("Ping").on_press(Ping).into());
     assert_eq!(drawn.node("root").unwrap().events["press"].command, "ping");
     assert!(
-        Plugin::named("test", "1")
+        Plugin::named(env!("CARGO_PKG_NAME"), "1")
             .command::<Ping>()
             .command::<Ping>()
             .manifest()
@@ -268,8 +268,9 @@ fn plugin_commands_support_forms_and_bound_inputs() {
 
 #[tokio::test]
 async fn input_refusals_travel_through_the_real_runtime() {
-    let mut daemon =
-        omega::testing::TestDaemon::serving(Plugin::named("audio", "1").command::<SetVolume>());
+    let mut daemon = omega::testing::TestDaemon::serving(
+        Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<SetVolume>(),
+    );
     daemon.welcome(&State::new()).await;
     assert_eq!(
         daemon.call("volume", vec![true.into_value()]).await,
@@ -306,4 +307,52 @@ fn repeated_components_keep_unique_keys_and_replace_labels() {
         keys.len()
     );
     assert_eq!(drawn.text(), "Readings 10 First 20 Second");
+}
+
+#[test]
+fn output_records_decode_strictly_without_configuration_defaults() {
+    use omega::{command::CommandValue, config::IntoValue};
+    #[derive(Debug, PartialEq, omega::Output)]
+    struct Report {
+        label: String,
+        count: u32,
+        note: Option<String>,
+    }
+    let encoded = Report {
+        label: "done".into(),
+        count: 2,
+        note: None,
+    }
+    .into_value();
+    assert_eq!(Report::decode_value(&encoded).unwrap().note, None);
+    let omega_proto::omega::value::Kind::Map(mut fields) = encoded.kind.unwrap() else {
+        panic!("expected map")
+    };
+    fields.entries.remove("note");
+    assert!(
+        Report::decode_value(&omega_proto::omega::Value {
+            kind: Some(omega_proto::omega::value::Kind::Map(fields.clone()))
+        })
+        .is_err()
+    );
+    fields
+        .entries
+        .insert("note".into(), Option::<String>::None.into_value());
+    fields.entries.insert("count".into(), (-1i64).into_value());
+    assert!(
+        Report::decode_value(&omega_proto::omega::Value {
+            kind: Some(omega_proto::omega::value::Kind::Map(fields))
+        })
+        .is_err()
+    );
+    assert!(<u64 as CommandValue>::decode_value(&u64::MAX.into_value()).is_err());
+}
+
+#[test]
+fn registration_rejects_a_command_owned_by_a_different_plugin() {
+    let error = omega::Plugin::named("another-owner", "1")
+        .command::<SetVolume>()
+        .manifest()
+        .unwrap_err();
+    assert!(error.to_string().contains("another-owner"));
 }

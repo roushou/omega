@@ -13,7 +13,12 @@ use crate::omega::{Value, ViewTree, value};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Interaction<'a> {
     Local(NonZeroU64),
-    Command { command: &'a str, args: &'a [Value] },
+    Command {
+        plugin: &'a str,
+        command: &'a str,
+        signature: &'a [u8],
+        args: &'a [Value],
+    },
 }
 
 impl<'a> Interaction<'a> {
@@ -67,7 +72,11 @@ impl<'a> Interaction<'a> {
             .ok_or_else(|| Refusal::invalid("node has no binding for this event"))?;
         match NonZeroU64::new(binding.local) {
             Some(local) => {
-                if !binding.command.is_empty() || !binding.args.is_empty() {
+                if !binding.command.is_empty()
+                    || !binding.args.is_empty()
+                    || !binding.plugin.is_empty()
+                    || !binding.signature.is_empty()
+                {
                     return Err(Refusal::invalid(
                         "local binding cannot carry command arguments",
                     ));
@@ -76,6 +85,8 @@ impl<'a> Interaction<'a> {
             }
             None => Ok(Self::Command {
                 command: &binding.command,
+                plugin: &binding.plugin,
+                signature: &binding.signature,
                 args: &binding.args,
             }),
         }
@@ -134,11 +145,15 @@ mod tests {
             command: "activate".into(),
             args: args.clone(),
             local: 0,
+            plugin: "apps".into(),
+            signature: Vec::new(),
         })]);
         assert_eq!(
             Interaction::resolve(&tree, "target", "press"),
             Ok(Interaction::Command {
                 command: "activate",
+                plugin: "apps",
+                signature: &[],
                 args: &args
             })
         );

@@ -118,8 +118,9 @@ async fn player_abilities_require_control_support() {
 
 #[test]
 fn playback_commands_declare_media_permission_without_a_read_subscription() {
-    let manifest =
-        omega::testing::manifest_of(&omega::Plugin::named("transport", "0.1.0").command::<Pause>());
+    let manifest = omega::testing::manifest_of(
+        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Pause>(),
+    );
     assert_eq!(
         manifest.granted().unwrap(),
         vec![omega_proto::omega::Capability::Media]

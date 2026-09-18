@@ -1,23 +1,21 @@
 //! Plugin session loop: authentication, state replication, rendering,
 //! command dispatch, and effect forwarding.
 
-use std::collections::HashMap;
-
 use omega_proto::Manifest;
 use omega_proto::omega::{Frame, Invoke, PublishView, frame, invoke, result};
 use omega_proto::{Client, Handshake, Socket, Values};
 use tokio::net::UnixStream;
 
-use crate::command::Args;
 use crate::error::Error;
 use crate::plugin::Plugin;
-use crate::plugin::registry::CalledCommand;
 use crate::runtime::context::Context;
 
+mod commands;
 mod instance;
 #[cfg(test)]
 mod tests;
 
+use commands::{Commands, Completion};
 use instance::Instance;
 
 pub(crate) struct Runtime {
@@ -30,7 +28,6 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
-    const COMMAND_LIMIT: usize = 64;
     /// Connect over the conventional socket, with the token this process was
     /// spawned with.
     pub(crate) async fn connect(manifest: &Manifest) -> Result<Self, Error> {
@@ -66,17 +63,7 @@ impl Runtime {
     pub(crate) async fn serve(mut self, plugin: Plugin) -> Result<(), Error> {
         let mut instances: Vec<Instance> = Vec::new();
 
-        // Command instances are shared across concurrent invocations.
-        let commands: HashMap<String, std::sync::Arc<dyn CalledCommand>> = plugin
-            .commands()
-            .iter()
-            .map(|entry| {
-                (
-                    entry.name.clone(),
-                    entry.build(&self.context, &self.settings),
-                )
-            })
-            .collect();
+        let mut commands = Commands::new(&plugin, &self.context, &self.settings)?;
 
         let reactions: Vec<_> = plugin
             .reactions()
@@ -86,7 +73,6 @@ impl Runtime {
 
         self.publish_all(&mut instances).await?;
 
-        let mut answers = tokio::task::JoinSet::new();
         loop {
             let deadline = self.effects.deadline();
             tokio::select! {
@@ -104,9 +90,14 @@ impl Runtime {
                     self.effects.expire()?;
                     self.storage_completions(&mut instances).await?;
                 }
-                Some(answer) = answers.join_next(), if !answers.is_empty() => {
-                    let (stream, completion) = answer.map_err(|error| Error::Runtime(std::io::Error::other(error)))?;
-                    self.answer(stream, Self::completion(completion)).await?;
+                completion = commands.next() => {
+                    match completion {
+                        Completion::Answer(reply) => self.client.send(*reply).await?,
+                        Completion::Failed { replies, error } => {
+                            for reply in replies { self.client.send(reply).await?; }
+                            return Err(error);
+                        }
+                    }
                 }
                 Some(request) = self.effects.recv() => {
                     let stream = self.client.allocate();
@@ -176,18 +167,9 @@ impl Runtime {
                         Some(frame::Body::Invoke(Invoke {
                             op: Some(invoke::Op::CallCommand(call)),
                         })) => {
-                            if answers.len() >= Self::COMMAND_LIMIT {
-                                self.client.send(omega_proto::Refusal::exhausted("command completion capacity exhausted").frame(frame.stream_id)).await?;
-                                continue;
+                            if let Err(refusal) = commands.admit(frame.stream_id, call) {
+                                self.client.send(refusal.frame(frame.stream_id)).await?;
                             }
-                            let Some(command) = commands.get(&call.command).cloned() else {
-                                self.client.send(omega_proto::Refusal::invalid(format!("no command {}", call.command)).frame(frame.stream_id)).await?;
-                                continue;
-                            };
-                            answers.spawn(async move {
-                                let completion = command.call(Args::new(call.args)).await;
-                                (frame.stream_id, completion)
-                            });
                         }
 
                         Some(frame::Body::Invoke(Invoke { op: Some(invoke::Op::SurfaceLifecycle(event)) })) => {

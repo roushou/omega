@@ -75,8 +75,8 @@ actions! {
     SetVolume => Audio,
     SetBacklight => Backlight,
     Notify => Notify,
-    /// Making another plugin run its own code is making code run.
-    InvokePlugin => Spawn,
+    /// Exact command dependencies are authorized by the command dispatcher.
+    InvokePlugin => None,
     ToggleFloating => None,
     ToggleFullscreen => None,
     SetPowerProfile => SystemControl,

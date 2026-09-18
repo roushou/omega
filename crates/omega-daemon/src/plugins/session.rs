@@ -69,6 +69,7 @@ impl Drop for SessionGuard {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SessionLink {
+    pub(crate) manifest: Option<std::sync::Arc<omega_proto::Manifest>>,
     pub(crate) bytes: std::sync::Arc<tokio::sync::Semaphore>,
     pub(crate) requests: tokio::sync::mpsc::Sender<Request>,
     pub(crate) stop: crate::Shutdown,

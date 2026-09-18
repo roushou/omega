@@ -141,8 +141,8 @@ impl Command for LockScreen {
 #[test]
 fn a_plugin_can_draw_and_do_at_once() {
     let manifest = manifest_of(
-        &omega::Plugin::named("battery", "0.1.0")
-            .surface_default::<Charge>()
+        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+            .surface_as::<Charge>("battery")
             .command::<LockScreen>(),
     );
 
@@ -256,8 +256,9 @@ async fn a_command_is_configured_by_its_plugin() {
 
 #[tokio::test]
 async fn a_plugin_is_told_its_settings_at_the_handshake() {
-    let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").command::<Threshold>());
+    let mut daemon = TestDaemon::serving(
+        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Threshold>(),
+    );
 
     // Settings must be available when plugin fields are constructed.
     daemon
@@ -478,8 +479,9 @@ impl Command for Announce {
 
 #[tokio::test]
 async fn a_command_answers_over_the_wire() {
-    let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("announce", "0.1.0").command::<Announce>());
+    let mut daemon = TestDaemon::serving(
+        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Announce>(),
+    );
     daemon.welcome(&State::new()).await;
 
     let said = daemon
@@ -567,8 +569,8 @@ fn a_topics_address_comes_from_where_it_is_defined() {
 #[test]
 fn owning_state_declares_the_right_to_publish_it() {
     let manifest = manifest_of(
-        &omega::Plugin::named("desk", "0.1.0")
-            .surface_default::<Showing>()
+        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+            .surface_as::<Showing>("desk")
             .command::<Focus>(),
     );
 
@@ -617,8 +619,8 @@ async fn publishing_state_is_an_effect_like_any_other() {
 #[tokio::test]
 async fn one_plugin_draws_what_another_published() {
     let mut daemon = TestDaemon::serving(
-        omega::Plugin::named("desk", "0.1.0")
-            .surface_default::<Showing>()
+        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+            .surface_as::<Showing>("desk")
             .command::<Focus>(),
     );
     daemon.welcome(&State::new()).await;

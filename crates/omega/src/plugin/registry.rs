@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 
-use omega_proto::omega::{Capability, Event, EventKind, Value};
+use omega_proto::omega::{Capability, Event, EventKind};
 use omega_proto::{IntoValue, SystemTopic, Values};
 
 use crate::Input;
@@ -24,6 +24,7 @@ pub(crate) struct SurfaceEntry {
     pub(crate) surface: String,
     pub(crate) plugin: Option<&'static str>,
     declare: Declaration,
+    commands: fn() -> Vec<omega_proto::omega::CommandDependency>,
     required: fn() -> Vec<SystemTopic>,
     make: fn(&Context, &Values) -> Box<dyn MountedSurface>,
 }
@@ -33,6 +34,12 @@ impl SurfaceEntry {
         Self {
             surface,
             plugin: None,
+            commands: || {
+                S::commands()
+                    .into_iter()
+                    .chain(S::Effects::commands())
+                    .collect()
+            },
             declare: |caps, topics, keys, stores| {
                 DeclarationOf::<S>::declare(caps, topics, keys, stores);
                 DeclarationOf::<S::Effects>::declare(caps, topics, keys, stores);
@@ -44,6 +51,10 @@ impl SurfaceEntry {
                 ))
             },
         }
+    }
+
+    pub(crate) fn command_dependencies(&self) -> Vec<omega_proto::omega::CommandDependency> {
+        (self.commands)()
     }
 
     pub(crate) fn declare(
@@ -77,7 +88,10 @@ impl SurfaceEntry {
 /// A registered command.
 pub(crate) struct CommandEntry {
     pub(crate) name: String,
+    pub(crate) owner: &'static str,
+    pub(crate) descriptor: omega_proto::omega::CommandEndpoint,
     declare: Declaration,
+    commands: fn() -> Vec<omega_proto::omega::CommandDependency>,
     make: fn(&Context, &Values) -> Arc<dyn CalledCommand>,
 }
 
@@ -85,9 +99,16 @@ impl CommandEntry {
     pub(crate) fn of<C: Command>(name: String) -> Self {
         Self {
             name,
+            owner: C::PLUGIN,
+            descriptor: crate::command::CommandRef::<C>::INSTANCE.descriptor(),
             declare: DeclarationOf::<C>::declare,
+            commands: C::commands,
             make: |context, settings| Arc::new(C::build(context, settings)),
         }
+    }
+
+    pub(crate) fn command_dependencies(&self) -> Vec<omega_proto::omega::CommandDependency> {
+        (self.commands)()
     }
 
     pub(crate) fn declare(
@@ -109,18 +130,30 @@ pub(crate) trait CalledCommand: Send + Sync {
     fn call(
         self: Arc<Self>,
         args: Args,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, crate::Error>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = Result<omega_proto::CommandAnswer, crate::Error>> + Send>>;
 }
 
 impl<C: Command> CalledCommand for C {
     fn call(
         self: Arc<Self>,
         args: Args,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, crate::Error>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<omega_proto::CommandAnswer, crate::Error>> + Send>>
+    {
         Box::pin(async move {
-            Command::call(&*self, C::Input::decode(args)?)
-                .await
-                .map(IntoValue::into_value)
+            use crate::command::CommandValue;
+            let value = Command::call(&*self, C::Input::decode(args)?)
+                .await?
+                .into_value();
+            C::Output::shape()
+                .accepts(&value)
+                .map_err(|e| crate::Error::invalid(e.to_string()))?;
+            Ok(
+                if C::Output::shape().kind == omega_proto::omega::command_type::Kind::Unit as i32 {
+                    omega_proto::CommandAnswer::Acknowledged
+                } else {
+                    omega_proto::CommandAnswer::Value(value)
+                },
+            )
         })
     }
 }
@@ -129,6 +162,7 @@ impl<C: Command> CalledCommand for C {
 pub(crate) struct ReactionEntry {
     pub(crate) event: EventKind,
     declare: Declaration,
+    commands: fn() -> Vec<omega_proto::omega::CommandDependency>,
     make: fn(&Context, &Values) -> Box<dyn FiredReaction>,
 }
 
@@ -137,8 +171,13 @@ impl ReactionEntry {
         Self {
             event,
             declare: DeclarationOf::<R>::declare,
+            commands: R::commands,
             make: |context, settings| Box::new(R::build(context, settings)),
         }
+    }
+
+    pub(crate) fn command_dependencies(&self) -> Vec<omega_proto::omega::CommandDependency> {
+        (self.commands)()
     }
 
     pub(crate) fn declare(

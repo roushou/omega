@@ -226,3 +226,9 @@ impl IntoValue for crate::omega::PowerProfile {
         self.as_str_name().into_value()
     }
 }
+
+impl FromValue for () {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.kind.is_none().then_some(())
+    }
+}

@@ -256,6 +256,10 @@ impl<S: Surface> std::fmt::Debug for SurfaceHarness<S> {
 /// An isolated operation awaiting a fixture-defined outcome.
 pub struct CapturedEffect(crate::effect::queue::Request);
 impl CapturedEffect {
+    #[cfg(test)]
+    pub(crate) fn from_request(request: crate::effect::queue::Request) -> Self {
+        Self(request)
+    }
     /// Inspect the operation before deciding its simulated outcome.
     pub fn operation(&self) -> &omega_proto::omega::invoke::Op {
         self.0.operation()

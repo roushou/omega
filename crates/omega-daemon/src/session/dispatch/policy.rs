@@ -9,6 +9,7 @@ use crate::authorization::Role;
 /// schema fails to compile here until its kind is named.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpKind {
+    ListCommands,
     Storage,
     StorageSubscribe,
     StorageUnsubscribe,
@@ -40,6 +41,7 @@ pub enum OpKind {
 impl OpKind {
     pub fn of(op: &invoke::Op) -> Self {
         match op {
+            invoke::Op::ListCommands(_) => Self::ListCommands,
             invoke::Op::Storage(_) => Self::Storage,
             invoke::Op::StorageSubscribe(_) => Self::StorageSubscribe,
             invoke::Op::StorageUnsubscribe(_) => Self::StorageUnsubscribe,
@@ -71,6 +73,7 @@ impl OpKind {
 
     pub fn name(self) -> &'static str {
         match self {
+            Self::ListCommands => "ListCommands",
             Self::Storage => "Storage",
             Self::StorageSubscribe => "StorageSubscribe",
             Self::StorageUnsubscribe => "StorageUnsubscribe",
@@ -129,7 +132,8 @@ impl OpKind {
             | invoke::Op::Storage(_)
             | invoke::Op::StorageSubscribe(_)
             | invoke::Op::StorageUnsubscribe(_)
-            | invoke::Op::StorageInspect(_) => None,
+            | invoke::Op::StorageInspect(_)
+            | invoke::Op::ListCommands(_) => None,
         }
     }
 }
@@ -150,6 +154,12 @@ pub(super) struct OpPolicy {
 /// The ops this daemon serves, and what each demands. Deny by default:
 /// anything absent is refused.
 pub(super) const POLICY: &[OpPolicy] = &[
+    OpPolicy {
+        kind: OpKind::ListCommands,
+        roles: &[Role::Plugin, Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
     OpPolicy {
         kind: OpKind::Storage,
         roles: &[Role::Plugin, Role::Operator],

@@ -79,6 +79,7 @@ impl Check {
             );
         }
         let document = System::new(&layout).evaluate(Self::PROFILE).await?;
+        omega_proto::CommandContracts::validate(manifests.iter())?;
         omega_proto::storage::StorageContracts::collect(
             manifests.iter().flat_map(|manifest| &manifest.storage),
         )?;

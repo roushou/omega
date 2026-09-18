@@ -1,7 +1,6 @@
 //! Public typed plugin endpoints, independent of UI instances.
 
 use crate::wiring::Wired;
-use omega_proto::IntoValue;
 
 /// A typed operation callable from UI bindings, schedules, or `omega run`.
 /// Commands use the owning plugin's capabilities and run concurrently.
@@ -21,7 +20,8 @@ use omega_proto::IntoValue;
 /// ```
 pub trait Command: Wired + crate::command::CommandName {
     type Input: crate::Input;
-    type Output: IntoValue + Send;
+    type Output: CommandValue;
+    const DESCRIPTION: &'static str = "";
     fn call(
         &self,
         args: Self::Input,
@@ -34,3 +34,15 @@ mod reference;
 pub use args::Args;
 pub use input::Input;
 pub use reference::{CommandName, CommandRef};
+
+mod value;
+pub use omega_proto::omega::command_type::Kind as CommandTypeKind;
+pub use omega_proto::omega::{CommandEndpoint, CommandField, CommandType};
+pub use omega_proto::{CommandAddress, CommandId};
+pub use value::CommandValue;
+
+mod caller;
+pub use caller::{Caller, Invocation};
+
+mod catalogue;
+pub use catalogue::{Available, Commands};

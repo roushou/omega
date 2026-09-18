@@ -26,15 +26,17 @@ impl ManifestStore {
         let mut plugins = HashMap::with_capacity(config.plugins.len());
 
         for name in config.names() {
-            let manifest = Self::read(layout, name).map_err(|source| ManifestStoreError {
-                plugin: name.clone(),
-                source,
-            })?;
+            let manifest =
+                Self::read(layout, name).map_err(|source| ManifestStoreError::Plugin {
+                    plugin: name.clone(),
+                    source,
+                })?;
 
             let hash = manifest.hash();
             plugins.insert(name.clone(), PluginManifest { manifest, hash });
         }
 
+        omega_proto::CommandContracts::validate(plugins.values().map(|entry| &entry.manifest))?;
         Ok(Self { plugins })
     }
 
@@ -84,13 +86,17 @@ impl ManifestStore {
     }
 }
 
-/// A plugin whose manifest could not be loaded or trusted.
+/// A manifest or dependency set that could not be loaded or trusted.
 #[derive(Debug, thiserror::Error)]
-#[error("plugin {plugin}: {source}")]
-pub struct ManifestStoreError {
-    pub plugin: PluginName,
-    #[source]
-    pub source: ManifestReadError,
+pub enum ManifestStoreError {
+    #[error("plugin {plugin}: {source}")]
+    Plugin {
+        plugin: PluginName,
+        #[source]
+        source: ManifestReadError,
+    },
+    #[error(transparent)]
+    Commands(#[from] omega_proto::CommandContractError),
 }
 
 /// Why one manifest did not load.

@@ -1,7 +1,7 @@
 //! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
-use omega_proto::omega::{CallCommand, InvokePlugin, RunCommand, action, invoke};
-use omega_proto::{ActionKind, PluginName};
+use omega_proto::ActionKind;
+use omega_proto::omega::{RunCommand, action};
 use omega_proto::{CommandAnswer, Refusal};
 
 use crate::refusal::Refusable;
@@ -44,7 +44,7 @@ impl Actions {
             // The daemon's own: spawning a process is not brokering a
             // subsystem, and routing between plugins is its own job.
             action::Kind::RunCommand(run) => Self::run(run),
-            action::Kind::InvokePlugin(invoke) => self.invoke_plugin(invoke).await,
+            action::Kind::InvokePlugin(invoke) => self.plugins.invoke_command(invoke, None).await,
             other => self.broker(other).await,
         }
     }
@@ -59,55 +59,6 @@ impl Actions {
             ))),
             Some(Ok(())) => Ok(CommandAnswer::Acknowledged),
             Some(Err(error)) => Err(error.refusal()),
-        }
-    }
-
-    /// Validate the target command against the manifest before dispatching it.
-    async fn invoke_plugin(&self, call: &InvokePlugin) -> Result<CommandAnswer, Refusal> {
-        let plugin = PluginName::try_from(call.plugin.clone())
-            .map_err(|e| Refusal::invalid(e.to_string()))?;
-
-        self.declares_command(&plugin, &call.command)?;
-
-        let outcome = self
-            .plugins
-            .request(
-                &plugin,
-                invoke::Op::CallCommand(CallCommand {
-                    command: call.command.clone(),
-                    args: call.args.clone(),
-                }),
-            )
-            .await
-            .or_refuse()?;
-
-        CommandAnswer::try_from(outcome)
-    }
-
-    /// A plugin serves the commands its manifest declares, and no others.
-    fn declares_command(&self, plugin: &PluginName, command: &str) -> Result<(), Refusal> {
-        let Some(entry) = self.plugins.manifest(plugin) else {
-            return Err(Refusal::invalid(format!(
-                "{plugin} is not a plugin of this build"
-            )));
-        };
-
-        let commands: Vec<&str> = entry
-            .manifest
-            .commands
-            .iter()
-            .map(|surface| surface.id.as_str())
-            .collect();
-
-        match commands.contains(&command) {
-            true => Ok(()),
-            false if commands.is_empty() => Err(Refusal::invalid(format!(
-                "{plugin} declares no command surfaces"
-            ))),
-            false => Err(Refusal::invalid(format!(
-                "{plugin} declares no command {command:?}; it has: {}",
-                commands.join(", ")
-            ))),
         }
     }
 

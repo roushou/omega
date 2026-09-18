@@ -135,7 +135,12 @@ pub fn policy_manifest(name: &str) -> Manifest {
 pub fn command_manifest(name: &str, command: &str) -> Manifest {
     Manifest::new(&plugin_name(name), "0.1.0")
         .granting([Capability::StateRead])
-        .serving([omega_proto::omega::CommandEndpoint { id: command.into() }])
+        .serving([omega_proto::omega::CommandEndpoint {
+            input: Some(Default::default()),
+            output: Some(Default::default()),
+            description: String::new(),
+            id: command.into(),
+        }])
         .reading(["battery"])
 }
 

@@ -119,6 +119,6 @@ mod tests {
             BluetoothDeviceId::from_value(&id.clone().into_value()),
             Some(id)
         );
-        assert!(crate::Handshake::negotiate(3).is_err());
+        assert!(crate::Handshake::negotiate(crate::PROTOCOL_VERSION + 1).is_err());
     }
 }

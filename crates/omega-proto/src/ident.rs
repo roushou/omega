@@ -119,6 +119,47 @@ impl fmt::Display for SurfaceId {
     }
 }
 
+/// Command identifier, unique within its declaring plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(transparent)]
+pub struct CommandId(String);
+
+impl std::str::FromStr for CommandId {
+    type Err = IdentError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl TryFrom<&str> for CommandId {
+    type Error = IdentError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<String> for CommandId {
+    type Error = IdentError;
+
+    fn try_from(id: String) -> Result<Self, Self::Error> {
+        Ident::validate("command id", id).map(Self)
+    }
+}
+
+impl CommandId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for CommandId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// A bar module's id: one instance of a surface, named by the state document
 /// so the same widget can appear twice.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -179,6 +220,12 @@ impl<'de> Deserialize<'de> for PluginName {
 }
 
 impl<'de> Deserialize<'de> for SurfaceId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for CommandId {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }

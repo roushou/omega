@@ -3,6 +3,7 @@ pub mod bluetooth;
 pub mod client;
 pub mod codec;
 pub mod command;
+pub use command::{CommandAddress, CommandContractError, CommandContracts};
 pub mod handshake;
 pub mod icons;
 pub mod ident;
@@ -34,7 +35,7 @@ pub use codec::{CodecError, FrameCodec, MAX_FRAME_LEN};
 pub use command::CommandAnswer;
 pub use handshake::{Handshake, HandshakeError};
 pub use icons::Glyph;
-pub use ident::{IdentError, ModuleId, PluginName, SurfaceId};
+pub use ident::{CommandId, IdentError, ModuleId, PluginName, SurfaceId};
 pub use interaction::Interaction;
 pub use manifest::ManifestError;
 #[cfg(feature = "json")]

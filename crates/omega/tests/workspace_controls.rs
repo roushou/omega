@@ -112,7 +112,8 @@ async fn command_inputs_reject_invalid_indices_before_effects() {
 
 #[test]
 fn switching_adds_no_reading_or_process_execution_grants() {
-    let manifest = manifest_of(&omega::Plugin::named("workspaces", "1").command::<Select>());
+    let manifest =
+        manifest_of(&omega::Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<Select>());
     assert!(!manifest.capabilities.contains(&(Capability::Spawn as i32)));
     assert!(manifest.state_topics.is_empty());
 }

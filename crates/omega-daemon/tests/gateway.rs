@@ -163,6 +163,7 @@ fn press(plugin: &str, command: &str) -> invoke::Op {
     invoke::Op::Act(Act {
         action: Some(Action {
             kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                signature: Vec::new(),
                 plugin: plugin.into(),
                 command: command.into(),
                 args: Vec::new(),

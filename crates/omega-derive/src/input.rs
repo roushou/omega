@@ -71,6 +71,12 @@ impl InputExpansion {
                 });
             }
         }
+        let shapes = fields.iter().map(|field| {
+            let ident = field.ident.as_ref().expect("named field");
+            let key = ident.to_string().trim_start_matches("r#").to_owned();
+            let ty = &field.ty;
+            quote! { ::omega::internal::CommandField { name: #key.into(), value: Some(<#ty as ::omega::internal::CommandValue>::shape()) } }
+        });
         let count = fields.len();
         let form_impl = if form {
             quote! {
@@ -82,7 +88,23 @@ impl InputExpansion {
             quote!()
         };
         Ok(quote! {
+            impl ::omega::internal::CommandValue for #name {
+                fn shape() -> ::omega::internal::CommandType {
+                    ::omega::internal::CommandType { kind: ::omega::internal::CommandTypeKind::Record as i32, fields: vec![#(#shapes),*], ..Default::default() }
+                }
+            }
+            impl ::omega::internal::IntoValue for #name {
+                fn into_value(self) -> ::omega::internal::Value {
+                    <Self as ::omega::internal::Input>::encode(self).remove(0)
+                }
+            }
+            impl ::omega::internal::FromValue for #name {
+                fn from_value(value: &::omega::internal::Value) -> Option<Self> {
+                    <Self as ::omega::internal::Input>::decode(::omega::internal::Args::new(vec![value.clone()])).ok()
+                }
+            }
             impl ::omega::internal::Input for #name {
+                fn shape() -> ::omega::internal::CommandType { <Self as ::omega::internal::CommandValue>::shape() }
                 fn decode(args: ::omega::internal::Args) -> Result<Self, ::omega::internal::Error> {
                     if args.len() != 1 { return Err(::omega::internal::Error::invalid("expected one input map")); }
                     let values = args.get::<::omega::internal::Values>(0)

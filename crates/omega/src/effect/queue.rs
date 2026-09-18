@@ -80,7 +80,7 @@ impl Admission {
                 deadline: Instant::now() + Effects::TIMEOUT,
             },
         });
-        Ok(Receipt { receiver })
+        Ok(Receipt::raw(receiver))
     }
 }
 
@@ -180,6 +180,9 @@ impl Effects {
             return Ok(true);
         }
         let result = match &answer.outcome {
+            Some(result::Outcome::Commands(commands)) => {
+                Ok(Some(omega_proto::IntoValue::into_value(commands.clone())))
+            }
             Some(result::Outcome::Ok(_)) => Ok(None),
             Some(result::Outcome::Value(value)) => Ok(Some(value.clone())),
             Some(result::Outcome::Error(error)) => {

@@ -211,6 +211,10 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
         let ty = &field.ty;
         quote! { descriptors.extend(<#ty as ::omega::internal::Wiring>::storage()); }
     });
+    let commands = handles.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { dependencies.extend(<#ty as ::omega::internal::Wiring>::commands()); }
+    });
     let keyspaces = handles.iter().map(|field| {
         let ty = &field.ty;
         quote! {
@@ -232,6 +236,9 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
 
     quote! {
         impl ::omega::internal::Wired for #name {
+            fn commands() -> ::std::vec::Vec<::omega::internal::CommandDependency> {
+                let mut dependencies = Vec::new(); #(#commands)* dependencies
+            }
             fn topics() -> ::std::vec::Vec<::omega::internal::SystemTopic> {
                 let mut topics = ::std::vec::Vec::new();
                 #(#topics)*
@@ -338,4 +345,10 @@ pub fn form(tokens: TokenStream) -> TokenStream {
 #[proc_macro_derive(Effects, attributes(omega))]
 pub fn effects(input: TokenStream) -> TokenStream {
     wire(input, Marker::Wiring)
+}
+
+/// A strictly decoded command result record. Also usable as command input.
+#[proc_macro_derive(Output)]
+pub fn output(tokens: TokenStream) -> TokenStream {
+    InputExpansion::expand(tokens, false)
 }

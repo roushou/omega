@@ -4,7 +4,7 @@
 use omega_proto::omega::{
     Act, Action, AdoptPlugin, InvokePlugin, Value, action, invoke, result, value,
 };
-use omega_proto::{Client, ClientError, CommandAnswer, PluginName, Socket, SurfaceId};
+use omega_proto::{Client, ClientError, CommandAnswer, CommandId, PluginName, Socket};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OperatorError {
@@ -119,11 +119,26 @@ impl Operator {
         .map(|_| ())
     }
 
+    pub async fn commands(&self) -> Result<omega_proto::omega::CommandCatalogue, OperatorError> {
+        match self
+            .invoke(invoke::Op::ListCommands(
+                omega_proto::omega::ListCommands {},
+            ))
+            .await?
+        {
+            result::Outcome::Commands(catalogue) => Ok(catalogue),
+            _ => Err(OperatorError::Unexpected(
+                "ListCommands",
+                "command catalogue",
+            )),
+        }
+    }
+
     /// Call a plugin's command surface, and hand back whatever it answered.
     pub async fn run(
         &self,
         plugin_name: &PluginName,
-        command_id: &SurfaceId,
+        command_id: &CommandId,
         args: Vec<Value>,
     ) -> Result<Option<Value>, OperatorError> {
         let outcome = self
@@ -133,6 +148,7 @@ impl Operator {
                         plugin: plugin_name.to_string(),
                         command: command_id.to_string(),
                         args,
+                        signature: Vec::new(),
                     })),
                 }),
             }))

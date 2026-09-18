@@ -44,7 +44,8 @@ impl TryFrom<result::Outcome> for CommandAnswer {
                 ErrorCode::try_from(error.code).unwrap_or(ErrorCode::Unspecified),
                 error.message,
             )),
-            result::Outcome::State(_)
+            result::Outcome::Commands(_)
+            | result::Outcome::State(_)
             | result::Outcome::View(_)
             | result::Outcome::Output(_)
             | result::Outcome::Deployment(_)

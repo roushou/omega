@@ -47,6 +47,7 @@ message Manifest {
 
   repeated EventKind events = 6;
   repeated StorageDescriptor storage = 8;
+  repeated CommandDependency command_dependencies = 9;
 }
 
 // One declared UI surface.
@@ -55,4 +56,48 @@ message Surface {
   SurfaceKind kind = 2;
 }
 
-message CommandEndpoint { string id = 1; }
+// Transport-neutral command value shapes. Opaque inputs require an explicit adapter.
+message CommandType {
+  enum Kind {
+    OPAQUE = 0;
+    UNIT = 1;
+    BOOLEAN = 2;
+    INTEGER = 3;
+    NUMBER = 4;
+    TEXT = 5;
+    LIST = 6;
+    OPTIONAL = 7;
+    RECORD = 8;
+    CHOICE = 9;
+  }
+  Kind kind = 1;
+  repeated CommandField fields = 2;
+  CommandType element = 3;
+  repeated string choices = 4;
+  optional double minimum = 5;
+  optional double maximum = 6;
+  string identity = 7;
+}
+message CommandField {
+  string name = 1;
+  CommandType value = 2;
+}
+message CommandEndpoint {
+  string id = 1;
+  CommandType input = 2;
+  CommandType output = 3;
+  string description = 4;
+}
+message CommandDependency {
+  string plugin = 1;
+  string command = 2;
+  bytes signature = 3;
+}
+message ListCommands {}
+message CommandCatalogue { repeated AvailableCommand entries = 1; }
+message AvailableCommand {
+  string plugin = 1;
+  CommandEndpoint endpoint = 2;
+  bytes signature = 3;
+  bool available = 4;
+}

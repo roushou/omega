@@ -71,6 +71,7 @@ impl Fixture {
                 ..Default::default()
             }),
             action::Kind::InvokePlugin(InvokePlugin {
+                signature: Vec::new(),
                 plugin: "lamp".into(),
                 command: "toggle".into(),
                 args: vec![],

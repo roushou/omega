@@ -4,6 +4,10 @@ The [architecture](architecture.md) describes the implemented contracts, and the
 [desktop platform design](desktop-platform.md) records composition decisions.
 This file tracks remaining limitations and future work.
 
+[Command interoperability](command-interoperability.md) documents typed calls,
+scoped discovery, and the launcher integration. Dynamic permission adoption and
+transactional routines remain outside that contract.
+
 ## Persistence and recovery
 
 - **Records:** replication survives plugin restarts while the daemon lives, but not

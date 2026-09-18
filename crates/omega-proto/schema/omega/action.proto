@@ -161,6 +161,7 @@ message InvokePlugin {
   string plugin = 1;
   string command = 2;
   repeated Value args = 3;
+  bytes signature = 4;
 }
 
 // Select a power profile. Platform-specific profile names are mapped by the broker.

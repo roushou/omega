@@ -41,10 +41,25 @@ impl EffectError {
 /// runtime, so detached effects cannot fail silently.
 #[derive(Debug)]
 #[must_use = "forward, await, poll, or explicitly detach the effect receipt"]
-pub struct Receipt {
+pub struct Receipt<T = Option<Value>> {
+    decode: fn(Option<Value>) -> Result<T, EffectError>,
     pub(crate) receiver: oneshot::Receiver<Completion>,
 }
 impl Receipt {
+    pub(crate) fn raw(receiver: oneshot::Receiver<Completion>) -> Self {
+        Self {
+            receiver,
+            decode: Ok,
+        }
+    }
+    fn decoded<T>(self, decode: fn(Option<Value>) -> Result<T, EffectError>) -> Receipt<T> {
+        Receipt {
+            receiver: self.receiver,
+            decode,
+        }
+    }
+}
+impl<T> Receipt<T> {
     /// Wait without blocking the SDK's connection loop.
     ///
     /// ```no_run
@@ -52,8 +67,11 @@ impl Receipt {
     /// notify.send("Finished").receipt()?.wait().await?;
     /// # Ok(()) }
     /// ```
-    pub async fn wait(self) -> Completion {
-        self.receiver.await.unwrap_or(Err(EffectError::Closed))
+    pub async fn wait(self) -> Result<T, EffectError> {
+        self.receiver
+            .await
+            .unwrap_or(Err(EffectError::Closed))
+            .and_then(self.decode)
     }
 
     /// Take a completed answer, or return `None` while it is pending.
@@ -65,9 +83,9 @@ impl Receipt {
     /// if let Some(result) = receipt.try_complete() { result?; }
     /// # Ok(()) }
     /// ```
-    pub fn try_complete(&mut self) -> Option<Completion> {
+    pub fn try_complete(&mut self) -> Option<Result<T, EffectError>> {
         match self.receiver.try_recv() {
-            Ok(result) => Some(result),
+            Ok(result) => Some(result.and_then(self.decode)),
             Err(oneshot::error::TryRecvError::Empty) => None,
             Err(oneshot::error::TryRecvError::Closed) => Some(Err(EffectError::Closed)),
         }
@@ -93,15 +111,24 @@ impl Receipt {
 /// ```
 #[derive(Debug)]
 #[must_use = "await the effect or explicitly take its receipt"]
-pub struct Effect {
-    submission: Submission,
+pub struct Effect<T = ()> {
+    submission: Result<Receipt<T>, EffectError>,
 }
 
 impl Effect {
     pub(crate) fn new(submission: Submission) -> Self {
-        Self { submission }
+        Self::decoded(submission, |_| Ok(()))
     }
-
+}
+impl<T> Effect<T> {
+    pub(crate) fn decoded(
+        submission: Submission,
+        decode: fn(Option<Value>) -> Result<T, EffectError>,
+    ) -> Self {
+        Self {
+            submission: submission.map(|receipt| receipt.decoded(decode)),
+        }
+    }
     /// Take admission and completion ownership for manual polling or detachment.
     ///
     /// ```no_run
@@ -109,13 +136,13 @@ impl Effect {
     /// session.lock().receipt()?.detach();
     /// # Ok(()) }
     /// ```
-    pub fn receipt(self) -> Submission {
+    pub fn receipt(self) -> Result<Receipt<T>, EffectError> {
         self.submission
     }
 }
 
-impl std::future::Future for Effect {
-    type Output = Result<(), crate::Error>;
+impl<T> std::future::Future for Effect<T> {
+    type Output = Result<T, crate::Error>;
 
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
@@ -128,7 +155,7 @@ impl std::future::Future for Effect {
                 .map(|answer| {
                     answer
                         .unwrap_or(Err(EffectError::Closed))
-                        .map(|_| ())
+                        .and_then(receipt.decode)
                         .map_err(Into::into)
                 }),
         }

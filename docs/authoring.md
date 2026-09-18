@@ -202,3 +202,49 @@ there is no additional registration in the system document.
 
 See [shared storage](storage.md) for the API, lifetimes, revision conflicts,
 inspection commands, and isolated test fixtures.
+
+## Call another plugin
+
+Add the plugin's library as a Cargo dependency and hold a typed caller in behavior:
+
+```rust,ignore
+#[derive(omega::Effects)]
+pub struct Effects {
+    volume: omega::command::Caller<audio::SetVolume>,
+    commands: omega::command::Commands,
+}
+
+// Inside async behavior:
+effects.volume.call(omega::Percent::whole(30)).await?;
+```
+
+`Caller<C>` declares exactly that endpoint in the manifest; there is no additional
+permission list in `system/`. `omega check` rejects missing or incompatible targets.
+The target uses its own settings and effects. A foreign UI binding must also have
+its caller declared in the source surface's effects. Keep callers out of render
+readings. `with(input)` constructs a pure invocation; `call(input)` admits work.
+
+Use `const DESCRIPTION: &'static str` on a command for discoverable help text.
+Input and output shapes come from the command types. Derive `omega::Output` for a
+returned struct; all fields are required when decoding command results. This is
+separate from configuration's defaulting behavior. Custom value types implement
+`CommandValue` and the strict `IntoValue`/`FromValue` conversions.
+
+`omega commands --json` inspects the catalogue. Plugin behavior can await
+`effects.commands.list()` to inspect only its accessible endpoints. Availability
+is a snapshot; always handle invocation errors. A timeout does not undo execution,
+and calls are never automatically retried against a replacement process.
+
+In a surface test, complete the captured command with ordinary Rust values:
+
+```rust,ignore
+let call = panel.take_effect().unwrap().command::<audio::SetVolume>()?;
+assert_eq!(*call.input(), omega::Percent::whole(30));
+call.complete(Ok(()))?;
+panel.complete().await?;
+
+// Complete a catalogue read without constructing protocol messages.
+panel.take_effect().unwrap().commands()?
+    .entry(audio::SetVolume, true)
+    .complete()?;
+```

@@ -88,7 +88,8 @@ and reviews. These rules also apply to AI coding tools working in this repositor
 - Declare action capabilities once in `omega-proto::ActionKind`. Check authorization
   before handler availability.
 - A plugin serves only registered commands with its own capabilities. Cross-plugin
-  invocation requires CAPABILITY_SPAWN for plugins; the operator is authorized by uid.
+  invocation requires an exact declared command dependency, including its signature;
+  CAPABILITY_SPAWN does not grant command access. The operator is authorized by uid.
 
 ## Daemon
 

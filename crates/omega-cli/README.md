@@ -35,6 +35,10 @@ to apply. Use `omega build --debug` for a debug build. `omega dev audio`
 temporarily replaces the supervised plugin with a development process in your
 terminal.
 
+Inspect available endpoints with `omega commands` or `omega commands audio --json`.
+The JSON output includes declared input/output shapes, signatures, descriptions,
+and connection availability. Discovery does not guarantee a later call will succeed.
+
 Command arguments are decoded by the plugin's input type. For plugins exposing
 these commands:
 

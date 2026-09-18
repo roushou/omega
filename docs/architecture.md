@@ -347,7 +347,9 @@ escaping can make a JSON request reach its limit sooner.
 Commands derive `Command` to declare their fields and implement the trait with
 associated `Input` and `Output` types and an async `call(input)` returning
 `Result<Output, omega::Error>`.
-Outputs implement `IntoValue`; `()` becomes terminal success without a value.
+Outputs implement `CommandValue`, which combines strict value conversions and a
+wire-shape description. Derive `omega::Output` for structured results. `()` becomes
+terminal success without a value; `Option::None` remains an explicit empty value.
 The runtime converts values and errors to closed protocol outcomes. Authors use
 ordinary return values and `?`; daemon refusals preserve their code.
 
@@ -355,8 +357,9 @@ The derive gives a command one identity, shared by `.command::<SetVolume>()`
 and `.on_change(SetVolume)`. Named-field commands expose a `CommandRef` constant
 in Rust's value namespace; the reference contains no command instance or effects.
 Controls require matching inputs (`Percent`, `bool`, `String` or `()`), and
-`SetVolume.with(value)` binds a complete input for a button. Duplicate registered
-command names are refused. A reference does not register the command: invoking an
+`SetVolume.with(value)` creates a pure `Invocation<C>` consumed by buttons,
+document actions, and callers. Bindings retain the defining plugin, command ID,
+and signature. Duplicate names and registration under a different owner are refused. A reference does not register the command: invoking an
 unregistered command remains a runtime refusal.
 
 The identity also carries the defining package for document actions.
@@ -379,7 +382,8 @@ values; power profiles accept `saver` (`power-saver`), `balanced`, and
 This conversion is confined to command inputs: `FromValue`, configuration,
 records, and derived input maps retain their strict value types.
 
-Effect handles and record writes return an awaitable `Effect`. Admission happens
+Effect handles and record writes return an awaitable `Effect<T = ()>`.
+`Caller<C>` returns `Effect<C::Output>` using the same queue and receipt accounting. Admission happens
 when the method is called, including local record updates; awaiting observes
 terminal success or failure. `Effect::receipt` exposes admission and a unique
 completion receipt for manual polling or explicit detachment. Dropping an
@@ -394,6 +398,10 @@ execution may still be running. Effects also carry the encoded-byte budget
 described below. Timeout, unavailable runtime, capacity exhaustion and oversized
 payloads have distinct wire error codes.
 
+The SDK runtime’s internal `Commands` owner holds constructed handlers, pending
+tasks, reply streams, and fail-stop state. The session loop admits calls through
+that owner and sends its completed replies; it does not manage command tasks.
+
 Command futures have a separate 64-entry bound, checked before invoking user
 code. They run concurrently while the connection loop receives frames, renders
 widgets and completes effects. A caller's timeout does not cancel command work;
@@ -402,6 +410,31 @@ aborts command tasks and resolves outstanding effects. Commands share their
 constructed instance, so mutable application state requires synchronization.
 Reactions and rendering remain synchronous. `testing::Called` awaits commands
 and completes captured effects, exposing their typed result to tests.
+
+### Interoperable commands
+
+`CommandId` and `CommandAddress` preserve the endpoint and plugin identity.
+Manifests contain generated input/output shapes and outgoing dependencies. A
+signature hashes the owner, command ID, and canonical shapes, excluding prose.
+Build/check validates dependencies against all plugin manifests.
+
+The daemon resolves authorization, contract, and target connection together.
+Connected sessions retain the manifest admitted at handshake, even if the next
+build's manifest has already been loaded. Admitted work is never redirected to a
+replacement. Renderer bindings use the source plugin's authority; operator
+identity does not broaden a renderer's access. Typed calls validate arguments and
+results against the admitted contract. Plugin refusals pass through unchanged.
+
+`Commands::list` returns descriptors for endpoints the caller may invoke, including
+connection availability. `omega commands --json` provides operator inspection.
+A catalogue snapshot is advisory; invocation repeats permission and signature
+checks. `CapturedEffect::command::<C>()` and `CapturedEffect::commands()` let tests
+complete calls and discovery with typed Rust declarations.
+
+Command panics end the plugin session. Stream identities live outside handler
+tasks, allowing `OutcomeUnknown` replies to all outstanding calls before shutdown
+when transport remains usable. Other handler errors remain per-call refusals.
+See [command interoperability](command-interoperability.md) for the full contract.
 
 ## Trust
 
@@ -440,7 +473,8 @@ A plugin declares UI surfaces and command endpoints separately in its manifest.
 A widget surface renders: the daemon creates each instance with construction
 settings and pulls its first tree; the plugin pushes subsequent trees. A command
 endpoint is invoked by `omega run`, a retained UI binding, or another plugin with
-`CAPABILITY_SPAWN`. Commands are not UI instances.
+a declared `Caller<C>` dependency. Spawn does not authorize command invocation.
+Commands are not UI instances.
 
 `omega-proto::CommandAnswer` defines terminal command and interaction answers:
 an acknowledgement or a value, including an empty value. Daemon action routing,

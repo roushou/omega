@@ -86,10 +86,13 @@ pub use omega_proto::omega::{Event, EventKind};
 /// Measurement types with display formatting and unit conversions.
 pub use units::{Bytes, Percent, Rate, Remaining, Temperature, Uptime};
 
-pub use omega_derive::{Command, Config, Effects, Form, Input, PluginState, Reaction, Surface};
+pub use omega_derive::{
+    Command, Config, Effects, Form, Input, Output, PluginState, Reaction, Surface,
+};
 
 /// Construction settings and typed field serialization. Derive `Config` to read settings.
 pub mod config {
+    pub use omega_proto::omega::Value;
     pub use omega_proto::{Fields, FromValue, IntoValue, Values};
 }
 
@@ -99,7 +102,7 @@ pub mod internal {
     pub use crate::Command;
     pub use crate::command::CommandName;
     pub use crate::command::CommandRef;
-    pub use crate::command::Input;
+    pub use crate::command::{CommandValue, Input, Invocation};
     pub use crate::record::PluginState;
     pub use crate::runtime::context::Context;
     pub use crate::surface::{SurfaceIdentity, SurfaceRef};
@@ -110,5 +113,7 @@ pub mod internal {
     pub use omega_proto::omega::Capability;
     pub use omega_proto::omega::StorageDescriptor;
     pub use omega_proto::omega::Value;
+    pub use omega_proto::omega::command_type::Kind as CommandTypeKind;
+    pub use omega_proto::omega::{CommandDependency, CommandField, CommandType};
     pub use omega_proto::{Fields, FromValue, IntoValue, SystemTopic, Values};
 }

@@ -15,7 +15,7 @@ No QML, JavaScript, or shell scripts required to write plugins.
 - Compose bar widgets, popup panels, and standalone windows and overlays.
 - Build reusable UI components and preview them with sample data.
 - Read system state and control devices through typed Rust APIs.
-- Register commands, react to events, and schedule background work.
+- Register typed commands, call other plugins, react to events, and schedule background work.
 
 The daemon runs plugins, shares system readings, and routes commands and UI
 interactions. Plugins run as your user in separate processes.

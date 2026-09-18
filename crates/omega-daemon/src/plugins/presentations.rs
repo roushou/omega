@@ -600,7 +600,7 @@ impl PluginRegistry {
         event: &omega::Interact,
     ) -> Result<omega_proto::CommandAnswer, Refusal> {
         let key = &permit.key;
-        let (plugin, session, call) = {
+        let (plugin, session, dispatch) = {
             let records = self.lock();
             permit.validate()?;
             let record = records
@@ -625,46 +625,58 @@ impl PluginRegistry {
             if view.requested != PresentationState::Visible as i32 {
                 return Err(Refusal::precondition("presentation is not visible"));
             }
-            let op = match omega_proto::Interaction::resolve(&view.view, &event.node, &event.event)?
-            {
-                omega_proto::Interaction::Local(binding) => {
-                    invoke::Op::SurfaceEvent(omega::SurfaceEvent {
-                        instance: Some(key.wire()),
-                        binding: binding.get(),
-                        value: event.value.clone(),
-                    })
-                }
-                omega_proto::Interaction::Command { command, args } => {
-                    let manifest = record
-                        .manifest
-                        .as_ref()
-                        .ok_or_else(|| Refusal::precondition("plugin has no manifest"))?;
-                    if !manifest
-                        .manifest
-                        .commands
-                        .iter()
-                        .any(|declared| declared.id == command)
-                    {
-                        return Err(Refusal::denied("binding targets an undeclared command"));
+            let dispatch =
+                match omega_proto::Interaction::resolve(&view.view, &event.node, &event.event)? {
+                    omega_proto::Interaction::Local(binding) => {
+                        BoundInteraction::Local(invoke::Op::SurfaceEvent(omega::SurfaceEvent {
+                            instance: Some(key.wire()),
+                            binding: binding.get(),
+                            value: event.value.clone(),
+                        }))
                     }
-                    let mut args = args.to_vec();
-                    if let Some(value) = &event.value {
-                        args.push(value.clone());
-                    }
-                    invoke::Op::CallCommand(omega::CallCommand {
-                        command: command.to_owned(),
+                    omega_proto::Interaction::Command {
+                        plugin: target,
+                        command,
+                        signature,
                         args,
-                    })
-                }
-            };
+                    } => {
+                        let manifest = record
+                            .session
+                            .as_ref()
+                            .and_then(|session| session.manifest.as_ref())
+                            .ok_or_else(|| {
+                                Refusal::precondition("plugin has no session manifest")
+                            })?;
+                        let grants = crate::authorization::Grants::of(manifest)?;
+                        let mut args = args.to_vec();
+                        if let Some(value) = &event.value {
+                            args.push(value.clone());
+                        }
+                        BoundInteraction::Command(
+                            omega::InvokePlugin {
+                                plugin: target.to_owned(),
+                                command: command.to_owned(),
+                                signature: signature.to_vec(),
+                                args,
+                            },
+                            grants,
+                        )
+                    }
+                };
             (
                 record.name.clone(),
                 record
                     .session
                     .clone()
                     .ok_or_else(|| Refusal::unavailable("plugin disconnected"))?,
-                op,
+                dispatch,
             )
+        };
+        let call = match dispatch {
+            BoundInteraction::Local(call) => call,
+            BoundInteraction::Command(call, grants) => {
+                return self.invoke_command(&call, Some(&grants)).await;
+            }
         };
         omega_proto::CommandAnswer::try_from(
             Self::request_on(&session, &plugin, call)
@@ -794,4 +806,9 @@ impl Drop for LifecycleDelivery {
             stop.trigger();
         }
     }
+}
+
+enum BoundInteraction {
+    Local(invoke::Op),
+    Command(omega::InvokePlugin, crate::authorization::Grants),
 }

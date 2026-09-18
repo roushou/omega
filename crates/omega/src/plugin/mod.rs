@@ -172,13 +172,13 @@ impl Plugin {
                 )));
             }
             command.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
-            commands.push(omega_proto::omega::CommandEndpoint {
-                id: command
-                    .name
-                    .parse::<omega_proto::SurfaceId>()
-                    .map_err(|source| Error::Name(command.name.clone(), source))?
-                    .to_string(),
-            });
+            if command.owner != self.name {
+                return Err(Error::invalid(format!(
+                    "command {} belongs to {}, not {}",
+                    command.name, command.owner, self.name
+                )));
+            }
+            commands.push(command.descriptor.clone());
         }
         for reaction in &self.reactions {
             reaction.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
@@ -196,6 +196,21 @@ impl Plugin {
             )
             .handling(self.reactions.iter().map(|reaction| reaction.event));
         manifest.storage = storage;
+        manifest.command_dependencies = self
+            .surfaces
+            .iter()
+            .flat_map(SurfaceEntry::command_dependencies)
+            .chain(
+                self.commands
+                    .iter()
+                    .flat_map(CommandEntry::command_dependencies),
+            )
+            .chain(
+                self.reactions
+                    .iter()
+                    .flat_map(ReactionEntry::command_dependencies),
+            )
+            .collect();
         manifest
             .validate(&name)
             .map_err(|e| Error::invalid(e.to_string()))?;

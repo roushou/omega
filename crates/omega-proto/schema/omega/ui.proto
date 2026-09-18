@@ -46,6 +46,8 @@ message Bind {
   string command = 1;
   repeated Value args = 2;
   uint64 local = 3; // mutually exclusive with command; opaque plugin-owned binding
+  string plugin = 4;
+  bytes signature = 5;
 }
 
 // Logical shortcuts are matched locally, after focused controls decline the event.

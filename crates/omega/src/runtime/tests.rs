@@ -1,5 +1,6 @@
 use super::*;
 use crate::Surface;
+use crate::command::Args;
 use crate::ui::{Text, View};
 use crate::wiring::Wired;
 use omega_proto::omega::Result as OpResult;
@@ -441,7 +442,7 @@ async fn a_forwarded_timeout_is_answered_and_a_late_refusal_does_not_kill_the_ru
 #[tokio::test]
 async fn completion_saturation_refuses_new_commands_before_they_submit_effects() {
     let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Forward>(), vec![]).await;
-    for _ in 0..Runtime::COMMAND_LIMIT {
+    for _ in 0..Commands::LIMIT {
         peer.command_start().await;
     }
     let answer = peer
@@ -498,7 +499,11 @@ impl crate::Command for Sequence {
 
 #[tokio::test]
 async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
-    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Sequence>(), vec![]).await;
+    let mut peer = Peer::start(
+        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
+        vec![],
+    )
+    .await;
     let (command, first) = peer.command_start().await;
     peer.quiet().await;
     peer.send(Frame::reply(first, result::Outcome::Ok(Default::default())))
@@ -527,7 +532,11 @@ async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
 
 #[tokio::test]
 async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
-    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Sequence>(), vec![]).await;
+    let mut peer = Peer::start(
+        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
+        vec![],
+    )
+    .await;
     let (command, first) = peer.command_start().await;
     peer.send(omega_proto::Refusal::denied("not allowed").frame(first))
         .await;
@@ -557,7 +566,11 @@ impl crate::Command for Delayed {
 
 #[tokio::test(start_paused = true)]
 async fn disconnect_releases_a_runtime_with_an_unfinished_command() {
-    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Delayed>(), vec![]).await;
+    let mut peer = Peer::start(
+        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Delayed>(),
+        vec![],
+    )
+    .await;
     let (_, first) = peer.command_start().await;
     peer.send(Frame::reply(first, result::Outcome::Ok(Default::default())))
         .await;
@@ -778,4 +791,42 @@ async fn subscription_refusal_is_rendered_without_waiting_for_a_storage_push() {
     peer.send(omega_proto::Refusal::denied("storage denied").frame(frame.stream_id))
         .await;
     assert!(Peer::text(&peer.published("tasks", "a").await).contains("storage denied"));
+}
+
+#[derive(crate::Command)]
+struct FailingHandler {}
+impl crate::Command for FailingHandler {
+    type Input = ();
+    type Output = ();
+    async fn call(&self, _: ()) -> crate::Result<()> {
+        panic!("fixture handler panic")
+    }
+}
+#[tokio::test]
+async fn a_handler_panic_answers_its_stream_before_ending_the_session() {
+    let mut peer = Peer::start(
+        Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<FailingHandler>(),
+        vec![],
+    )
+    .await;
+    let answer = peer
+        .invoke(invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            command: "failing-handler".into(),
+            args: vec![],
+        }))
+        .await;
+    let result::Outcome::Error(error) = answer else {
+        panic!("expected a refusal");
+    };
+    assert_eq!(
+        error.code,
+        omega_proto::omega::ErrorCode::OutcomeUnknown as i32
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), &mut peer.task)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
 }

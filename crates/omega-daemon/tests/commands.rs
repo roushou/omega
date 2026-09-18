@@ -6,11 +6,11 @@ use std::time::Duration;
 
 use common::{Harness, command_manifest, expect_refusal, next_result, widget_manifest};
 use omega_daemon::manifest::ManifestStore;
-use omega_proto::Manifest;
 use omega_proto::omega::{
     Act, Action, ErrorCode, Frame, Invoke, InvokePlugin, Value, action, frame, invoke, result,
     value,
 };
+use omega_proto::{IntoValue, Manifest};
 
 fn call(stream_id: u64, plugin: &str, command: &str) -> Frame {
     Frame {
@@ -19,6 +19,7 @@ fn call(stream_id: u64, plugin: &str, command: &str) -> Frame {
             op: Some(invoke::Op::Act(Act {
                 action: Some(Action {
                     kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                        signature: Vec::new(),
                         plugin: plugin.into(),
                         command: command.into(),
                         args: vec![Value {
@@ -181,7 +182,7 @@ async fn a_plugin_that_declares_no_commands_says_so() {
         .unwrap();
 
     let refusal = expect_refusal(next_result(&mut operator).await);
-    assert!(refusal.message.contains("no command surfaces"), "{refusal}");
+    assert!(refusal.message.contains("undeclared command"), "{refusal}");
 }
 
 #[tokio::test]
@@ -233,7 +234,7 @@ async fn a_plugins_own_refusal_reaches_the_caller_as_it_was() {
 }
 
 #[tokio::test]
-async fn a_plugin_needs_a_capability_to_invoke_another() {
+async fn a_plugin_needs_a_declared_dependency_to_invoke_another() {
     let lamp = command_manifest("lamp", "toggle");
     let caller = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(
@@ -249,7 +250,10 @@ async fn a_plugin_needs_a_capability_to_invoke_another() {
 
     let refusal = expect_refusal(next_result(&mut caller_plugin).await);
     assert_eq!(refusal.code, ErrorCode::PermissionDenied);
-    assert!(refusal.message.contains("CAPABILITY_SPAWN"), "{refusal}");
+    assert!(
+        refusal.message.contains("command access not declared"),
+        "{refusal}"
+    );
 }
 
 #[tokio::test]
@@ -431,4 +435,64 @@ async fn streamed_results_and_cancelled_callers_do_not_release_pending_slots_ear
         .await
         .unwrap();
     assert!(admitted.await.unwrap().is_ok());
+}
+
+#[tokio::test]
+async fn a_declared_dependency_routes_without_spawn_and_discovery_does_not_widen_access() {
+    let target = command_manifest("target", "set");
+    let hidden = command_manifest("hidden", "set");
+    let mut caller_manifest = widget_manifest("caller", "panel");
+    caller_manifest
+        .command_dependencies
+        .push(target.commands[0].dependency("target"));
+    let harness = Harness::new(
+        "typed-call",
+        ManifestStore::from_manifests([target.clone(), hidden, caller_manifest.clone()]),
+    );
+    let mut target_peer = connected_plugin(&harness, &target).await;
+    let mut caller = connected_plugin(&harness, &caller_manifest).await;
+    caller
+        .send(Frame {
+            stream_id: 1,
+            body: Some(frame::Body::Invoke(Invoke {
+                op: Some(invoke::Op::ListCommands(Default::default())),
+            })),
+        })
+        .await
+        .unwrap();
+    let result::Outcome::Commands(catalogue) =
+        common::expect_outcome(next_result(&mut caller).await)
+    else {
+        panic!("catalogue expected");
+    };
+    assert_eq!(catalogue.entries.len(), 1);
+    assert_eq!(catalogue.entries[0].plugin, "target");
+    assert!(catalogue.entries[0].available);
+    let mut request = call(3, "target", "set");
+    if let Some(frame::Body::Invoke(Invoke {
+        op: Some(invoke::Op::Act(act)),
+    })) = request.body.as_mut()
+        && let Some(action::Kind::InvokePlugin(call)) =
+            act.action.as_mut().and_then(|a| a.kind.as_mut())
+    {
+        call.signature = target.commands[0].signature("target");
+    }
+    caller.send(request).await.unwrap();
+    let request = target_peer.recv().await.unwrap().unwrap();
+    target_peer
+        .send(Frame::reply(
+            request.stream_id,
+            result::Outcome::Value("typed result".into_value()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        common::expect_outcome(next_result(&mut caller).await),
+        result::Outcome::Value("typed result".into_value())
+    );
+    caller.send(call(5, "hidden", "set")).await.unwrap();
+    assert_eq!(
+        expect_refusal(next_result(&mut caller).await).code,
+        ErrorCode::PermissionDenied
+    );
 }

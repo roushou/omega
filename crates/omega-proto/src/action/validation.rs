@@ -1,9 +1,9 @@
 use super::ActionKind;
+use crate::PluginName;
 use crate::omega::{
     Action, Direction, PowerProfile, WindowSelector, action, media_key, move_to_workspace,
     set_backlight, set_volume, switch_workspace, window_selector,
 };
-use crate::{PluginName, SurfaceId};
 
 /// A malformed action payload, independent of permissions or machine state.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -193,7 +193,7 @@ impl action::Kind {
                 )?;
                 input.require(
                     "command",
-                    call.command.parse::<SurfaceId>().is_ok(),
+                    call.command.parse::<crate::CommandId>().is_ok(),
                     "must be a command surface identifier",
                 )?;
             }

@@ -19,12 +19,40 @@ use omega_proto::{FromValue, IntoValue};
 /// assert_eq!(level, Percent::whole(40));
 /// assert_eq!(String::decode(Args::new(vec!["40%".into_value()])).unwrap(), "40%");
 /// ```
+///
+/// Custom inputs use the SDK's value and shape types without a protocol dependency:
+///
+/// ```
+/// use omega::{Args, Input, config::Value};
+/// use omega::command::{CommandType, CommandTypeKind};
+///
+/// struct Query(String);
+/// impl Input for Query {
+///     fn shape() -> CommandType {
+///         CommandType::of(CommandTypeKind::Text)
+///     }
+///     fn decode(args: Args) -> omega::Result<Self> {
+///         String::decode(args).map(Self)
+///     }
+///     fn encode(self) -> Vec<Value> {
+///         self.0.encode()
+///     }
+/// }
+/// let args = Args::new(Query("files".into()).encode());
+/// assert_eq!(Query::decode(args).unwrap().0, "files");
+/// ```
 pub trait Input: Sized + Send + 'static {
+    fn shape() -> omega_proto::omega::CommandType {
+        omega_proto::omega::CommandType::default()
+    }
     fn decode(args: Args) -> Result<Self, Error>;
     fn encode(self) -> Vec<Value>;
 }
 
 impl Input for () {
+    fn shape() -> omega_proto::omega::CommandType {
+        <Self as super::CommandValue>::shape()
+    }
     fn decode(args: Args) -> Result<Self, Error> {
         if args.is_empty() {
             Ok(())
@@ -49,6 +77,7 @@ impl Input for Args {
 macro_rules! scalar_input {
     ($($ty:ty),* $(,)?) => { $(
         impl Input for $ty {
+            fn shape() -> omega_proto::omega::CommandType { <Self as super::CommandValue>::shape() }
             fn decode(args: Args) -> Result<Self, Error> {
                 if args.len() != 1 { return Err(Error::invalid("expected one argument")); }
                 args.get(0).ok_or_else(|| Error::invalid(concat!("expected ", stringify!($ty))))
@@ -103,6 +132,9 @@ impl ScalarInput {
 macro_rules! text_input {
     ($ty:ty, $expected:literal, $parse:expr) => {
         impl Input for $ty {
+            fn shape() -> omega_proto::omega::CommandType {
+                <Self as super::CommandValue>::shape()
+            }
             fn decode(args: Args) -> Result<Self, Error> {
                 ScalarInput::decode(args, $expected, $parse)
             }

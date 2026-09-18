@@ -30,6 +30,7 @@ pub use policy::OpKind;
 /// What a served op answers with, on the stream that asked.
 #[derive(Debug)]
 pub enum Response {
+    Commands(omega_proto::omega::CommandCatalogue),
     /// The op succeeded and carries nothing back.
     Ok,
     Instances(omega_proto::omega::InstanceList),
@@ -52,6 +53,7 @@ impl From<CommandAnswer> for Response {
 impl Response {
     pub fn frame(self, stream_id: u64) -> Frame {
         let outcome = match self {
+            Self::Commands(commands) => result::Outcome::Commands(commands),
             Self::Instances(instances) => result::Outcome::Instances(instances),
             Self::Ok => result::Outcome::Ok(Empty {}),
             Self::State(patch) => result::Outcome::State(patch),
@@ -440,6 +442,13 @@ impl Dispatcher {
                 Ok(Response::Ok)
             }
 
+            invoke::Op::ListCommands(_) => Ok(Response::Commands(self.plugins.command_catalogue(
+                if peer.role() == Role::Plugin {
+                    Some(peer.grants())
+                } else {
+                    None
+                },
+            )?)),
             invoke::Op::Act(act) => {
                 let action = act
                     .action
@@ -447,6 +456,20 @@ impl Dispatcher {
                     .and_then(|action| action.kind.as_ref())
                     .ok_or_else(|| Refusal::invalid("Act carries no action"))?;
 
+                if let omega_proto::omega::action::Kind::InvokePlugin(call) = action {
+                    return self
+                        .plugins
+                        .invoke_command(
+                            call,
+                            if peer.role() == Role::Plugin {
+                                Some(peer.grants())
+                            } else {
+                                None
+                            },
+                        )
+                        .await
+                        .map(Response::from);
+                }
                 // Check the capability for this action kind.
                 if peer.role() == Role::Plugin {
                     Actions::authorize(action, peer.grants())?;

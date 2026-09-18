@@ -357,9 +357,9 @@ impl Actions {
         command: impl Into<::omega::command::CommandRef<C>>,
         input: C::Input,
     ) -> Action {
-        use ::omega::Input;
-        let command = command.into();
-        Self::invoke_named_with(command.plugin(), command.name(), input.encode())
+        Self::of(action::Kind::InvokePlugin(
+            command.into().with(input).into_wire(),
+        ))
     }
 
     /// Invoke a dynamically named command without input. Prefer [`Self::invoke`]
@@ -378,6 +378,7 @@ impl Actions {
         Self::of(action::Kind::InvokePlugin(InvokePlugin {
             plugin: plugin.into(),
             command: command.into(),
+            signature: Vec::new(),
             args: args.into_iter().map(IntoValue::into_value).collect(),
         }))
     }

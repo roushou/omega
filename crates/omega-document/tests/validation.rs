@@ -143,6 +143,9 @@ fn scheduled_commands_must_name_a_built_plugins_command_surface() {
             SurfaceKind::Widget,
         )])
         .serving([omega_proto::omega::CommandEndpoint {
+            input: Some(Default::default()),
+            output: Some(Default::default()),
+            description: String::new(),
             id: "refresh".into(),
         }]);
     for (plugin, command, valid) in [
@@ -157,6 +160,7 @@ fn scheduled_commands_must_name_a_built_plugins_command_surface() {
                 cadence: "every 1m".into(),
                 action: Some(Action {
                     kind: Some(action::Kind::InvokePlugin(InvokePlugin {
+                        signature: Vec::new(),
                         plugin: plugin.into(),
                         command: command.into(),
                         args: vec![],
