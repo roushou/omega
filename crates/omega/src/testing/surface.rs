@@ -117,6 +117,114 @@ impl<S: Surface> SurfaceHarness<S> {
     pub fn take_effect(&mut self) -> Option<CapturedEffect> {
         self.effects.try_recv().map(CapturedEffect)
     }
+
+    async fn next_effect(&mut self) -> crate::Result<CapturedEffect> {
+        self.effects
+            .recv()
+            .await
+            .map(CapturedEffect)
+            .ok_or_else(|| Error::invalid("fixture effect queue closed"))
+    }
+
+    /// Capture the next effect as a typed storage read.
+    /// Waits for an effect without a timeout; use Tokio's timeout when needed.
+    /// Wrong operations or storage IDs return errors, consume that one effect,
+    /// and close its receipt. No effects are skipped or completed automatically.
+    ///
+    /// ```
+    /// use omega::{Surface, storage::{Storage, StoragePolicy, Revision},
+    ///     testing::{SurfaceHarness, Stored}};
+    /// struct Tasks;
+    /// impl Storage for Tasks {
+    ///     type Key = String;
+    ///     type Value = String;
+    ///     const ID: &'static str = "example.tasks";
+    ///     const POLICY: StoragePolicy = StoragePolicy::Memory;
+    /// }
+    /// # struct Fixture;
+    /// # impl Fixture {
+    /// async fn reply<S: Surface>(panel: &mut SurfaceHarness<S>) -> omega::Result<()> {
+    ///     let read = panel.expect_storage_read::<Tasks>().await?;
+    ///     let snapshot = Stored::<Tasks>::new(Revision {
+    ///         epoch: "a".repeat(32), revision: 2,
+    ///     })?.entry("one".into(), "Buy coffee".into(), 1)?;
+    ///     read.reply(&snapshot)?;
+    ///     panel.complete().await?;
+    ///     Ok(())
+    /// }
+    /// # }
+    /// ```
+    pub async fn expect_storage_read<T: crate::storage::Storage>(
+        &mut self,
+    ) -> crate::Result<super::StorageRead<T>> {
+        self.next_effect().await?.try_into()
+    }
+
+    /// Capture the next effect as a typed insertion. Matching and waiting follow
+    /// [`Self::expect_storage_read`]. Inspect `key()` and `value()`, then explicitly
+    /// call `succeed`, `refuse`, or `fail`. Success never updates subscriptions.
+    ///
+    /// ```
+    /// use omega::{Surface, storage::{Storage, Revision}, testing::SurfaceHarness};
+    /// # struct Fixture;
+    /// # impl Fixture {
+    /// async fn inserted<S: Surface, T: Storage>(panel: &mut SurfaceHarness<S>,
+    ///     revision: Revision) -> omega::Result<()> {
+    ///     let write = panel.expect_storage_insert::<T>().await?;
+    ///     write.succeed(revision)?;
+    ///     panel.complete().await
+    /// }
+    /// # }
+    /// ```
+    pub async fn expect_storage_insert<T: crate::storage::Storage>(
+        &mut self,
+    ) -> crate::Result<super::StorageInsert<T>> {
+        self.next_effect().await?.try_into()
+    }
+
+    /// Capture the next effect as a conditional replacement. Matching and waiting
+    /// follow [`Self::expect_storage_read`]. `expected()` is the entry token sent
+    /// by the plugin; acknowledge with the committed entry token, not an unrelated
+    /// store revision. Subscription updates remain explicit.
+    ///
+    /// ```
+    /// use omega::{Surface, storage::Storage, testing::SurfaceHarness};
+    /// # struct Fixture;
+    /// # impl Fixture {
+    /// async fn unchanged<S: Surface, T: Storage>(panel: &mut SurfaceHarness<S>) -> omega::Result<()> {
+    ///     let write = panel.expect_storage_replace::<T>().await?;
+    ///     let revision = write.expected().clone();
+    ///     write.succeed(revision)?;
+    ///     panel.complete().await
+    /// }
+    /// # }
+    /// ```
+    pub async fn expect_storage_replace<T: crate::storage::Storage>(
+        &mut self,
+    ) -> crate::Result<super::StorageReplace<T>> {
+        self.next_effect().await?.try_into()
+    }
+
+    /// Capture the next effect as a conditional removal. Matching and waiting
+    /// follow [`Self::expect_storage_read`]. A success needs a store revision newer
+    /// than `expected()`. Subscription updates remain explicit.
+    ///
+    /// ```
+    /// use omega::{Surface, storage::Storage, testing::{SurfaceHarness, operation::{ErrorCode, Refusal}}};
+    /// # struct Fixture;
+    /// # impl Fixture {
+    /// async fn conflicted<S: Surface, T: Storage>(panel: &mut SurfaceHarness<S>) -> omega::Result<()> {
+    ///     let remove = panel.expect_storage_remove::<T>().await?;
+    ///     remove.refuse(Refusal::new(ErrorCode::Conflict, "Changed concurrently"))?;
+    ///     panel.complete().await
+    /// }
+    /// # }
+    /// ```
+    pub async fn expect_storage_remove<T: crate::storage::Storage>(
+        &mut self,
+    ) -> crate::Result<super::StorageRemove<T>> {
+        self.next_effect().await?.try_into()
+    }
     /// Deliver the next managed task completion using the production scheduler.
     pub async fn complete(&mut self) -> Result<(), Error> {
         std::future::poll_fn(|cx| self.instance.poll(cx)).await

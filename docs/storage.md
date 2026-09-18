@@ -262,7 +262,52 @@ harness.storage(&snapshot)?;
 ```
 
 The fixture applies the surface's declared query. It does not write files, open
-sockets, or implicitly complete effects. Production runtime tests verify pushed
+sockets, or implicitly complete effects.
+
+Capture reads and writes through their typed helpers:
+
+```rust
+let read = harness.expect_storage_read::<Tasks>().await?;
+assert_eq!(read.query().key(), Some(&"task-1".to_owned()));
+read.reply(&snapshot)?;
+harness.complete().await?;
+
+let insert = harness.expect_storage_insert::<Tasks>().await?;
+assert_eq!(insert.key(), &"task-2".to_owned());
+assert_eq!(insert.value().title, "Buy coffee");
+insert.succeed(Revision {
+    epoch: "a".repeat(32),
+    revision: 2,
+})?;
+harness.complete().await?;
+```
+
+Each helper waits for the next effect, checks the storage ID and operation, and
+returns typed inputs. A mismatch consumes only that effect, returns an error,
+and closes its receipt. Dropping a capture also closes its receipt. These waits
+have no built-in timeout; tests can use `tokio::time::timeout`.
+
+`expect_storage_replace` and `expect_storage_remove` also expose `expected()`.
+Insertion and replacement successes return the committed entry token. An unchanged
+replacement may retain its token; a removal needs an advancing store revision in
+the same epoch. Invalid success tokens fail instead of acknowledging the write.
+
+All captures support `refuse(Refusal)` and `fail(EffectError)`, for example:
+
+```rust
+use omega::testing::operation::{ErrorCode, Refusal};
+
+let remove = harness.expect_storage_remove::<Tasks>().await?;
+remove.refuse(Refusal::new(ErrorCode::Conflict, "Changed concurrently"))?;
+harness.complete().await?;
+```
+
+Write acknowledgement never publishes a subscription update. Deliver a new
+`Stored<Tasks>` with `harness.storage(&snapshot)` explicitly; either delivery order
+can be tested. The helpers encode receipts, not a simulated database: they do not
+track other entries or decide whether a write should succeed.
+
+Production runtime tests verify pushed
 updates and refusal invalidation; daemon tests exercise actual shared mutations,
 revision conflicts, persistence, and authenticated socket sessions.
 

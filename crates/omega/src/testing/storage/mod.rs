@@ -1,6 +1,30 @@
 use crate::storage::{Contract, Revision, Storage};
-use omega_proto::omega::{StorageEntry, StoragePage, StorageQuery};
+use omega_proto::omega::{StorageEntry, StoragePage, StorageQuery as WireQuery};
 use std::{collections::BTreeMap, marker::PhantomData};
+
+mod request;
+pub use request::{StorageInsert, StorageQuery, StorageRead, StorageRemove, StorageReplace};
+
+struct FixtureRevision;
+
+impl FixtureRevision {
+    fn validate(revision: &Revision) -> crate::Result<()> {
+        if revision.epoch.len() != 32 || !revision.epoch.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(crate::Error::invalid("fixture epoch needs 32 hex digits"));
+        }
+        Ok(())
+    }
+
+    fn entry(revision: &Revision) -> crate::Result<()> {
+        Self::validate(revision)?;
+        if revision.revision == 0 {
+            return Err(crate::Error::invalid(
+                "fixture entry revision must be nonzero",
+            ));
+        }
+        Ok(())
+    }
+}
 
 /// An explicit committed snapshot for isolated surface tests and previews.
 /// Entries are selected by the surface's actual subscription query. No daemon,
@@ -36,9 +60,7 @@ impl<S: Storage> std::fmt::Debug for Stored<S> {
 
 impl<S: Storage> Stored<S> {
     pub fn new(revision: Revision) -> crate::Result<Self> {
-        if revision.epoch.len() != 32 || !revision.epoch.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(crate::Error::invalid("fixture epoch needs 32 hex digits"));
-        }
+        FixtureRevision::validate(&revision)?;
         Ok(Self {
             revision,
             entries: BTreeMap::new(),
@@ -72,7 +94,7 @@ impl<S: Storage> Stored<S> {
         Ok(self)
     }
 
-    pub(crate) fn page(&self, query: &StorageQuery) -> StoragePage {
+    pub(crate) fn page(&self, query: &WireQuery) -> StoragePage {
         let mut selected = self
             .entries
             .values()

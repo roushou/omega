@@ -76,9 +76,11 @@ pub use surface::{CapturedEffect, SurfaceHarness};
 pub mod operation {
     pub use omega_proto::Refusal;
     pub use omega_proto::omega::{
-        PresentationAction, action::Kind as Action, invoke::Op as Operation,
+        ErrorCode, PresentationAction, action::Kind as Action, invoke::Op as Operation,
     };
 }
 
 mod storage;
-pub use storage::Stored;
+pub use storage::{
+    StorageInsert, StorageQuery, StorageRead, StorageRemove, StorageReplace, Stored,
+};
