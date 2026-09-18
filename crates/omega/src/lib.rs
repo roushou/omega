@@ -64,6 +64,7 @@ mod wiring;
 
 pub mod effect;
 pub mod record;
+pub mod storage;
 pub mod testing;
 pub mod ui;
 
@@ -107,6 +108,7 @@ pub mod internal {
     pub use crate::wiring::{Does, Reads, Wiring};
     pub use crate::{Args, Error};
     pub use omega_proto::omega::Capability;
+    pub use omega_proto::omega::StorageDescriptor;
     pub use omega_proto::omega::Value;
     pub use omega_proto::{Fields, FromValue, IntoValue, SystemTopic, Values};
 }

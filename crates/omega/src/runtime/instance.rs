@@ -18,6 +18,9 @@ pub(super) struct Instance {
 }
 
 impl Instance {
+    pub(super) fn storage_changed(&mut self) {
+        self.dirty = true;
+    }
     pub(super) fn new(
         entry: &SurfaceEntry,
         identity: omega_proto::instance::InstanceKey,

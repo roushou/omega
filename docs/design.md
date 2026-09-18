@@ -7,8 +7,9 @@ This file tracks remaining limitations and future work.
 ## Persistence and recovery
 
 - **Records:** replication survives plugin restarts while the daemon lives, but not
-  a daemon restart. Durable records need retention, schema migration and failure
-  semantics before choosing a storage implementation.
+  a daemon restart. Shared [storage](storage.md) adds committed key-value operations with memory
+  and JSON backends. Automatic schema migration and a transition from `Own`/`Watch`
+  remain open; existing records retain their current semantics.
 - **Activation:** accepting a build validates its inputs and prepares handover;
   it is not atomic process replacement or a health gate. A started schedule can
   fire before its target plugin completes a handshake. Readiness-gated activation

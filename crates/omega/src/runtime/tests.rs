@@ -665,3 +665,117 @@ async fn a_failed_render_is_isolated_published_once_and_recovers_on_invalidation
     peer.quiet().await;
     assert!(!peer.task.is_finished());
 }
+
+struct StoredTasks;
+impl crate::storage::Storage for StoredTasks {
+    type Key = String;
+    type Value = String;
+    const ID: &'static str = "test.tasks";
+    const POLICY: crate::storage::StoragePolicy = crate::storage::StoragePolicy::Memory;
+}
+struct TaskQuery;
+impl crate::storage::Subscription for TaskQuery {
+    type Storage = StoredTasks;
+    fn query(&self) -> crate::storage::Query<StoredTasks> {
+        crate::storage::Query::new()
+    }
+}
+#[derive(crate::Surface)]
+struct StoredSurface {
+    tasks: crate::storage::Subscribed<TaskQuery>,
+}
+impl Surface for StoredSurface {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn initialize(&mut self, _: &mut ()) -> crate::Result<()> {
+        self.tasks.start(TaskQuery)
+    }
+    fn render(&self, _: &(), _: &crate::surface::Events<Self::Message>) -> View {
+        use crate::storage::Snapshot;
+        Text::new(match self.tasks.snapshot() {
+            Snapshot::Loading => "loading".into(),
+            Snapshot::Failed(error) => error,
+            Snapshot::Ready(page) => page
+                .entries()
+                .iter()
+                .map(|entry| entry.value.clone())
+                .collect::<Vec<_>>()
+                .join(","),
+        })
+        .into()
+    }
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> crate::surface::Task<Self::Message> {
+        match message {}
+    }
+}
+impl Peer {
+    async fn storage_update(&mut self, subscription: u64, revision: u64, text: &str) {
+        self.send(Frame {
+            stream_id: 0,
+            body: Some(frame::Body::StorageUpdate(
+                omega_proto::omega::StorageUpdate {
+                    subscription,
+                    error: String::new(),
+                    page: Some(omega_proto::omega::StoragePage {
+                        revision: Some(omega_proto::omega::StorageRevision {
+                            epoch: "a".repeat(32),
+                            revision,
+                        }),
+                        entries: vec![omega_proto::omega::StorageEntry {
+                            key: "one".into(),
+                            json: serde_json::to_vec(text).unwrap(),
+                            revision,
+                        }],
+                        total: 1,
+                        truncated: false,
+                    }),
+                },
+            )),
+        })
+        .await;
+    }
+}
+#[tokio::test]
+async fn storage_pushes_invalidate_the_instance_and_stale_snapshots_do_not_regress_it() {
+    let mut peer = Peer::start(
+        Plugin::named("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
+        vec![],
+    )
+    .await;
+    assert_eq!(Peer::text(&peer.render("tasks", "a", "").await), "loading");
+    let frame = peer.next().await;
+    let Some(frame::Body::Invoke(Invoke {
+        op: Some(invoke::Op::StorageSubscribe(request)),
+    })) = frame.body
+    else {
+        panic!("expected subscription")
+    };
+    peer.send(Frame::reply(
+        frame.stream_id,
+        result::Outcome::Ok(Default::default()),
+    ))
+    .await;
+    peer.storage_update(request.subscription, 2, "new").await;
+    assert_eq!(Peer::text(&peer.published("tasks", "a").await), "new");
+    peer.storage_update(request.subscription, 1, "old").await;
+    peer.quiet().await;
+}
+#[tokio::test]
+async fn subscription_refusal_is_rendered_without_waiting_for_a_storage_push() {
+    let mut peer = Peer::start(
+        Plugin::named("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
+        vec![],
+    )
+    .await;
+    assert_eq!(Peer::text(&peer.render("tasks", "a", "").await), "loading");
+    let frame = peer.next().await;
+    peer.send(omega_proto::Refusal::denied("storage denied").frame(frame.stream_id))
+        .await;
+    assert!(Peer::text(&peer.published("tasks", "a").await).contains("storage denied"));
+}

@@ -102,6 +102,7 @@ impl Runtime {
 
                 _ = async { tokio::time::sleep_until(deadline.expect("enabled deadline")).await }, if deadline.is_some() => {
                     self.effects.expire()?;
+                    self.storage_completions(&mut instances).await?;
                 }
                 Some(answer) = answers.join_next(), if !answers.is_empty() => {
                     let (stream, completion) = answer.map_err(|error| Error::Runtime(std::io::Error::other(error)))?;
@@ -117,6 +118,12 @@ impl Runtime {
                     let Some(frame) = received? else { return Ok(()) };
 
                     match frame.body {
+                        Some(frame::Body::StorageUpdate(update)) => {
+                            if let Some(identity) = self.context.storage().apply(update) {
+                                for instance in &mut instances { if instance.identity == identity { instance.storage_changed(); } }
+                                self.publish_all(&mut instances).await?;
+                            }
+                        }
                         Some(frame::Body::StatePatch(patch)) => {
                             self.context.apply(&patch);
                             for instance in &mut instances { instance.invalidate(&patch); }
@@ -230,7 +237,7 @@ impl Runtime {
                         }
 
                         Some(frame::Body::Result(answer)) => {
-                            if self.effects.answer(frame.stream_id, &answer)? { continue; }
+                            if self.effects.answer(frame.stream_id, &answer)? { self.storage_completions(&mut instances).await?; continue; }
                             if self.publications.remove(&frame.stream_id) {
                                 if let Some(result::Outcome::Error(error)) = &answer.outcome
                                     && error.code != omega_proto::omega::ErrorCode::FailedPrecondition as i32 {
@@ -248,6 +255,17 @@ impl Runtime {
                 }
             }
         }
+    }
+
+    async fn storage_completions(&mut self, instances: &mut [Instance]) -> Result<(), Error> {
+        for identity in self.context.storage().completions() {
+            for instance in instances.iter_mut() {
+                if instance.identity == identity {
+                    instance.storage_changed();
+                }
+            }
+        }
+        self.publish_all(instances).await
     }
 
     async fn publish_all(&mut self, instances: &mut [Instance]) -> Result<(), Error> {

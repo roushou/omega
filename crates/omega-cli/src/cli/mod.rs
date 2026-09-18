@@ -15,6 +15,7 @@ mod rollback;
 mod run;
 pub(crate) mod shell;
 mod status;
+mod storage;
 
 use std::io::IsTerminal;
 
@@ -91,6 +92,7 @@ pub enum Command {
     Preview(preview::PreviewCmd),
     Shell(shell::ShellCmd),
     Status(status::StatusCmd),
+    Storage(storage::StorageCmd),
 }
 
 impl Command {
@@ -113,6 +115,7 @@ impl Command {
             Self::Preview(cmd) => cmd.run(ui).await,
             Self::Shell(cmd) => cmd.run(ui).await,
             Self::Status(cmd) => cmd.run(ui).await,
+            Self::Storage(cmd) => cmd.run(ui).await,
         }
     }
 }

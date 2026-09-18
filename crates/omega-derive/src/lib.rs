@@ -207,6 +207,10 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
         }
     });
 
+    let storage = handles.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { descriptors.extend(<#ty as ::omega::internal::Wiring>::storage()); }
+    });
     let keyspaces = handles.iter().map(|field| {
         let ty = &field.ty;
         quote! {
@@ -242,6 +246,11 @@ fn wire(input: TokenStream, marker: Marker) -> TokenStream {
                 capabilities
             }
 
+            fn storage() -> ::std::vec::Vec<::omega::internal::StorageDescriptor> {
+                let mut descriptors = ::std::vec::Vec::new();
+                #(#storage)*
+                descriptors
+            }
             fn keyspaces() -> ::std::vec::Vec<::std::string::String> {
                 let mut keyspaces = ::std::vec::Vec::new();
                 #(#keyspaces)*

@@ -146,6 +146,30 @@ impl Refusable for crate::plugins::TokenError {
     }
 }
 
+impl Refusable for crate::storage::StorageError {
+    fn refusal(&self) -> Refusal {
+        use omega_proto::omega::ErrorCode;
+        let code = match self {
+            Self::Invalid(_) => ErrorCode::InvalidArgument,
+            Self::Incompatible(_) => ErrorCode::FailedPrecondition,
+            Self::Exhausted(_) => ErrorCode::ResourceExhausted,
+            Self::Unavailable(_) => ErrorCode::Unavailable,
+            Self::TooLarge(_) => ErrorCode::PayloadTooLarge,
+            Self::OutcomeUnknown(_) => ErrorCode::OutcomeUnknown,
+            Self::AlreadyExists => ErrorCode::AlreadyExists,
+            Self::NotFound => ErrorCode::NotFound,
+            Self::Conflict => ErrorCode::Conflict,
+        };
+        Refusal::new(code, self.to_string())
+    }
+}
+
+impl Refusable for omega_proto::storage::StorageError {
+    fn refusal(&self) -> Refusal {
+        Refusal::invalid(self.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

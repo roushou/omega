@@ -23,6 +23,7 @@ impl Manifest {
             surfaces: Vec::new(),
             commands: Vec::new(),
             state_topics: Vec::new(),
+            storage: Vec::new(),
             events: Vec::new(),
         }
     }
@@ -70,6 +71,8 @@ impl Manifest {
     pub fn canonical(&self) -> Vec<u8> {
         let mut canonical = self.clone();
 
+        canonical.storage.sort_by_key(prost::Message::encode_to_vec);
+        canonical.storage.dedup();
         canonical.capabilities.sort_unstable();
         canonical.capabilities.dedup();
         canonical.events.sort_unstable();
@@ -146,6 +149,7 @@ impl Manifest {
                 declared,
             });
         }
+        crate::storage::StorageContracts::collect(&self.storage)?;
         self.granted()?;
         self.surface_kinds()?;
         for command in &self.commands {
@@ -187,6 +191,8 @@ impl Surface {
 /// Invalid manifest identity, capability, topic, or surface declaration.
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
+    #[error(transparent)]
+    Storage(#[from] crate::storage::StorageError),
     #[error("not a manifest: {0}")]
     Malformed(#[from] prost::DecodeError),
     #[error("unknown capability {0}")]

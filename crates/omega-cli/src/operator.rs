@@ -31,6 +31,42 @@ impl Operator {
         Self { socket }
     }
 
+    pub async fn storage_info(
+        &self,
+        id: Option<&omega_proto::storage::StorageId>,
+    ) -> Result<String, OperatorError> {
+        match self
+            .invoke(invoke::Op::StorageInspect(
+                omega_proto::omega::StorageInspect {
+                    id: id.map(ToString::to_string),
+                },
+            ))
+            .await?
+        {
+            result::Outcome::Value(Value {
+                kind: Some(value::Kind::StringValue(json)),
+            }) => Ok(json),
+            _ => Err(OperatorError::Unexpected("StorageInspect", "JSON metadata")),
+        }
+    }
+    pub async fn storage_page(
+        &self,
+        id: &omega_proto::storage::StorageId,
+        query: omega_proto::omega::StorageQuery,
+    ) -> Result<omega_proto::omega::StoragePage, OperatorError> {
+        match self
+            .invoke(invoke::Op::Storage(omega_proto::omega::StorageRequest {
+                id: id.to_string(),
+                operation: Some(omega_proto::omega::storage_request::Operation::Read(query)),
+            }))
+            .await?
+        {
+            result::Outcome::Value(value) => omega_proto::omega::StoragePage::try_from(&value)
+                .map_err(|_| OperatorError::Unexpected("Storage", "a storage page")),
+            _ => Err(OperatorError::Unexpected("Storage", "a storage page")),
+        }
+    }
+
     pub async fn present(
         &self,
         request: omega_proto::omega::CreateInstance,

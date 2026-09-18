@@ -84,6 +84,12 @@ pub trait Surface: Wired {
     /// Behavior dependencies, constructed separately from render-side readings.
     type Effects: Wired;
 
+    /// Initialize instance subscriptions before mounting or rendering.
+    /// Failures refuse instance construction and release its handles.
+    fn initialize(&mut self, _model: &mut Self::Model) -> crate::Result<()> {
+        Ok(())
+    }
+
     /// Describe the current view without performing effects.
     fn render(&self, model: &Self::Model, events: &Events<Self::Message>) -> View;
     /// Apply one local message and return any asynchronous work to schedule.

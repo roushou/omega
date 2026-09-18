@@ -1106,6 +1106,7 @@ dependencies = [
  "omega-keyboard",
  "omega-proto",
  "rustix",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",

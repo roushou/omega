@@ -176,12 +176,16 @@ impl Daemon {
         };
 
         self.shutdown.trigger();
+        self.hub.storage().close();
         let _ = hosts.await;
         converger.stop().await;
         schedules.shutdown().await;
         sessions.shutdown().await;
         observers.shutdown().await;
         self.stop().await;
+        if let Err(error) = self.hub.storage().drain().await {
+            return Err(std::io::Error::other(error).into());
+        }
         if let Some(error) = self.shutdown.failure() {
             return Err(DaemonError::Task(error));
         }

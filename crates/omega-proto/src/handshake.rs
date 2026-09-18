@@ -104,13 +104,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_initial_protocol_version_is_accepted() {
-        for version in [0, 2, 7, 8, u32::MAX] {
+    fn only_the_supported_protocol_range_is_accepted() {
+        for version in [0, MIN_PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1, u32::MAX] {
             assert!(matches!(
                 Handshake::negotiate(version),
                 Err(HandshakeError::VersionMismatch { .. })
             ));
         }
-        assert_eq!(Handshake::negotiate(1).unwrap(), 1);
+        for version in MIN_PROTOCOL_VERSION..=PROTOCOL_VERSION {
+            assert_eq!(Handshake::negotiate(version).unwrap(), version);
+        }
     }
 }

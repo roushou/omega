@@ -19,3 +19,5 @@ pub use generation::{Generation, GenerationId, GenerationStage, Generations, Rol
 pub use layout::{Layout, Profile};
 pub use state::{BuiltPlugin, StateConfig};
 pub use toml::{Table, Toml, TomlDoc, TomlError, TomlFile, TomlSchema};
+
+pub mod storage;

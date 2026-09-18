@@ -55,3 +55,5 @@ pub use omega::Frame;
 
 mod application;
 pub use application::{ApplicationId, ApplicationIdError};
+
+pub mod storage;

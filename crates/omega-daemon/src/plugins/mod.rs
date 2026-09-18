@@ -47,6 +47,9 @@ struct Inner {
 }
 
 impl PluginRegistry {
+    pub(crate) fn storage(&self) -> crate::storage::Stores {
+        self.inner.hub.storage()
+    }
     const REQUEST_BYTES: usize = 8 * 1024 * 1024;
     /// A table, and the stream of plugins connecting to it. Only the daemon
     /// holds the receiving end.

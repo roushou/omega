@@ -195,6 +195,7 @@ My personal configuration is available at [omx](https://github.com/roushou/omx) 
 - [Plugin and component guide](docs/authoring.md): readings, commands, composition, and state.
 - [API reference](https://docs.rs/omega-rs): types, methods, and examples.
 - [Previews](docs/previews.md): fixtures, interaction, and visual comparisons.
+- [Shared storage](docs/storage.md): typed stores, subscriptions, JSON persistence, and inspection (unreleased).
 - [Keyboard input](docs/keyboard.md): shortcuts, scoped routing, and list navigation.
 - [CLI guide](crates/omega-cli/README.md): build, inspect, and develop a config.
 

@@ -79,3 +79,6 @@ pub mod operation {
         PresentationAction, action::Kind as Action, invoke::Op as Operation,
     };
 }
+
+mod storage;
+pub use storage::Stored;

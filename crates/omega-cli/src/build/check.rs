@@ -79,6 +79,9 @@ impl Check {
             );
         }
         let document = System::new(&layout).evaluate(Self::PROFILE).await?;
+        omega_proto::storage::StorageContracts::collect(
+            manifests.iter().flat_map(|manifest| &manifest.storage),
+        )?;
         omega_omarchy::DocumentValidation::validate(&document, &manifests)?;
         Self::renderer(ui);
         ui.step(

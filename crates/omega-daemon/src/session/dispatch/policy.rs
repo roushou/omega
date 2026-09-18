@@ -9,6 +9,10 @@ use crate::authorization::Role;
 /// schema fails to compile here until its kind is named.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpKind {
+    Storage,
+    StorageSubscribe,
+    StorageUnsubscribe,
+    StorageInspect,
     CreateInstance,
     ChangePresentation,
     InspectInstances,
@@ -36,6 +40,10 @@ pub enum OpKind {
 impl OpKind {
     pub fn of(op: &invoke::Op) -> Self {
         match op {
+            invoke::Op::Storage(_) => Self::Storage,
+            invoke::Op::StorageSubscribe(_) => Self::StorageSubscribe,
+            invoke::Op::StorageUnsubscribe(_) => Self::StorageUnsubscribe,
+            invoke::Op::StorageInspect(_) => Self::StorageInspect,
             invoke::Op::CreateInstance(_) => Self::CreateInstance,
             invoke::Op::ChangePresentation(_) => Self::ChangePresentation,
             invoke::Op::InspectInstances(_) => Self::InspectInstances,
@@ -63,6 +71,10 @@ impl OpKind {
 
     pub fn name(self) -> &'static str {
         match self {
+            Self::Storage => "Storage",
+            Self::StorageSubscribe => "StorageSubscribe",
+            Self::StorageUnsubscribe => "StorageUnsubscribe",
+            Self::StorageInspect => "StorageInspect",
             Self::CreateInstance => "CreateInstance",
             Self::ChangePresentation => "ChangePresentation",
             Self::InspectInstances => "InspectInstances",
@@ -113,7 +125,11 @@ impl OpKind {
             | invoke::Op::GetDeployment(_)
             | invoke::Op::ApplyShell(_)
             | invoke::Op::AdoptPlugin(_)
-            | invoke::Op::CallCommand(_) => None,
+            | invoke::Op::CallCommand(_)
+            | invoke::Op::Storage(_)
+            | invoke::Op::StorageSubscribe(_)
+            | invoke::Op::StorageUnsubscribe(_)
+            | invoke::Op::StorageInspect(_) => None,
         }
     }
 }
@@ -134,6 +150,30 @@ pub(super) struct OpPolicy {
 /// The ops this daemon serves, and what each demands. Deny by default:
 /// anything absent is refused.
 pub(super) const POLICY: &[OpPolicy] = &[
+    OpPolicy {
+        kind: OpKind::Storage,
+        roles: &[Role::Plugin, Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::StorageSubscribe,
+        roles: &[Role::Plugin],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::StorageUnsubscribe,
+        roles: &[Role::Plugin],
+        capabilities: &[],
+        surface: None,
+    },
+    OpPolicy {
+        kind: OpKind::StorageInspect,
+        roles: &[Role::Operator],
+        capabilities: &[],
+        surface: None,
+    },
     OpPolicy {
         kind: OpKind::CreateInstance,
         roles: &[Role::Operator],

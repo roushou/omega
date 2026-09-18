@@ -1,0 +1,54 @@
+syntax = "proto3";
+package omega;
+
+// Resource descriptors are extracted from registered plugin dependencies.
+message StorageDescriptor {
+  string id = 1;
+  bool persistent = 2;
+  uint32 schema_version = 3;
+  uint32 max_entries = 4;
+  uint32 max_value_bytes = 5;
+  uint32 max_total_bytes = 6;
+  bool writable = 7;
+  string codec = 8;
+}
+message StorageQuery {
+  optional string key = 1;
+  optional string after = 2;
+  uint32 limit = 3;
+}
+message StorageRevision {
+  string epoch = 1;
+  uint64 revision = 2;
+}
+message StorageEntry {
+  string key = 1;
+  bytes json = 2;
+  uint64 revision = 3;
+}
+message StoragePage {
+  StorageRevision revision = 1;
+  repeated StorageEntry entries = 2;
+  uint64 total = 3;
+  bool truncated = 4;
+}
+message StorageRequest {
+  string id = 1;
+  oneof operation {
+    StorageQuery read = 2;
+    StorageInsert insert = 3;
+    StorageReplace replace = 4;
+    StorageRemove remove = 5;
+  }
+}
+message StorageInsert { string key = 1; bytes json = 2; }
+message StorageReplace { string key = 1; bytes json = 2; StorageRevision expected = 3; }
+message StorageRemove { string key = 1; StorageRevision expected = 2; }
+message StorageSubscribe { string id = 1; uint64 subscription = 2; StorageQuery query = 3; }
+message StorageUnsubscribe { uint64 subscription = 1; }
+message StorageUpdate {
+  uint64 subscription = 1;
+  StoragePage page = 2;
+  string error = 3;
+}
+message StorageInspect { optional string id = 1; reserved 2; }

@@ -12,7 +12,12 @@ use crate::wiring::Wired;
 use crate::{Args, Command, Reaction};
 
 /// Dependency declaration callback shared by registration kinds.
-type Declaration = fn(&mut BTreeSet<Capability>, &mut BTreeSet<SystemTopic>, &mut BTreeSet<String>);
+type Declaration = fn(
+    &mut BTreeSet<Capability>,
+    &mut BTreeSet<SystemTopic>,
+    &mut BTreeSet<String>,
+    &mut Vec<omega_proto::omega::StorageDescriptor>,
+);
 
 /// Surface identity and per-instance constructor.
 pub(crate) struct SurfaceEntry {
@@ -28,9 +33,9 @@ impl SurfaceEntry {
         Self {
             surface,
             plugin: None,
-            declare: |caps, topics, keys| {
-                DeclarationOf::<S>::declare(caps, topics, keys);
-                DeclarationOf::<S::Effects>::declare(caps, topics, keys);
+            declare: |caps, topics, keys, stores| {
+                DeclarationOf::<S>::declare(caps, topics, keys, stores);
+                DeclarationOf::<S::Effects>::declare(caps, topics, keys, stores);
             },
             required: S::required_topics,
             make: |context, settings| {
@@ -46,13 +51,14 @@ impl SurfaceEntry {
         capabilities: &mut BTreeSet<Capability>,
         topics: &mut BTreeSet<SystemTopic>,
         keyspaces: &mut BTreeSet<String>,
+        storage: &mut Vec<omega_proto::omega::StorageDescriptor>,
     ) {
-        (self.declare)(capabilities, topics, keyspaces);
+        (self.declare)(capabilities, topics, keyspaces, storage);
     }
 
     pub(crate) fn dependencies(&self) -> Vec<String> {
         let (mut caps, mut topics, mut keys) = (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
-        self.declare(&mut caps, &mut topics, &mut keys);
+        self.declare(&mut caps, &mut topics, &mut keys, &mut Vec::new());
         topics
             .into_iter()
             .map(|topic| topic.as_str().to_string())
@@ -89,8 +95,9 @@ impl CommandEntry {
         capabilities: &mut BTreeSet<Capability>,
         topics: &mut BTreeSet<SystemTopic>,
         keyspaces: &mut BTreeSet<String>,
+        storage: &mut Vec<omega_proto::omega::StorageDescriptor>,
     ) {
-        (self.declare)(capabilities, topics, keyspaces);
+        (self.declare)(capabilities, topics, keyspaces, storage);
     }
 
     pub(crate) fn build(&self, context: &Context, settings: &Values) -> Arc<dyn CalledCommand> {
@@ -139,8 +146,9 @@ impl ReactionEntry {
         capabilities: &mut BTreeSet<Capability>,
         topics: &mut BTreeSet<SystemTopic>,
         keyspaces: &mut BTreeSet<String>,
+        storage: &mut Vec<omega_proto::omega::StorageDescriptor>,
     ) {
-        (self.declare)(capabilities, topics, keyspaces);
+        (self.declare)(capabilities, topics, keyspaces, storage);
     }
 
     pub(crate) fn build(&self, context: &Context, settings: &Values) -> Box<dyn FiredReaction> {
@@ -165,7 +173,9 @@ impl<T: Wired> DeclarationOf<T> {
         capabilities: &mut BTreeSet<Capability>,
         topics: &mut BTreeSet<SystemTopic>,
         keyspaces: &mut BTreeSet<String>,
+        storage: &mut Vec<omega_proto::omega::StorageDescriptor>,
     ) {
+        storage.extend(T::storage());
         capabilities.extend(T::capabilities());
         topics.extend(T::topics());
         keyspaces.extend(T::keyspaces());

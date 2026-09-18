@@ -80,3 +80,26 @@ fn failed_replacements_preserve_old_contents_until_rename() {
         Fixture::new().exercise(Some(b"old"), fault);
     }
 }
+
+#[test]
+fn publication_errors_identify_whether_rename_happened() {
+    use std::os::unix::fs::PermissionsExt;
+    for step in [
+        WriteStep::Write,
+        WriteStep::FlushFile,
+        WriteStep::Rename,
+        WriteStep::FlushDirectory,
+    ] {
+        let fixture = Fixture::new();
+        let mut file = AtomicFile::at(fixture.0.join("state"));
+        file.write(b"old").unwrap();
+        file.fault = Some(step);
+        let error = file
+            .publish(b"new", std::fs::Permissions::from_mode(0o600))
+            .unwrap_err();
+        assert_eq!(
+            matches!(error, super::WriteError::AfterPublication(_)),
+            step == WriteStep::FlushDirectory
+        );
+    }
+}

@@ -175,3 +175,18 @@ Run `omega --help` or `omega <command> --help` for the full command reference.
 [Architecture](https://github.com/roushou/omega/blob/main/docs/architecture.md)
 
 Licensed under MIT.
+
+## Storage (unreleased)
+
+Inspect shared storage through the daemon. Answers are JSON on stdout:
+
+```sh
+omega storage list
+omega storage show productivity.tasks --limit 50
+omega storage export productivity.tasks > tasks.json
+```
+
+Use `--offline` to inspect persistent files while the daemon is stopped. The
+command takes an exclusive lease and refuses to race an active storage owner.
+See [shared storage](../../docs/storage.md) for declarations, access, limits,
+and recovery.

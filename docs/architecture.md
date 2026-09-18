@@ -1249,3 +1249,24 @@ Filesystem recovery stays in `omega-host`, which has no execution dependency.
 is a single domain operation, including the unchanged-target case. Shell ownership
 and service activation retain their own contracts. See [pipelines and recovery](workflows.md)
 for lifecycle rules, test replacement examples, and recovery boundaries.
+
+## Shared storage
+
+`omega-daemon::storage::Stores` owns storage resources for the daemon state root.
+Build validation compares all manifest-derived descriptors. Activation prepares
+resources before plugin handover; incompatible declarations or files reject the
+candidate. Stores outlive plugin sessions. Manifest grants authorize reads and
+writes; renderers have no general storage access.
+
+Mutations plan against committed state under one per-store lock, publish through
+`omega-host::storage::JsonStore` when persistent, then expose the new revision.
+Admission is bounded and retained through caller cancellation. `AtomicFile::publish`
+distinguishes pre-publication failure from uncertain post-rename durability.
+Uncertain stores stop serving data until restart and successful validation/sync.
+The state-root lease stays alive with admitted work.
+
+Subscriptions register before reading their first snapshot. Revision notifications
+coalesce; each query reads a committed bounded page and sends updates without holding
+the store lock. The SDK routes updates to the owning instance, rejects older revisions,
+and caches decoded snapshots. Initialization, closure, and fixtures use the production
+surface lifecycle. See [storage](storage.md) for authoring and operational contracts.

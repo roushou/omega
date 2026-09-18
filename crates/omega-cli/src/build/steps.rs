@@ -177,6 +177,9 @@ impl Validated {
 
 impl Described {
     pub(crate) fn validate(self, document: StateDocument) -> anyhow::Result<Validated> {
+        omega_proto::storage::StorageContracts::collect(
+            self.plan.manifests().flat_map(|manifest| &manifest.storage),
+        )?;
         omega_omarchy::DocumentValidation::validate(&document, self.plan.manifests())?;
 
         Ok(Validated {

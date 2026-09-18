@@ -110,6 +110,6 @@ mod tests {
     }
     #[test]
     fn a_peer_that_cannot_route_targets_is_refused() {
-        assert!(crate::Handshake::negotiate(2).is_err());
+        assert!(crate::Handshake::negotiate(crate::MIN_PROTOCOL_VERSION - 1).is_err());
     }
 }

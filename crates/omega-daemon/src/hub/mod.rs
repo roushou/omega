@@ -90,6 +90,7 @@ pub struct Hub {
 
 #[derive(Debug)]
 struct HubInner {
+    storage: crate::storage::Stores,
     store: Mutex<StateStore>,
     state: History<StatePatch>,
     views: Mutex<ViewRegistry>,
@@ -153,6 +154,9 @@ impl ViewUpdate {
 }
 
 impl Hub {
+    pub fn storage(&self) -> crate::storage::Stores {
+        self.inner.storage.clone()
+    }
     const VIEW_BYTES: usize = 8 * 1024 * 1024;
     const VIEW_COUNT: usize = 4096;
     const PUBLICATION_BYTES: usize = omega_proto::MAX_FRAME_LEN - 256;
@@ -162,6 +166,7 @@ impl Hub {
         let events = History::new();
         Self {
             inner: Arc::new(HubInner {
+                storage: Default::default(),
                 store: Mutex::new(StateStore::new()),
                 state,
                 views: Mutex::new(ViewRegistry::default()),

@@ -21,7 +21,7 @@ impl EffectsSender {
     pub(crate) fn reserve_record(&self) -> Result<Admission, EffectError> {
         self.reserve(Effects::MAX_PAYLOAD)
     }
-    fn reserve(&self, size: usize) -> Result<Admission, EffectError> {
+    pub(crate) fn reserve(&self, size: usize) -> Result<Admission, EffectError> {
         if size > Effects::MAX_PAYLOAD {
             return Err(EffectError::TooLarge);
         }
@@ -57,6 +57,7 @@ impl EffectsSender {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Admission {
     slot: mpsc::OwnedPermit<Request>,
     permit: OwnedSemaphorePermit,

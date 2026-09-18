@@ -44,6 +44,16 @@ pub struct Layout {
 }
 
 impl Layout {
+    pub fn storage_directory(&self) -> PathBuf {
+        self.state.join("storage")
+    }
+    pub fn storage_file(&self, id: &omega_proto::storage::StorageId) -> PathBuf {
+        self.storage_directory().join(format!("{id}.json"))
+    }
+    pub fn storage_lock(&self) -> PathBuf {
+        self.state.join("storage.lock")
+    }
+
     /// The crate that emits the state document. Named once here because the
     /// CLI scaffolds it, cargo builds it, and the build runs it.
     pub const SYSTEM_CRATE: &'static str = "system";

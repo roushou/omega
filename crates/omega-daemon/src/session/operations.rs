@@ -30,7 +30,9 @@ impl Operations {
         matches!(
             invoke.op,
             Some(
-                invoke::Op::Act(_)
+                invoke::Op::Storage(_)
+                    | invoke::Op::StorageInspect(_)
+                    | invoke::Op::Act(_)
                     | invoke::Op::AdoptPlugin(_)
                     | invoke::Op::CreateInstance(_)
                     | invoke::Op::Interact(_)

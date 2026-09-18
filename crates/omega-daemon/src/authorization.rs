@@ -21,6 +21,7 @@ pub enum Role {
 /// of the manifest.
 #[derive(Debug)]
 pub struct Grants {
+    storage: std::collections::BTreeMap<omega_proto::storage::StorageId, bool>,
     capabilities: Vec<Capability>,
     surfaces: HashMap<SurfaceId, SurfaceKind>,
 }
@@ -42,7 +43,16 @@ impl Grants {
             })
             .collect::<Result<_, Refusal>>()?;
 
+        let mut storage = std::collections::BTreeMap::new();
+        for descriptor in &manifest.storage {
+            let id = descriptor.validate().map_err(|e| e.refusal())?;
+            storage
+                .entry(id)
+                .and_modify(|write| *write |= descriptor.writable)
+                .or_insert(descriptor.writable);
+        }
         Ok(Self {
+            storage,
             capabilities,
             surfaces,
         })
@@ -50,8 +60,21 @@ impl Grants {
 
     pub(crate) fn none() -> Self {
         Self {
+            storage: Default::default(),
             capabilities: Vec::new(),
             surfaces: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn storage(&self, id: &str, write: bool) -> Result<(), Refusal> {
+        let id = id
+            .parse::<omega_proto::storage::StorageId>()
+            .map_err(|e| e.refusal())?;
+        match self.storage.get(&id) {
+            Some(writable) if !write || *writable => Ok(()),
+            _ => Err(Refusal::denied(format!(
+                "storage access not declared for {id}"
+            ))),
         }
     }
 

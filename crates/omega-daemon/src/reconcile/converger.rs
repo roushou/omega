@@ -233,6 +233,19 @@ impl Worker {
     }
 
     async fn activate(&mut self, build: ValidatedBuild) -> Result<(), DaemonError> {
+        self.context
+            .plugins
+            .storage()
+            .prepare(
+                &self.context.layout,
+                build
+                    .manifests
+                    .iter()
+                    .flat_map(|(_, entry)| entry.manifest.storage.clone())
+                    .collect(),
+            )
+            .await
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         let _handover = self.context.supervisor.handover().await;
         let changed = match &self.build {
             Some(previous) => previous.changed_plugins(&build)?,

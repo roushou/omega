@@ -10,6 +10,7 @@ import "omega/ui.proto";
 import "omega/instance.proto";
 import "omega/plugin.proto";
 import "omega/value.proto";
+import "omega/storage.proto";
 
 // Length-prefixed frame on a multiplexed Unix connection.
 // Requests and responses share a stream ID; streaming results end with done = true.
@@ -27,6 +28,7 @@ message Frame {
     Event event = 16;
     Ping ping = 17;
     Pong pong = 18;
+    StorageUpdate storage_update = 19;
   }
 }
 
@@ -60,6 +62,10 @@ message Welcome {
 message Invoke {
   oneof op {
     // ---- plugin -> daemon: daemon services ----
+    StorageRequest storage = 23;
+    StorageSubscribe storage_subscribe = 24;
+    StorageUnsubscribe storage_unsubscribe = 25;
+    StorageInspect storage_inspect = 26;
     GetState get_state = 1;
     SetState set_state = 2;
     Subscribe subscribe = 3;
@@ -207,6 +213,11 @@ enum ErrorCode {
   ERROR_CODE_PAYLOAD_TOO_LARGE = 8;
   // The operation deadline elapsed; external completion may be unknown.
   ERROR_CODE_DEADLINE_EXCEEDED = 9;
+  ERROR_CODE_ALREADY_EXISTS = 10;
+  ERROR_CODE_NOT_FOUND = 11;
+  ERROR_CODE_CONFLICT = 12;
+  // An admitted mutation may have committed. Read state before deciding what to do.
+  ERROR_CODE_OUTCOME_UNKNOWN = 13;
 }
 
 message Empty {}

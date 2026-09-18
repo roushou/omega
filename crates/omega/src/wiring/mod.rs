@@ -20,7 +20,12 @@ pub trait Wiring: Sized + Send + Sync + 'static {
         Self::TOPICS.to_vec()
     }
 
-    /// Plugin record addresses this declaration subscribes to.
+    /// Shared stores and access required by this handle.
+    fn storage() -> Vec<omega_proto::omega::StorageDescriptor> {
+        Vec::new()
+    }
+
+    /// Plugin record addresses read by this declaration.
     fn keyspaces() -> Vec<String> {
         Vec::new()
     }
@@ -63,7 +68,12 @@ pub trait Wired: Sized + Send + Sync + 'static {
         Self::topics()
     }
 
-    /// Every plugin keyspace its fields read.
+    /// Shared stores and access required by the declared fields.
+    fn storage() -> Vec<omega_proto::omega::StorageDescriptor> {
+        Vec::new()
+    }
+
+    /// Plugin record addresses read by this declaration.
     fn keyspaces() -> Vec<String> {
         Vec::new()
     }

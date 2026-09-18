@@ -3,6 +3,7 @@ syntax = "proto3";
 package omega;
 
 import "omega/event.proto";
+import "omega/storage.proto";
 
 // Plugin manifests, endpoint kinds, and capabilities.
 
@@ -45,6 +46,7 @@ message Manifest {
   repeated string state_topics = 5;
 
   repeated EventKind events = 6;
+  repeated StorageDescriptor storage = 8;
 }
 
 // One declared UI surface.

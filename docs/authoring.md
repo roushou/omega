@@ -191,3 +191,14 @@ for command results and effects. Tests use synthetic readings and captured effec
 For visual inspection, register component or surface cases with `omega-preview`
 and run `omega preview <package>`. Follow the [preview guide](previews.md) for
 loading states, interaction, screenshots, and comparisons.
+
+## Shared storage
+
+Use `omega::storage::Store<T>` in behavior for committed key-value reads and writes.
+For rendering, declare `Subscribed<Q>` where `Q: Subscription<Storage = T>` and
+start it in `Surface::initialize`. The ordinary `Storage` trait defines the key,
+value, stable ID, and memory or JSON policy. Handle fields derive manifest access;
+there is no additional registration in the system document.
+
+See [shared storage](storage.md) for the API, lifetimes, revision conflicts,
+inspection commands, and isolated test fixtures.

@@ -16,6 +16,27 @@ enum WriteStep {
     FlushDirectory,
 }
 
+/// Whether a failed atomic replacement may already be visible at its destination.
+#[derive(Debug, thiserror::Error)]
+pub enum WriteError {
+    #[error("file was not published: {0}")]
+    BeforePublication(#[source] io::Error),
+    #[error("file was published but directory sync failed: {0}")]
+    AfterPublication(#[source] io::Error),
+}
+impl WriteError {
+    pub fn into_io(self) -> io::Error {
+        match self {
+            Self::BeforePublication(error) | Self::AfterPublication(error) => error,
+        }
+    }
+}
+impl From<io::Error> for WriteError {
+    fn from(error: io::Error) -> Self {
+        Self::BeforePublication(error)
+    }
+}
+
 /// A file written by write-then-rename: readers see either the old contents
 /// or the new ones, never a partial write.
 ///
@@ -45,7 +66,7 @@ impl AtomicFile {
     /// remove the temporary file. A directory-sync failure after rename leaves
     /// the new contents visible, but their durability is uncertain.
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
-        self.write_mode(bytes, None)
+        self.write_mode(bytes, None).map_err(WriteError::into_io)
     }
 
     /// Publish contents and permissions together; permission bits are set on the
@@ -55,6 +76,17 @@ impl AtomicFile {
         bytes: &[u8],
         permissions: std::fs::Permissions,
     ) -> io::Result<()> {
+        self.publish(bytes, permissions)
+            .map_err(WriteError::into_io)
+    }
+
+    /// Publish with an error that distinguishes rejection before rename from
+    /// uncertain durability after rename. Success includes file and directory sync.
+    pub fn publish(
+        &self,
+        bytes: &[u8],
+        permissions: std::fs::Permissions,
+    ) -> Result<(), WriteError> {
         self.write_mode(bytes, Some(permissions))
     }
 
@@ -62,7 +94,7 @@ impl AtomicFile {
         &self,
         bytes: &[u8],
         permissions: Option<std::fs::Permissions>,
-    ) -> io::Result<()> {
+    ) -> Result<(), WriteError> {
         let dir = match self.path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
             _ => Path::new("."),
@@ -86,7 +118,7 @@ impl AtomicFile {
         }
     }
 
-    fn replace(&self, file: File, tmp: &Path, bytes: &[u8], dir: &Path) -> io::Result<()> {
+    fn replace(&self, file: File, tmp: &Path, bytes: &[u8], dir: &Path) -> Result<(), WriteError> {
         // The contents must be on disk before the rename can publish them.
         #[cfg(test)]
         self.check(WriteStep::Write)?;
@@ -101,8 +133,9 @@ impl AtomicFile {
         std::fs::rename(tmp, &self.path)?;
 
         #[cfg(test)]
-        self.check(WriteStep::FlushDirectory)?;
-        Directory::sync(dir)
+        self.check(WriteStep::FlushDirectory)
+            .map_err(WriteError::AfterPublication)?;
+        Directory::sync(dir).map_err(WriteError::AfterPublication)
     }
 
     #[cfg(test)]

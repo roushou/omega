@@ -121,6 +121,14 @@ impl<S: Surface> SurfaceHarness<S> {
     pub async fn complete(&mut self) -> Result<(), Error> {
         std::future::poll_fn(|cx| self.instance.poll(cx)).await
     }
+    /// Deliver an explicit committed storage snapshot to this surface's queries.
+    /// Subscription admission still needs an explicit captured-effect completion.
+    pub fn storage<T: crate::storage::Storage>(
+        &mut self,
+        snapshot: &super::Stored<T>,
+    ) -> Result<(), Error> {
+        self.context.storage().fixture(snapshot)
+    }
     pub fn state(&mut self, state: &State) {
         self.revision += 1;
         let mut topics = state.snapshot().topics;

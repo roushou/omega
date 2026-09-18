@@ -20,6 +20,8 @@ pub(crate) trait MountedSurface: Send {
 }
 
 pub(crate) struct Instance<S: Surface> {
+    context: crate::runtime::context::Context,
+    initialized: bool,
     surface: S,
     effects: S::Effects,
     model: S::Model,
@@ -48,6 +50,8 @@ impl<S: Surface> Instance<S> {
         settings: &omega_proto::Values,
     ) -> Self {
         Self {
+            context: context.clone(),
+            initialized: false,
             surface: S::build(context, settings),
             effects: S::Effects::build(context, settings),
             model: S::Model::default(),
@@ -123,6 +127,9 @@ impl<S: Surface> MountedSurface for Instance<S> {
     }
     fn lifecycle(&mut self, event: super::Lifecycle) -> Result<(), Error> {
         if event == super::Lifecycle::Closed {
+            self.context
+                .storage()
+                .close(self.context.instance().as_ref())?;
             self.tasks.abort_all();
             self.tasks.detach_all();
             self.work.clear();
@@ -139,6 +146,13 @@ impl<S: Surface> MountedSurface for Instance<S> {
         self.schedule(task)
     }
     fn mounted(&mut self) -> Result<(), Error> {
+        if !self.initialized {
+            self.surface.initialize(&mut self.model)?;
+            self.context
+                .storage()
+                .validate(self.context.instance().as_ref())?;
+            self.initialized = true;
+        }
         let task = self.surface.mounted(&mut self.model, &self.effects);
         self.schedule(task)
     }

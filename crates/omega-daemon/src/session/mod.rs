@@ -201,6 +201,9 @@ impl Session {
 
         loop {
             tokio::select! {
+                Some(update) = dispatcher.storage_update() => {
+                    connection.send(Frame { stream_id: 0, body: Some(frame::Body::StorageUpdate(update)) }).await?;
+                }
                 published = state.recv() => {
                     match published {
                         // Forward only subscribed topics.

@@ -65,6 +65,11 @@ impl Response {
 /// Per-connection invocation authorization and dispatch. Dropping it releases adoptions.
 #[derive(Debug)]
 pub struct Dispatcher {
+    storage_updates: tokio::sync::mpsc::Sender<omega_proto::omega::StorageUpdate>,
+    storage_receiver:
+        tokio::sync::Mutex<tokio::sync::mpsc::Receiver<omega_proto::omega::StorageUpdate>>,
+    storage_subscriptions:
+        std::sync::Mutex<std::collections::BTreeMap<u64, tokio::task::JoinHandle<()>>>,
     attachment: Option<attachment::RendererAttachment>,
     hub: Hub,
     supervisor: Supervisor,
@@ -82,7 +87,11 @@ impl Dispatcher {
         plugins: PluginRegistry,
         brokers: Brokerage,
     ) -> Self {
+        let (storage_updates, storage_receiver) = tokio::sync::mpsc::channel(16);
         Self {
+            storage_updates,
+            storage_receiver: tokio::sync::Mutex::new(storage_receiver),
+            storage_subscriptions: Default::default(),
             attachment: None,
             hub,
             layout: None,
@@ -94,6 +103,9 @@ impl Dispatcher {
         }
     }
 
+    pub async fn storage_update(&self) -> Option<omega_proto::omega::StorageUpdate> {
+        self.storage_receiver.lock().await.recv().await
+    }
     pub(crate) fn with_attachment(mut self, attachment: attachment::RendererAttachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -218,6 +230,98 @@ impl Dispatcher {
         op: &invoke::Op,
     ) -> Result<Response, Refusal> {
         match op {
+            invoke::Op::Storage(request) => {
+                if peer.role() == Role::Plugin {
+                    peer.grants().storage(
+                        &request.id,
+                        !matches!(
+                            request.operation,
+                            Some(omega_proto::omega::storage_request::Operation::Read(_))
+                        ),
+                    )?;
+                }
+                let page = self
+                    .hub
+                    .storage()
+                    .execute(request.clone())
+                    .await
+                    .or_refuse()?;
+                use omega_proto::IntoValue;
+                Ok(Response::Value(page.into_value()))
+            }
+            invoke::Op::StorageInspect(request) => {
+                use omega_proto::IntoValue;
+                Ok(Response::Value(
+                    self.hub
+                        .storage()
+                        .inspect(request.id.as_deref())
+                        .await
+                        .or_refuse()?
+                        .to_string()
+                        .into_value(),
+                ))
+            }
+            invoke::Op::StorageSubscribe(request) => {
+                peer.grants().storage(&request.id, false)?;
+                let query = request
+                    .query
+                    .clone()
+                    .ok_or_else(|| Refusal::invalid("missing storage query"))?;
+                query.validate().or_refuse()?;
+                let resource = self.hub.storage().resource(&request.id).or_refuse()?;
+                let mut subscriptions = self
+                    .storage_subscriptions
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                if request.subscription == 0 || subscriptions.contains_key(&request.subscription) {
+                    return Err(Refusal::invalid("duplicate or zero subscription id"));
+                }
+                if subscriptions.len() >= 32 {
+                    return Err(Refusal::exhausted("storage subscription limit"));
+                }
+                let mut changes = resource.changes();
+                let sender = self.storage_updates.clone();
+                let subscription = request.subscription;
+                subscriptions.insert(
+                    subscription,
+                    tokio::spawn(async move {
+                        loop {
+                            changes.borrow_and_update();
+                            let (page, error) = match resource.page(&query).await {
+                                Ok(page) => (Some(page), String::new()),
+                                Err(e) => (None, e.to_string()),
+                            };
+                            if sender
+                                .send(omega_proto::omega::StorageUpdate {
+                                    subscription,
+                                    page,
+                                    error,
+                                })
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            if changes.changed().await.is_err() {
+                                break;
+                            }
+                        }
+                    }),
+                );
+                Ok(Response::Ok)
+            }
+            invoke::Op::StorageUnsubscribe(request) => {
+                if let Some(task) = self
+                    .storage_subscriptions
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&request.subscription)
+                {
+                    task.abort();
+                }
+                Ok(Response::Ok)
+            }
+
             invoke::Op::CreateInstance(create) => {
                 Ok(Response::Instances(omega_proto::omega::InstanceList {
                     instances: vec![self.plugins.create_instance(create).await?],
@@ -462,6 +566,13 @@ impl Dispatcher {
 
 impl Drop for Dispatcher {
     fn drop(&mut self) {
+        for (_, task) in std::mem::take(
+            self.storage_subscriptions
+                .get_mut()
+                .unwrap_or_else(|e| e.into_inner()),
+        ) {
+            task.abort();
+        }
         if let Some(slot) = &self.attachment {
             let held = slot.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(attachment) = held.as_ref() {

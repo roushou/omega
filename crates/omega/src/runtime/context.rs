@@ -18,6 +18,7 @@ pub struct Context {
 
 #[derive(Debug)]
 struct Shared {
+    storage: crate::storage::Subscriptions,
     /// Read on every render, written by the runtime as patches arrive.
     state: RwLock<Mirror>,
     records: Mutex<BTreeMap<String, Values>>,
@@ -26,6 +27,9 @@ struct Shared {
 }
 
 impl Context {
+    pub(crate) fn storage(&self) -> &crate::storage::Subscriptions {
+        &self.inner.storage
+    }
     pub(crate) fn for_instance(&self, instance: omega_proto::instance::InstanceKey) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -49,6 +53,7 @@ impl Context {
         Self {
             instance: None,
             inner: Arc::new(Shared {
+                storage: Default::default(),
                 state: RwLock::new(mirror),
                 records: Mutex::new(BTreeMap::new()),
                 effects,
@@ -127,6 +132,12 @@ impl Context {
     }
 
     /// Admit one effect without blocking. Its receipt reports the terminal answer.
+    pub(crate) fn reserve_effect(
+        &self,
+        size: usize,
+    ) -> Result<crate::effect::queue::Admission, crate::effect::EffectError> {
+        self.inner.effects.reserve(size)
+    }
     pub fn act(&self, op: invoke::Op) -> crate::effect::Submission {
         self.inner.effects.submit(op)
     }

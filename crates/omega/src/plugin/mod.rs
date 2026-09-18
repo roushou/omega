@@ -136,6 +136,7 @@ impl Plugin {
         let mut capabilities = BTreeSet::new();
         let mut topics = BTreeSet::new();
         let mut keyspaces = BTreeSet::new();
+        let mut storage = Vec::new();
         let mut surfaces = Vec::new();
         let mut commands = Vec::new();
 
@@ -155,7 +156,7 @@ impl Plugin {
                     widget.surface
                 )));
             }
-            widget.declare(&mut capabilities, &mut topics, &mut keyspaces);
+            widget.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
             surfaces.push(Declaration::new(
                 &omega_proto::SurfaceId::try_from(widget.surface.clone())
                     .map_err(|source| Error::Name(widget.surface.clone(), source))?,
@@ -170,7 +171,7 @@ impl Plugin {
                     command.name
                 )));
             }
-            command.declare(&mut capabilities, &mut topics, &mut keyspaces);
+            command.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
             commands.push(omega_proto::omega::CommandEndpoint {
                 id: command
                     .name
@@ -180,10 +181,10 @@ impl Plugin {
             });
         }
         for reaction in &self.reactions {
-            reaction.declare(&mut capabilities, &mut topics, &mut keyspaces);
+            reaction.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
         }
 
-        Ok(Manifest::new(&name, self.version.clone())
+        let mut manifest = Manifest::new(&name, self.version.clone())
             .granting(capabilities)
             .exposing(surfaces)
             .serving(commands)
@@ -193,7 +194,12 @@ impl Plugin {
                     .map(|topic: SystemTopic| Address::System(topic).to_string())
                     .chain(keyspaces),
             )
-            .handling(self.reactions.iter().map(|reaction| reaction.event)))
+            .handling(self.reactions.iter().map(|reaction| reaction.event));
+        manifest.storage = storage;
+        manifest
+            .validate(&name)
+            .map_err(|e| Error::invalid(e.to_string()))?;
+        Ok(manifest)
     }
 
     /// Start a Tokio runtime and serve the plugin until the session ends.
