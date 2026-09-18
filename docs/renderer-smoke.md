@@ -38,6 +38,21 @@ Use two configured Omega widgets with panels, such as audio and power.
    clear the old view, and reattach. Open the panel again and repeat a control
    interaction. `omega status` must report healthy plugins and current renderers.
 
+## Daemon recovery
+
+Leave the Omarchy shell running throughout these checks:
+
+1. Record the placements in `omega status --json`, then run
+   `systemctl --user restart omega.service`. Once the daemon is accepting
+   connections, attachments should return on the one-second retry cadence without
+   a shell restart. Plugin startup may add time before views become available.
+2. Stop the service for several seconds, then start it. Failed connection attempts
+   must keep retrying; a missing socket must not leave the renderer disconnected.
+3. Verify all prior placements are attached, then open the launcher. Its persisted
+   favorites should be restored through the new plugin's storage subscription.
+4. A pending interaction must report an unknown outcome after disconnect and must
+   not be sent again. A dismissed panel must not reopen during recovery.
+
 If a check fails, record which input caused it, the delay before closure, and
 `omega status --json`. Read the current shell log with
 `quickshell log -p "$OMARCHY_PATH/shell" --tail 100 --log-times`.

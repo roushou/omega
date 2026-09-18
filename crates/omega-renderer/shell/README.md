@@ -66,6 +66,13 @@ value. The daemon resolves the command and fixed arguments from its retained tre
 instances sharing a transport. Disconnect clears views and reports unknown outcomes;
 commands are never retried automatically.
 
+Socket closes and connection errors clear attachment state and retry with a fresh
+socket after one second. A failed initial connection follows the same retry path.
+Connected sockets are checked every five seconds and replaced after fifteen seconds
+without inbound activity, including while attachment is pending. Recovery subscribes
+to plugin state and acquires a new scoped attachment; old socket callbacks cannot
+restore stale views or replay interactions.
+
 The daemon stages embedded core/desktop assets under its renderer cache and
 supervises one standalone host per plugin. `omega present <plugin> <surface>` opens
 a singleton normal window; `--new`, `--overlay`, and `--config '{"label":"Example"}'`

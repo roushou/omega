@@ -5,5 +5,6 @@ QtObject {
     property bool connected: false
     property QtObject parser
     property string written: ""
+    signal error(int error)
     function write(text) { written += text }
 }

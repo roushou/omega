@@ -58,11 +58,15 @@ QtObject {
         link.tree = null
         link.snapshot = null
         link.attached = false
+        link.attachmentStream = 0
         link.instance = null
+        link.revision = "0"
+        link.presented = false
         link.instances = ({})
         link.drawnBy = ""
         link.plugins = []
         requests.disconnected(reason)
+        if (!retry.running) retry.start()
     }
     // Track inbound activity to detect stale connections even without a socket close signal.
     property double lastHeard: 0
@@ -206,13 +210,18 @@ QtObject {
         id: socketComponent
 
         Socket {
+            id: transport
             path: link.socketPath
             parser: SplitParser {
-                onRead: function(line) { link.onLine(line) }
+                onRead: function(line) {
+                    if (link.socket === transport) link.onLine(line)
+                }
             }
             // Clear stale views when the daemon disconnects.
             onConnectedChanged: {
+                if (link.socket !== transport) return
                 if (connected) {
+                    retry.stop()
                     link.connected = true
                     link.subscribeToPlugins()
                     link.attach()
@@ -220,12 +229,17 @@ QtObject {
                     link.disconnected()
                 }
             }
+            // A failed initial connection need not change the connected property.
+            onError: {
+                if (link.socket === transport) link.disconnected()
+            }
         }
     }
 
     property Socket socket: null
 
     function openSocket() {
+        if (link.socket !== null) return
         // Qt 6.4 Loader creates a context incompatible with this bound component.
         link.socket = socketComponent.createObject(link)
         // Both path and the owning reference must exist before connection signals fire.
@@ -235,13 +249,22 @@ QtObject {
 
     function reconnect(reason) {
         link.disconnected(reason)
+        retry.stop()
         link.lastHeard = Date.now()
-        if (link.socket) link.socket.destroy()
+        var previous = link.socket
         link.socket = null
+        if (previous) previous.destroy()
         Qt.callLater(link.openSocket)
     }
 
     Component.onCompleted: link.openSocket()
+
+    // Explicit failures retry promptly, at a bounded rate while the daemon is down.
+    property Timer retry: Timer {
+        id: retry
+        interval: 1000
+        onTriggered: link.reconnect()
+    }
 
     // Reconnect after the heartbeat silence deadline.
     // Replace the Socket object after failure; toggling a failed socket can leave it
@@ -252,9 +275,11 @@ QtObject {
         repeat: true
         onTriggered: {
             var expired = requests.expire(Date.now())
-            if (link.connected && !link.attached) { link.attach(); return }
-            if (Date.now() - link.lastHeard < 15000 && !expired) return
-            link.reconnect(expired ? requests.error : "")
+            if (Date.now() - link.lastHeard >= 15000 || expired) {
+                link.reconnect(expired ? requests.error : "")
+                return
+            }
+            if (link.connected && !link.attached) link.attach()
         }
     }
 }

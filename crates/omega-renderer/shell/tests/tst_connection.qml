@@ -90,4 +90,70 @@ TestCase {
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
         verify(link.press({command:"volume"}, 0.4, "slider"))
     }
+
+    function test_socket_close_retries_without_waiting_for_heartbeat() {
+        var link = connection()
+        link.heartbeat.stop()
+        link.retry.interval = 20
+        link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"old",incarnation:"old-session"},requested:2,view:{revision:"9",root:{type:"text"}}}))
+        verify(link.press({}, 0.5, "slider"))
+        link.socket.connected = false
+        verify(!link.connected)
+        verify(!link.attached)
+        compare(link.instance, null)
+        compare(link.revision, "0")
+        compare(link.presented, false)
+        verify(!link.busy("slider"))
+        verify(link.requests.error.indexOf("unknown") >= 0)
+        verify(link.retry.running)
+        tryCompare(link, "connected", true)
+        verify(!link.retry.running)
+        verify(link.socket.written.indexOf("attachRenderer") >= 0)
+        verify(link.socket.written.indexOf("interact") < 0)
+        link.onLine(JSON.stringify({streamId:link.attachmentStream,result:{instances:{instances:[{
+            plugin:"audio",surface:"panel",instance:{id:"new",incarnation:"new-session"},
+            view:{revision:"1",root:{type:"text",text:"Recovered"}}
+        }]}}}))
+        verify(link.attached)
+        compare(link.instance.incarnation, "new-session")
+        compare(link.tree.text, "Recovered")
+    }
+
+    function test_socket_error_retries_even_without_a_close_signal() {
+        var link = connection()
+        link.heartbeat.stop()
+        link.retry.interval = 20
+        link.socket.error(2)
+        verify(!link.connected)
+        verify(link.retry.running)
+        tryCompare(link, "connected", true)
+        verify(!link.retry.running)
+        verify(link.socket.written.indexOf("attachRenderer") >= 0)
+    }
+
+    function test_silent_unattached_connection_is_replaced() {
+        var link = connection()
+        link.heartbeat.stop()
+        link.attached = false
+        link.lastHeard = Date.now() - 20000
+        link.heartbeat.triggered()
+        compare(link.socket, null)
+        verify(!link.connected)
+        tryCompare(link, "connected", true)
+        verify(link.socket.written.indexOf("attachRenderer") >= 0)
+    }
+
+    function test_retired_socket_cannot_deliver_views_or_change_connection_state() {
+        var link = connection()
+        var retired = link.socket
+        link.reconnect()
+        retired.connected = false
+        retired.connected = true
+        retired.error(2)
+        retired.parser.read(JSON.stringify({plugins:{plugins:[{plugin:"audio"}]}}))
+        verify(!link.connected)
+        verify(!link.retry.running)
+        compare(link.plugins.length, 0)
+        tryCompare(link, "connected", true)
+    }
 }
