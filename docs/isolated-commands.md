@@ -1,7 +1,7 @@
 # Isolated command hosts
 
-Implemented in the source tree. Command hosts use protocol version 2; rebuild
-configuration executables and the daemon together when adopting these changes.
+Command hosts require Omega 0.4.0 and protocol version 2. Rebuild configuration
+executables and update the daemon together when upgrading.
 
 ## Definitions and identities
 

@@ -1,9 +1,8 @@
 # Shared storage
 
 Omega provides typed key-value storage through `omega::storage`. Stores can live
-in memory for a daemon session or persist as JSON across restarts. This feature
-is implemented on the current branch and requires protocol version 2; it is not
-available in the published 0.3.9 binaries.
+in memory for a daemon session or persist as JSON across restarts. Storage
+requires Omega 0.4.0 and protocol version 2.
 
 Declare a store in a normal Rust library, then use its type in plugins. There is
 no storage-specific derive and no storage registration or consumer list in the

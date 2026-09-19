@@ -395,7 +395,11 @@ fn a_scaffolded_config_builds_and_runs() {
         .unwrap();
     assert!(!unknown.status.success());
     assert!(unknown.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown plugin does-not-exist"));
+    let diagnostic = String::from_utf8_lossy(&unknown.stderr);
+    assert!(
+        diagnostic.contains("unknown plugin or command host does-not-exist"),
+        "{diagnostic}"
+    );
 
     let lock_path = machine.root.join("config/Cargo.lock");
     let lock_before = std::fs::read(&lock_path).unwrap();

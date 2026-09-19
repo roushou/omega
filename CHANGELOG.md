@@ -1,3 +1,53 @@
+## What's Changed in 0.4.0
+* feat(commands): add isolated command hosts
+* feat(commands): add typed plugin interoperability
+* fix(renderer): prevent input stalls during list updates
+* feat(testing): add typed storage captures
+* fix(renderer): reconnect promptly after daemon restart
+* feat(storage): add persistent typed stores
+* docs: update README
+* chore: clean dependencies and bump github actions
+
+### Highlights
+
+* Typed stores support persistent JSON and daemon-session memory. Plugins share
+  stores through explicit Rust declarations, with revision-checked writes and
+  subscriptions. Typed test fixtures cover reads and writes without wire messages.
+* Commands have stable IDs and discoverable input/output contracts. Plugins can
+  invoke them through typed callers, and the CLI exposes their catalogue through
+  `omega commands`.
+* Isolated command hosts run reusable commands outside UI plugins. The daemon
+  starts and supervises providers, bounds queues and execution, and supports
+  persistent or one-shot processes. `omega status` reports host phases, queued
+  and active calls, startup errors, and recent failures.
+* `omega new <name> --command-host` scaffolds a command package under `commands/`
+  and prints its typed system registration. Command construction also supports
+  explicit Rust without a derive macro.
+* The renderer avoids input stalls during list updates and reconnects promptly
+  after daemon restarts, including recovery from interrupted attachments.
+
+### Upgrade notes
+
+* Update configuration dependencies to 0.4.0 and rebuild with `omega build`.
+  Update the CLI, daemon (`omega daemon install`), and renderer
+  (`omega shell install`) together. Protocol 2 is required; 0.3.9 plugin binaries
+  and daemon connections are incompatible. Rebuild older generations before reuse.
+* Replace `Plugin::named` with `Plugin::new`; `omega::plugin!()` remains available.
+* Give every command an explicit namespaced `Command::ID`, such as
+  `audio.volume`. IDs no longer come from the defining package. Update CLI calls,
+  schedules, and other references to use those IDs; each ID has one provider.
+  For example, `omega run audio volume 40%` becomes `omega run audio.volume 40%`
+  when the command declares `audio.volume`.
+* Command outputs now implement `CommandValue`. Use `#[derive(omega::Output)]`
+  for output records. Derived commands construct dependencies automatically;
+  macro-free commands implement `omega::command::Construct`. A fresh handler is
+  constructed for each invocation, so shared state belongs in dependencies.
+* Command hosts must be declared in the system document. Placing a package in
+  `commands/` alone does not start it. See [isolated command hosts](docs/isolated-commands.md)
+  and [storage](docs/storage.md) for the new APIs and lifecycle contracts.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.3.9...v0.4.0
+
 ## What's Changed in 0.3.9
 * fix(renderer): match desktop themes and avoid redundant view updates
 * fix: typo
