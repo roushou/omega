@@ -76,7 +76,7 @@ fn duplicate_typed_or_explicit_registrations_are_rejected() {
 
 #[test]
 fn typed_registration_cannot_silently_change_the_owning_plugin() {
-    let error = omega::Plugin::named("other-plugin", "0.1.0")
+    let error = omega::Plugin::new("other-plugin", "0.1.0")
         .surface(Indicator)
         .manifest()
         .unwrap_err();

@@ -1,4 +1,4 @@
-//! Session-owned command handlers, admission, and concurrent execution.
+//! Session-owned command factories, admission, and concurrent execution.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -10,7 +10,7 @@ use super::context::Context;
 use crate::{
     command::Args,
     error::Error,
-    plugin::{Plugin, registry::CalledCommand},
+    program::{Registrations, registration::CalledCommand},
 };
 
 pub(super) struct Commands {
@@ -29,12 +29,12 @@ impl Commands {
     pub(super) const LIMIT: usize = 64;
 
     pub(super) fn new(
-        plugin: &Plugin,
+        registrations: &Registrations,
         context: &Context,
         settings: &Values,
     ) -> Result<Self, Error> {
-        let handlers = plugin
-            .commands()
+        let handlers = registrations
+            .commands
             .iter()
             .map(|entry| {
                 Ok((
@@ -163,6 +163,7 @@ mod tests {
             self.admit(
                 stream,
                 CallCommand {
+                    invocation_id: 0,
                     command: command.into(),
                     args: vec![],
                 },

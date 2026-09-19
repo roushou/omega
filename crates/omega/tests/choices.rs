@@ -12,6 +12,8 @@ struct SetPowerProfile {
     profiles: SetProfile,
 }
 impl Command for SetPowerProfile {
+    const ID: &'static str = "set-power-profile";
+
     type Input = PowerProfile;
     type Output = ();
     async fn call(&self, profile: PowerProfile) -> omega::Result<()> {

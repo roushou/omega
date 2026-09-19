@@ -3,6 +3,7 @@ syntax = "proto3";
 package omega;
 
 import "omega/event.proto";
+import "omega/host.proto";
 import "omega/storage.proto";
 
 // Plugin manifests, endpoint kinds, and capabilities.
@@ -36,6 +37,7 @@ enum SurfaceKind {
 // Hello carries SHA-256 over canonical bytes: repeated fields sorted and
 // deduplicated, then protobuf-encoded in tag order.
 message Manifest {
+  HostKind host_kind = 10;
   string name = 1;
   string version = 2;
   repeated Capability capabilities = 3;
@@ -89,15 +91,61 @@ message CommandEndpoint {
   string description = 4;
 }
 message CommandDependency {
-  string plugin = 1;
+  reserved 1;
+  reserved "plugin";
   string command = 2;
   bytes signature = 3;
 }
 message ListCommands {}
-message CommandCatalogue { repeated AvailableCommand entries = 1; }
+message CommandCatalogue { repeated AvailableCommand entries = 1; repeated CommandHostStatus hosts = 2; }
 message AvailableCommand {
   string plugin = 1;
   CommandEndpoint endpoint = 2;
   bytes signature = 3;
   bool available = 4;
+  repeated CommandExecution executions = 5;
+}
+
+// Bounded, argument-free execution diagnostics for an isolated command provider.
+message CommandExecution {
+  uint64 invocation_id = 1;
+  uint64 process_id = 2;
+  string phase = 3;
+  uint64 queue_ms = 4;
+  uint64 execution_ms = 5;
+  string outcome = 6;
+  string command = 7;
+}
+
+enum CommandHostPhase {
+  COMMAND_HOST_PHASE_UNSPECIFIED = 0;
+  COMMAND_HOST_PHASE_IDLE = 1;
+  COMMAND_HOST_PHASE_STARTING = 2;
+  COMMAND_HOST_PHASE_RUNNING = 3;
+  COMMAND_HOST_PHASE_STOPPING = 4;
+  COMMAND_HOST_PHASE_BACKOFF = 5;
+  COMMAND_HOST_PHASE_FAILED = 6;
+}
+
+message CommandHostStatus {
+  string id = 1;
+  string lifetime = 2;
+  repeated CommandProcessStatus processes = 3;
+  uint32 concurrency = 4;
+  uint32 queue_capacity = 5;
+  CommandHostPhase phase = 6;
+  HostStart start = 7;
+  // Eligibility, not a promise of an automatic retry for on-demand hosts.
+  optional uint64 retry_after_ms = 8;
+  // Most recent startup failure; cleared by a successful handshake. Bounded to 512 characters.
+  string startup_error = 9;
+  // Counts include admitted work draining from older generations of this host.
+  uint32 queued_calls = 10;
+  uint32 active_calls = 11;
+  // Up to five failures, newest completion first, from the bounded execution history.
+  repeated CommandExecution recent_failures = 12;
+}
+message CommandProcessStatus {
+  uint64 id = 1;
+  string phase = 2;
 }

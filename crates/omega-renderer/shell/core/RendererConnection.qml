@@ -19,6 +19,7 @@ QtObject {
     property bool presented: false
     property var instances: ({})
     property int attachmentStream: 0
+    property double attachmentStarted: 0
     signal viewUpdated(var snapshot)
 
     // Default daemon socket path, overridable by the host.
@@ -59,6 +60,7 @@ QtObject {
         link.snapshot = null
         link.attached = false
         link.attachmentStream = 0
+        link.attachmentStarted = 0
         link.instance = null
         link.revision = "0"
         link.presented = false
@@ -88,6 +90,7 @@ QtObject {
             if (Number(msg.streamId) === link.attachmentStream) {
                 if (msg.result.error) {
                     requests.error = msg.result.error.message
+                    link.disconnected(requests.error)
                     return
                 }
                 link.attached = true
@@ -125,8 +128,10 @@ QtObject {
     }
 
     function attach() {
+        if (link.attached || link.attachmentStream !== 0) return
         if (!link.plugin || (!link.standalone && (!link.surface || !link.module))) return
         link.attachmentStream = link.allocateStream()
+        link.attachmentStarted = Date.now()
         var request = { features: ["RENDERER_FEATURE_INSTANCES", "RENDERER_FEATURE_SCOPED_INTERACTIONS", "RENDERER_FEATURE_LOCAL_MESSAGES", "RENDERER_FEATURE_CONTROLLED_INPUTS", "RENDERER_FEATURE_KEYBOARD_SHORTCUTS", "RENDERER_FEATURE_RESOLVED_NAVIGATION"] }
         if (link.standalone) {
             request.plugin = link.plugin
@@ -275,7 +280,9 @@ QtObject {
         repeat: true
         onTriggered: {
             var expired = requests.expire(Date.now())
-            if (Date.now() - link.lastHeard >= 15000 || expired) {
+            var attachmentExpired = !link.attached && link.attachmentStream !== 0
+                && Date.now() - link.attachmentStarted >= 15000
+            if (Date.now() - link.lastHeard >= 15000 || expired || attachmentExpired) {
                 link.reconnect(expired ? requests.error : "")
                 return
             }

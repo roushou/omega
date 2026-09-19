@@ -30,11 +30,14 @@ impl TestDaemon {
     pub fn serving(plugin: Plugin) -> Self {
         let (daemon, plugin_stream) =
             UnixStream::pair().expect("a socket pair is always available");
-        let manifest = plugin.manifest().expect("the plugin's manifest is valid");
+        let program = plugin
+            .program
+            .prepare()
+            .expect("the plugin's manifest is valid");
 
         tokio::spawn(async move {
-            if let Ok(runtime) = crate::runtime::Runtime::over(plugin_stream, &manifest).await {
-                let _ = runtime.serve(plugin).await;
+            if let Ok(runtime) = crate::runtime::Runtime::over(plugin_stream, program).await {
+                let _ = runtime.serve().await;
             }
         });
 
@@ -67,6 +70,7 @@ impl TestDaemon {
         self.send(Frame {
             stream_id: 0,
             body: Some(frame::Body::Welcome(Welcome {
+                host_assignment: None,
                 protocol_version: PROTOCOL_VERSION,
                 plugin_id: "test".to_string(),
                 daemon_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -131,6 +135,7 @@ impl TestDaemon {
         self.invoke(
             stream,
             invoke::Op::CallCommand(CallCommand {
+                invocation_id: 0,
                 command: command.to_string(),
                 args,
             }),

@@ -146,7 +146,16 @@ impl Client {
         &mut self,
         stream_id: u64,
     ) -> Result<crate::omega::result::Outcome, ClientError> {
-        let deadline = tokio::time::Instant::now() + Self::TIMEOUT;
+        self.answer_with_timeout(stream_id, Self::TIMEOUT).await
+    }
+
+    /// Wait with an explicit caller deadline. Timeout does not cancel remote effects.
+    pub async fn answer_with_timeout(
+        &mut self,
+        stream_id: u64,
+        timeout: Duration,
+    ) -> Result<crate::omega::result::Outcome, ClientError> {
+        let deadline = tokio::time::Instant::now() + timeout;
         loop {
             let frame = tokio::time::timeout_at(deadline, self.recv())
                 .await

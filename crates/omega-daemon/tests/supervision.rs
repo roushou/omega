@@ -9,7 +9,7 @@ use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
 use omega_daemon::plugins::{PluginRegistry, Transition};
 use omega_daemon::supervisor::{Backoff, PluginSpec, Supervisor};
-use omega_daemon::{PluginToken, Shutdown};
+use omega_daemon::{Shutdown, SpawnToken};
 use omega_proto::PluginName;
 use omega_proto::omega::PluginPhase;
 use omega_proto::{Socket, SystemTopic};
@@ -193,7 +193,7 @@ async fn a_token_is_revoked_when_its_process_is_gone() {
         Shutdown::new(),
     );
 
-    let token: PluginToken = supervisor.register(&plugin("battery-widget")).unwrap();
+    let token: SpawnToken = supervisor.register(&plugin("battery-widget")).unwrap();
     assert!(supervisor.identify(1234, token.as_str()).is_some());
     assert!(supervisor.identify(1234, "another-token").is_none());
 }

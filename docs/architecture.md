@@ -53,7 +53,11 @@ use their own error library. Generated workspaces require neither `anyhow` nor
 same document validator. `omega check` evaluates and validates without
 staging or publishing a generation. A configuration may contain only native
 shell widgets, with no Omega plugins. Fresh workspaces start with `system`;
-`omega new` registers each added plugin in Cargo's workspace membership.
+`omega new` registers added packages in Cargo's workspace membership. Plugins
+live in `plugins/`, command packages in `commands/`, and shared libraries in
+`crates/`. Command packages run only with executable metadata and a host
+registration in the document. Scaffolding uses the same workspace lock, staged
+publication, and manifest rollback for all three package kinds.
 Validation retains underlying error sources, available widget surfaces and duplicate placement locations for callers to inspect.
 
 Terminal diagnostics belong to `omega-cli::ui::Ui`. Its `miette` adapter renders
@@ -232,7 +236,7 @@ interaction bindings. `plugin` owns registration and Omega supervision readings,
 separate from the machine resource readings in `platform::system`.
 
 The private `MountedSurface` execution contract lives with the production surface
-instance runtime. Registration constructs implementations; runtime publication and
+instance runtime. Registration retains constructors; runtime publication and
 the harness consume the same contract. Surface execution does not depend on the
 registration module. Derive-facing contracts continue through `omega::internal`.
 
@@ -240,8 +244,19 @@ registration module. Derive-facing contracts continue through `omega::internal`.
 handles. `effect` owns generic completion, receipts, and queue admission; concrete
 controls belong to their service domains. Private `wiring` generates field
 construction and capability declarations without centrally defining domain types.
-Runtime context and the replicated mirror live under `runtime`; registration
-storage lives under `plugin`. Derives access a narrow `internal` export boundary.
+Runtime context and the replicated mirror live under `runtime`. The private
+`program` module owns registration storage and manifest compilation for both
+`Plugin` and `CommandHost`. Preparation validates the executable kind and keeps
+its manifest and registrations together. Executable startup prepares once, then
+either describes that manifest or hands the prepared program to the runtime.
+Derives access a narrow `internal` export boundary.
+
+`CommandHost` declares exports; `CommandHostDeployment` supplies desired lifetime,
+execution bounds, and settings to the system document. The runtime validates the
+daemon assignment against the executable kind. `runtime::execution` owns plugin,
+persistent-command, and one-shot admission states. A one-shot session refuses
+foreign invocations without consuming its assignment, then exits after sending
+the assigned invocation's terminal answer, including an admission refusal.
 
 `Reads` excludes effects from render declarations regardless of module location.
 Topic-coverage tests require exactly one primitive handle per system topic;
@@ -353,16 +368,17 @@ terminal success without a value; `Option::None` remains an explicit empty value
 The runtime converts values and errors to closed protocol outcomes. Authors use
 ordinary return values and `?`; daemon refusals preserve their code.
 
-The derive gives a command one identity, shared by `.command::<SetVolume>()`
-and `.on_change(SetVolume)`. Named-field commands expose a `CommandRef` constant
+`Command::ID` declares the identity shared by `.command::<SetVolume>()` and
+`.on_change(SetVolume)`. The derive wires fields and supplies construction;
+named-field commands expose a `CommandRef` constant
 in Rust's value namespace; the reference contains no command instance or effects.
 Controls require matching inputs (`Percent`, `bool`, `String` or `()`), and
 `SetVolume.with(value)` creates a pure `Invocation<C>` consumed by buttons,
-document actions, and callers. Bindings retain the defining plugin, command ID,
-and signature. Duplicate names and registration under a different owner are refused. A reference does not register the command: invoking an
+document actions, and callers. Bindings retain the command ID and signature. The daemon resolves the provider;
+duplicate command IDs across providers are refused. A reference does not register the command: invoking an
 unregistered command remains a runtime refusal.
 
-The identity also carries the defining package for document actions.
+Document actions use the same provider-independent command identity.
 `Actions::invoke(focus::Tick)` requires a command with `Input = ()`;
 `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` encodes its typed input.
 Schedules and keybindings consume the same action. Dynamic targets use
@@ -398,7 +414,7 @@ execution may still be running. Effects also carry the encoded-byte budget
 described below. Timeout, unavailable runtime, capacity exhaustion and oversized
 payloads have distinct wire error codes.
 
-The SDK runtime’s internal `Commands` owner holds constructed handlers, pending
+The SDK runtime’s internal `Commands` owner holds command factories, pending
 tasks, reply streams, and fail-stop state. The session loop admits calls through
 that owner and sends its completed replies; it does not manage command tasks.
 
@@ -406,17 +422,20 @@ Command futures have a separate 64-entry bound, checked before invoking user
 code. They run concurrently while the connection loop receives frames, renders
 widgets and completes effects. A caller's timeout does not cancel command work;
 a command occupies its slot until it finishes or the connection ends. Disconnect
-aborts command tasks and resolves outstanding effects. Commands share their
-constructed instance, so mutable application state requires synchronization.
+aborts command tasks and resolves outstanding effects. Each invocation constructs
+a fresh handler after input decoding and required-reading initialization. Shared
+application state belongs in explicit dependencies; concurrent access to that
+state requires synchronization.
 Reactions and rendering remain synchronous. `testing::Called` awaits commands
 and completes captured effects, exposing their typed result to tests.
 
 ### Interoperable commands
 
-`CommandId` and `CommandAddress` preserve the endpoint and plugin identity.
+`CommandId` identifies an operation independently of its provider.
+`CommandAddress` pairs that ID with its resolved provider for routing and diagnostics.
 Manifests contain generated input/output shapes and outgoing dependencies. A
-signature hashes the owner, command ID, and canonical shapes, excluding prose.
-Build/check validates dependencies against all plugin manifests.
+signature hashes the command ID and canonical shapes, excluding provider identity
+and prose. Build/check validates dependencies against plugin and command-host manifests.
 
 The daemon resolves authorization, contract, and target connection together.
 Connected sessions retain the manifest admitted at handshake, even if the next
@@ -425,13 +444,14 @@ replacement. Renderer bindings use the source plugin's authority; operator
 identity does not broaden a renderer's access. Typed calls validate arguments and
 results against the admitted contract. Plugin refusals pass through unchanged.
 
-`Commands::list` returns descriptors for endpoints the caller may invoke, including
-connection availability. `omega commands --json` provides operator inspection.
+`Commands::list` returns descriptors and availability for endpoints the caller
+may invoke, including configured command hosts that start on demand.
+`omega commands --json` provides operator inspection.
 A catalogue snapshot is advisory; invocation repeats permission and signature
 checks. `CapturedEffect::command::<C>()` and `CapturedEffect::commands()` let tests
 complete calls and discovery with typed Rust declarations.
 
-Command panics end the plugin session. Stream identities live outside handler
+Command panics end the provider session. Stream identities live outside handler
 tasks, allowing `OutcomeUnknown` replies to all outstanding calls before shutdown
 when transport remains usable. Other handler errors remain per-call refusals.
 See [command interoperability](command-interoperability.md) for the full contract.
@@ -840,8 +860,12 @@ with the locally published generation. A rejected candidate remains visible whil
 the accepted build continues to converge. Shell application records its own
 generation and result because explicit application can precede activation.
 Ordinary `omega status` uses this operator snapshot; `--json` writes its protocol
-JSON to stdout, including generation identities and plugin health. Human-readable
-status goes to stderr; `omega status <plugin>` adds instance details and log paths.
+JSON to stdout, including generation identities, plugin health, and `commandHosts`.
+Command host facts come from the host manager, as in `omega commands`; hosts do
+not appear again as plugin health entries. Status shows every active process phase
+and explicitly reports hosts with no active process. Human-readable status goes to
+stderr; `omega status <plugin>` adds instance details and log paths, while
+`omega status <host>` selects a command host and includes its execution limits.
 
 Plugin health is an on-demand projection from `PluginRegistry`: manifest surfaces,
 the latest validated placement plan, session-owned instances, and retained view

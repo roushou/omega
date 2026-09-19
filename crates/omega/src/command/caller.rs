@@ -15,7 +15,9 @@ use std::marker::PhantomData;
 /// ```no_run
 /// # use omega::{Command, Percent};
 /// # #[derive(omega::Command)] struct SetVolume { volume: omega::platform::audio::Volume }
-/// # impl Command for SetVolume { type Input = Percent; type Output = (); async fn call(&self, p: Percent) -> omega::Result<()> { self.volume.set(p).await } }
+/// # impl Command for SetVolume {
+/// #     const ID: &'static str = "set-volume";
+/// #  type Input = Percent; type Output = (); async fn call(&self, p: Percent) -> omega::Result<()> { self.volume.set(p).await } }
 /// # async fn example(caller: &omega::command::Caller<SetVolume>) -> omega::Result<()> {
 /// caller.call(Percent::whole(30)).await?;
 /// # Ok(()) }
@@ -39,7 +41,7 @@ impl<C> Clone for Caller<C> {
 }
 impl<C: Command> Wiring for Caller<C> {
     fn commands() -> Vec<omega_proto::omega::CommandDependency> {
-        vec![CommandRef::<C>::INSTANCE.descriptor().dependency(C::PLUGIN)]
+        vec![CommandRef::<C>::INSTANCE.descriptor().dependency()]
     }
     fn build(context: &Context) -> Self {
         Self {
@@ -77,8 +79,7 @@ pub struct Invocation<C: Command> {
 impl<C: Command> std::fmt::Debug for Invocation<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Invocation")
-            .field("plugin", &C::PLUGIN)
-            .field("command", &C::NAME)
+            .field("command", &C::ID)
             .finish_non_exhaustive()
     }
 }
@@ -91,9 +92,9 @@ impl<C: Command> Invocation<C> {
     }
     pub fn into_wire(self) -> InvokePlugin {
         InvokePlugin {
-            plugin: C::PLUGIN.into(),
-            command: C::NAME.into(),
-            signature: CommandRef::<C>::INSTANCE.descriptor().signature(C::PLUGIN),
+            plugin: "".into(),
+            command: C::ID.into(),
+            signature: CommandRef::<C>::INSTANCE.descriptor().signature(),
             args: self.args,
         }
     }
@@ -109,13 +110,14 @@ impl<C: Command> Invocation<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::CommandName;
     use crate::wiring::Wired;
     use omega_proto::IntoValue;
 
     #[derive(crate::Command)]
     struct Echo {}
     impl Command for Echo {
+        const ID: &'static str = "echo";
+
         type Input = String;
         type Output = Option<String>;
         async fn call(&self, input: String) -> crate::Result<Self::Output> {
@@ -132,11 +134,7 @@ mod tests {
         let dependencies = Dependencies::commands();
         assert_eq!(
             dependencies,
-            vec![
-                CommandRef::<Echo>::INSTANCE
-                    .descriptor()
-                    .dependency(Echo::PLUGIN)
-            ]
+            vec![CommandRef::<Echo>::INSTANCE.descriptor().dependency()]
         );
         let (sender, mut queue) = crate::effect::queue::Effects::channel();
         let context = Context::new(&Default::default(), sender);
@@ -160,13 +158,11 @@ mod tests {
     fn bound_invocation_retains_owner_and_is_pure() {
         let binding: crate::ui::Bind<()> = CommandRef::<Echo>::INSTANCE.with("hello".into()).into();
         let binding = binding.into_wire();
-        assert_eq!(binding.plugin, Echo::PLUGIN);
-        assert_eq!(binding.command, Echo::NAME);
+        assert_eq!(binding.plugin, "");
+        assert_eq!(binding.command, Echo::ID);
         assert_eq!(
             binding.signature,
-            CommandRef::<Echo>::INSTANCE
-                .descriptor()
-                .signature(Echo::PLUGIN)
+            CommandRef::<Echo>::INSTANCE.descriptor().signature()
         );
     }
 }

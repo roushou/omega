@@ -38,7 +38,7 @@ pub enum Response {
     State(StatePatch),
     /// Whatever a plugin answered with, for an op that asked it something.
     Value(Value),
-    Deployment(omega_proto::omega::DeploymentStatus),
+    Deployment(Box<omega_proto::omega::DeploymentStatus>),
 }
 
 impl From<CommandAnswer> for Response {
@@ -58,7 +58,7 @@ impl Response {
             Self::Ok => result::Outcome::Ok(Empty {}),
             Self::State(patch) => result::Outcome::State(patch),
             Self::Value(value) => result::Outcome::Value(value),
-            Self::Deployment(status) => result::Outcome::Deployment(status),
+            Self::Deployment(status) => result::Outcome::Deployment(*status),
         };
         Frame::reply(stream_id, outcome)
     }
@@ -530,9 +530,22 @@ impl Dispatcher {
             invoke::Op::GetDeployment(_) => {
                 let mut status = self.deployment.snapshot();
                 (status.plugins, status.plugin_health) = self.plugins.health_snapshot();
+                status.command_hosts = self.plugins.hosts().inspect();
+                status.plugins.retain(|plugin| {
+                    !status
+                        .command_hosts
+                        .iter()
+                        .any(|host| host.id == plugin.plugin)
+                });
+                status.plugin_health.retain(|plugin| {
+                    !status
+                        .command_hosts
+                        .iter()
+                        .any(|host| host.id == plugin.plugin)
+                });
                 status.renderers = self.plugins.renderer_statuses();
                 status.renderer_placements = self.plugins.renderer_placements();
-                Ok(Response::Deployment(status))
+                Ok(Response::Deployment(Box::new(status)))
             }
             invoke::Op::ApplyShell(apply) => {
                 let layout = self

@@ -138,6 +138,8 @@ pub struct Connect {
     bluetooth: BluetoothControl,
 }
 impl Command for Connect {
+    const ID: &'static str = "connect";
+
     type Input = DeviceId;
     type Output = ();
     async fn call(&self, id: DeviceId) -> omega::Result<()> {
@@ -149,6 +151,8 @@ pub struct Disconnect {
     bluetooth: BluetoothControl,
 }
 impl Command for Disconnect {
+    const ID: &'static str = "disconnect";
+
     type Input = DeviceId;
     type Output = ();
     async fn call(&self, id: DeviceId) -> omega::Result<()> {
@@ -157,7 +161,7 @@ impl Command for Disconnect {
 }
 
 fn main() -> omega::Result<()> {
-    Plugin::named(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+    Plugin::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<Connect>()
@@ -336,7 +340,7 @@ mod tests {
         assert!(called.answer.is_err());
         assert!(called.effects.is_empty());
         let manifest = manifest_of(
-            &Plugin::named("bluetooth", "0.1.0")
+            &Plugin::new("bluetooth", "0.1.0")
                 .surface_as::<Panel>("bluetooth")
                 .command::<Connect>()
                 .command::<Disconnect>(),

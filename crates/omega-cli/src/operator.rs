@@ -137,7 +137,6 @@ impl Operator {
     /// Call a plugin's command surface, and hand back whatever it answered.
     pub async fn run(
         &self,
-        plugin_name: &PluginName,
         command_id: &CommandId,
         args: Vec<Value>,
     ) -> Result<Option<Value>, OperatorError> {
@@ -145,7 +144,7 @@ impl Operator {
             .invoke(invoke::Op::Act(Act {
                 action: Some(Action {
                     kind: Some(action::Kind::InvokePlugin(InvokePlugin {
-                        plugin: plugin_name.to_string(),
+                        plugin: String::new(),
                         command: command_id.to_string(),
                         args,
                         signature: Vec::new(),
@@ -173,9 +172,15 @@ impl Operator {
         // No token: the CLI is not a plugin, and saying so is the point.
         let (mut client, _welcome) = Client::connect(&self.socket, "", "").await?;
 
+        let timeout = if matches!(&op, invoke::Op::Act(act) if matches!(act.action.as_ref().and_then(|a| a.kind.as_ref()), Some(action::Kind::InvokePlugin(_))))
+        {
+            omega_proto::host::ExecutionPolicy::CALL_TIMEOUT
+        } else {
+            Client::TIMEOUT
+        };
         let stream = client.allocate();
         client.invoke(stream, op).await?;
-        Ok(client.answer(stream).await?)
+        Ok(client.answer_with_timeout(stream, timeout).await?)
     }
 }
 

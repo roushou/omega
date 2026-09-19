@@ -154,21 +154,37 @@ impl Session {
         let mut events = self.hub.subscribe_events();
 
         // A plugin is reachable by name for as long as this session lasts.
-        let (outbound, mut requests) = tokio::sync::mpsc::channel::<Request>(16);
+        let (outbound, mut requests) =
+            tokio::sync::mpsc::channel::<Request>(if peer.host_process().is_some() {
+                64
+            } else {
+                16
+            });
+        let host_registered = peer
+            .host_process()
+            .map(|id| self.plugins.hosts().connect(id, outbound.clone()))
+            .transpose()
+            .map_err(SessionError::Refused)?;
         let registered = peer
             .plugin_name()
+            .filter(|_| peer.host_process().is_none())
             .map(|name| self.plugins.connected(name, outbound));
 
         let settings = peer
             .plugin_name()
             .map(|name| self.plugins.config(name))
             .unwrap_or_default();
+        let settings = peer
+            .host_settings()
+            .map(|settings| settings.into_map())
+            .unwrap_or(settings);
         drop(handover);
 
         connection
             .send(Frame {
                 stream_id: 0,
                 body: Some(frame::Body::Welcome(Welcome {
+                    host_assignment: peer.host_assignment(),
                     protocol_version: PROTOCOL_VERSION,
                     plugin_id: peer.label(),
                     daemon_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -247,7 +263,7 @@ impl Session {
                 // The daemon asking this plugin for something.
                 Some(request) = requests.recv() => {
                     if request.answer.is_closed() { continue; }
-                    if pending.len() >= 16 {
+                    if pending.len() >= if peer.host_process().is_some() { 64 } else { 16 } {
                         let _ = request.answer.send(Err(Refusal::exhausted("too many pending requests")));
                         continue;
                     }
@@ -290,6 +306,7 @@ impl Session {
                         None => std::future::pending().await,
                     }
                 } => return Ok(()),
+                _ = async { match &host_registered { Some(guard) => guard.cancelled().await, None => std::future::pending().await } } => return Ok(()),
                 _ = keepalive.tick() => {
                     if liveness.health() == Health::Unresponsive {
                         tracing::warn!(plugin = %peer.label(), "peer stopped answering; closing");
@@ -303,11 +320,10 @@ impl Session {
 
     /// Allowed topics: declared plugin subscriptions or all topics for an authorized observer.
     fn subscriptions(&self, peer: &Peer) -> Subscriptions {
-        peer.plugin_name()
-            .and_then(|name| self.plugins.manifest(name).map(|plugin| (name, plugin)))
-            .map_or_else(Subscriptions::watcher, |(name, plugin)| {
-                Subscriptions::of(name, &plugin.manifest)
-            })
+        match (peer.plugin_name(), peer.manifest()) {
+            (Some(name), Some(manifest)) => Subscriptions::of(name, manifest),
+            _ => Subscriptions::watcher(),
+        }
     }
 
     /// The peer's opening frame, or why it is not one.
@@ -322,7 +338,17 @@ impl Session {
 
     /// Resolve pid and token against supervision records, then load manifest grants.
     fn admit(&self, pid: i32, uid: u32, hello: &Hello) -> Result<Peer, Refusal> {
+        if let Some(peer) =
+            self.plugins
+                .hosts()
+                .authenticate(pid, &hello.token, &hello.manifest_hash)?
+        {
+            return Ok(peer);
+        }
         let Some(name) = self.supervisor.identify(pid, &hello.token) else {
+            if !hello.token.is_empty() {
+                return Err(Refusal::unauthenticated("unrecognized process token"));
+            }
             return Peer::operator(pid, uid);
         };
 

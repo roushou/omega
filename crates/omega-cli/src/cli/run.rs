@@ -1,18 +1,15 @@
-//! `omega run`: call a plugin's command surface.
+//! `omega run`: invoke a command through its configured provider.
 
+use omega_proto::CommandId;
 use omega_proto::omega::{Value, value};
-use omega_proto::{CommandId, PluginName};
 
 use crate::operator::Operator;
 use crate::ui::{Paint, Step, Ui};
 
-/// Invoke a registered plugin command using that plugin's granted capabilities.
+/// Invoke a registered command using its provider's granted capabilities.
 #[derive(Debug, clap::Args)]
 pub struct RunCmd {
-    /// The plugin that declares the command.
-    #[arg(value_name = "PLUGIN")]
-    pub plugin_name: PluginName,
-    /// The command surface's id, as its manifest declares it.
+    /// The command ID declared by its implementation.
     #[arg(value_name = "COMMAND")]
     pub command_id: CommandId,
     /// Arguments decoded by the command: e.g. 40%, balanced, true, or text.
@@ -28,17 +25,11 @@ impl RunCmd {
             .map(|argument| Self::text(argument))
             .collect();
 
-        match Operator::new()
-            .run(&self.plugin_name, &self.command_id, args)
-            .await?
-        {
+        match Operator::new().run(&self.command_id, args).await? {
             // The answer is data: it goes to stdout undecorated, so that
-            // `omega run battery level | jq` gets a value and not a report.
+            // `omega run battery.level | jq` gets a value and not a report.
             Some(answer) => ui.line(Self::render(&answer)),
-            None => ui.step(
-                Step::Done,
-                Paint::name(format!("{} {}", self.plugin_name, self.command_id)),
-            ),
+            None => ui.step(Step::Done, Paint::name(self.command_id.to_string())),
         }
         Ok(())
     }
@@ -70,7 +61,7 @@ mod tests {
     #[test]
     fn run_preserves_arguments_for_type_directed_decoding() {
         for argument in ["-42", "40%", "001", "true", "two words"] {
-            let cli = Cli::try_parse_from(["omega", "run", "example", "set", argument]).unwrap();
+            let cli = Cli::try_parse_from(["omega", "run", "example.set", argument]).unwrap();
             let Command::Run(run) = cli.command else {
                 panic!("expected run")
             };

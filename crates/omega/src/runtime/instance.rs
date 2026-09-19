@@ -1,7 +1,7 @@
 use omega_proto::omega::ViewTree;
 use omega_proto::{SystemTopic, Values};
 
-use crate::plugin::registry::SurfaceEntry;
+use crate::program::registration::SurfaceEntry;
 use crate::runtime::context::Context;
 use crate::surface::instance::MountedSurface;
 

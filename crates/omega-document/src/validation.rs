@@ -20,10 +20,38 @@ impl DocumentValidation {
                 return Err(Self::error("duplicate built plugin"));
             }
         }
+        omega_proto::CommandContracts::validate(built.values().copied()).map_err(Self::cause)?;
+        let mut command_hosts = BTreeSet::new();
+        for config in &document.command_hosts {
+            let policy = omega_proto::host::HostPolicy::try_from(config).map_err(Self::cause)?;
+            let name = config.id.parse::<PluginName>().map_err(Self::cause)?;
+            if !command_hosts.insert(name.clone()) {
+                return Err(Self::error("duplicate command host configuration"));
+            }
+            if !built.get(&name).is_some_and(|manifest| {
+                manifest.host_kind == omega_proto::omega::HostKind::Commands as i32
+            }) {
+                return Err(Self::error(format!(
+                    "{} is not a built command host",
+                    policy.id
+                )));
+            }
+        }
+        for (name, manifest) in &built {
+            if manifest.host_kind == omega_proto::omega::HostKind::Commands as i32
+                && !command_hosts.contains(name)
+            {
+                return Err(Self::error(format!(
+                    "command host {name} requires an explicit lifetime configuration"
+                )));
+            }
+        }
         let mut plugins = BTreeSet::new();
         for plugin in &document.plugins {
             let name = plugin.name.parse::<PluginName>().map_err(Self::cause)?;
-            if !built.contains_key(&name) {
+            if !built.get(&name).is_some_and(|manifest| {
+                manifest.host_kind == omega_proto::omega::HostKind::Plugin as i32
+            }) {
                 return Err(Self::error(format!("unknown plugin {name}")));
             }
             if !plugins.insert(name) {
@@ -49,13 +77,22 @@ impl DocumentValidation {
                     .validate()
                     .map_err(|error| Self::error(format!("schedule {:?}: {error}", schedule.id)))?;
                 if let omega_proto::omega::action::Kind::InvokePlugin(call) = kind {
-                    let plugin = call.plugin.parse::<PluginName>().map_err(Self::cause)?;
-                    let manifest = built.get(&plugin).ok_or_else(|| {
-                        Self::error(format!(
-                            "schedule {:?}: unknown plugin {plugin}",
-                            schedule.id
-                        ))
-                    })?;
+                    let manifest = built
+                        .values()
+                        .find(|manifest| {
+                            (call.plugin.is_empty() || call.plugin == manifest.name)
+                                && manifest
+                                    .commands
+                                    .iter()
+                                    .any(|command| command.id == call.command)
+                        })
+                        .ok_or_else(|| {
+                            Self::error(format!(
+                                "schedule {:?}: unknown command {}",
+                                schedule.id, call.command
+                            ))
+                        })?;
+                    let plugin = &manifest.name;
                     if !manifest
                         .commands
                         .iter()

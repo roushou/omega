@@ -1,4 +1,5 @@
 syntax = "proto3";
+import "omega/host.proto";
 
 package omega;
 
@@ -11,6 +12,7 @@ import "omega/instance.proto";
 // Stable entity IDs identify changes during reconciliation; observed state uses separate messages.
 
 message StateDocument {
+  repeated CommandHostConfig command_hosts = 13;
   uint64 revision = 1;                  // from omega.lock
 
   repeated Monitor monitors = 2;

@@ -162,6 +162,54 @@ impl Scaffold {
         Self::stamp(PLUGIN_MAIN, name)
     }
 
+    /// SDK package with explicit command-host discovery metadata.
+    pub fn command_host_manifest(&self, name: &PackageName) -> Result<Manifest, CargoError> {
+        let mut manifest = self.plugin_crate_manifest(name.plugin())?;
+        manifest.set_command_host()?;
+        Ok(manifest)
+    }
+
+    /// Library, command implementation, host declaration, and executable entry point.
+    pub fn command_host_files(
+        &self,
+        name: &PackageName,
+    ) -> Result<Vec<(&'static str, String)>, ScaffoldError> {
+        Ok(vec![
+            (
+                "src/lib.rs",
+                include_str!("../../templates/command-host/src/lib.rs").into(),
+            ),
+            (
+                "src/commands.rs",
+                Self::substitute(
+                    include_str!("../../templates/command-host/src/commands.rs"),
+                    "{host_name}",
+                    name.package(),
+                )?,
+            ),
+            (
+                "src/host.rs",
+                Self::substitute(
+                    include_str!("../../templates/command-host/src/host.rs"),
+                    "{host_name}",
+                    name.package(),
+                )?,
+            ),
+            (
+                "src/main.rs",
+                Self::stamp(
+                    include_str!("../../templates/command-host/src/main.rs"),
+                    name,
+                )?,
+            ),
+        ])
+    }
+
+    /// Registration to append to the system document's builder.
+    pub fn command_host_hint(name: &PackageName) -> String {
+        format!(".command_host({}::Host::declaration())?", name.rust_ident())
+    }
+
     /// Generate the system crate manifest. Plugin dependencies are added by `omega new`.
     pub fn system_manifest(&self) -> Result<Manifest, CargoError> {
         Manifest::new_package(
@@ -200,14 +248,18 @@ impl Scaffold {
 
     /// Expand required template placeholders or fail if any are missing.
     fn stamp(template: &str, name: &PackageName) -> Result<String, ScaffoldError> {
-        let stamped = template.replace(CRATE_TOKEN, name.rust_ident());
+        Self::substitute(template, CRATE_TOKEN, name.rust_ident())
+    }
 
-        // Reject unmatched placeholders before writing an invalid template.
-        if stamped == template || stamped.contains("{plugin") {
-            Err(ScaffoldError::ProgramTemplate { token: CRATE_TOKEN })
-        } else {
-            Ok(stamped)
+    fn substitute(
+        template: &str,
+        token: &'static str,
+        value: &str,
+    ) -> Result<String, ScaffoldError> {
+        if !template.contains(token) {
+            return Err(ScaffoldError::ProgramTemplate { token });
         }
+        Ok(template.replace(token, value))
     }
 
     fn resolve(&self, spec: &DependencySpec) -> Dependency {

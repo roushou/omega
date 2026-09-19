@@ -8,7 +8,7 @@ use crate::supervisor::Supervisor;
 #[derive(Debug)]
 pub(super) struct Adoptions {
     supervisor: Supervisor,
-    taken: std::sync::Mutex<std::collections::BTreeMap<PluginName, crate::plugins::PluginToken>>,
+    taken: std::sync::Mutex<std::collections::BTreeMap<PluginName, crate::plugins::SpawnToken>>,
 }
 
 impl Adoptions {
@@ -19,7 +19,7 @@ impl Adoptions {
         }
     }
 
-    pub(super) fn taken(&self, name: PluginName, token: crate::plugins::PluginToken) {
+    pub(super) fn taken(&self, name: PluginName, token: crate::plugins::SpawnToken) {
         let mut taken = self.taken.lock().unwrap_or_else(|e| e.into_inner());
         taken.insert(name, token);
     }

@@ -1,8 +1,10 @@
 use super::*;
+use crate::Plugin;
 use crate::Surface;
 use crate::command::Args;
 use crate::ui::{Text, View};
 use crate::wiring::Wired;
+use omega_proto::IntoValue;
 use omega_proto::omega::Result as OpResult;
 use omega_proto::omega::{
     BatteryState, Capability, NetworkState, RemoveWidget, RenderWidget, StatePatch, StateSnapshot,
@@ -82,14 +84,16 @@ impl Peer {
         }
     }
     async fn start(plugin: Plugin, topics: Vec<StateTopic>) -> Self {
-        let manifest = plugin.manifest().unwrap();
+        Self::start_program(plugin.program.prepare().unwrap(), topics, None).await
+    }
+    async fn start_program(
+        program: PreparedProgram,
+        topics: Vec<StateTopic>,
+        assignment: Option<omega_proto::omega::HostAssignment>,
+    ) -> Self {
         let (daemon, plugin_stream) = UnixStream::pair().unwrap();
-        let task = tokio::spawn(async move {
-            Runtime::over(plugin_stream, &manifest)
-                .await?
-                .serve(plugin)
-                .await
-        });
+        let task =
+            tokio::spawn(async move { Runtime::over(plugin_stream, program).await?.serve().await });
         let mut peer = Self {
             transport: Transport::new(daemon),
             streams: DaemonStreams::new(),
@@ -102,6 +106,7 @@ impl Peer {
         peer.send(Frame {
             stream_id: 0,
             body: Some(frame::Body::Welcome(Welcome {
+                host_assignment: assignment,
                 protocol_version: omega_proto::PROTOCOL_VERSION,
                 state: Some(StateSnapshot { topics }),
                 ..Default::default()
@@ -214,7 +219,7 @@ impl Drop for Peer {
 
 #[tokio::test]
 async fn surfaces_wait_only_for_their_own_topics_and_records_have_defaults() {
-    let plugin = Plugin::named("test", "0.1.0")
+    let plugin = Plugin::new("test", "0.1.0")
         .surface_as::<Probe<0>>("battery")
         .surface_as::<Probe<1>>("network")
         .surface_as::<Probe<2>>("both")
@@ -236,7 +241,7 @@ async fn surfaces_wait_only_for_their_own_topics_and_records_have_defaults() {
 
 #[tokio::test]
 async fn requested_instances_wait_without_blocking_and_keep_their_settings() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![]).await;
     assert!(
         peer.render("battery", "bar-1", "placed:")
@@ -255,7 +260,7 @@ async fn requested_instances_wait_without_blocking_and_keep_their_settings() {
 
 #[tokio::test]
 async fn deduplication_includes_pull_responses_and_retractions() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
     peer.render("battery", "", "").await;
     peer.render("battery", "bar-1", "").await;
@@ -274,7 +279,7 @@ async fn deduplication_includes_pull_responses_and_retractions() {
 
 #[tokio::test]
 async fn reconfiguration_and_removal_replace_publication_history() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
     peer.render("battery", "", "").await;
     peer.render("battery", "bar-1", "old:").await;
@@ -313,7 +318,7 @@ async fn reconfiguration_and_removal_replace_publication_history() {
 
 #[tokio::test]
 async fn explicit_absence_is_ready_and_empty_first_views_are_published() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, None)]).await;
     assert!(peer.render("battery", "", "").await.root.is_none());
     peer.patch(vec![Peer::battery(2, None)]).await;
@@ -336,11 +341,10 @@ impl Wired for Forward {
         }
     }
 }
-impl crate::command::CommandName for Forward {
-    const PLUGIN: &'static str = "test";
-    const NAME: &'static str = "forward";
-}
+
 impl crate::Command for Forward {
+    const ID: &'static str = "forward";
+
     type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<(), crate::Error> {
@@ -362,6 +366,7 @@ impl Peer {
             stream_id: command,
             body: Some(frame::Body::Invoke(Invoke {
                 op: Some(invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+                    invocation_id: 0,
                     command: "forward".into(),
                     args: vec![],
                 })),
@@ -381,7 +386,7 @@ impl Peer {
 
 #[tokio::test]
 async fn effect_completions_are_correlated_without_blocking_state_or_other_requests() {
-    let plugin = Plugin::named("test", "0.1.0")
+    let plugin = Plugin::new("test", "0.1.0")
         .command::<Forward>()
         .surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
@@ -423,7 +428,7 @@ async fn effect_completions_are_correlated_without_blocking_state_or_other_reque
 
 #[tokio::test(start_paused = true)]
 async fn a_forwarded_timeout_is_answered_and_a_late_refusal_does_not_kill_the_runtime() {
-    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Forward>(), vec![]).await;
+    let mut peer = Peer::start(Plugin::new("test", "0.1.0").command::<Forward>(), vec![]).await;
     let (command, effect) = peer.command_start().await;
     tokio::time::advance(crate::effect::queue::Effects::TIMEOUT).await;
     let answer = peer.next().await;
@@ -441,12 +446,13 @@ async fn a_forwarded_timeout_is_answered_and_a_late_refusal_does_not_kill_the_ru
 
 #[tokio::test]
 async fn completion_saturation_refuses_new_commands_before_they_submit_effects() {
-    let mut peer = Peer::start(Plugin::named("test", "0.1.0").command::<Forward>(), vec![]).await;
+    let mut peer = Peer::start(Plugin::new("test", "0.1.0").command::<Forward>(), vec![]).await;
     for _ in 0..Commands::LIMIT {
         peer.command_start().await;
     }
     let answer = peer
         .invoke(invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            invocation_id: 0,
             command: "forward".into(),
             args: vec![],
         }))
@@ -460,7 +466,7 @@ async fn completion_saturation_refuses_new_commands_before_they_submit_effects()
 
 #[tokio::test]
 async fn oversized_pull_results_are_refused_without_installing_or_caching_the_instance() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<0>>("battery");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<0>>("battery");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
     peer.render("battery", "", "").await;
     let answer = peer
@@ -483,11 +489,12 @@ async fn oversized_pull_results_are_refused_without_installing_or_caching_the_in
 }
 
 #[derive(crate::Command)]
-#[omega(name = "forward")]
 struct Sequence {
     notify: crate::platform::notification::Notify,
 }
 impl crate::Command for Sequence {
+    const ID: &'static str = "forward";
+
     type Input = Args;
     type Output = String;
     async fn call(&self, _: Args) -> Result<String, crate::Error> {
@@ -500,7 +507,7 @@ impl crate::Command for Sequence {
 #[tokio::test]
 async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
     let mut peer = Peer::start(
-        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
+        Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
         vec![],
     )
     .await;
@@ -533,7 +540,7 @@ async fn an_async_command_sequences_effects_and_returns_a_typed_value() {
 #[tokio::test]
 async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
     let mut peer = Peer::start(
-        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
+        Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Sequence>(),
         vec![],
     )
     .await;
@@ -550,11 +557,12 @@ async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
 }
 
 #[derive(crate::Command)]
-#[omega(name = "forward")]
 struct Delayed {
     notify: crate::platform::notification::Notify,
 }
 impl crate::Command for Delayed {
+    const ID: &'static str = "forward";
+
     type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<(), crate::Error> {
@@ -567,7 +575,7 @@ impl crate::Command for Delayed {
 #[tokio::test(start_paused = true)]
 async fn disconnect_releases_a_runtime_with_an_unfinished_command() {
     let mut peer = Peer::start(
-        Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Delayed>(),
+        Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Delayed>(),
         vec![],
     )
     .await;
@@ -591,7 +599,7 @@ async fn disconnect_releases_a_runtime_with_an_unfinished_command() {
 async fn startup_readiness_reports_remaining_topics_and_completes_with_an_empty_render() {
     use omega_proto::omega::RenderReadiness;
 
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<2>>("both");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<2>>("both");
     let mut peer = Peer::start(plugin, vec![]).await;
     let initial = peer.render("both", "", "").await;
     assert_eq!(initial.readiness(), RenderReadiness::Waiting);
@@ -614,7 +622,7 @@ async fn startup_readiness_reports_remaining_topics_and_completes_with_an_empty_
 
 #[tokio::test]
 async fn shared_required_readings_are_reported_once() {
-    let plugin = Plugin::named("test", "0.1.0").surface_as::<Probe<4>>("shared");
+    let plugin = Plugin::new("test", "0.1.0").surface_as::<Probe<4>>("shared");
     let mut peer = Peer::start(plugin, vec![]).await;
     let view = peer.render("shared", "", "").await;
     assert_eq!(view.pending_topics, ["battery"]);
@@ -649,7 +657,7 @@ impl Surface for Bounded {
 #[tokio::test]
 async fn a_failed_render_is_isolated_published_once_and_recovers_on_invalidation() {
     use omega_proto::omega::RenderReadiness;
-    let plugin = Plugin::named("test", "1")
+    let plugin = Plugin::new("test", "1")
         .surface_as::<Bounded>("bounded")
         .surface_as::<Probe<0>>("healthy");
     let mut peer = Peer::start(plugin, vec![Peer::battery(1, Some(0.5))]).await;
@@ -757,7 +765,7 @@ impl Peer {
 #[tokio::test]
 async fn storage_pushes_invalidate_the_instance_and_stale_snapshots_do_not_regress_it() {
     let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
+        Plugin::new("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
         vec![],
     )
     .await;
@@ -782,7 +790,7 @@ async fn storage_pushes_invalidate_the_instance_and_stale_snapshots_do_not_regre
 #[tokio::test]
 async fn subscription_refusal_is_rendered_without_waiting_for_a_storage_push() {
     let mut peer = Peer::start(
-        Plugin::named("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
+        Plugin::new("test", "0.1.0").surface_as::<StoredSurface>("tasks"),
         vec![],
     )
     .await;
@@ -796,6 +804,8 @@ async fn subscription_refusal_is_rendered_without_waiting_for_a_storage_push() {
 #[derive(crate::Command)]
 struct FailingHandler {}
 impl crate::Command for FailingHandler {
+    const ID: &'static str = "failing-handler";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> crate::Result<()> {
@@ -805,12 +815,13 @@ impl crate::Command for FailingHandler {
 #[tokio::test]
 async fn a_handler_panic_answers_its_stream_before_ending_the_session() {
     let mut peer = Peer::start(
-        Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<FailingHandler>(),
+        Plugin::new(env!("CARGO_PKG_NAME"), "1").command::<FailingHandler>(),
         vec![],
     )
     .await;
     let answer = peer
         .invoke(invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            invocation_id: 0,
             command: "failing-handler".into(),
             args: vec![],
         }))
@@ -829,4 +840,101 @@ async fn a_handler_panic_answers_its_stream_before_ending_the_session() {
             .unwrap()
             .is_err()
     );
+}
+
+#[derive(crate::Command)]
+struct HostEcho;
+impl crate::Command for HostEcho {
+    type Input = String;
+    type Output = String;
+    const ID: &'static str = "test.echo";
+    async fn call(&self, text: String) -> crate::Result<String> {
+        Ok(text)
+    }
+}
+
+impl Peer {
+    async fn command_host(invocation_id: u64) -> Self {
+        let mut program =
+            crate::program::Program::new("test-host", "1", crate::program::ProgramKind::Commands);
+        program
+            .registrations
+            .commands
+            .push(crate::program::registration::CommandEntry::of::<HostEcho>(
+                "test.echo".into(),
+            ));
+        Self::start_program(
+            program.prepare().unwrap(),
+            Vec::new(),
+            Some(omega_proto::omega::HostAssignment {
+                process_id: 1,
+                invocation_id,
+            }),
+        )
+        .await
+    }
+    async fn host_call(
+        &mut self,
+        invocation_id: u64,
+        command: &str,
+        args: Vec<omega_proto::omega::Value>,
+    ) -> result::Outcome {
+        self.invoke(invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            invocation_id,
+            command: command.into(),
+            args,
+        }))
+        .await
+    }
+    async fn exited(&mut self) {
+        tokio::time::timeout(Duration::from_secs(3), &mut self.task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(self.transport.recv().await.unwrap().is_none());
+    }
+}
+
+#[tokio::test]
+async fn one_shot_refuses_foreign_calls_then_answers_its_assignment_before_exiting() {
+    let mut peer = Peer::command_host(42).await;
+    assert!(matches!(
+        peer.host_call(41, "test.echo", vec!["foreign".into_value()])
+            .await,
+        result::Outcome::Error(_)
+    ));
+    assert_eq!(
+        peer.host_call(42, "test.echo", vec!["assigned".into_value()])
+            .await,
+        result::Outcome::Value("assigned".into_value())
+    );
+    peer.exited().await;
+}
+
+#[tokio::test]
+async fn one_shot_exits_after_refusing_its_assigned_command_or_input() {
+    for (command, args) in [
+        ("missing", Vec::new()),
+        ("test.echo", vec![true.into_value()]),
+    ] {
+        let mut peer = Peer::command_host(42).await;
+        assert!(matches!(
+            peer.host_call(42, command, args).await,
+            result::Outcome::Error(_)
+        ));
+        peer.exited().await;
+    }
+}
+
+#[tokio::test]
+async fn persistent_command_hosts_keep_serving_after_a_completed_call() {
+    let mut peer = Peer::command_host(0).await;
+    for invocation in [1, 2] {
+        assert_eq!(
+            peer.host_call(invocation, "test.echo", vec!["ok".into_value()])
+                .await,
+            result::Outcome::Value("ok".into_value())
+        );
+    }
 }

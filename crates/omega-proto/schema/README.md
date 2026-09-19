@@ -176,8 +176,14 @@ than arguments. A reset invalidates pending effects and renderer-local drafts.
 ## Command contracts
 
 `CommandEndpoint` carries input/output shapes and a description. Dependencies name
-an exact plugin and command with its canonical signature. `Bind` retains that
-owner and signature; a local message has neither. `InvokePlugin` routes through
+a provider-independent command ID with its canonical signature. `Bind` retains
+that identity and signature; a local message has neither. `InvokePlugin` routes through
 the same authority checks for SDK calls, retained bindings, and operator actions.
 `ListCommands` returns a `CommandCatalogue` outcome on the request stream. Listing
 is caller-scoped and grants no access. These contracts require protocol version 2.
+
+`CommandHostStatus` projects provider phase, process facts, restart eligibility,
+bounded startup errors, and invocation counts. Its recent failures contain only
+command identity, invocation identity, timing, and outcome codes. Caller-scoped
+catalogues include failures only for visible commands. `CommandHostPhase` is a
+closed enum; an unspecified phase is unknown, not idle or healthy.

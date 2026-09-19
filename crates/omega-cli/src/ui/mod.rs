@@ -2,6 +2,7 @@
 //! Progress and diagnostics go to stderr; command results go to stdout.
 //! All output uses this module's shared alignment, styling, and path formatting.
 
+mod command_hosts;
 mod deployment;
 mod diagnostic;
 mod health;

@@ -32,13 +32,26 @@ impl Plan {
 
         let mut plan = Vec::with_capacity(plugins.len());
         for name in plugins {
-            generation.files().copy(
-                &layout.compiled_binary(profile, name),
-                layout.plugin_program_rel(name),
-            )?;
+            let program = layout.compiled_binary(profile, name);
+            let manifest = Describe::program(&program, name).await?;
+            let declared = manifest.plugin()?;
+            if plan
+                .iter()
+                .any(|entry: &PluginBuild| entry.name == declared)
+            {
+                anyhow::bail!("duplicate executable identity {declared}");
+            }
+            generation
+                .files()
+                .copy(&program, layout.plugin_program_rel(&declared))?;
+            let staged_manifest =
+                Describe::program(&staged.state_plugin_program(&declared), &declared).await?;
+            if manifest.canonical() != staged_manifest.canonical() {
+                anyhow::bail!("{declared} changed while staging its executable");
+            }
             plan.push(PluginBuild {
-                manifest: Describe::program(&staged.state_plugin_program(name), name).await?,
-                name: name.clone(),
+                manifest,
+                name: declared,
             });
         }
 

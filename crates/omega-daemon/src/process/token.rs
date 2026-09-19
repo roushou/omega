@@ -2,9 +2,9 @@
 
 /// A one-time secret handed to exactly one spawned process.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PluginToken(String);
+pub struct SpawnToken(String);
 
-impl PluginToken {
+impl SpawnToken {
     /// Generate a 128-bit token from OS randomness.
     /// Returns an error when the OS cannot supply randomness; no fallback is used.
     pub fn mint() -> Result<Self, TokenError> {
@@ -24,7 +24,7 @@ impl PluginToken {
     }
 }
 
-impl std::fmt::Display for PluginToken {
+impl std::fmt::Display for SpawnToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
@@ -32,7 +32,7 @@ impl std::fmt::Display for PluginToken {
 
 /// OS randomness was unavailable; no token was issued.
 #[derive(Debug, thiserror::Error)]
-#[error("cannot generate a secure plugin identity: {0}")]
+#[error("cannot generate a secure process identity: {0}")]
 pub struct TokenError(getrandom::Error);
 
 impl From<getrandom::Error> for TokenError {
@@ -47,12 +47,37 @@ mod tests {
 
     #[test]
     fn randomness_failure_never_produces_a_token() {
-        assert!(PluginToken::generate(|_| Err(getrandom::Error::UNSUPPORTED)).is_err());
-        let token = PluginToken::generate(|bytes| {
+        assert!(SpawnToken::generate(|_| Err(getrandom::Error::UNSUPPORTED)).is_err());
+        let token = SpawnToken::generate(|bytes| {
             bytes.fill(0xab);
             Ok(())
         })
         .unwrap();
         assert_eq!(token.as_str(), "ab".repeat(16));
+    }
+}
+
+/// A daemon-issued token bound to one operating-system process.
+#[derive(Debug, Clone)]
+pub(crate) struct SpawnIdentity {
+    token: SpawnToken,
+    pid: Option<i32>,
+}
+impl SpawnIdentity {
+    pub(crate) fn new(token: SpawnToken) -> Self {
+        Self { token, pid: None }
+    }
+    pub(crate) fn token(&self) -> &SpawnToken {
+        &self.token
+    }
+    pub(crate) fn bind(&mut self, pid: i32) {
+        self.pid = Some(pid);
+    }
+    pub(crate) fn claims(&mut self, pid: i32, token: &str) -> bool {
+        if pid <= 0 || self.token.as_str() != token || self.pid.is_some_and(|bound| bound != pid) {
+            return false;
+        }
+        self.pid = Some(pid);
+        true
     }
 }

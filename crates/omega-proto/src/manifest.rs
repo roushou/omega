@@ -23,6 +23,7 @@ impl Manifest {
             surfaces: Vec::new(),
             commands: Vec::new(),
             command_dependencies: Vec::new(),
+            host_kind: 0,
             state_topics: Vec::new(),
             storage: Vec::new(),
             events: Vec::new(),
@@ -157,6 +158,19 @@ impl Manifest {
     /// Validate manifest identity, grants, topics, and surface declarations.
     /// Shared by build-time and daemon load-time validation.
     pub fn validate(&self, plugin: &PluginName) -> Result<(), ManifestError> {
+        match crate::omega::HostKind::try_from(self.host_kind) {
+            Ok(crate::omega::HostKind::Plugin) => {}
+            Ok(crate::omega::HostKind::Commands)
+                if self.surfaces.is_empty()
+                    && self.events.is_empty()
+                    && !self.commands.is_empty() => {}
+            _ => {
+                return Err(crate::CommandContractError::Invalid(
+                    "invalid executable export category".into(),
+                )
+                .into());
+            }
+        }
         let declared = self.plugin()?;
         if &declared != plugin {
             return Err(ManifestError::NameMismatch {
@@ -177,7 +191,7 @@ impl Manifest {
         }
         let mut dependencies = std::collections::BTreeMap::new();
         for dependency in &self.command_dependencies {
-            let address = crate::CommandAddress::try_from(dependency)?;
+            let address = crate::CommandId::try_from(dependency)?;
             if dependency.signature.len() != 32
                 || dependencies
                     .insert(address, &dependency.signature)

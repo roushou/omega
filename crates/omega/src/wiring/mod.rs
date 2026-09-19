@@ -97,3 +97,5 @@ impl Wired for () {
     }
     fn build(_: &crate::runtime::context::Context, _: &omega_proto::Values) -> Self {}
 }
+
+mod tuples;

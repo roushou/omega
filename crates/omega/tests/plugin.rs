@@ -69,8 +69,7 @@ fn a_reading_prints_itself() {
 
 #[test]
 fn a_plugins_manifest_is_the_sum_of_its_fields() {
-    let manifest =
-        manifest_of(&omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
+    let manifest = manifest_of(&omega::Plugin::new("charge", "0.1.0").surface_default::<Charge>());
 
     // Reading fields declare their topic subscriptions and capabilities.
     assert_eq!(manifest.state_topics, vec!["battery"]);
@@ -125,12 +124,13 @@ fn a_view_is_built_out_of_the_things_it_is_made_of() {
 }
 
 #[derive(omega::Command)]
-#[omega(name = "lock")]
 struct LockScreen {
     session: Session,
 }
 
 impl Command for LockScreen {
+    const ID: &'static str = "lock";
+
     type Input = Args;
     type Output = ();
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
@@ -141,7 +141,7 @@ impl Command for LockScreen {
 #[test]
 fn a_plugin_can_draw_and_do_at_once() {
     let manifest = manifest_of(
-        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+        &omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0")
             .surface_as::<Charge>("battery")
             .command::<LockScreen>(),
     );
@@ -222,13 +222,14 @@ fn an_instance_is_configured_by_the_document() {
 
 /// Command fixture using plugin-level settings.
 #[derive(omega::Command)]
-#[omega(name = "threshold")]
 struct Threshold {
     #[omega(config)]
     settings: Warning,
 }
 
 impl Command for Threshold {
+    const ID: &'static str = "threshold";
+
     type Input = Args;
     type Output = String;
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
@@ -257,7 +258,7 @@ async fn a_command_is_configured_by_its_plugin() {
 #[tokio::test]
 async fn a_plugin_is_told_its_settings_at_the_handshake() {
     let mut daemon = TestDaemon::serving(
-        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Threshold>(),
+        omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Threshold>(),
     );
 
     // Settings must be available when plugin fields are constructed.
@@ -315,7 +316,7 @@ async fn where_a_widget_is_placed_adds_to_how_its_plugin_was_configured() {
     }
 
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("battery", "0.1.0").surface_default::<Labelled>());
+        TestDaemon::serving(omega::Plugin::new("battery", "0.1.0").surface_default::<Labelled>());
 
     let plugin = Look {
         low_threshold: 20,
@@ -351,12 +352,12 @@ async fn where_a_widget_is_placed_adds_to_how_its_plugin_was_configured() {
 #[tokio::test]
 async fn a_plugin_publishes_its_view_and_keeps_publishing() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::new("charge", "0.1.0").surface_default::<Charge>());
 
     let hello = daemon.welcome(&State::new().battery(0.5, true)).await;
     assert_eq!(
         hello.manifest_hash,
-        manifest_of(&omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>()).hash(),
+        manifest_of(&omega::Plugin::new("charge", "0.1.0").surface_default::<Charge>()).hash(),
         "a plugin presents the hash of the manifest it derived from itself"
     );
 
@@ -375,7 +376,7 @@ async fn a_plugin_publishes_its_view_and_keeps_publishing() {
 #[tokio::test]
 async fn a_widget_is_not_asked_to_draw_a_machine_it_cannot_see() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::new("charge", "0.1.0").surface_default::<Charge>());
 
     // No battery in the snapshot: a widget that declared one has nothing
     // truthful to draw, so it is not asked to.
@@ -417,9 +418,8 @@ impl Surface for MaybeCharge {
 
 #[tokio::test]
 async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
-    let mut daemon = TestDaemon::serving(
-        omega::Plugin::named("charge", "0.1.0").surface_default::<MaybeCharge>(),
-    );
+    let mut daemon =
+        TestDaemon::serving(omega::Plugin::new("charge", "0.1.0").surface_default::<MaybeCharge>());
 
     // Reported absence satisfies readiness and allows the first render.
     daemon
@@ -438,7 +438,7 @@ async fn a_topic_with_nothing_to_report_is_an_answer_not_a_wait() {
 #[tokio::test]
 async fn a_document_can_instantiate_one_surface_more_than_once() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("warned", "0.1.0").surface_as::<Warned>("warned"));
+        TestDaemon::serving(omega::Plugin::new("warned", "0.1.0").surface_as::<Warned>("warned"));
     daemon.welcome(&State::new().battery(0.15, false)).await;
     let _first = daemon.render("warned", "test", Default::default()).await;
 
@@ -460,12 +460,13 @@ async fn a_document_can_instantiate_one_surface_more_than_once() {
 }
 
 #[derive(omega::Command)]
-#[omega(name = "say")]
 struct Announce {
     notify: Notify,
 }
 
 impl Command for Announce {
+    const ID: &'static str = "say";
+
     type Input = Args;
     type Output = String;
     async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
@@ -480,7 +481,7 @@ impl Command for Announce {
 #[tokio::test]
 async fn a_command_answers_over_the_wire() {
     let mut daemon = TestDaemon::serving(
-        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Announce>(),
+        omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Announce>(),
     );
     daemon.welcome(&State::new()).await;
 
@@ -518,12 +519,13 @@ struct Mode {
 }
 
 #[derive(omega::Command)]
-#[omega(name = "focus")]
 struct Focus {
     mode: Own<Mode>,
 }
 
 impl Command for Focus {
+    const ID: &'static str = "focus";
+
     type Input = Args;
     type Output = ();
     async fn call(&self, args: Args) -> Result<Self::Output, omega::Error> {
@@ -569,7 +571,7 @@ fn a_topics_address_comes_from_where_it_is_defined() {
 #[test]
 fn owning_state_declares_the_right_to_publish_it() {
     let manifest = manifest_of(
-        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+        &omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0")
             .surface_as::<Showing>("desk")
             .command::<Focus>(),
     );
@@ -619,7 +621,7 @@ async fn publishing_state_is_an_effect_like_any_other() {
 #[tokio::test]
 async fn one_plugin_draws_what_another_published() {
     let mut daemon = TestDaemon::serving(
-        omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0")
+        omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0")
             .surface_as::<Showing>("desk")
             .command::<Focus>(),
     );
@@ -656,9 +658,9 @@ struct FormValues {
 macro_rules! ui_command {
     ($ty:ident, $input:ty, $name:literal) => {
         #[derive(omega::Command)]
-        #[omega(name = $name)]
         struct $ty {}
         impl Command for $ty {
+            const ID: &'static str = $name;
             type Input = $input;
             type Output = ();
             async fn call(&self, _: $input) -> omega::Result<()> {
@@ -894,7 +896,7 @@ fn a_widget_that_draws_nothing_says_so() {
 #[tokio::test]
 async fn independent_instances_keep_their_own_addresses() {
     let mut daemon =
-        TestDaemon::serving(omega::Plugin::named("charge", "0.1.0").surface_default::<Charge>());
+        TestDaemon::serving(omega::Plugin::new("charge", "0.1.0").surface_default::<Charge>());
     daemon.welcome(&State::new().battery(0.5, false)).await;
     daemon
         .render("charge", "window-1", Default::default())
@@ -1097,7 +1099,7 @@ fn a_handle_declares_the_topic_its_type_names() {
     // The manifest comes from the fields, so holding `Bluetooth` is what asks
     // for the topic — there is no string anywhere to get wrong.
     let manifest = omega::testing::manifest_of(
-        &omega::Plugin::named("devices", "0.1.0").surface_default::<Devices>(),
+        &omega::Plugin::new("devices", "0.1.0").surface_default::<Devices>(),
     );
     assert_eq!(manifest.state_topics, vec!["bluetooth"]);
 }
@@ -1131,7 +1133,7 @@ impl Surface for Situation {
 fn a_composite_declares_every_topic_it_is_made_of() {
     // Composite dependencies contribute all their topics to the manifest.
     let manifest =
-        manifest_of(&omega::Plugin::named("situation", "0.1.0").surface_default::<Situation>());
+        manifest_of(&omega::Plugin::new("situation", "0.1.0").surface_default::<Situation>());
     assert_eq!(manifest.state_topics, vec!["battery", "mains"]);
 }
 
@@ -1178,6 +1180,8 @@ struct IncrementTwice {
 }
 
 impl Command for IncrementTwice {
+    const ID: &'static str = "increment-twice";
+
     type Input = Args;
     type Output = String;
     async fn call(&self, _args: Args) -> Result<Self::Output, omega::Error> {
@@ -1215,6 +1219,8 @@ struct FillRecords {
     counter: omega::record::Own<Counter>,
 }
 impl Command for FillRecords {
+    const ID: &'static str = "fill-records";
+
     type Input = Args;
     type Output = u32;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
@@ -1251,6 +1257,8 @@ struct ForwardRecord {
     counter: omega::record::Own<Counter>,
 }
 impl Command for ForwardRecord {
+    const ID: &'static str = "forward-record";
+
     type Input = Args;
     type Output = ();
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
@@ -1274,6 +1282,8 @@ struct FillRecordBytes {
     record: Own<LargeRecord>,
 }
 impl Command for FillRecordBytes {
+    const ID: &'static str = "fill-record-bytes";
+
     type Input = Args;
     type Output = bool;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {
@@ -1304,6 +1314,8 @@ struct OversizedRecord {
     record: Own<LargeRecord>,
 }
 impl Command for OversizedRecord {
+    const ID: &'static str = "oversized-record";
+
     type Input = Args;
     type Output = bool;
     async fn call(&self, _: Args) -> Result<Self::Output, omega::Error> {

@@ -12,6 +12,8 @@ struct Pause {
     media: MediaControl,
 }
 impl Command for Pause {
+    const ID: &'static str = "pause";
+
     type Input = PlayerId;
     type Output = ();
     async fn call(&self, id: PlayerId) -> omega::Result<()> {
@@ -24,6 +26,8 @@ struct Toggle {
     media: MediaControl,
 }
 impl Command for Toggle {
+    const ID: &'static str = "toggle";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -83,6 +87,8 @@ struct Inspect {
     media: Media,
 }
 impl Command for Inspect {
+    const ID: &'static str = "inspect";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -119,7 +125,7 @@ async fn player_abilities_require_control_support() {
 #[test]
 fn playback_commands_declare_media_permission_without_a_read_subscription() {
     let manifest = omega::testing::manifest_of(
-        &omega::Plugin::named(env!("CARGO_PKG_NAME"), "0.1.0").command::<Pause>(),
+        &omega::Plugin::new(env!("CARGO_PKG_NAME"), "0.1.0").command::<Pause>(),
     );
     assert_eq!(
         manifest.granted().unwrap(),

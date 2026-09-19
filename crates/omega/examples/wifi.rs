@@ -205,6 +205,8 @@ pub struct Connect {
     wifi: WifiControl,
 }
 impl Command for Connect {
+    const ID: &'static str = "connect";
+
     type Input = Credentials;
     type Output = ();
     async fn call(&self, input: Credentials) -> omega::Result<()> {
@@ -225,6 +227,8 @@ pub struct Sample {
 }
 
 impl Command for Sample {
+    const ID: &'static str = "sample";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> Result<(), omega::Error> {
@@ -242,6 +246,8 @@ pub struct Join {
 }
 
 impl Command for Join {
+    const ID: &'static str = "join";
+
     type Input = String;
     type Output = ();
     async fn call(&self, ssid: String) -> omega::Result<()> {
@@ -256,6 +262,8 @@ pub struct Disconnect {
 }
 
 impl Command for Disconnect {
+    const ID: &'static str = "disconnect";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -269,7 +277,7 @@ fn bars(_strength: Percent) -> Glyph {
 }
 
 pub fn plugin() -> omega::Plugin {
-    omega::Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
+    omega::Plugin::new(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<Connect>()

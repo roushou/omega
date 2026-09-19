@@ -3,14 +3,12 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 
 impl CommandEndpoint {
-    pub fn signature(&self, plugin: &str) -> Vec<u8> {
+    pub fn signature(&self) -> Vec<u8> {
         let mut endpoint = self.clone();
         endpoint.description.clear();
         endpoint.input = endpoint.input.as_ref().map(CommandType::canonical);
         endpoint.output = endpoint.output.as_ref().map(CommandType::canonical);
         let mut hash = Sha256::new();
-        hash.update((plugin.len() as u64).to_le_bytes());
-        hash.update(plugin.as_bytes());
         hash.update(endpoint.encode_to_vec());
         hash.finalize().to_vec()
     }
@@ -32,14 +30,13 @@ mod tests {
         }
     }
     #[test]
-    fn signature_excludes_prose_but_includes_owner_and_types() {
+    fn signature_excludes_prose_but_includes_identity_and_types() {
         let mut endpoint = Fixture::endpoint();
-        let signature = endpoint.signature("first");
+        let signature = endpoint.signature();
         endpoint.description = "new prose".into();
-        assert_eq!(signature, endpoint.signature("first"));
-        assert_ne!(signature, endpoint.signature("second"));
+        assert_eq!(signature, endpoint.signature());
         endpoint.output = Some(CommandType::of(Kind::Text));
-        assert_ne!(signature, endpoint.signature("first"));
+        assert_ne!(signature, endpoint.signature());
     }
     #[test]
     fn record_field_order_does_not_change_signature() {
@@ -53,8 +50,8 @@ mod tests {
                 .to_vec(),
             ..CommandType::of(Kind::Record)
         });
-        let signature = endpoint.signature("first");
+        let signature = endpoint.signature();
         endpoint.input.as_mut().unwrap().fields.reverse();
-        assert_eq!(signature, endpoint.signature("first"));
+        assert_eq!(signature, endpoint.signature());
     }
 }

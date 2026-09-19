@@ -155,6 +155,8 @@ impl Media {
 /// #[derive(omega::Command)]
 /// struct Pause { media: MediaControl }
 /// impl Command for Pause {
+///     const ID: &'static str = "pause";
+///
 ///     type Input = PlayerId;
 ///     type Output = ();
 ///     async fn call(&self, id: PlayerId) -> omega::Result<()> {

@@ -8,7 +8,7 @@ use omega_proto::omega::{PluginPhase, PluginStatus, Value};
 use crate::manifest::PluginManifest;
 use crate::plugins::lifecycle::{Lifecycle, Transition};
 use crate::plugins::session::SessionLink;
-use crate::plugins::token::PluginToken;
+use crate::process::SpawnIdentity;
 use crate::shutdown::Shutdown;
 
 /// The two things that can be asked of a running plugin.
@@ -29,10 +29,7 @@ pub struct PluginRecord {
     /// contain but something still refers to.
     pub manifest: Option<PluginManifest>,
     pub lifecycle: Lifecycle,
-    /// The token of the current spawn, and the pid it was bound to on first
-    /// use. Identity is the pair: a pid is recycled, a token is not.
-    pub token: Option<PluginToken>,
-    pub pid: Option<i32>,
+    pub(crate) identity: Option<SpawnIdentity>,
     /// Present while the supervisor is running it.
     pub control: Option<PluginControl>,
     /// Present while the plugin holds a session.
@@ -57,8 +54,7 @@ impl PluginRecord {
             name,
             manifest: None,
             lifecycle: Lifecycle::default(),
-            token: None,
-            pid: None,
+            identity: None,
             control: None,
             session: None,
             instances: Default::default(),
@@ -84,21 +80,9 @@ impl PluginRecord {
 
     /// Validate token ownership. First use binds the token to the presenting pid.
     pub fn claims(&mut self, pid: i32, token: &str) -> bool {
-        if self
-            .token
-            .as_ref()
-            .is_none_or(|held| held.as_str() != token)
-        {
-            return false;
-        }
-
-        match self.pid {
-            Some(bound) => bound == pid,
-            None => {
-                self.pid = Some(pid);
-                true
-            }
-        }
+        self.identity
+            .as_mut()
+            .is_some_and(|identity| identity.claims(pid, token))
     }
 
     pub fn apply(&mut self, transition: Transition) -> bool {

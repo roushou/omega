@@ -13,6 +13,8 @@ use omega_proto::{
 /// #[derive(omega::Command)]
 /// struct Connect { bluetooth: BluetoothControl }
 /// impl Command for Connect {
+///     const ID: &'static str = "connect";
+///
 ///     type Input = DeviceId;
 ///     type Output = ();
 ///     async fn call(&self, id: DeviceId) -> omega::Result<()> {

@@ -13,8 +13,8 @@ use omega_proto::PluginName;
 pub struct Plugins(Vec<PluginName>);
 
 impl Plugins {
-    /// Read the workspace manifest and derive its plugins: member directories
-    /// directly under `plugins/`, minus `exclude`.
+    /// Discover conventional `plugins/` members and explicitly marked executable
+    /// packages. Other Cargo members are libraries; `exclude` is respected.
     pub fn discover(layout: &Layout) -> Result<Self, PluginsError> {
         let manifest = layout.file::<Manifest>(CargoSlot::Workspace).read()?;
         let workspace = manifest.workspace()?.ok_or_else(|| CargoError {
@@ -23,9 +23,50 @@ impl Plugins {
         })?;
         let mut names = Vec::new();
         for dir in workspace.member_dirs(&layout.config)? {
-            match WorkspaceRole::at(layout, &dir)? {
-                WorkspaceRole::Plugin(name) => names.push(name.plugin().clone()),
-                WorkspaceRole::System | WorkspaceRole::Library(_) => {}
+            let role = match WorkspaceRole::at(layout, &dir) {
+                Ok(role) => Some(role),
+                Err(WorkspaceError::Location(_)) => None,
+                Err(error) => return Err(error.into()),
+            };
+            if std::fs::symlink_metadata(&dir)
+                .map_err(WorkspaceError::Io)?
+                .is_symlink()
+            {
+                return Err(WorkspaceError::Location(dir).into());
+            }
+            if !dir
+                .canonicalize()
+                .map_err(WorkspaceError::Io)?
+                .starts_with(layout.config.canonicalize().map_err(WorkspaceError::Io)?)
+            {
+                return Err(WorkspaceError::Location(dir).into());
+            }
+            let member = layout.file::<Manifest>(CargoSlot::Member(&dir)).read()?;
+            if let Some(package) = member.package()? {
+                match package.omega_kind()? {
+                    Some("command-host") | Some("plugin") => {
+                        names.push(package.name()?.parse().map_err(|error| CargoError {
+                            field: "package.name".into(),
+                            reason: format!("{error}"),
+                        })?);
+                        continue;
+                    }
+                    Some(other) => {
+                        return Err(CargoError {
+                            field: "package.metadata.omega.kind".into(),
+                            reason: format!("unknown Omega role {other}"),
+                        }
+                        .into());
+                    }
+                    None => {}
+                }
+            }
+            match role {
+                Some(WorkspaceRole::Plugin(name)) => names.push(name.plugin().clone()),
+                Some(
+                    WorkspaceRole::System | WorkspaceRole::Library(_) | WorkspaceRole::Commands(_),
+                ) => {}
+                None => {}
             }
         }
 

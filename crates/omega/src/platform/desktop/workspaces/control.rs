@@ -16,6 +16,8 @@ use omega_proto::{
 /// #[derive(omega::Command)]
 /// struct Select { workspaces: WorkspaceControl }
 /// impl Command for Select {
+///     const ID: &'static str = "select";
+///
 ///     type Input = WorkspaceIndex;
 ///     type Output = ();
 ///     async fn call(&self, index: WorkspaceIndex) -> omega::Result<()> {

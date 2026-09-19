@@ -5,6 +5,7 @@ use omega_proto::omega::{Value, invoke};
 
 use crate::Input;
 use crate::testing::state::State;
+use crate::wiring::Wired;
 use crate::{Args, Command};
 
 /// The result and ordered effects of a test command invocation.
@@ -31,6 +32,8 @@ impl Called {
     /// #[derive(omega::Command)]
     /// struct Lock { session: omega::platform::session::Session }
     /// impl Command for Lock {
+    ///     const ID: &'static str = "lock";
+    ///
     ///     type Input = ();
     ///     type Output = ();
     ///     async fn call(&self, _: ()) -> Result<(), omega::Error> {
@@ -52,9 +55,26 @@ impl Called {
         settings: &Values,
         args: Vec<Value>,
     ) -> Called<C::Output> {
+        let input = match C::Input::decode(Args::new(args)) {
+            Ok(input) => input,
+            Err(error) => {
+                return Called {
+                    answer: Err(error),
+                    effects: Vec::new(),
+                };
+            }
+        };
         let (context, mut effects) = state.context();
-        let command = C::build(&context, settings);
-        let answer = async { command.call(C::Input::decode(Args::new(args))?).await };
+        if !context.holds(&C::Dependencies::required_topics()) {
+            return Called {
+                answer: Err(crate::Error::invalid(
+                    "command fixture is missing required readings",
+                )),
+                effects: Vec::new(),
+            };
+        }
+        let command = C::construct(C::Dependencies::build(&context, settings));
+        let answer = command.call(input);
         tokio::pin!(answer);
 
         let mut queued = Vec::new();

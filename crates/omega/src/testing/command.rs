@@ -18,8 +18,8 @@ pub struct CommandCall<C: Command> {
 impl<C: Command> std::fmt::Debug for CommandCall<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CommandCall")
-            .field("plugin", &C::PLUGIN)
-            .field("command", &C::NAME)
+            .field("plugin", &"")
+            .field("command", &C::ID)
             .finish_non_exhaustive()
     }
 }
@@ -57,9 +57,9 @@ impl CapturedEffect {
         else {
             return Err(crate::Error::invalid("expected a command invocation"));
         };
-        if call.plugin != C::PLUGIN
-            || call.command != C::NAME
-            || call.signature != CommandRef::<C>::INSTANCE.descriptor().signature(C::PLUGIN)
+        if !call.plugin.is_empty()
+            || call.command != C::ID
+            || call.signature != CommandRef::<C>::INSTANCE.descriptor().signature()
         {
             return Err(crate::Error::invalid(
                 "captured command identity or signature differs",
@@ -85,8 +85,9 @@ impl CommandList {
         self.catalogue
             .entries
             .push(omega_proto::omega::AvailableCommand {
-                plugin: command.plugin().into(),
-                signature: descriptor.signature(command.plugin()),
+                executions: Vec::new(),
+                plugin: "fixture".into(),
+                signature: descriptor.signature(),
                 endpoint: Some(descriptor),
                 available,
             });

@@ -18,6 +18,7 @@ pub struct Context {
 
 #[derive(Debug)]
 struct Shared {
+    changed: tokio::sync::Notify,
     storage: crate::storage::Subscriptions,
     /// Read on every render, written by the runtime as patches arrive.
     state: RwLock<Mirror>,
@@ -53,6 +54,7 @@ impl Context {
         Self {
             instance: None,
             inner: Arc::new(Shared {
+                changed: tokio::sync::Notify::new(),
                 storage: Default::default(),
                 state: RwLock::new(mirror),
                 records: Mutex::new(BTreeMap::new()),
@@ -64,8 +66,21 @@ impl Context {
 
     pub(crate) fn apply(&self, patch: &StatePatch) {
         let errors = self.write().apply(patch);
+        self.inner.changed.notify_waiters();
         for error in errors {
             Self::report_reading_error(&error);
+        }
+    }
+
+    pub(crate) async fn initialized(&self, topics: &[SystemTopic]) {
+        loop {
+            let changed = self.inner.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if self.holds(topics) {
+                return;
+            }
+            changed.await;
         }
     }
 

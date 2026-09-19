@@ -76,6 +76,7 @@ impl SurfaceEntry {
             .chain(keys)
             .collect()
     }
+
     pub(crate) fn topics(&self) -> Vec<SystemTopic> {
         (self.required)()
     }
@@ -88,7 +89,6 @@ impl SurfaceEntry {
 /// A registered command.
 pub(crate) struct CommandEntry {
     pub(crate) name: String,
-    pub(crate) owner: &'static str,
     pub(crate) descriptor: omega_proto::omega::CommandEndpoint,
     declare: Declaration,
     commands: fn() -> Vec<omega_proto::omega::CommandDependency>,
@@ -99,11 +99,16 @@ impl CommandEntry {
     pub(crate) fn of<C: Command>(name: String) -> Self {
         Self {
             name,
-            owner: C::PLUGIN,
             descriptor: crate::command::CommandRef::<C>::INSTANCE.descriptor(),
-            declare: DeclarationOf::<C>::declare,
-            commands: C::commands,
-            make: |context, settings| Arc::new(C::build(context, settings)),
+            declare: DeclarationOf::<C::Dependencies>::declare,
+            commands: C::Dependencies::commands,
+            make: |context, settings| {
+                Arc::new(CommandFactory::<C> {
+                    context: context.clone(),
+                    settings: settings.clone(),
+                    command: std::marker::PhantomData,
+                })
+            },
         }
     }
 
@@ -133,7 +138,13 @@ pub(crate) trait CalledCommand: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<omega_proto::CommandAnswer, crate::Error>> + Send>>;
 }
 
-impl<C: Command> CalledCommand for C {
+struct CommandFactory<C> {
+    context: Context,
+    settings: Values,
+    command: std::marker::PhantomData<fn() -> C>,
+}
+
+impl<C: Command> CalledCommand for CommandFactory<C> {
     fn call(
         self: Arc<Self>,
         args: Args,
@@ -141,9 +152,12 @@ impl<C: Command> CalledCommand for C {
     {
         Box::pin(async move {
             use crate::command::CommandValue;
-            let value = Command::call(&*self, C::Input::decode(args)?)
-                .await?
-                .into_value();
+            let input = C::Input::decode(args)?;
+            self.context
+                .initialized(&C::Dependencies::required_topics())
+                .await;
+            let handler = C::construct(C::Dependencies::build(&self.context, &self.settings));
+            let value = Command::call(&handler, input).await?.into_value();
             C::Output::shape()
                 .accepts(&value)
                 .map_err(|e| crate::Error::invalid(e.to_string()))?;

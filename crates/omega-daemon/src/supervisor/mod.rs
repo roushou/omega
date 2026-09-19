@@ -8,17 +8,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::process::{Child, Command};
+use tokio::process::Child;
 use tokio::sync::watch;
 use tokio::time::Instant;
 
 use omega_proto::PluginName;
+use omega_proto::Socket;
 use omega_proto::omega::PluginStatus;
-use omega_proto::{Handshake, Socket};
 
 use crate::manifest::ManifestStore;
-use crate::plugins::{PluginControl, PluginRegistry, PluginToken, Transition};
-use crate::process::Signal;
+use crate::plugins::{PluginControl, PluginRegistry, SpawnToken, Transition};
+use crate::process::ManagedChild;
 use crate::shutdown::Shutdown;
 
 pub use backoff::Backoff;
@@ -80,6 +80,9 @@ struct SupervisorInner {
 
 impl Supervisor {
     pub fn new(socket: Socket, plugins: PluginRegistry, shutdown: Shutdown) -> Self {
+        plugins
+            .hosts()
+            .environment(socket.clone(), shutdown.clone());
         Self {
             inner: Arc::new(SupervisorInner {
                 socket,
@@ -97,12 +100,12 @@ impl Supervisor {
 
     /// Whether every plugin has finished stopping.
     pub fn all_stopped(&self) -> bool {
-        self.inner.plugins.all_stopped()
+        self.inner.plugins.all_stopped() && self.inner.plugins.hosts().all_stopped()
     }
 
     /// Register a plugin this supervisor did not spawn, for tests and dev. The
     /// returned token is what that process must present in `Hello`.
-    pub fn register(&self, name: &PluginName) -> Result<PluginToken, crate::plugins::TokenError> {
+    pub fn register(&self, name: &PluginName) -> Result<SpawnToken, crate::plugins::TokenError> {
         self.inner.plugins.issue(name)
     }
 
@@ -163,15 +166,15 @@ impl Supervisor {
     pub async fn adopt_plugin(
         &self,
         name: &PluginName,
-    ) -> Result<PluginToken, omega_proto::Refusal> {
-        self.adopt_with(name, PluginToken::mint).await
+    ) -> Result<SpawnToken, omega_proto::Refusal> {
+        self.adopt_with(name, SpawnToken::mint).await
     }
 
     async fn adopt_with(
         &self,
         name: &PluginName,
-        mint: impl FnOnce() -> Result<PluginToken, crate::plugins::TokenError>,
-    ) -> Result<PluginToken, omega_proto::Refusal> {
+        mint: impl FnOnce() -> Result<SpawnToken, crate::plugins::TokenError>,
+    ) -> Result<SpawnToken, omega_proto::Refusal> {
         let _handover = self.handover().await;
         if self.inner.plugins.manifest(name).is_none() {
             return Err(omega_proto::Refusal::precondition(format!(
@@ -191,7 +194,7 @@ impl Supervisor {
 
     /// Give an adopted plugin back, so the next convergence runs the binary the
     /// build produced.
-    pub fn release_plugin(&self, name: &PluginName, token: &PluginToken) {
+    pub fn release_plugin(&self, name: &PluginName, token: &SpawnToken) {
         self.inner.plugins.release_adoption(name, token);
     }
 
@@ -332,22 +335,14 @@ impl PluginProcess {
             .transition(&self.spec.name, transition);
     }
 
-    fn start(&self, token: &PluginToken) -> std::io::Result<Child> {
-        let mut command = Command::new(&self.spec.program);
-        command
-            .env("OMEGA_SOCKET", self.supervisor.socket.path())
-            .env(Handshake::TOKEN_ENV, token.as_str())
-            .kill_on_drop(true);
-
-        if let Some(log) = &self.spec.log {
-            let (out, err) = log.streams()?;
-            command.stdout(out).stderr(err);
-        }
-
-        if let Some(generation) = &self.spec.generation {
-            generation.protect_child(command.as_std_mut());
-        }
-        command.spawn()
+    fn start(&self, token: &SpawnToken) -> std::io::Result<Child> {
+        ManagedChild::spawn(
+            &self.spec.program,
+            &self.supervisor.socket,
+            token,
+            self.spec.generation.as_ref(),
+            self.spec.log.as_ref(),
+        )
     }
 
     /// Watch one child until it exits or receives a stop or restart request.
@@ -397,22 +392,9 @@ impl PluginProcess {
 
     /// Send SIGTERM, wait for the grace period, then kill if needed.
     async fn terminate(&self, child: &mut Child) {
-        let Some(pid) = child.id() else {
-            return;
-        };
-
-        if let Err(e) = Signal::terminate(pid as i32) {
-            tracing::debug!(plugin = %self.spec.name, error = %e, "could not signal plugin; killing");
-            let _ = child.kill().await;
-            return;
-        }
-
-        match tokio::time::timeout(Self::GRACE, child.wait()).await {
-            Ok(_) => tracing::debug!(plugin = %self.spec.name, "plugin exited on request"),
-            Err(_) => {
-                tracing::warn!(plugin = %self.spec.name, "plugin ignored SIGTERM; killing");
-                let _ = child.kill().await;
-            }
+        if let Err(error) = ManagedChild::stop(child).await {
+            tracing::error!(plugin = %self.spec.name, %error, "could not reap plugin process");
+            self.supervisor.shutdown.trigger();
         }
     }
 }

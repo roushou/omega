@@ -5,6 +5,8 @@ use omega::{Percent, Ui, View};
 #[derive(omega::Command)]
 struct Change {}
 impl omega::Command for Change {
+    const ID: &'static str = "change";
+
     type Input = Percent;
     type Output = ();
     async fn call(&self, _: Percent) -> omega::Result<()> {

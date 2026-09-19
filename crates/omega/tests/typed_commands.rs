@@ -4,11 +4,12 @@ use omega::ui::{Button, Form, Metric, Section, Slider};
 use omega::{Args, Command, Input, Percent, Plugin, Surface, Ui};
 
 #[derive(omega::Command)]
-#[omega(name = "volume")]
 struct SetVolume {
     volume: omega::platform::audio::Volume,
 }
 impl Command for SetVolume {
+    const ID: &'static str = "volume";
+
     type Input = Percent;
     type Output = ();
     async fn call(&self, value: Percent) -> omega::Result<()> {
@@ -22,6 +23,8 @@ struct SetMuted {
 }
 
 impl Command for SetMuted {
+    const ID: &'static str = "set-muted";
+
     type Input = bool;
     type Output = ();
 
@@ -95,7 +98,7 @@ impl Surface for Controls {
 
 #[test]
 fn bindings_share_registration_identity_without_acquiring_command_capabilities() {
-    let plugin = Plugin::named(env!("CARGO_PKG_NAME"), "1")
+    let plugin = Plugin::new(env!("CARGO_PKG_NAME"), "1")
         .surface_default::<Controls>()
         .command::<SetVolume>();
     let manifest = plugin.manifest().unwrap();
@@ -106,7 +109,7 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
             .any(|surface| surface.id == "volume")
     );
     assert!(
-        Plugin::named(env!("CARGO_PKG_NAME"), "1")
+        Plugin::new(env!("CARGO_PKG_NAME"), "1")
             .surface_default::<Controls>()
             .manifest()
             .unwrap()
@@ -152,6 +155,8 @@ struct Credentials {
 #[derive(omega::Command)]
 struct Connect {}
 impl Command for Connect {
+    const ID: &'static str = "connect";
+
     type Input = Credentials;
     type Output = ();
     async fn call(&self, _: Credentials) -> omega::Result<()> {
@@ -219,6 +224,8 @@ fn structured_inputs_preserve_field_types() {
 #[derive(omega::Command)]
 struct Ping;
 impl Command for Ping {
+    const ID: &'static str = "ping";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -230,7 +237,7 @@ fn plugin_commands_bind_and_duplicate_names_are_refused() {
     let drawn = Drawn::of_ui(Button::new("Ping").on_press(Ping).into());
     assert_eq!(drawn.node("root").unwrap().events["press"].command, "ping");
     assert!(
-        Plugin::named(env!("CARGO_PKG_NAME"), "1")
+        Plugin::new(env!("CARGO_PKG_NAME"), "1")
             .command::<Ping>()
             .command::<Ping>()
             .manifest()
@@ -241,6 +248,8 @@ fn plugin_commands_bind_and_duplicate_names_are_refused() {
 #[derive(omega::Command)]
 struct Submit;
 impl Command for Submit {
+    const ID: &'static str = "submit";
+
     type Input = Credentials;
     type Output = ();
     async fn call(&self, _: Credentials) -> omega::Result<()> {
@@ -269,7 +278,7 @@ fn plugin_commands_support_forms_and_bound_inputs() {
 #[tokio::test]
 async fn input_refusals_travel_through_the_real_runtime() {
     let mut daemon = omega::testing::TestDaemon::serving(
-        Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<SetVolume>(),
+        Plugin::new(env!("CARGO_PKG_NAME"), "1").command::<SetVolume>(),
     );
     daemon.welcome(&State::new()).await;
     assert_eq!(
@@ -349,10 +358,10 @@ fn output_records_decode_strictly_without_configuration_defaults() {
 }
 
 #[test]
-fn registration_rejects_a_command_owned_by_a_different_plugin() {
-    let error = omega::Plugin::named("another-owner", "1")
+fn registration_does_not_derive_ownership_from_the_defining_package() {
+    let manifest = omega::Plugin::new("another-owner", "1")
         .command::<SetVolume>()
         .manifest()
-        .unwrap_err();
-    assert!(error.to_string().contains("another-owner"));
+        .unwrap();
+    assert_eq!(manifest.commands[0].id, SetVolume::ID);
 }

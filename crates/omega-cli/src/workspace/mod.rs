@@ -1,6 +1,6 @@
 mod files;
 mod init;
-mod plugin;
+mod package;
 
 pub(crate) use files::{FileEdit, FileEdits};
 pub(crate) use init::InitialShell;

@@ -2,7 +2,8 @@ use super::CommandContractError;
 use crate::omega::CommandDependency;
 use crate::{CommandId, PluginName};
 
-/// A command's complete identity. Neither component is inferred from a caller.
+/// A resolved provider and operation used for routing and diagnostics.
+/// Command identity and signatures depend only on `command`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommandAddress {
     pub plugin: PluginName,
@@ -13,12 +14,9 @@ impl std::fmt::Display for CommandAddress {
         write!(f, "{}::{}", self.plugin, self.command)
     }
 }
-impl TryFrom<&CommandDependency> for CommandAddress {
+impl TryFrom<&CommandDependency> for CommandId {
     type Error = CommandContractError;
     fn try_from(value: &CommandDependency) -> Result<Self, Self::Error> {
-        Ok(Self {
-            plugin: value.plugin.parse()?,
-            command: value.command.parse()?,
-        })
+        Ok(value.command.parse()?)
     }
 }

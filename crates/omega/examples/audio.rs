@@ -83,11 +83,12 @@ impl Surface for Panel {
 }
 
 #[derive(omega::Command, Debug)]
-#[omega(name = "volume")]
 pub struct SetVolume {
     volume: Volume,
 }
 impl Command for SetVolume {
+    const ID: &'static str = "volume";
+
     type Input = Percent;
     type Output = ();
     async fn call(&self, value: Percent) -> omega::Result<()> {
@@ -100,6 +101,8 @@ pub struct Mute {
     volume: Volume,
 }
 impl Command for Mute {
+    const ID: &'static str = "mute";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -108,7 +111,7 @@ impl Command for Mute {
 }
 
 pub fn plugin() -> Plugin {
-    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
+    Plugin::new(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<SetVolume>()

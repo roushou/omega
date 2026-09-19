@@ -40,7 +40,7 @@ fn publish(surface: &str) -> Frame {
 }
 
 /// A harness with one plugin that declares the `battery` widget surface.
-async fn harness(tag: &str) -> (Harness, String, omega_daemon::plugins::PluginToken) {
+async fn harness(tag: &str) -> (Harness, String, omega_daemon::plugins::SpawnToken) {
     let manifest = widget_manifest("battery-widget", "battery");
     let harness = Harness::new(tag, ManifestStore::from_manifests([manifest.clone()]));
     let token = harness.register_plugin("battery-widget");
@@ -106,6 +106,7 @@ async fn an_op_this_daemon_does_not_serve_is_refused_not_ignored() {
             stream_id: 1,
             body: Some(frame::Body::Invoke(Invoke {
                 op: Some(invoke::Op::CallCommand(CallCommand {
+                    invocation_id: 0,
                     command: "connect".into(),
                     args: Vec::new(),
                 })),

@@ -101,6 +101,35 @@ impl Manifest {
         Ok(Self { document })
     }
 
+    /// Mark this package as an executable command host for Omega discovery.
+    /// Retain unrelated package metadata. Malformed metadata leaves the document unchanged.
+    pub fn set_command_host(&mut self) -> Result<(), CargoError> {
+        self.edit(|document| {
+            let mut table = document
+                .get_mut("package")
+                .and_then(Item::as_table_like_mut)
+                .ok_or_else(|| CargoError::new("package", "missing or not a table"))?;
+            for (key, path) in [
+                ("metadata", "package.metadata"),
+                ("omega", "package.metadata.omega"),
+            ] {
+                let mut implicit = Table::new();
+                implicit.set_implicit(true);
+                table = table
+                    .entry(key)
+                    .or_insert(Item::Table(implicit))
+                    .as_table_like_mut()
+                    .ok_or_else(|| CargoError::new(path, "must be a table"))?;
+            }
+            if let Some(kind) = table.get_mut("kind") {
+                Fields::replace(kind, value("command-host"));
+            } else {
+                table.insert("kind", value("command-host"));
+            }
+            Ok(())
+        })
+    }
+
     /// Construct a virtual workspace with caller-selected members and defaults.
     pub fn new_workspace(
         resolver: &str,
@@ -373,6 +402,23 @@ impl TomlSchema for Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_host_metadata_preserves_other_fields_and_failed_edits_are_atomic() {
+        let source = "[package]\nname = 'audio'\n[package.metadata.other]\nkeep = true # keep\n[package.metadata.omega]\nkind = 'plugin' # role\n";
+        let mut manifest = source.parse::<Manifest>().unwrap();
+        manifest.set_command_host().unwrap();
+        assert_eq!(
+            manifest.package().unwrap().unwrap().omega_kind().unwrap(),
+            Some("command-host")
+        );
+        assert!(manifest.to_string().contains("keep = true # keep"));
+        assert!(manifest.to_string().contains("# role"));
+        let source = "[package]\nname = 'audio'\nmetadata = false\n";
+        let mut manifest = source.parse::<Manifest>().unwrap();
+        assert!(manifest.set_command_host().is_err());
+        assert_eq!(manifest.to_string(), source);
+    }
 
     #[test]
     fn borrowed_package_fields_support_inheritance_and_cargo_defaults() {

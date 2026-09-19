@@ -143,6 +143,43 @@ TestCase {
         verify(link.socket.written.indexOf("attachRenderer") >= 0)
     }
 
+    function test_attachment_is_single_flight_and_accepts_the_original_reply() {
+        var link = connection()
+        link.attached = false
+        var stream = link.attachmentStream
+        var written = link.socket.written
+        link.heartbeat.triggered()
+        compare(link.attachmentStream, stream)
+        compare(link.socket.written, written)
+        link.onLine(JSON.stringify({streamId:stream,result:{instances:{instances:[]}}}))
+        verify(link.attached)
+    }
+
+    function test_heartbeats_cannot_keep_a_stalled_attachment_alive() {
+        var link = connection()
+        link.attached = false
+        link.attachmentStarted = Date.now() - 20000
+        link.onLine(JSON.stringify({heartbeat:true}))
+        link.heartbeat.triggered()
+        compare(link.socket, null)
+        tryCompare(link, "connected", true)
+        verify(link.socket.written.indexOf("attachRenderer") >= 0)
+    }
+
+    function test_refused_attachment_retries_on_a_fresh_connection() {
+        var link = connection()
+        link.attached = false
+        link.heartbeat.stop()
+        link.retry.interval = 20
+        var previous = link.socket
+        link.onLine(JSON.stringify({streamId:link.attachmentStream,result:{error:{message:"Already attached"}}}))
+        verify(!link.connected)
+        compare(link.requests.error, "Already attached")
+        tryCompare(link, "connected", true)
+        verify(link.socket !== previous)
+        verify(link.socket.written.indexOf("attachRenderer") >= 0)
+    }
+
     function test_retired_socket_cannot_deliver_views_or_change_connection_state() {
         var link = connection()
         var retired = link.socket

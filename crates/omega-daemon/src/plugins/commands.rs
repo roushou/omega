@@ -15,18 +15,78 @@ impl PluginRegistry {
         call: &InvokePlugin,
         grants: Option<&Grants>,
     ) -> Result<CommandAnswer, Refusal> {
+        let command = call
+            .command
+            .parse::<omega_proto::CommandId>()
+            .map_err(|error| Refusal::invalid(error.to_string()))?;
+        if let Some(grants) = grants {
+            grants.command_id_access(&command)?;
+        }
+        let provider = {
+            let records = self.lock();
+            let mut providers = records.values().filter(|record| {
+                record
+                    .session
+                    .as_ref()
+                    .and_then(|s| s.manifest.as_deref())
+                    .or_else(|| record.manifest.as_ref().map(|m| &m.manifest))
+                    .is_some_and(|manifest| {
+                        manifest
+                            .commands
+                            .iter()
+                            .any(|endpoint| endpoint.id == command.as_str())
+                    })
+            });
+            let provider = providers.next().ok_or_else(|| {
+                Refusal::invalid(format!("no provider declares command {command}"))
+            })?;
+            if providers.next().is_some() {
+                return Err(Refusal::precondition(format!(
+                    "multiple providers for {command}"
+                )));
+            }
+            if !call.plugin.is_empty() && call.plugin != provider.name.as_str() {
+                return Err(Refusal::precondition(
+                    "command provider does not match requested host",
+                ));
+            }
+            provider.name.clone()
+        };
         let address = CommandAddress {
-            plugin: call
-                .plugin
-                .parse()
-                .map_err(|e: omega_proto::IdentError| Refusal::invalid(e.to_string()))?,
-            command: call
-                .command
-                .parse()
-                .map_err(|e: omega_proto::IdentError| Refusal::invalid(e.to_string()))?,
+            plugin: provider,
+            command,
         };
         if let Some(grants) = grants {
             grants.command_access(&address)?;
+        }
+        if self.hosts().configured(address.plugin.as_str()) {
+            let endpoint = self
+                .manifest(&address.plugin)
+                .and_then(|manifest| {
+                    manifest
+                        .manifest
+                        .commands
+                        .into_iter()
+                        .find(|endpoint| endpoint.id == address.command.as_str())
+                })
+                .ok_or_else(|| Refusal::unavailable("command provider removed"))?;
+            let signature = endpoint.signature();
+            if let Some(grants) = grants {
+                grants.command(&address, &signature)?;
+            }
+            if !call.signature.is_empty() && call.signature != signature {
+                return Err(Refusal::precondition("command signature mismatch"));
+            }
+            return self
+                .hosts()
+                .invoke(
+                    address.plugin.as_str(),
+                    address.command,
+                    call.args.clone(),
+                    &signature,
+                    !call.signature.is_empty(),
+                )
+                .await;
         }
         let (session, endpoint) = {
             let records = self.lock();
@@ -54,7 +114,7 @@ impl PluginRegistry {
                             .join(", ")
                     ))
                 })?;
-            let signature = endpoint.signature(address.plugin.as_str());
+            let signature = endpoint.signature();
             if let Some(grants) = grants {
                 grants.command(&address, &signature)?;
             }
@@ -90,6 +150,7 @@ impl PluginRegistry {
                 &session,
                 &address.plugin,
                 invoke::Op::CallCommand(CallCommand {
+                    invocation_id: 0,
                     command: address.command.to_string(),
                     args: call.args.clone(),
                 }),
@@ -135,15 +196,17 @@ impl PluginRegistry {
                     plugin: record.name.clone(),
                     command,
                 };
-                let signature = endpoint.signature(record.name.as_str());
+                let signature = endpoint.signature();
                 if grants.is_some_and(|grants| grants.command(&address, &signature).is_err()) {
                     continue;
                 }
                 entries.push(AvailableCommand {
+                    executions: self.hosts().executions(record.name.as_str(), &endpoint.id),
                     plugin: record.name.to_string(),
                     endpoint: Some(endpoint.clone()),
                     signature,
-                    available: record.session.is_some(),
+                    available: record.session.is_some()
+                        || self.hosts().configured(record.name.as_str()),
                 });
             }
         }
@@ -151,7 +214,27 @@ impl PluginRegistry {
             (&a.plugin, a.endpoint.as_ref().map(|e| &e.id))
                 .cmp(&(&b.plugin, b.endpoint.as_ref().map(|e| &e.id)))
         });
-        Ok(CommandCatalogue { entries })
+        let hosts = self
+            .hosts()
+            .inspect()
+            .into_iter()
+            .filter(|host| grants.is_none() || entries.iter().any(|entry| entry.plugin == host.id))
+            .map(|mut host| {
+                if grants.is_some() {
+                    host.recent_failures.retain(|failure| {
+                        entries.iter().any(|entry| {
+                            entry.plugin == host.id
+                                && entry
+                                    .endpoint
+                                    .as_ref()
+                                    .is_some_and(|endpoint| endpoint.id == failure.command)
+                        })
+                    });
+                }
+                host
+            })
+            .collect();
+        Ok(CommandCatalogue { entries, hosts })
     }
 }
 
@@ -179,7 +262,7 @@ mod tests {
                 plugin: "target".into(),
                 command: "get".into(),
                 args: Vec::new(),
-                signature: manifest.commands[0].signature("target"),
+                signature: manifest.commands[0].signature(),
             }
         }
     }

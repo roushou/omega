@@ -9,6 +9,8 @@ pub enum WorkspaceRole {
     System,
     Plugin(PackageName),
     Library(PackageName),
+    /// Command packages; location alone does not declare an executable.
+    Commands(PackageName),
 }
 
 impl WorkspaceRole {
@@ -31,13 +33,16 @@ impl WorkspaceRole {
         if directory.parent() == Some(layout.crates_dir().as_path()) {
             return Ok(Self::Library(name.parse::<PackageName>()?));
         }
+        if directory.parent() == Some(layout.commands_dir().as_path()) {
+            return Ok(Self::Commands(name.parse::<PackageName>()?));
+        }
         Err(WorkspaceError::Location(directory.into()))
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
-    #[error("{} is outside system/, plugins/<name>/, or crates/<name>/", .0.display())]
+    #[error("{} is outside system/, plugins/<name>/, crates/<name>/, or commands/<name>/", .0.display())]
     Location(PathBuf),
     #[error(transparent)]
     Name(#[from] crate::package::PackageNameError),

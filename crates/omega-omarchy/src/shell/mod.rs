@@ -286,6 +286,8 @@ impl PluginWidget {
     /// #[derive(omega::Command)]
     /// struct Refresh {}
     /// impl Command for Refresh {
+    ///     const ID: &'static str = "refresh";
+    ///
     ///     type Input = (); type Output = ();
     ///     async fn call(&self, _: ()) -> Result<(), omega::Error> { Ok(()) }
     /// }

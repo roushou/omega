@@ -79,6 +79,22 @@ impl Document {
         self
     }
 
+    /// Configure an executable command provider without starting it.
+    /// A declaration uses persistent on-demand execution with serial calls and default
+    /// bounds. Use `CommandHost::deployment()` to override policy or construction settings.
+    /// Invalid declarations or execution policies return an error.
+    pub fn command_host(
+        mut self,
+        host: impl Into<omega::host::CommandHostDeployment>,
+    ) -> crate::Result<Self> {
+        self.inner.command_hosts.push(
+            host.into()
+                .configuration()
+                .map_err(|error| crate::Error::Extension(Box::new(error)))?,
+        );
+        Ok(self)
+    }
+
     pub fn into_inner(self) -> StateDocument {
         self.inner
     }
@@ -301,6 +317,8 @@ impl Actions {
     /// #[derive(omega::Command)]
     /// struct Refresh {}
     /// impl Command for Refresh {
+    ///     const ID: &'static str = "refresh";
+    ///
     ///     type Input = ();
     ///     type Output = ();
     ///     async fn call(&self, _: ()) -> omega::Result<()> { Ok(()) }
@@ -314,6 +332,8 @@ impl Actions {
     /// #[derive(omega::Command)]
     /// struct SetLevel;
     /// impl Command for SetLevel {
+    ///     const ID: &'static str = "set-level";
+    ///
     ///     type Input = u64;
     ///     type Output = ();
     ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
@@ -334,6 +354,8 @@ impl Actions {
     /// #[derive(omega::Command)]
     /// struct SetLevel {}
     /// impl Command for SetLevel {
+    ///     const ID: &'static str = "set-level";
+    ///
     ///     type Input = u64;
     ///     type Output = ();
     ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
@@ -347,6 +369,8 @@ impl Actions {
     /// #[derive(omega::Command)]
     /// struct SetLevel;
     /// impl Command for SetLevel {
+    ///     const ID: &'static str = "set-level";
+    ///
     ///     type Input = u64;
     ///     type Output = ();
     ///     async fn call(&self, _: u64) -> omega::Result<()> { Ok(()) }
@@ -363,13 +387,13 @@ impl Actions {
     }
 
     /// Invoke a dynamically named command without input. Prefer [`Self::invoke`]
-    /// when the defining plugin is a dependency.
+    /// when the command library is a dependency.
     pub fn invoke_named(plugin: impl Into<String>, command: impl Into<String>) -> Action {
         Self::invoke_named_with(plugin, command, Vec::<bool>::new())
     }
 
     /// Invoke a dynamically named command with positional wire values.
-    /// The daemon validates the target and input against the plugin manifest.
+    /// The daemon validates the target and input against the provider manifest.
     pub fn invoke_named_with(
         plugin: impl Into<String>,
         command: impl Into<String>,

@@ -1,0 +1,41 @@
+syntax = "proto3";
+package omega;
+
+import "omega/value.proto";
+
+// Export category of an executable, independent of its source location.
+enum HostKind {
+  HOST_KIND_PLUGIN = 0;
+  HOST_KIND_COMMANDS = 1;
+}
+
+enum HostLifetime {
+  HOST_LIFETIME_PERSISTENT = 0;
+  HOST_LIFETIME_ONE_SHOT = 1;
+}
+
+enum HostStart {
+  HOST_START_ON_DEMAND = 0;
+  HOST_START_EAGER = 1;
+}
+
+// Desired execution policy. All limits and deadlines must be positive except
+// queue_capacity, where zero rejects calls that cannot immediately start.
+message CommandHostConfig {
+  string id = 1;
+  HostLifetime lifetime = 2;
+  HostStart start = 3;
+  uint32 concurrency = 4;
+  uint32 queue_capacity = 5;
+  uint64 queue_timeout_ms = 6;
+  uint64 startup_timeout_ms = 7;
+  uint64 execution_timeout_ms = 8;
+  map<string, Value> settings = 9;
+}
+
+// Issued by the daemon, not selected by the peer. A one-shot connection is
+// restricted to this one invocation. Zero means a persistent host session.
+message HostAssignment {
+  uint64 process_id = 1;
+  uint64 invocation_id = 2;
+}

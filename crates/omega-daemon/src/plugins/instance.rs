@@ -1,6 +1,6 @@
 //! Instance ownership and presentation state live under the plugin table's lock.
 
-use super::PluginToken;
+use super::SpawnToken;
 use super::presentation_state::{Observation, PresentationState, Visibility};
 use crate::hub::{SurfaceRef, ViewUpdate};
 use omega_proto::instance::{
@@ -40,8 +40,8 @@ impl Instance {
         } else {
             Visibility::Visible
         };
-        let id = PluginToken::mint()?;
-        let incarnation = PluginToken::mint()?;
+        let id = SpawnToken::mint()?;
+        let incarnation = SpawnToken::mint()?;
         Ok(Self {
             lifecycle: Default::default(),
             key: InstanceKey {

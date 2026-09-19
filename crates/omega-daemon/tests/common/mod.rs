@@ -8,7 +8,7 @@ use omega_daemon::Shutdown;
 use omega_daemon::broker::Brokerage;
 use omega_daemon::hub::Hub;
 use omega_daemon::manifest::ManifestStore;
-use omega_daemon::plugins::{PluginRegistry, PluginToken};
+use omega_daemon::plugins::{PluginRegistry, SpawnToken};
 use omega_daemon::session::{Liveness, Session};
 use omega_daemon::supervisor::Supervisor;
 use omega_proto::PluginName;
@@ -68,7 +68,7 @@ impl Harness {
 
     /// Register this process as a plugin and take its token, the way a spawned
     /// plugin receives one in its environment.
-    pub fn register_plugin(&self, name: &str) -> PluginToken {
+    pub fn register_plugin(&self, name: &str) -> SpawnToken {
         self.supervisor.register(&plugin_name(name)).unwrap()
     }
 

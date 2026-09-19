@@ -412,3 +412,142 @@ fn shared_libraries_have_no_program_and_only_explicit_consumers() {
     let power = std::fs::read_to_string(f.layout.config.join("plugins/power/Cargo.toml")).unwrap();
     assert!(power.contains("../../crates/desktop-ui"));
 }
+
+#[test]
+fn command_hosts_share_workspace_membership_and_dependency_wiring() {
+    use omega_host::cargo::{CargoSlot, Manifest};
+    let f = Fixture::new();
+    f.init();
+    let system_source = std::fs::read_to_string(f.layout.system_main()).unwrap();
+    let name: PackageName = "audio-commands".parse().unwrap();
+    f.open()
+        .prepare_command_host(name.clone())
+        .unwrap()
+        .apply()
+        .unwrap();
+    let directory = f.layout.command_src_dir(&name);
+    let manifest = f
+        .layout
+        .file::<Manifest>(CargoSlot::Member(&directory))
+        .read()
+        .unwrap();
+    assert_eq!(
+        manifest.package().unwrap().unwrap().omega_kind().unwrap(),
+        Some("command-host")
+    );
+    assert!(
+        manifest
+            .dependencies()
+            .unwrap()
+            .get("omega")
+            .unwrap()
+            .is_inherited()
+    );
+    let system = f.layout.file::<Manifest>(CargoSlot::System).read().unwrap();
+    assert_eq!(
+        system
+            .dependencies()
+            .unwrap()
+            .get("audio-commands")
+            .unwrap()
+            .path(),
+        Some("../commands/audio-commands")
+    );
+    assert_eq!(
+        std::fs::read_to_string(f.layout.system_main()).unwrap(),
+        system_source
+    );
+    for file in ["lib.rs", "main.rs", "commands.rs", "host.rs"] {
+        let source = std::fs::read_to_string(directory.join("src").join(file)).unwrap();
+        assert!(!source.contains("{host_name}"));
+        assert!(!source.contains("{plugin_snake}"));
+    }
+    f.open()
+        .prepare_library(
+            "shared".parse().unwrap(),
+            &["commands/audio-commands".into()],
+        )
+        .unwrap()
+        .apply()
+        .unwrap();
+    f.open()
+        .prepare_plugin("indicator".parse().unwrap(), Template::Minimal)
+        .unwrap()
+        .apply()
+        .unwrap();
+    let manifest = f
+        .layout
+        .file::<Manifest>(CargoSlot::Member(&directory))
+        .read()
+        .unwrap();
+    assert_eq!(
+        manifest
+            .dependencies()
+            .unwrap()
+            .get("shared")
+            .unwrap()
+            .path(),
+        Some("../../crates/shared")
+    );
+    let root = f.root_source().parse::<Manifest>().unwrap();
+    assert_eq!(
+        root.workspace().unwrap().unwrap().members().unwrap(),
+        ["system", "commands/*", "crates/*", "plugins/*"]
+    );
+    let runnable = omega_host::workspace::Plugins::discover(&f.layout).unwrap();
+    assert_eq!(
+        runnable
+            .iter()
+            .map(|name| name.as_str())
+            .collect::<Vec<_>>(),
+        ["audio-commands", "indicator"]
+    );
+    assert!(
+        f.open()
+            .prepare_library("audio_commands".parse().unwrap(), &[])
+            .is_err()
+    );
+}
+
+#[test]
+fn excluded_command_host_has_no_files_or_manifest_edits() {
+    let f = Fixture::new();
+    f.init();
+    let root = f
+        .root_source()
+        .replace("[workspace]", "[workspace]\nexclude = ['commands/*']");
+    f.write(f.layout.workspace_manifest(), &root);
+    assert!(
+        f.open()
+            .prepare_command_host("audio".parse().unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("excluded")
+    );
+    assert_eq!(f.root_source(), root);
+    assert!(!f.layout.commands_dir().exists());
+}
+
+#[test]
+fn command_host_publication_failure_rolls_back_the_system_dependency_and_glob() {
+    let f = Fixture::new();
+    f.init();
+    let before = f.root_source();
+    let system = std::fs::read_to_string(f.layout.system_manifest()).unwrap();
+    let name = "audio".parse().unwrap();
+    let directory = f.layout.command_src_dir(&name);
+    let workspace = f.open();
+    let prepared = workspace.prepare_command_host(name).unwrap();
+    f.write(directory.join("mine"), "keep me");
+    assert!(prepared.apply().is_err());
+    assert_eq!(f.root_source(), before);
+    assert_eq!(
+        std::fs::read_to_string(f.layout.system_manifest()).unwrap(),
+        system
+    );
+    assert_eq!(
+        std::fs::read_to_string(directory.join("mine")).unwrap(),
+        "keep me"
+    );
+    assert!(!directory.join("src").exists());
+}

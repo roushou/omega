@@ -1,4 +1,4 @@
-//! Scaffold a plugin or library and connect its Cargo dependencies.
+//! Scaffold a plugin, command host, or library and connect its Cargo dependencies.
 //!
 //! Placement belongs to the config author. Print its declaration without changing
 //! the system's layout.
@@ -9,7 +9,7 @@ use crate::workspace::ConfigWorkspace;
 use omega_host::Layout;
 use omega_host::package::PackageName;
 
-/// Scaffold a plugin into `~/.config/omega/plugins/<name>`.
+/// Scaffold a plugin, reusable command host, or shared library.
 #[derive(Debug, clap::Args)]
 pub struct NewCmd {
     #[arg(value_name = "NAME")]
@@ -17,7 +17,10 @@ pub struct NewCmd {
     /// Create a shared Rust library, which Omega never supervises.
     #[arg(long, conflicts_with = "template")]
     pub lib: bool,
-    /// Add the library as a dependency of a member (system, plugins/name, crates/name).
+    /// Create a reusable command library and executable under commands/<name>.
+    #[arg(long, conflicts_with_all = ["lib", "template", "into"])]
+    pub command_host: bool,
+    /// Add the library to a member (system, plugins/name, commands/name, crates/name).
     #[arg(long, requires = "lib", value_name = "MEMBER")]
     pub into: Vec<std::path::PathBuf>,
     /// Choose the plugin's starting point.
@@ -42,6 +45,28 @@ impl NewCmd {
                     format!("{} → {}", consumer.display(), created.package()),
                 );
             }
+            return Ok(());
+        }
+        if self.command_host {
+            let created = workspace.prepare_command_host(self.package_name)?.apply()?;
+            ui.step(
+                Step::Created,
+                Paint::path(workspace.layout().command_src_dir(&created)),
+            );
+            ui.step(Step::Linked, format!("system → {}", created.package()));
+            ui.step(
+                Step::Next,
+                format!(
+                    "add this call to the Document builder in {}:",
+                    Paint::path(workspace.layout().system_main())
+                ),
+            );
+            ui.detail(Paint::command(Scaffold::command_host_hint(&created)));
+            ui.detail(
+                "The default deployment starts on the first call and keeps the process running.",
+            );
+            ui.next("omega build");
+            ui.next(&format!("omega run {}.echo hello", created.package()));
             return Ok(());
         }
         let created = workspace

@@ -1,4 +1,4 @@
-use super::{Marker, kebab, wire};
+use super::{Marker, wire};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
@@ -20,20 +20,14 @@ impl CommandExpansion {
         }
         let name = &input.ident;
         let visibility = &input.vis;
-        let mut command_name = kebab(&name.to_string());
-        for attr in &input.attrs {
-            if attr.path().is_ident("omega")
-                && let Err(error) = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        command_name = meta.value()?.parse::<syn::LitStr>()?.value();
-                        Ok(())
-                    } else {
-                        Err(meta.error("expected `name = \"command-name\"`"))
-                    }
-                })
-            {
-                return error.to_compile_error().into();
-            }
+        if let Some(attr) = input
+            .attrs
+            .iter()
+            .find(|attr| attr.path().is_ident("omega"))
+        {
+            return syn::Error::new_spanned(attr, "declare command identity using Command::ID")
+                .to_compile_error()
+                .into();
         }
         let reference = match &input.data {
             Data::Struct(data) if matches!(data.fields, Fields::Unit) => quote! {
@@ -57,10 +51,6 @@ impl CommandExpansion {
         };
         let mut wired = proc_macro2::TokenStream::from(wire(tokens, Marker::Wiring));
         wired.extend(quote! {
-            impl ::omega::internal::CommandName for #name {
-                const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
-                const NAME: &'static str = #command_name;
-            }
             #reference
         });
         wired.into()

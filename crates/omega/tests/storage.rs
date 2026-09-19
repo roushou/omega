@@ -108,7 +108,7 @@ async fn query_selection_loading_failure_and_close_use_production_lifecycle() {
 
 #[test]
 fn fields_derive_storage_access_including_surface_effects_without_system_grants() {
-    let manifest = omega::plugin::Plugin::named("tasks", "1.0.0")
+    let manifest = omega::plugin::Plugin::new("tasks", "1.0.0")
         .surface_as::<List>("list")
         .manifest()
         .unwrap();

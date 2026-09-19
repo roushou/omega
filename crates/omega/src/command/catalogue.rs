@@ -12,7 +12,8 @@ use omega_proto::{
     },
 };
 
-/// One discoverable endpoint and its current connection availability.
+/// One discoverable endpoint and its current provider availability.
+/// Configured on-demand hosts can be available before their process starts.
 #[derive(Debug, Clone)]
 pub struct Available {
     pub address: CommandAddress,
@@ -58,7 +59,7 @@ impl Commands {
                                 .validate()
                                 .map_err(|_| EffectError::UnexpectedResponse)?,
                         };
-                        if entry.signature != descriptor.signature(address.plugin.as_str()) {
+                        if entry.signature != descriptor.signature() {
                             return Err(EffectError::UnexpectedResponse);
                         }
                         Ok(Available {

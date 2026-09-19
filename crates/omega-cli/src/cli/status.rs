@@ -7,10 +7,10 @@ use omega_proto::PluginName;
 
 use crate::ui::{Paint, Step, Ui};
 
-/// Report the daemon's view of every plugin.
+/// Report plugin health and command host processes.
 #[derive(Debug, clap::Args)]
 pub struct StatusCmd {
-    /// Inspect one plugin, including its surfaces and required readings.
+    /// Inspect one plugin or command host.
     #[arg(value_name = "PLUGIN")]
     pub plugin_name: Option<PluginName>,
 
@@ -67,8 +67,11 @@ impl StatusCmd {
         }
 
         ui.blank();
-        if status.plugins.is_empty() {
-            ui.step(Step::Checked, "the daemon is running; no plugins");
+        if status.plugins.is_empty() && status.command_hosts.is_empty() {
+            ui.step(
+                Step::Checked,
+                "the daemon is running; no plugins or command hosts",
+            );
         } else {
             ui.plugin_health(
                 &status.plugins,
@@ -77,6 +80,7 @@ impl StatusCmd {
                 self.plugin_name.is_some(),
             )?;
         }
+        ui.command_hosts(&status.command_hosts, self.plugin_name.is_some());
         Ok(())
     }
 
@@ -94,9 +98,16 @@ impl StatusCmd {
             status
                 .plugins
                 .iter()
-                .any(|status| status.plugin == plugin_name.as_str()),
-            "unknown plugin {plugin_name}"
+                .any(|status| status.plugin == plugin_name.as_str())
+                || status
+                    .command_hosts
+                    .iter()
+                    .any(|host| host.id == plugin_name.as_str()),
+            "unknown plugin or command host {plugin_name}"
         );
+        status
+            .command_hosts
+            .retain(|host| host.id == plugin_name.as_str());
         status
             .plugins
             .retain(|status| status.plugin == plugin_name.as_str());
@@ -212,6 +223,45 @@ mod tests {
     use omega_proto::omega::{
         AttachRenderer, DeploymentStatus, PluginHealth, PluginStatus, attach_renderer,
     };
+
+    #[test]
+    fn selecting_a_command_host_preserves_process_facts_in_json() {
+        use omega_proto::omega::{CommandHostStatus, CommandProcessStatus};
+
+        let mut status = DeploymentStatus {
+            command_hosts: vec![CommandHostStatus {
+                id: "audio-commands".into(),
+                lifetime: "persistent".into(),
+                processes: vec![CommandProcessStatus {
+                    id: 7,
+                    phase: "running".into(),
+                }],
+                ..Default::default()
+            }],
+            plugins: vec![PluginStatus {
+                plugin: "audio".into(),
+                ..Default::default()
+            }],
+            plugin_health: vec![PluginHealth {
+                plugin: "audio".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut plugin_only = status.clone();
+        StatusCmd::select(&mut plugin_only, Some(&"audio".parse().unwrap())).unwrap();
+        assert!(plugin_only.command_hosts.is_empty());
+
+        StatusCmd::select(&mut status, Some(&"audio-commands".parse().unwrap())).unwrap();
+        assert!(status.plugins.is_empty());
+        assert!(status.plugin_health.is_empty());
+        assert_eq!(status.command_hosts[0].processes[0].id, 7);
+        let json = serde_json::to_string(&status).unwrap();
+        let decoded: DeploymentStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, status);
+        assert!(json.contains("commandHosts"));
+        assert!(json.contains("running"));
+    }
 
     #[test]
     fn selecting_a_plugin_filters_json_facts_and_rejects_unknown_names() {

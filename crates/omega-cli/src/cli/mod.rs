@@ -134,8 +134,7 @@ mod tests {
             (vec!["omega", "restart", "../audio"], "PLUGIN"),
             (vec!["omega", "logs", "Bad"], "PLUGIN"),
             (vec!["omega", "status", "Bad"], "PLUGIN"),
-            (vec!["omega", "run", "Bad", "set"], "PLUGIN"),
-            (vec!["omega", "run", "audio", "Bad"], "COMMAND"),
+            (vec!["omega", "run", "Bad"], "COMMAND"),
             (vec!["omega", "present", "Bad", "panel"], "PLUGIN"),
             (vec!["omega", "present", "audio", "Bad"], "SURFACE"),
             (vec!["omega", "new", "Bad"], "NAME"),
@@ -213,6 +212,36 @@ mod tests {
             panic!("expected link")
         };
         assert_eq!(link.path.unwrap().into_os_string(), path);
+    }
+
+    #[test]
+    fn new_command_host_accepts_only_its_own_options() {
+        let cli =
+            Cli::try_parse_from(["omega", "new", "audio-commands", "--command-host"]).unwrap();
+        let Command::New(new) = cli.command else {
+            panic!("expected new")
+        };
+        assert!(new.command_host);
+        for extra in [
+            vec!["--lib"],
+            vec!["--template", "minimal"],
+            vec!["--into", "system"],
+        ] {
+            let mut args = vec!["omega", "new", "audio", "--command-host"];
+            args.extend(extra);
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+        assert!(
+            Cli::try_parse_from([
+                "omega",
+                "new",
+                "shared",
+                "--lib",
+                "--into",
+                "commands/audio"
+            ])
+            .is_ok()
+        );
     }
 
     #[test]

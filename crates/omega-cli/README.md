@@ -76,6 +76,19 @@ registered as workspace members. Put the printed expression into your shell's
 `Bar::left`, `Bar::center`, or `Bar::right`; running a plugin alone does not
 place its widget on screen.
 
+`omega new audio-commands --command-host` creates a reusable command library and
+executable under `commands/audio-commands/`. It adds the Cargo member, executable
+metadata, and system dependency, then prints the `.command_host(...)` call to add
+to your document. The starter command echoes text:
+
+```sh
+omega build
+omega run audio-commands.echo hello
+```
+
+The default host starts on its first invocation and stays running. Its commands
+can be imported by plugins without importing another UI plugin.
+
 `omega check` compiles the workspace, evaluates the Rust configuration, and
 validates its placements and schedules without publishing a generation.
 Configurations containing only native Omarchy widgets can be checked and built

@@ -8,12 +8,11 @@ mod presentation_state;
 mod presentations;
 pub mod record;
 pub mod session;
-pub mod token;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 use omega_proto::PluginName;
 use omega_proto::SystemTopic;
@@ -25,11 +24,11 @@ use crate::Shutdown;
 use crate::hub::Hub;
 use crate::manifest::{ManifestStore, PluginManifest};
 
+pub use crate::process::{SpawnToken, TokenError};
 pub use lifecycle::{Lifecycle, Transition};
 pub use presentations::InstalledInstance;
 pub use record::{PluginControl, PluginRecord};
 pub use session::{Request, RequestError, SessionGuard};
-pub use token::{PluginToken, TokenError};
 
 #[derive(Debug, Clone)]
 pub struct PluginRegistry {
@@ -38,6 +37,7 @@ pub struct PluginRegistry {
 
 #[derive(Debug)]
 struct Inner {
+    hosts: crate::hosts::Hosts,
     plugins: Mutex<BTreeMap<PluginName, PluginRecord>>,
     renderers: Mutex<BTreeMap<crate::attachment::Scope, presentations::RendererLease>>,
     request_bytes: Arc<tokio::sync::Semaphore>,
@@ -47,6 +47,9 @@ struct Inner {
 }
 
 impl PluginRegistry {
+    pub(crate) fn hosts(&self) -> &crate::hosts::Hosts {
+        &self.inner.hosts
+    }
     pub(crate) fn storage(&self) -> crate::storage::Stores {
         self.inner.hub.storage()
     }
@@ -58,6 +61,7 @@ impl PluginRegistry {
         (
             Self {
                 inner: Arc::new(Inner {
+                    hosts: Default::default(),
                     plugins: Mutex::new(BTreeMap::new()),
                     renderers: Default::default(),
                     request_bytes: Arc::new(tokio::sync::Semaphore::new(Self::REQUEST_BYTES)),
@@ -151,18 +155,18 @@ impl PluginRegistry {
 
     /// Mint the token for a spawn that is about to happen. Issuing it before
     /// the spawn is what makes a fast plugin's first connection identifiable.
-    pub fn issue(&self, name: &PluginName) -> Result<PluginToken, TokenError> {
-        let token = PluginToken::mint()?;
+    pub fn issue(&self, name: &PluginName) -> Result<SpawnToken, TokenError> {
+        let token = SpawnToken::mint()?;
         Ok(self.install_token(name, false, token))
     }
 
     /// Issue a development spawn token and reserve the plugin identity.
     /// Adopted sessions use the same manifest grants as supervised sessions.
-    pub fn adopt_plugin(&self, name: &PluginName) -> Result<PluginToken, TokenError> {
-        Ok(self.adopt_with_token(name, PluginToken::mint()?))
+    pub fn adopt_plugin(&self, name: &PluginName) -> Result<SpawnToken, TokenError> {
+        Ok(self.adopt_with_token(name, SpawnToken::mint()?))
     }
 
-    pub(crate) fn adopt_with_token(&self, name: &PluginName, token: PluginToken) -> PluginToken {
+    pub(crate) fn adopt_with_token(&self, name: &PluginName, token: SpawnToken) -> SpawnToken {
         let token = self.install_token(name, true, token);
         self.publish();
         token
@@ -170,13 +174,15 @@ impl PluginRegistry {
 
     /// Give an adopted plugin back to the supervisor, and say so, so that a
     /// convergence starts the built binary again.
-    pub fn release_adoption(&self, name: &PluginName, token: &PluginToken) {
+    pub fn release_adoption(&self, name: &PluginName, token: &SpawnToken) {
         {
             let mut plugins = self.lock();
             let Some(record) = plugins.get_mut(name) else {
                 return;
             };
-            if !record.adopted || record.token.as_ref() != Some(token) {
+            if !record.adopted
+                || record.identity.as_ref().map(|identity| identity.token()) != Some(token)
+            {
                 return;
             }
             if let Some(session) = record.session.take() {
@@ -185,8 +191,7 @@ impl PluginRegistry {
             }
             record.instances.clear();
             record.adopted = false;
-            record.token = None;
-            record.pid = None;
+            record.identity = None;
         }
         self.publish();
 
@@ -195,7 +200,7 @@ impl PluginRegistry {
         let _ = self.inner.connected.try_send(name.clone());
     }
 
-    fn install_token(&self, name: &PluginName, adopted: bool, token: PluginToken) -> PluginToken {
+    fn install_token(&self, name: &PluginName, adopted: bool, token: SpawnToken) -> SpawnToken {
         let mut plugins = self.lock();
         let record = plugins
             .entry(name.clone())
@@ -205,8 +210,7 @@ impl PluginRegistry {
             self.inner.hub.forget_plugin(name);
         }
         record.instances.clear();
-        record.token = Some(token.clone());
-        record.pid = None;
+        record.identity = Some(crate::process::SpawnIdentity::new(token.clone()));
         record.adopted = adopted;
         token
     }
@@ -224,15 +228,16 @@ impl PluginRegistry {
                 self.inner.hub.forget_plugin(name);
             }
             record.instances.clear();
-            record.token = None;
-            record.pid = None;
+            record.identity = None;
         }
     }
 
     /// Bind a token to the process that now holds it.
     pub fn bind(&self, name: &PluginName, pid: i32) {
-        if let Some(record) = self.lock().get_mut(name) {
-            record.pid = Some(pid);
+        if let Some(record) = self.lock().get_mut(name)
+            && let Some(identity) = &mut record.identity
+        {
+            identity.bind(pid);
         }
     }
 
@@ -363,45 +368,12 @@ impl PluginRegistry {
         Self::request_on(&session, plugin, op).await
     }
 
-    async fn request_on(
+    pub(crate) async fn request_on(
         session: &session::SessionLink,
         plugin: &PluginName,
         op: invoke::Op,
     ) -> Result<result::Outcome, RequestError> {
-        let size = op.encoded_len();
-        if size > omega_proto::MAX_FRAME_LEN - 32 {
-            return Err(RequestError::TooLarge(plugin.clone()));
-        }
-        let bytes = session
-            .bytes
-            .clone()
-            .try_acquire_many_owned(size as u32)
-            .map_err(|_| RequestError::Full(plugin.clone()))?;
-        let slot = session
-            .requests
-            .try_reserve()
-            .map_err(|error| match error {
-                mpsc::error::TrySendError::Full(_) => RequestError::Full(plugin.clone()),
-                mpsc::error::TrySendError::Closed(_) => RequestError::Absent(plugin.clone()),
-            })?;
-        let (answer, answered) = oneshot::channel();
-        let deadline = tokio::time::Instant::now() + session::REQUEST_TIMEOUT;
-        slot.send(Request {
-            op,
-            answer,
-            _bytes: bytes,
-        });
-
-        match tokio::time::timeout_at(deadline, answered).await {
-            Ok(Ok(Ok(outcome))) => Ok(outcome),
-            Ok(Ok(Err(refusal))) => Err(RequestError::Refused {
-                plugin: plugin.clone(),
-                source: refusal,
-            }),
-            // The session ended while the request was outstanding.
-            Ok(Err(_)) => Err(RequestError::Absent(plugin.clone())),
-            Err(_) => Err(RequestError::Timeout(plugin.clone())),
-        }
+        session.request(plugin, op, session::REQUEST_TIMEOUT).await
     }
 
     // ---- lifecycle ----

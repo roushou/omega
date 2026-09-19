@@ -77,6 +77,8 @@ pub struct SetVolume {
 }
 
 impl Command for SetVolume {
+    const ID: &'static str = "set-volume";
+
     type Input = Percent;
     type Output = ();
 
@@ -98,8 +100,45 @@ detaching it leaves failure reporting to the runtime and does not suppress that 
 
 From `system/`, use `Actions::invoke(focus::Tick)` for a command with `Input = ()`
 or `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` for typed input.
-These examples require dependencies on plugins exporting those commands.
-The daemon also checks that the target plugin registered the command.
+These examples require dependencies on libraries exporting those commands.
+The daemon resolves each command to its configured provider.
+
+### Separate command hosts
+
+Use `omega new audio-commands --command-host` to create a command library and
+executable in `commands/audio-commands/`. Add the printed registration to your
+system document, then run `omega build`. The generated `audio-commands.echo`
+command accepts and returns text, so `omega run audio-commands.echo hello` works
+without desktop service dependencies.
+
+The library exports command types and `Host::declaration()`. Both the executable
+and the system use that declaration. Consumers import the command types and use
+`Caller<T>`; importing a library starts no process. See
+[isolated command hosts](isolated-commands.md) for deployment policy and limits.
+
+### Command construction
+
+`#[derive(omega::Command)]` wires the declared fields and supplies construction.
+The `Command` implementation only defines identity, input, output, and behavior.
+A fresh handler is constructed for each call after required readings initialize.
+
+To write the example above without the derive, remove `#[derive(omega::Command)]`
+and implement `omega::command::Construct`:
+
+```rust
+impl omega::command::Construct for SetVolume {
+    type Dependencies = (Volume,);
+
+    fn construct((volume,): Self::Dependencies) -> Self {
+        Self { volume }
+    }
+}
+```
+
+Use either generated wiring or an explicit `Construct` implementation for a type.
+Both paths derive grants and subscriptions from the dependencies they construct.
+Registration only inspects these declarations; it does not construct a handler.
+See [command interoperability](command-interoperability.md) for a complete example.
 
 ## Workspace controls
 

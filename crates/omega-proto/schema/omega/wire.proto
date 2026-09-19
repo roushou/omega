@@ -9,6 +9,7 @@ import "omega/state/plugins.proto";
 import "omega/ui.proto";
 import "omega/instance.proto";
 import "omega/plugin.proto";
+import "omega/host.proto";
 import "omega/value.proto";
 import "omega/storage.proto";
 
@@ -47,6 +48,7 @@ message Hello {
 // Daemon -> plugin. Grants capabilities (read from the manifest, never from the
 // plugin) and hands over the initial state mirror.
 message Welcome {
+  HostAssignment host_assignment = 7;
   uint32 protocol_version = 1;      // the version both will speak
   string plugin_id = 2;
   string daemon_version = 3;
@@ -150,6 +152,7 @@ message AdoptPlugin {
 
 // Run a plugin's command surface.
 message CallCommand {
+  uint64 invocation_id = 3;
   string command = 1;
   repeated Value args = 2;
 }
@@ -277,4 +280,6 @@ message DeploymentStatus {
   // Live embedded and popup placements that require a host attachment.
   repeated PlacementAttachment renderer_placements = 11;
   repeated PluginHealth plugin_health = 12;
+  // Command hosts have independent process lifetimes and no surface readiness.
+  repeated CommandHostStatus command_hosts = 13;
 }

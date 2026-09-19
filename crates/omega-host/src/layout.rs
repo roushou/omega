@@ -254,6 +254,15 @@ impl Layout {
         self.crates_dir().join(name.package())
     }
 
+    /// Reusable command packages. Executable metadata determines whether they run.
+    pub fn commands_dir(&self) -> PathBuf {
+        self.config.join("commands")
+    }
+
+    pub fn command_src_dir(&self, name: &crate::package::PackageName) -> PathBuf {
+        self.commands_dir().join(name.package())
+    }
+
     // ---- build output ----
 
     /// Shared Cargo target directory at `~/.config/omega/target`.

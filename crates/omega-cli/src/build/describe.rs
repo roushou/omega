@@ -59,9 +59,7 @@ impl<'a> Describe<'a> {
         let manifest = Manifest::decode_bytes(&output.stdout)
             .with_context(|| format!("{name} did not answer with a manifest"))?;
 
-        // The plugin names itself from its crate; a mismatch means the binary
-        // in this crate's output is not this crate's.
-        manifest.validate(name)?;
+        manifest.validate(&manifest.plugin()?)?;
         Ok(manifest)
     }
 }

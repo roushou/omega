@@ -1,16 +1,17 @@
-//! Plugin session loop: authentication, state replication, rendering,
+//! Executable session loop: authentication, state replication, rendering,
 //! command dispatch, and effect forwarding.
 
-use omega_proto::Manifest;
 use omega_proto::omega::{Frame, Invoke, PublishView, frame, invoke, result};
 use omega_proto::{Client, Handshake, Socket, Values};
 use tokio::net::UnixStream;
 
 use crate::error::Error;
-use crate::plugin::Plugin;
+use crate::program::PreparedProgram;
 use crate::runtime::context::Context;
+use execution::ExecutionMode;
 
 mod commands;
+mod execution;
 mod instance;
 #[cfg(test)]
 mod tests;
@@ -19,54 +20,77 @@ use commands::{Commands, Completion};
 use instance::Instance;
 
 pub(crate) struct Runtime {
+    program: PreparedProgram,
+    execution: ExecutionMode,
     publications: std::collections::BTreeSet<u64>,
     client: Client,
     context: Context,
     effects: crate::effect::queue::Effects,
-    /// Plugin settings received at handshake. Instance settings override matching keys.
+    /// Provider settings received at handshake. Surface instances layer their own settings.
     settings: Values,
 }
 
 impl Runtime {
     /// Connect over the conventional socket, with the token this process was
     /// spawned with.
-    pub(crate) async fn connect(manifest: &Manifest) -> Result<Self, Error> {
-        Self::over_socket(&Socket::resolve(), manifest).await
+    pub(crate) async fn connect(program: PreparedProgram) -> Result<Self, Error> {
+        Self::over_socket(&Socket::resolve(), program).await
     }
 
-    pub(crate) async fn over_socket(socket: &Socket, manifest: &Manifest) -> Result<Self, Error> {
-        let (client, welcome) =
-            Client::connect(socket, &manifest.hash(), &Handshake::token_from_env()).await?;
-        Ok(Self::welcomed(client, welcome))
+    pub(crate) async fn over_socket(
+        socket: &Socket,
+        program: PreparedProgram,
+    ) -> Result<Self, Error> {
+        let (client, welcome) = Client::connect(
+            socket,
+            &program.manifest.hash(),
+            &Handshake::token_from_env(),
+        )
+        .await?;
+        Self::welcomed(client, welcome, program)
     }
 
     /// Connect over a stream that is already open — a `UnixStream::pair` in a
     /// test, where there is no daemon and no socket file.
-    pub(crate) async fn over(stream: UnixStream, manifest: &Manifest) -> Result<Self, Error> {
-        let (client, welcome) =
-            Client::over(stream, &manifest.hash(), &Handshake::token_from_env()).await?;
-        Ok(Self::welcomed(client, welcome))
+    pub(crate) async fn over(stream: UnixStream, program: PreparedProgram) -> Result<Self, Error> {
+        let (client, welcome) = Client::over(
+            stream,
+            &program.manifest.hash(),
+            &Handshake::token_from_env(),
+        )
+        .await?;
+        Self::welcomed(client, welcome, program)
     }
 
-    fn welcomed(client: Client, welcome: omega_proto::omega::Welcome) -> Self {
+    fn welcomed(
+        client: Client,
+        welcome: omega_proto::omega::Welcome,
+        program: PreparedProgram,
+    ) -> Result<Self, Error> {
         let (sender, effects) = crate::effect::queue::Effects::channel();
-        Self {
+        let execution = ExecutionMode::try_from((program.kind, welcome.host_assignment))?;
+        Ok(Self {
+            program,
+            execution,
             publications: Default::default(),
             client,
             context: Context::new(&welcome.state.unwrap_or_default(), sender),
             effects,
             settings: Values::from_map(welcome.config),
-        }
+        })
     }
 
-    /// Serve every surface the plugin registered until the daemon closes.
-    pub(crate) async fn serve(mut self, plugin: Plugin) -> Result<(), Error> {
+    /// Serve the prepared registrations until disconnect or one-shot completion.
+    pub(crate) async fn serve(mut self) -> Result<(), Error> {
         let mut instances: Vec<Instance> = Vec::new();
 
-        let mut commands = Commands::new(&plugin, &self.context, &self.settings)?;
+        let mut commands =
+            Commands::new(&self.program.registrations, &self.context, &self.settings)?;
 
-        let reactions: Vec<_> = plugin
-            .reactions()
+        let reactions: Vec<_> = self
+            .program
+            .registrations
+            .reactions
             .iter()
             .map(|entry| (entry.event, entry.build(&self.context, &self.settings)))
             .collect();
@@ -92,7 +116,10 @@ impl Runtime {
                 }
                 completion = commands.next() => {
                     match completion {
-                        Completion::Answer(reply) => self.client.send(*reply).await?,
+                        Completion::Answer(reply) => {
+                            self.client.send(*reply).await?;
+                            if self.execution.complete() { return Ok(()); }
+                        },
                         Completion::Failed { replies, error } => {
                             for reply in replies { self.client.send(reply).await?; }
                             return Err(error);
@@ -124,8 +151,8 @@ impl Runtime {
                         Some(frame::Body::Invoke(Invoke {
                             op: Some(invoke::Op::RenderWidget(render)),
                         })) => {
-                            let Some(entry) = plugin
-                                .surfaces()
+                            let Some(entry) = self.program.registrations
+                                .surfaces
                                 .iter()
                                 .find(|entry| entry.surface == render.surface_id)
                             else {
@@ -167,8 +194,13 @@ impl Runtime {
                         Some(frame::Body::Invoke(Invoke {
                             op: Some(invoke::Op::CallCommand(call)),
                         })) => {
+                            if let Err(refusal) = self.execution.admit(call.invocation_id) {
+                                self.client.send(refusal.frame(frame.stream_id)).await?;
+                                continue;
+                            }
                             if let Err(refusal) = commands.admit(frame.stream_id, call) {
                                 self.client.send(refusal.frame(frame.stream_id)).await?;
+                                if self.execution.complete() { return Ok(()); }
                             }
                         }
 

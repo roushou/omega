@@ -145,11 +145,8 @@ async fn an_adoption_ends_with_the_connection_that_asked_for_it() {
     // An expired adoption token grants no plugin authority.
     let hash = widget_manifest("battery-widget", "battery").hash();
     let mut late = harness.connect(&hash, &token).await;
-    let welcome = welcome(late.recv().await.unwrap());
-
-    assert_ne!(welcome.plugin_id, name.to_string());
-    assert!(welcome.plugin_id.starts_with("operator-"), "{welcome:?}");
-    assert!(welcome.capabilities.is_empty(), "{welcome:?}");
+    let refusal = expect_refusal(late.recv().await.unwrap());
+    assert_eq!(refusal.code, ErrorCode::Unauthenticated);
 }
 
 #[tokio::test]

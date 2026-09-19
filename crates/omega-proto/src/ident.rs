@@ -144,7 +144,17 @@ impl TryFrom<String> for CommandId {
     type Error = IdentError;
 
     fn try_from(id: String) -> Result<Self, Self::Error> {
-        Ident::validate("command id", id).map(Self)
+        if id.len() > 256
+            || id
+                .split('.')
+                .any(|part| Ident::validate("command id", part.to_owned()).is_err())
+        {
+            return Err(IdentError::InvalidCharacters {
+                kind: "command id",
+                name: id,
+            });
+        }
+        Ok(Self(id))
     }
 }
 

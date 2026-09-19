@@ -64,6 +64,33 @@ impl Machine {
         String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
+    fn execution(&self, command: &str, phase: &str) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let catalogue: serde_json::Value =
+                serde_json::from_str(&self.run(&["commands", "--json"])).unwrap();
+            let found = catalogue["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| {
+                    entry["endpoint"]["id"] == command
+                        && entry
+                            .get("executions")
+                            .and_then(|v| v.as_array())
+                            .is_some_and(|calls| calls.iter().any(|call| call["phase"] == phase))
+                });
+            if found {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{command} did not reach {phase}: {catalogue}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     /// Run cargo over the scaffolded workspace, the way its author would.
     fn cargo_command(&self, args: &[&str]) -> Command {
         let mut command = Command::new("cargo");
@@ -652,7 +679,7 @@ fn shell_only_configs_build_and_check_never_publishes() {
             "tick", omega_document::Cadence::seconds(1),
             omega_document::Actions::invoke_named("missing", "tick")
         )).emit()"#,
-            "unknown plugin",
+            "unknown command",
         ),
     ] {
         std::fs::write(
@@ -693,4 +720,284 @@ fn generated_workspace_builds_stay_in_cargo_target_scratch_space() {
     let args: Vec<_> = command.get_args().collect();
     let target = args.iter().position(|arg| *arg == "--target-dir").unwrap();
     assert_eq!(Path::new(args[target + 1]), Machine::build_cache());
+}
+
+#[test]
+#[ignore = "compiles command hosts and runs an isolated daemon"]
+fn command_hosts_switch_lifetime_without_changing_commands_or_callers() {
+    let machine = Machine::new();
+    machine.run(&["init", "--bare"]);
+    machine.run(&["link"]);
+    machine.run(&["new", "operations", "--lib", "--into", "system"]);
+    let manifest = machine.root.join("config/crates/operations/Cargo.toml");
+    let mut source = std::fs::read_to_string(&manifest).unwrap();
+    source.push_str(&format!("\n[dependencies.omega]\npackage = \"omega-rs\"\nversion = {:?}\n\n[package.metadata.omega]\nkind = \"command-host\"\n", env!("CARGO_PKG_VERSION")));
+    std::fs::write(manifest, source).unwrap();
+    std::fs::write(
+        machine.root.join("config/crates/operations/src/lib.rs"),
+        r#"
+use omega::{Command, host::CommandHost};
+pub use omega::host::ExecutionPolicy;
+pub struct Identity;
+impl omega::command::Construct for Identity {
+    type Dependencies = ();
+    fn construct((): ()) -> Self { Self }
+}
+
+impl Command for Identity {    type Input = ();
+    type Output = String;
+    const ID: &'static str = "test.process";
+    async fn call(&self, (): ()) -> omega::Result<String> {
+        Ok(std::process::id().to_string())
+    }
+}
+pub struct Fail;
+impl omega::command::Construct for Fail {
+    type Dependencies = ();
+    fn construct((): ()) -> Self { Self }
+}
+
+impl Command for Fail {    type Input = ();
+    type Output = ();
+    const ID: &'static str = "test.fail";
+    async fn call(&self, (): ()) -> omega::Result<()> { panic!("intentional fixture failure") }
+}
+pub struct Wait;
+impl omega::command::Construct for Wait {
+    type Dependencies = ();
+    fn construct((): ()) -> Self { Self }
+}
+
+impl Command for Wait {    type Input = ();
+    type Output = ();
+    const ID: &'static str = "test.wait";
+    async fn call(&self, (): ()) -> omega::Result<()> {
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        Ok(())
+    }
+}
+pub fn host() -> CommandHost {
+    CommandHost::new("process-host", "1.0.0").command::<Identity>().command::<Fail>().command::<Wait>()
+}
+pub fn bounded_host() -> omega::host::CommandHostDeployment {
+    let mut policy = omega::host::ExecutionPolicy::serial();
+    policy.queue_capacity = 1;
+    policy.queue_timeout = std::time::Duration::from_secs(1);
+    policy.execution_timeout = std::time::Duration::from_secs(3);
+    host().deployment().execution(policy)
+}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        machine.root.join("config/crates/operations/src/main.rs"),
+        "fn main() -> omega::Result<()> { operations::host().run() }\n",
+    )
+    .unwrap();
+    let system = machine.root.join("config/system/src/main.rs");
+    std::fs::write(&system, "fn main() -> omega_document::Result<()> { omega_document::Document::new().command_host(operations::host().deployment().execution(operations::ExecutionPolicy::bounded(std::num::NonZeroUsize::new(4).unwrap())))?.emit() }\n").unwrap();
+    machine.run(&["build", "--debug"]);
+    let _daemon = machine.daemon();
+    assert!(listening(&machine.control(), Duration::from_secs(10)));
+    machine.run(&["build", "--debug", "--wait", "--timeout", "30s"]);
+    let idle: serde_json::Value =
+        serde_json::from_str(&machine.run(&["status", "process-host", "--json"])).unwrap();
+    assert_eq!(idle["commandHosts"][0]["id"], "process-host");
+    assert_eq!(idle["commandHosts"][0]["phase"], "COMMAND_HOST_PHASE_IDLE");
+    let status = machine.run(&["status", "process-host"]);
+    assert!(status.is_empty(), "human-readable status belongs on stderr");
+    assert!(
+        idle.get("plugins")
+            .is_none_or(|v| v.as_array().unwrap().is_empty())
+    );
+    assert!(
+        idle.get("pluginHealth")
+            .is_none_or(|v| v.as_array().unwrap().is_empty())
+    );
+    assert!(
+        idle["commandHosts"][0]
+            .get("processes")
+            .is_none_or(|v| v.as_array().unwrap().is_empty())
+    );
+    let callers: Vec<_> = (0..4)
+        .map(|_| {
+            machine
+                .omega(&["run", "test.process"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    let processes: Vec<_> = callers
+        .into_iter()
+        .map(|caller| {
+            let output = caller.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap()
+        })
+        .collect();
+    let first = &processes[0];
+    assert!(processes.iter().all(|process| process == first));
+    assert_eq!(*first, machine.run(&["run", "test.process"]));
+    let active: serde_json::Value =
+        serde_json::from_str(&machine.run(&["status", "--json"])).unwrap();
+    assert_eq!(
+        active["commandHosts"][0]["processes"][0]["phase"],
+        "running"
+    );
+    assert!(active.get("plugins").is_none_or(|v| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["plugin"] != "process-host")
+    }));
+
+    std::fs::write(&system, "fn main() -> omega_document::Result<()> { omega_document::Document::new().command_host(operations::host().deployment().one_shot())?.emit() }\n").unwrap();
+    machine.run(&["build", "--debug", "--wait", "--timeout", "30s"]);
+    let second = machine.run(&["run", "test.process"]);
+    let third = machine.run(&["run", "test.process"]);
+    assert_ne!(*first, second);
+    assert_ne!(second, third);
+    let failure = machine.omega(&["run", "test.fail"]).output().unwrap();
+    assert!(!failure.status.success());
+    assert!(
+        String::from_utf8_lossy(&failure.stderr).contains("OUTCOME_UNKNOWN"),
+        "{}",
+        String::from_utf8_lossy(&failure.stderr)
+    );
+    let fourth = machine.run(&["run", "test.process"]);
+    assert_ne!(third, fourth);
+    let catalogue: serde_json::Value =
+        serde_json::from_str(&machine.run(&["commands", "--json"])).unwrap();
+    assert_eq!(catalogue["hosts"][0]["id"], "process-host");
+    assert_eq!(catalogue["hosts"][0]["lifetime"], "one-shot");
+    assert_eq!(catalogue["hosts"][0]["phase"], "COMMAND_HOST_PHASE_IDLE");
+    assert!(
+        catalogue["hosts"][0].get("startupError").is_none(),
+        "a completed one-shot handshake must not become a startup failure"
+    );
+    assert!(
+        catalogue["hosts"][0]["recentFailures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|failure| failure["command"] == "test.fail")
+    );
+    let readable = machine
+        .omega(&["commands", "process-host"])
+        .output()
+        .unwrap();
+    assert!(readable.status.success());
+    assert!(String::from_utf8_lossy(&readable.stderr).contains("OUTCOME_UNKNOWN"));
+    assert!(String::from_utf8_lossy(&readable.stdout).contains("test.process"));
+    assert!(
+        catalogue["hosts"][0]
+            .get("processes")
+            .is_none_or(|v| v.as_array().unwrap().is_empty())
+    );
+    assert!(
+        catalogue["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry.get("executions").is_some())
+    );
+    std::fs::write(&system, "fn main() -> omega_document::Result<()> { omega_document::Document::new().command_host(operations::bounded_host())?.emit() }\n").unwrap();
+    machine.run(&["build", "--debug", "--wait", "--timeout", "30s"]);
+    let mut abandoned = machine
+        .omega(&["run", "test.wait"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    machine.execution("test.wait", "dispatched");
+    let queued = machine
+        .omega(&["run", "test.wait"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    machine.execution("test.wait", "queued");
+    abandoned.kill().unwrap();
+    abandoned.wait().unwrap();
+    let saturated = machine.omega(&["run", "test.process"]).output().unwrap();
+    assert!(!saturated.status.success());
+    assert!(
+        String::from_utf8_lossy(&saturated.stderr).contains("RESOURCE_EXHAUSTED"),
+        "{}",
+        String::from_utf8_lossy(&saturated.stderr)
+    );
+    let expired = queued.wait_with_output().unwrap();
+    assert!(!expired.status.success());
+    assert!(
+        String::from_utf8_lossy(&expired.stderr).contains("DEADLINE_EXCEEDED"),
+        "{}",
+        String::from_utf8_lossy(&expired.stderr)
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let catalogue = machine.run(&["commands", "--json"]);
+        if catalogue.contains("ERROR_CODE_OUTCOME_UNKNOWN") && !catalogue.contains("dispatched") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "execution capacity was not released: {catalogue}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    machine.run(&["run", "test.process"]);
+}
+
+#[test]
+#[ignore = "compiles a scaffolded command host and runs an isolated daemon"]
+fn scaffolded_command_host_builds_with_its_printed_registration_and_runs() {
+    let machine = Machine::new();
+    machine.run(&["init", "--bare"]);
+    machine.run(&["link"]);
+    let system = machine.root.join("config/system/src/main.rs");
+    let original = std::fs::read(&system).unwrap();
+    let output = machine
+        .omega(&["new", "audio-commands", "--command-host"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+    let hint = omega_cli::scaffold::Scaffold::command_host_hint(&"audio-commands".parse().unwrap());
+    assert!(String::from_utf8_lossy(&output.stderr).contains(&hint));
+    assert_eq!(std::fs::read(&system).unwrap(), original);
+    machine.assert_members(&["system", "commands/*"], &["audio-commands", "system"]);
+    machine.run(&[
+        "new",
+        "shared",
+        "--lib",
+        "--into",
+        "commands/audio-commands",
+    ]);
+    std::fs::write(&system, format!("fn main() -> omega_document::Result<()> {{ omega_document::Document::new(){hint}.emit() }}\n")).unwrap();
+    machine.run(&["check"]);
+    machine.run(&["build", "--debug"]);
+    let _daemon = machine.daemon();
+    assert!(listening(&machine.control(), Duration::from_secs(10)));
+    machine.run(&["build", "--debug", "--wait", "--timeout", "30s"]);
+    assert_eq!(
+        machine.run(&["run", "audio-commands.echo", "hello world"]),
+        "hello world\n"
+    );
+    let catalogue: serde_json::Value =
+        serde_json::from_str(&machine.run(&["commands", "audio-commands", "--json"])).unwrap();
+    assert_eq!(catalogue["hosts"][0]["id"], "audio-commands");
+    assert_eq!(
+        catalogue["entries"][0]["endpoint"]["id"],
+        "audio-commands.echo"
+    );
 }

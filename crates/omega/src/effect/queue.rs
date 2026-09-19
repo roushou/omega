@@ -71,13 +71,19 @@ impl Admission {
         }
         drop(self.bytes.split(self.bytes.num_permits() - size));
         let (reply, receiver) = oneshot::channel();
+        let timeout = if matches!(&op, invoke::Op::Act(act) if matches!(act.action.as_ref().and_then(|a| a.kind.as_ref()), Some(omega_proto::omega::action::Kind::InvokePlugin(_))))
+        {
+            omega_proto::host::ExecutionPolicy::CALL_TIMEOUT
+        } else {
+            Effects::TIMEOUT
+        };
         self.slot.send(Request {
             op,
             pending: PendingEffect {
                 reply: Some(reply),
                 _permit: self.permit,
                 _bytes: self.bytes,
-                deadline: Instant::now() + Effects::TIMEOUT,
+                deadline: Instant::now() + timeout,
             },
         });
         Ok(Receipt::raw(receiver))

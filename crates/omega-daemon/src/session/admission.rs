@@ -15,6 +15,13 @@ use crate::process::Identity;
 pub struct Peer {
     id: PeerId,
     grants: Grants,
+    manifest: Option<std::sync::Arc<Manifest>>,
+    host: Option<(
+        omega_proto::host::ProcessId,
+        omega_proto::host::HostId,
+        Option<omega_proto::host::InvocationId>,
+        omega_proto::Values,
+    )>,
 }
 
 #[derive(Debug)]
@@ -26,8 +33,46 @@ enum PeerId {
 }
 
 impl Peer {
+    pub(crate) fn host(
+        process: omega_proto::host::ProcessId,
+        host: omega_proto::host::HostId,
+        invocation: Option<omega_proto::host::InvocationId>,
+        manifest: std::sync::Arc<Manifest>,
+        settings: omega_proto::Values,
+    ) -> Result<Self, Refusal> {
+        let name = host
+            .as_str()
+            .parse()
+            .map_err(|error: omega_proto::IdentError| Refusal::invalid(error.to_string()))?;
+        Ok(Self {
+            grants: Grants::of(&manifest)?,
+            manifest: Some(manifest),
+            host: Some((process, host, invocation, settings)),
+            id: PeerId::Plugin(name),
+        })
+    }
+    pub(crate) fn host_process(&self) -> Option<omega_proto::host::ProcessId> {
+        self.host.as_ref().map(|host| host.0)
+    }
+    pub(crate) fn host_assignment(&self) -> Option<omega_proto::omega::HostAssignment> {
+        self.host
+            .as_ref()
+            .map(|host| omega_proto::omega::HostAssignment {
+                process_id: host.0.get(),
+                invocation_id: host.2.map_or(0, |id| id.get()),
+            })
+    }
+    pub(crate) fn host_settings(&self) -> Option<omega_proto::Values> {
+        self.host.as_ref().map(|host| host.3.clone())
+    }
+    pub(crate) fn manifest(&self) -> Option<&Manifest> {
+        self.manifest.as_deref()
+    }
+
     pub fn plugin(name: PluginName, manifest: &Manifest) -> Result<Self, Refusal> {
         Ok(Self {
+            manifest: Some(std::sync::Arc::new(manifest.clone())),
+            host: None,
             grants: Grants::of(manifest)?,
             id: PeerId::Plugin(name),
         })
@@ -42,6 +87,8 @@ impl Peer {
         }
 
         Ok(Self {
+            manifest: None,
+            host: None,
             id: PeerId::Operator(pid),
             // An operator holds no plugin's capabilities: it may cycle a plugin,
             // not act as one.

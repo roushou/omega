@@ -21,6 +21,17 @@ impl<'a> Package<'a> {
             .ok_or_else(|| CargoError::new("package.name", "is required"))
     }
 
+    /// Optional Omega executable role from package metadata.
+    pub fn omega_kind(&self) -> Result<Option<&'a str>, CargoError> {
+        let Some(metadata) = Fields::table(self.table, "metadata", "package.metadata")? else {
+            return Ok(None);
+        };
+        let Some(omega) = Fields::table(metadata, "omega", "package.metadata.omega")? else {
+            return Ok(None);
+        };
+        Fields::string(omega, "kind", "package.metadata.omega.kind")
+    }
+
     /// The declared version; `None` means Cargo's default applies.
     pub fn version(&self) -> Result<Option<Inherited<'a>>, CargoError> {
         self.inherited("version")

@@ -4,6 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let protos = [
         "omega/value.proto",
         "omega/storage.proto",
+        "omega/host.proto",
         "omega/state/display.proto",
         "omega/state/media.proto",
         "omega/state/network.proto",

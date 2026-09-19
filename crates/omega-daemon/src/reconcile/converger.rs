@@ -269,6 +269,15 @@ impl Worker {
             self.context.plugins.revoke(name);
         }
         build.generation.accept()?;
+        self.context
+            .plugins
+            .hosts()
+            .configure(
+                &build.manifests,
+                &build.document.command_hosts,
+                &build.generation,
+            )
+            .map_err(|error| super::ProviderError::new("command hosts", error.to_string()))?;
         self.context.plugins.activate(
             &build.manifests,
             build
@@ -302,7 +311,14 @@ impl Worker {
 
         // Validate every plan before the first effect. A failed application
         // stops the pass; the retry plans again against actual ownership.
-        let built_plugins = build.config.names().cloned().collect();
+        let built_plugins = build
+            .manifests
+            .iter()
+            .filter(|(_, manifest)| {
+                manifest.manifest.host_kind == omega_proto::omega::HostKind::Plugin as i32
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
         let running_plugins = self.context.supervisor.running().into_iter().collect();
         let plugin_changes =
             PluginProvider::plan(&build.document, &built_plugins, &running_plugins)?;

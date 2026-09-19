@@ -51,10 +51,23 @@ fn workspace(layout: &Layout, members: &[&str], exclude: &[&str]) {
 fn only_plugins_are_runnable_members() {
     let tmp = TempDir::new("discover");
     let layout = tmp.layout();
-    for dir in ["plugins/battery", "plugins/clock", "crates/shared"] {
+    for dir in [
+        "plugins/battery",
+        "plugins/clock",
+        "crates/shared",
+        "commands/shared-commands",
+    ] {
         std::fs::create_dir_all(layout.config.join(dir)).unwrap();
+        std::fs::write(
+            layout.config.join(dir).join("Cargo.toml"),
+            format!(
+                "[package]\nname = {:?}\nversion = \"1.0.0\"\n",
+                dir.rsplit('/').next().unwrap()
+            ),
+        )
+        .unwrap();
     }
-    workspace(&layout, &["plugins/*", "crates/*"], &[]);
+    workspace(&layout, &["plugins/*", "crates/*", "commands/*"], &[]);
 
     let plugins = Plugins::discover(&layout).unwrap();
     assert_eq!(
@@ -72,6 +85,14 @@ fn excluded_members_are_not_plugins() {
     let layout = tmp.layout();
     for dir in ["plugins/battery", "plugins/scratch"] {
         std::fs::create_dir_all(layout.config.join(dir)).unwrap();
+        std::fs::write(
+            layout.config.join(dir).join("Cargo.toml"),
+            format!(
+                "[package]\nname = {:?}\nversion = \"1.0.0\"\n",
+                dir.rsplit('/').next().unwrap()
+            ),
+        )
+        .unwrap();
     }
     workspace(&layout, &["plugins/*"], &["plugins/scratch"]);
 
@@ -102,16 +123,26 @@ fn a_missing_workspace_manifest_is_reported_as_such() {
 }
 
 #[test]
-fn misplaced_members_fail_loudly() {
+fn unmarked_members_are_libraries_but_external_members_are_rejected() {
     let tmp = TempDir::new("roles");
     let layout = tmp.layout();
     for member in ["plugins/nested/deep", "shared", "../external"] {
+        std::fs::create_dir_all(layout.config.join(member)).unwrap();
+        std::fs::write(
+            layout.config.join(member).join("Cargo.toml"),
+            "[package]\nname = \"example\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
         workspace(&layout, &[member], &[]);
-        assert!(
-            Plugins::discover(&layout)
-                .unwrap_err()
-                .to_string()
-                .contains("outside")
-        );
+        if member == "../external" {
+            assert!(
+                Plugins::discover(&layout)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("outside")
+            );
+        } else {
+            assert!(Plugins::discover(&layout).unwrap().is_empty());
+        }
     }
 }

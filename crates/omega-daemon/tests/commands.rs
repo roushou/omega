@@ -162,7 +162,7 @@ async fn a_command_the_plugin_never_declared_is_refused_before_it_is_asked() {
     // Validate command names against the manifest before routing.
     let refusal = expect_refusal(next_result(&mut operator).await);
     assert_eq!(refusal.code, ErrorCode::InvalidArgument);
-    assert!(refusal.message.contains("toggle"), "{refusal}");
+    assert!(refusal.message.contains("togle"), "{refusal}");
 }
 
 #[tokio::test]
@@ -182,7 +182,7 @@ async fn a_plugin_that_declares_no_commands_says_so() {
         .unwrap();
 
     let refusal = expect_refusal(next_result(&mut operator).await);
-    assert!(refusal.message.contains("undeclared command"), "{refusal}");
+    assert!(refusal.message.contains("no provider"), "{refusal}");
 }
 
 #[tokio::test]
@@ -293,6 +293,7 @@ struct PendingCalls;
 impl PendingCalls {
     fn op(bytes: usize) -> invoke::Op {
         invoke::Op::CallCommand(omega_proto::omega::CallCommand {
+            invocation_id: 0,
             command: "toggle".into(),
             args: vec![Value {
                 kind: Some(value::Kind::StringValue("x".repeat(bytes))),
@@ -440,11 +441,11 @@ async fn streamed_results_and_cancelled_callers_do_not_release_pending_slots_ear
 #[tokio::test]
 async fn a_declared_dependency_routes_without_spawn_and_discovery_does_not_widen_access() {
     let target = command_manifest("target", "set");
-    let hidden = command_manifest("hidden", "set");
+    let hidden = command_manifest("hidden", "hidden.set");
     let mut caller_manifest = widget_manifest("caller", "panel");
     caller_manifest
         .command_dependencies
-        .push(target.commands[0].dependency("target"));
+        .push(target.commands[0].dependency());
     let harness = Harness::new(
         "typed-call",
         ManifestStore::from_manifests([target.clone(), hidden, caller_manifest.clone()]),
@@ -475,7 +476,7 @@ async fn a_declared_dependency_routes_without_spawn_and_discovery_does_not_widen
         && let Some(action::Kind::InvokePlugin(call)) =
             act.action.as_mut().and_then(|a| a.kind.as_mut())
     {
-        call.signature = target.commands[0].signature("target");
+        call.signature = target.commands[0].signature();
     }
     caller.send(request).await.unwrap();
     let request = target_peer.recv().await.unwrap().unwrap();
@@ -490,7 +491,7 @@ async fn a_declared_dependency_routes_without_spawn_and_discovery_does_not_widen
         common::expect_outcome(next_result(&mut caller).await),
         result::Outcome::Value("typed result".into_value())
     );
-    caller.send(call(5, "hidden", "set")).await.unwrap();
+    caller.send(call(5, "hidden", "hidden.set")).await.unwrap();
     assert_eq!(
         expect_refusal(next_result(&mut caller).await).code,
         ErrorCode::PermissionDenied

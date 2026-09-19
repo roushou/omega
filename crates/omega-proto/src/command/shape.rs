@@ -154,3 +154,52 @@ impl CommandType {
         }
     }
 }
+
+impl CommandEndpoint {
+    /// Validate the typed argument envelope against this endpoint's input shape.
+    pub fn accepts_arguments(
+        &self,
+        args: &[crate::omega::Value],
+    ) -> Result<(), CommandContractError> {
+        let input = self
+            .input
+            .as_ref()
+            .ok_or_else(|| CommandContractError::Invalid("missing input shape".into()))?;
+        match command_type::Kind::try_from(input.kind) {
+            Ok(command_type::Kind::Opaque) => Ok(()),
+            Ok(command_type::Kind::Unit) if args.is_empty() => Ok(()),
+            Ok(command_type::Kind::Unit) => Err(CommandContractError::Invalid(
+                "command expects no arguments".into(),
+            )),
+            Ok(_) if args.len() == 1 => input.accepts(&args[0]),
+            _ => Err(CommandContractError::Invalid(
+                "invalid command argument envelope".into(),
+            )),
+        }
+    }
+
+    /// Validate a terminal answer without conflating an empty value and an acknowledgement.
+    pub fn accepts_answer(
+        &self,
+        answer: &super::CommandAnswer,
+    ) -> Result<(), CommandContractError> {
+        let output = self
+            .output
+            .as_ref()
+            .ok_or_else(|| CommandContractError::Invalid("missing output shape".into()))?;
+        match answer {
+            super::CommandAnswer::Value(value) => output.accepts(value),
+            super::CommandAnswer::Acknowledged
+                if matches!(
+                    command_type::Kind::try_from(output.kind),
+                    Ok(command_type::Kind::Unit | command_type::Kind::Opaque)
+                ) =>
+            {
+                Ok(())
+            }
+            _ => Err(CommandContractError::Invalid(
+                "command returned no value".into(),
+            )),
+        }
+    }
+}

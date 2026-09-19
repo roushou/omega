@@ -5,6 +5,7 @@ pub mod codec;
 pub mod command;
 pub use command::{CommandAddress, CommandContractError, CommandContracts};
 pub mod handshake;
+pub mod host;
 pub mod icons;
 pub mod ident;
 pub mod instance;

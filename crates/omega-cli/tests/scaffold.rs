@@ -27,6 +27,9 @@ fn every_member_inherits_from_the_workspace_and_never_declares() {
     for member in [
         scaffold.plugin_crate_manifest(&plugin()).unwrap(),
         scaffold.system_manifest().unwrap(),
+        scaffold
+            .command_host_manifest(&"audio-commands".parse().unwrap())
+            .unwrap(),
     ] {
         for (name, dependency) in member.dependencies().unwrap().iter() {
             // A member of this workspace is reached by path and has no

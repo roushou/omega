@@ -192,6 +192,8 @@ pub struct Start {
     timer: Own<Timer>,
 }
 impl Command for Start {
+    const ID: &'static str = "start";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -203,6 +205,8 @@ pub struct Pause {
     timer: Own<Timer>,
 }
 impl Command for Pause {
+    const ID: &'static str = "pause";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -214,6 +218,8 @@ pub struct Reset {
     timer: Own<Timer>,
 }
 impl Command for Reset {
+    const ID: &'static str = "reset";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -226,6 +232,8 @@ pub struct Tick {
     notify: Notify,
 }
 impl Command for Tick {
+    const ID: &'static str = "tick";
+
     type Input = ();
     type Output = ();
     async fn call(&self, _: ()) -> omega::Result<()> {
@@ -243,7 +251,7 @@ impl Command for Tick {
     }
 }
 pub fn plugin() -> Plugin {
-    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
+    Plugin::new(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<Start>()

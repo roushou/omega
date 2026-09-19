@@ -54,8 +54,10 @@ extern crate self as omega;
 
 pub mod command;
 mod error;
+pub mod host;
 pub mod platform;
 pub mod plugin;
+mod program;
 pub mod reaction;
 mod runtime;
 pub mod surface;
@@ -100,7 +102,6 @@ pub mod config {
 #[doc(hidden)]
 pub mod internal {
     pub use crate::Command;
-    pub use crate::command::CommandName;
     pub use crate::command::CommandRef;
     pub use crate::command::{CommandValue, Input, Invocation};
     pub use crate::record::PluginState;

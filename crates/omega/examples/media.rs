@@ -216,6 +216,8 @@ pub struct SelectPlayer {
     selection: Own<Selection>,
 }
 impl Command for SelectPlayer {
+    const ID: &'static str = "select-player";
+
     type Input = Option<PlayerId>;
     type Output = ();
     async fn call(&self, player: Option<PlayerId>) -> omega::Result<()> {
@@ -233,6 +235,8 @@ pub struct PlayPause {
     media: MediaControl,
 }
 impl Command for PlayPause {
+    const ID: &'static str = "play-pause";
+
     type Input = PlayerId;
     type Output = ();
     async fn call(&self, id: PlayerId) -> omega::Result<()> {
@@ -245,6 +249,8 @@ pub struct Previous {
     media: MediaControl,
 }
 impl Command for Previous {
+    const ID: &'static str = "previous";
+
     type Input = PlayerId;
     type Output = ();
     async fn call(&self, id: PlayerId) -> omega::Result<()> {
@@ -257,6 +263,8 @@ pub struct Next {
     media: MediaControl,
 }
 impl Command for Next {
+    const ID: &'static str = "next";
+
     type Input = PlayerId;
     type Output = ();
     async fn call(&self, id: PlayerId) -> omega::Result<()> {
@@ -265,7 +273,7 @@ impl Command for Next {
 }
 
 fn main() -> omega::Result<()> {
-    Plugin::named(PLUGIN, env!("CARGO_PKG_VERSION"))
+    Plugin::new(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
         .surface_as::<Panel>("panel")
         .command::<SelectPlayer>()

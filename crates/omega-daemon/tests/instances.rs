@@ -940,12 +940,11 @@ async fn a_foreign_binding_preserves_its_owner_and_uses_the_source_plugins_grant
     for granted in [false, true] {
         let mut fixture = Fixture::new("foreign-binding");
         let target = common::command_manifest("target", "activate");
-        let mut source =
-            common::widget_manifest("example", "panel").serving(target.commands.clone());
+        let mut source = common::widget_manifest("example", "panel");
         if granted {
             source
                 .command_dependencies
-                .push(target.commands[0].dependency("target"));
+                .push(target.commands[0].dependency());
         }
         drop(fixture.guard.take());
         fixture
@@ -969,7 +968,7 @@ async fn a_foreign_binding_preserves_its_owner_and_uses_the_source_plugins_grant
         let mut view = Fixture::view("local target".into_value());
         let binding = view.root.as_mut().unwrap().events.get_mut("press").unwrap();
         binding.plugin = "target".into();
-        binding.signature = target.commands[0].signature("target");
+        binding.signature = target.commands[0].signature();
         fixture
             .plugins
             .publish_instance(

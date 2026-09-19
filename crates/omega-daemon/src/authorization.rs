@@ -21,7 +21,7 @@ pub enum Role {
 /// of the manifest.
 #[derive(Debug)]
 pub struct Grants {
-    commands: std::collections::BTreeMap<omega_proto::CommandAddress, Vec<u8>>,
+    commands: std::collections::BTreeMap<omega_proto::CommandId, Vec<u8>>,
     storage: std::collections::BTreeMap<omega_proto::storage::StorageId, bool>,
     capabilities: Vec<Capability>,
     surfaces: HashMap<SurfaceId, SurfaceKind>,
@@ -55,22 +55,16 @@ impl Grants {
         let mut commands = std::collections::BTreeMap::new();
         for endpoint in &manifest.commands {
             commands.insert(
-                omega_proto::CommandAddress {
-                    plugin: manifest
-                        .name
-                        .parse()
-                        .map_err(|e: omega_proto::IdentError| Refusal::invalid(e.to_string()))?,
-                    command: endpoint
-                        .id
-                        .parse()
-                        .map_err(|e: omega_proto::IdentError| Refusal::invalid(e.to_string()))?,
-                },
-                endpoint.signature(&manifest.name),
+                endpoint
+                    .id
+                    .parse()
+                    .map_err(|e: omega_proto::IdentError| Refusal::invalid(e.to_string()))?,
+                endpoint.signature(),
             );
         }
         for dependency in &manifest.command_dependencies {
             commands.insert(
-                omega_proto::CommandAddress::try_from(dependency).map_err(|e| e.refusal())?,
+                omega_proto::CommandId::try_from(dependency).map_err(|e| e.refusal())?,
                 dependency.signature.clone(),
             );
         }
@@ -103,11 +97,23 @@ impl Grants {
         }
     }
 
+    pub(crate) fn command_id_access(
+        &self,
+        command: &omega_proto::CommandId,
+    ) -> Result<(), Refusal> {
+        if self.commands.contains_key(command) {
+            Ok(())
+        } else {
+            Err(Refusal::denied(format!(
+                "command access not declared for {command}"
+            )))
+        }
+    }
     pub(crate) fn command_access(
         &self,
         address: &omega_proto::CommandAddress,
     ) -> Result<(), Refusal> {
-        if self.commands.contains_key(address) {
+        if self.commands.contains_key(&address.command) {
             Ok(())
         } else {
             Err(Refusal::denied(format!(
@@ -120,7 +126,7 @@ impl Grants {
         address: &omega_proto::CommandAddress,
         signature: &[u8],
     ) -> Result<(), Refusal> {
-        match self.commands.get(address) {
+        match self.commands.get(&address.command) {
             Some(expected) if expected == signature => Ok(()),
             Some(_) => Err(Refusal::precondition(format!(
                 "incompatible command {address}"

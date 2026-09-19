@@ -11,6 +11,8 @@ struct Select {
     control: WorkspaceControl,
 }
 impl Command for Select {
+    const ID: &'static str = "select";
+
     type Input = WorkspaceIndex;
     type Output = ();
     async fn call(&self, index: WorkspaceIndex) -> omega::Result<()> {
@@ -23,6 +25,8 @@ struct Named {
     control: WorkspaceControl,
 }
 impl Command for Named {
+    const ID: &'static str = "named";
+
     type Input = WorkspaceName;
     type Output = ();
     async fn call(&self, name: WorkspaceName) -> omega::Result<()> {
@@ -35,6 +39,8 @@ struct Cycle {
     control: WorkspaceControl,
 }
 impl Command for Cycle {
+    const ID: &'static str = "cycle";
+
     type Input = bool;
     type Output = ();
     async fn call(&self, next: bool) -> omega::Result<()> {
@@ -113,7 +119,7 @@ async fn command_inputs_reject_invalid_indices_before_effects() {
 #[test]
 fn switching_adds_no_reading_or_process_execution_grants() {
     let manifest =
-        manifest_of(&omega::Plugin::named(env!("CARGO_PKG_NAME"), "1").command::<Select>());
+        manifest_of(&omega::Plugin::new(env!("CARGO_PKG_NAME"), "1").command::<Select>());
     assert!(!manifest.capabilities.contains(&(Capability::Spawn as i32)));
     assert!(manifest.state_topics.is_empty());
 }

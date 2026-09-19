@@ -13,6 +13,8 @@ use std::marker::PhantomData;
 /// #[derive(omega::Command)]
 /// struct SetVolume {}
 /// impl Command for SetVolume {
+///     const ID: &'static str = "set-volume";
+///
 ///     type Input = Percent;
 ///     type Output = ();
 ///     async fn call(&self, _: Percent) -> omega::Result<()> { Ok(()) }
@@ -27,6 +29,8 @@ use std::marker::PhantomData;
 /// #[derive(omega::Command)]
 /// struct Join {}
 /// impl Command for Join {
+///     const ID: &'static str = "join";
+///
 ///     type Input = String;
 ///     type Output = ();
 ///     async fn call(&self, _: String) -> omega::Result<()> { Ok(()) }
@@ -45,9 +49,9 @@ pub struct Bind<I> {
 impl<C: Command> From<CommandRef<C>> for Bind<C::Input> {
     fn from(_: CommandRef<C>) -> Self {
         Self {
-            command: C::NAME.to_string(),
-            plugin: C::PLUGIN.into(),
-            signature: CommandRef::<C>::INSTANCE.descriptor().signature(C::PLUGIN),
+            command: C::ID.to_string(),
+            plugin: "".into(),
+            signature: CommandRef::<C>::INSTANCE.descriptor().signature(),
             local: 0,
             args: Vec::new(),
             input: PhantomData,

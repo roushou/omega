@@ -299,6 +299,8 @@ impl ChoiceValue for omega_proto::omega::PowerProfile {
 /// #[derive(omega::Command)]
 /// struct SetPowerProfile { profiles: SetProfile }
 /// impl Command for SetPowerProfile {
+///     const ID: &'static str = "set-power-profile";
+///
 ///     type Input = PowerProfile;
 ///     type Output = ();
 ///     async fn call(&self, profile: PowerProfile) -> omega::Result<()> {
@@ -319,6 +321,8 @@ impl ChoiceValue for omega_proto::omega::PowerProfile {
 /// #[derive(omega::Command)]
 /// struct Rename {}
 /// impl Command for Rename {
+///     const ID: &'static str = "rename";
+///
 ///     type Input = String;
 ///     type Output = ();
 ///     async fn call(&self, _: String) -> omega::Result<()> { Ok(()) }
@@ -400,6 +404,8 @@ pub trait FormInput: Input {
 /// #[derive(omega::Command)]
 /// struct Connect { wifi: omega::platform::network::WifiControl }
 /// impl Command for Connect {
+///     const ID: &'static str = "connect";
+///
 ///     type Input = Credentials;
 ///     type Output = ();
 ///     async fn call(&self, input: Credentials) -> omega::Result<()> {

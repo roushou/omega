@@ -6,14 +6,20 @@ use omega_host::package::PackageName;
 use omega_host::{StageDir, Toml};
 
 #[derive(Debug)]
-pub(crate) struct PreparedPlugin<'a> {
+pub(crate) struct PreparedPackage<'a> {
     workspace: &'a ConfigWorkspace,
     name: PackageName,
     manifest: String,
-    library: &'static str,
-    main: Option<String>,
+    files: Vec<(&'static str, String)>,
     destination: std::path::PathBuf,
     edits: FileEdits,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PackageKind {
+    Plugin(Template),
+    Library,
+    CommandHost,
 }
 
 impl ConfigWorkspace {
@@ -21,28 +27,41 @@ impl ConfigWorkspace {
         &self,
         name: PackageName,
         template: Template,
-    ) -> Result<PreparedPlugin<'_>> {
-        self.prepare_package(name, Some(template), &[std::path::PathBuf::from("system")])
+    ) -> Result<PreparedPackage<'_>> {
+        self.prepare_package(
+            name,
+            PackageKind::Plugin(template),
+            &[std::path::PathBuf::from("system")],
+        )
     }
 
     pub(crate) fn prepare_library(
         &self,
         name: PackageName,
         consumers: &[std::path::PathBuf],
-    ) -> Result<PreparedPlugin<'_>> {
-        self.prepare_package(name, None, consumers)
+    ) -> Result<PreparedPackage<'_>> {
+        self.prepare_package(name, PackageKind::Library, consumers)
+    }
+
+    pub(crate) fn prepare_command_host(&self, name: PackageName) -> Result<PreparedPackage<'_>> {
+        self.prepare_package(
+            name,
+            PackageKind::CommandHost,
+            &[std::path::PathBuf::from("system")],
+        )
     }
 
     fn prepare_package(
         &self,
         name: PackageName,
-        template: Option<Template>,
+        kind: PackageKind,
         consumers: &[std::path::PathBuf],
-    ) -> Result<PreparedPlugin<'_>> {
+    ) -> Result<PreparedPackage<'_>> {
         use omega_host::workspace::WorkspaceRole;
-        let destination = match template {
-            Some(_) => self.layout.plugin_src_dir(name.plugin()),
-            None => self.layout.library_src_dir(&name),
+        let (destination, pattern) = match kind {
+            PackageKind::Plugin(_) => (self.layout.plugin_src_dir(name.plugin()), "plugins/*"),
+            PackageKind::Library => (self.layout.library_src_dir(&name), "crates/*"),
+            PackageKind::CommandHost => (self.layout.command_src_dir(&name), "commands/*"),
         };
         ensure!(
             !destination.try_exists()? && std::fs::symlink_metadata(&destination).is_err(),
@@ -62,10 +81,7 @@ impl ConfigWorkspace {
                 .to_str()
                 .context("non-UTF-8 member path")?,
             // Cargo rejects unmatched globs, so add each one with its first crate.
-            match template {
-                Some(_) => "plugins/*",
-                None => "crates/*",
-            },
+            pattern,
         )?;
         let updated = editor.to_string();
         let members = editor
@@ -113,7 +129,9 @@ impl ConfigWorkspace {
             let role = WorkspaceRole::at(&self.layout, &directory)?;
             let prefix = match role {
                 WorkspaceRole::System => "..",
-                WorkspaceRole::Plugin(_) | WorkspaceRole::Library(_) => "../..",
+                WorkspaceRole::Plugin(_)
+                | WorkspaceRole::Library(_)
+                | WorkspaceRole::Commands(_) => "../..",
             };
             let relative = destination.strip_prefix(&self.layout.config)?;
             let mut edit = FileEdit::read(
@@ -135,37 +153,49 @@ impl ConfigWorkspace {
             edit.replace(editor.to_string());
             edits.push(edit);
         }
-        let mut manifest = self.scaffold.plugin_crate_manifest(name.plugin())?;
-        if template.is_none() {
-            manifest.clear_dependencies();
-        }
-        let manifest = Toml::encode(&manifest)?;
-        let main = template
-            .map(|_| self.scaffold.plugin_main(&name))
-            .transpose()?;
-        Ok(PreparedPlugin {
+        let (manifest, files) = match kind {
+            PackageKind::Plugin(template) => (
+                self.scaffold.plugin_crate_manifest(name.plugin())?,
+                vec![
+                    ("src/lib.rs", template.library().into()),
+                    ("src/main.rs", self.scaffold.plugin_main(&name)?),
+                ],
+            ),
+            PackageKind::Library => {
+                let mut manifest = self.scaffold.plugin_crate_manifest(name.plugin())?;
+                manifest.clear_dependencies();
+                (
+                    manifest,
+                    vec![(
+                        "src/lib.rs",
+                        "//! Shared types and components for this desktop.\n".into(),
+                    )],
+                )
+            }
+            PackageKind::CommandHost => (
+                self.scaffold.command_host_manifest(&name)?,
+                self.scaffold.command_host_files(&name)?,
+            ),
+        };
+        Ok(PreparedPackage {
             workspace: self,
             name,
-            manifest,
-            library: template
-                .map(Template::library)
-                .unwrap_or("//! Shared types and components for this desktop.\n"),
+            manifest: Toml::encode(&manifest)?,
+            files,
             destination,
-            main,
             edits: FileEdits::new(edits),
         })
     }
 }
 
-impl PreparedPlugin<'_> {
+impl PreparedPackage<'_> {
     pub(crate) fn apply(self) -> Result<PackageName> {
         let destination = self.destination;
         let stage =
             StageDir::in_directory(&destination, &self.workspace.layout.workspace_staging())?;
         stage.write("Cargo.toml", self.manifest.as_bytes())?;
-        stage.write("src/lib.rs", self.library.as_bytes())?;
-        if let Some(main) = self.main {
-            stage.write("src/main.rs", main.as_bytes())?;
+        for (path, source) in self.files {
+            stage.write(path, source.as_bytes())?;
         }
         self.edits.apply()?;
         if let Err(error) = stage.publish_new() {

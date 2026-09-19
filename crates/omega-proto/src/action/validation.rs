@@ -188,7 +188,7 @@ impl action::Kind {
             Self::InvokePlugin(call) => {
                 input.require(
                     "plugin",
-                    call.plugin.parse::<PluginName>().is_ok(),
+                    call.plugin.is_empty() || call.plugin.parse::<PluginName>().is_ok(),
                     "must be a plugin identifier",
                 )?;
                 input.require(

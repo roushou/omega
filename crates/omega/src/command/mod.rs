@@ -1,24 +1,33 @@
-//! Public typed plugin endpoints, independent of UI instances.
+//! Typed command endpoints, independent of providers and UI instances.
 
-use crate::wiring::Wired;
-
-/// A typed operation callable from UI bindings, schedules, or `omega run`.
-/// Commands use the owning plugin's capabilities and run concurrently.
-/// Synchronize shared mutable state; record updates provide their own locking.
+/// A reusable typed operation callable from UI bindings, schedules, and other commands.
+///
+/// Register the command in one plugin or command host. `ID` names the operation
+/// independently of that provider. Each invocation constructs a fresh handler
+/// after required readings initialize. Shared state must be an explicit dependency.
+/// Host policy controls concurrency; commands registered in plugins run concurrently.
+/// Derive `omega::Command` to construct dependencies from fields, or implement
+/// [`Construct`] explicitly without a macro.
 ///
 /// ```no_run
-/// use omega::Command;
+/// use omega::{Command, platform::session::Session};
+///
 /// #[derive(omega::Command)]
-/// struct Lock { session: omega::platform::session::Session }
+/// struct Lock { session: Session }
+///
 /// impl Command for Lock {
 ///     type Input = ();
 ///     type Output = ();
-///     async fn call(&self, _: ()) -> Result<(), omega::Error> {
+///
+///     const ID: &'static str = "session.lock";
+///
+///     async fn call(&self, _: ()) -> omega::Result<()> {
 ///         self.session.lock().await
 ///     }
 /// }
 /// ```
-pub trait Command: Wired + crate::command::CommandName {
+pub trait Command: Construct {
+    const ID: &'static str;
     type Input: crate::Input;
     type Output: CommandValue;
     const DESCRIPTION: &'static str = "";
@@ -28,12 +37,16 @@ pub trait Command: Wired + crate::command::CommandName {
     ) -> impl std::future::Future<Output = Result<Self::Output, crate::Error>> + Send;
 }
 
+mod construct;
+pub use construct::Construct;
+
 mod args;
 mod input;
 mod reference;
+pub use crate::wiring::Wired as Dependencies;
 pub use args::Args;
 pub use input::Input;
-pub use reference::{CommandName, CommandRef};
+pub use reference::CommandRef;
 
 mod value;
 pub use omega_proto::omega::command_type::Kind as CommandTypeKind;
