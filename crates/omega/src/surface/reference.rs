@@ -41,15 +41,18 @@ impl<W> Clone for SurfaceRef<W> {
         *self
     }
 }
+
 impl<W> std::fmt::Debug for SurfaceRef<W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("SurfaceRef")
     }
 }
+
 impl<W> SurfaceRef<W> {
     #[doc(hidden)]
     pub const INSTANCE: Self = Self(PhantomData);
 }
+
 impl<W: SurfaceIdentity> SurfaceRef<W> {
     /// The package that defines this widget.
     pub fn plugin(self) -> &'static str {

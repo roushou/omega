@@ -24,6 +24,7 @@ pub enum WriteError {
     #[error("file was published but directory sync failed: {0}")]
     AfterPublication(#[source] io::Error),
 }
+
 impl WriteError {
     pub fn into_io(self) -> io::Error {
         match self {
@@ -31,6 +32,7 @@ impl WriteError {
         }
     }
 }
+
 impl From<io::Error> for WriteError {
     fn from(error: io::Error) -> Self {
         Self::BeforePublication(error)

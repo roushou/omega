@@ -9,6 +9,7 @@ pub const PLUGIN: &str = env!("CARGO_PKG_NAME");
 pub struct Indicator {
     audio: Audio,
 }
+
 impl Surface for Indicator {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -38,6 +39,7 @@ impl Surface for Indicator {
 pub struct Panel {
     audio: Audio,
 }
+
 impl Surface for Panel {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -86,6 +88,7 @@ impl Surface for Panel {
 pub struct SetVolume {
     volume: Volume,
 }
+
 impl Command for SetVolume {
     const ID: &'static str = "volume";
 
@@ -100,6 +103,7 @@ impl Command for SetVolume {
 pub struct Mute {
     volume: Volume,
 }
+
 impl Command for Mute {
     const ID: &'static str = "mute";
 
@@ -117,6 +121,7 @@ pub fn plugin() -> Plugin {
         .command::<SetVolume>()
         .command::<Mute>()
 }
+
 fn main() -> omega::Result<()> {
     plugin().run()
 }

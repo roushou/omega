@@ -8,6 +8,7 @@ impl crate::IntoValue for crate::omega::CommandCatalogue {
         }
     }
 }
+
 impl crate::FromValue for crate::omega::CommandCatalogue {
     fn from_value(value: &crate::omega::Value) -> Option<Self> {
         match value.kind.as_ref()? {

@@ -9,6 +9,7 @@ pub(super) struct History {
     pub accepted: Option<GenerationId>,
     pub previous: Option<GenerationId>,
 }
+
 impl TomlSchema for History {
     fn decode(source: &str) -> Result<Self, crate::TomlError> {
         crate::Toml::deserialize(source)

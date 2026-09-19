@@ -581,6 +581,7 @@ struct Creation {
     session: SessionLink,
     committed: bool,
 }
+
 impl Drop for Creation {
     fn drop(&mut self) {
         if !self.committed {
@@ -800,6 +801,7 @@ impl LifecycleDelivery {
         self.0.take();
     }
 }
+
 impl Drop for LifecycleDelivery {
     fn drop(&mut self) {
         if let Some(stop) = self.0.take() {

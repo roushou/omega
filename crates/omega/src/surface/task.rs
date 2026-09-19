@@ -9,16 +9,19 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub struct Task<M> {
     pub(crate) work: Vec<Work<M>>,
 }
+
 pub(crate) struct Work<M> {
     pub key: Option<TaskKey>,
     pub execution: Execution<M>,
     pub failed: Arc<dyn Fn(Error) -> M + Send + Sync>,
 }
+
 impl<M> Default for Task<M> {
     fn default() -> Self {
         Self { work: Vec::new() }
     }
 }
+
 impl<M: Send + 'static> Task<M> {
     pub fn none() -> Self {
         Self::default()

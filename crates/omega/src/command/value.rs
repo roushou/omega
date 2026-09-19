@@ -26,6 +26,7 @@ pub trait CommandValue: IntoValue + FromValue + Send + 'static {
         Self::from_value(value).ok_or_else(|| Error::invalid("invalid command value"))
     }
 }
+
 macro_rules! scalar {
     ($ty:ty, $kind:ident) => {
         impl CommandValue for $ty {
@@ -66,6 +67,7 @@ impl CommandValue for omega_proto::WorkspaceIndex {
         }
     }
 }
+
 impl CommandValue for Percent {
     fn shape() -> CommandType {
         CommandType {
@@ -76,6 +78,7 @@ impl CommandValue for Percent {
         }
     }
 }
+
 impl CommandValue for omega_proto::omega::PowerProfile {
     fn shape() -> CommandType {
         CommandType {
@@ -88,6 +91,7 @@ impl CommandValue for omega_proto::omega::PowerProfile {
         }
     }
 }
+
 impl<T: CommandValue> CommandValue for Option<T> {
     fn shape() -> CommandType {
         CommandType {
@@ -96,6 +100,7 @@ impl<T: CommandValue> CommandValue for Option<T> {
         }
     }
 }
+
 impl<T: CommandValue> CommandValue for Vec<T> {
     fn shape() -> CommandType {
         CommandType {

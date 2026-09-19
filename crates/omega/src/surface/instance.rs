@@ -32,11 +32,13 @@ pub(crate) struct Instance<S: Surface> {
     queued: std::collections::VecDeque<S::Message>,
     budget: Arc<tokio::sync::Semaphore>,
 }
+
 struct Pending<M> {
     key: Option<TaskKey>,
     failed: Arc<dyn Fn(Error) -> M + Send + Sync>,
     abort: tokio::task::AbortHandle,
 }
+
 impl<S: Surface> Instance<S> {
     pub(crate) fn model(&self) -> &S::Model {
         &self.model
@@ -115,6 +117,7 @@ impl<S: Surface> Instance<S> {
         self.schedule(task)
     }
 }
+
 impl<S: Surface> MountedSurface for Instance<S> {
     fn render(&mut self) -> Result<omega_proto::omega::ViewTree, Error> {
         self.bindings.clear();

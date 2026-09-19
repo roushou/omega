@@ -29,11 +29,13 @@ impl<C> Clone for CommandRef<C> {
         *self
     }
 }
+
 impl<C> std::fmt::Debug for CommandRef<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("CommandRef")
     }
 }
+
 impl<C> CommandRef<C> {
     pub const fn new() -> Self {
         Self::INSTANCE
@@ -41,6 +43,7 @@ impl<C> CommandRef<C> {
     #[doc(hidden)]
     pub const INSTANCE: Self = Self(PhantomData);
 }
+
 impl<C: Command> CommandRef<C> {
     pub fn descriptor(self) -> omega_proto::omega::CommandEndpoint {
         omega_proto::omega::CommandEndpoint {

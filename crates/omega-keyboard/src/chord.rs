@@ -8,6 +8,7 @@ pub struct Chord {
     phase: Phase,
     repeats: bool,
 }
+
 impl Chord {
     pub const fn new(key: Key) -> Self {
         Self {

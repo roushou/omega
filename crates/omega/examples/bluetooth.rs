@@ -9,6 +9,7 @@ use omega::{Command, Plugin, Surface, Ui};
 pub struct Indicator {
     bluetooth: Bluetooth,
 }
+
 impl Surface for Indicator {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -31,6 +32,7 @@ impl Surface for Indicator {
         Icon::new(Glyph::Bluetooth).muted().tooltip(tooltip).into()
     }
 }
+
 impl Indicator {
     fn connected_indicator(&self) -> Ui {
         let devices = self.bluetooth.connected_devices();
@@ -58,6 +60,7 @@ impl Indicator {
 pub struct Panel {
     bluetooth: Bluetooth,
 }
+
 impl Panel {
     fn name(device: &BluetoothDevice) -> &str {
         if device.name().is_empty() {
@@ -96,6 +99,7 @@ impl Panel {
             .child(button.fill_width())
     }
 }
+
 impl Surface for Panel {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -137,6 +141,7 @@ impl Surface for Panel {
 pub struct Connect {
     bluetooth: BluetoothControl,
 }
+
 impl Command for Connect {
     const ID: &'static str = "connect";
 
@@ -146,10 +151,12 @@ impl Command for Connect {
         self.bluetooth.connect(&id).await
     }
 }
+
 #[derive(omega::Command, Debug)]
 pub struct Disconnect {
     bluetooth: BluetoothControl,
 }
+
 impl Command for Disconnect {
     const ID: &'static str = "disconnect";
 

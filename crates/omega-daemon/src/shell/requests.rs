@@ -9,6 +9,7 @@ pub(super) struct Requests<R> {
     bytes: usize,
     pub(super) closed: bool,
 }
+
 impl<R: AsyncRead + Unpin> Requests<R> {
     const LIMIT: usize = omega_proto::MAX_FRAME_LEN;
 

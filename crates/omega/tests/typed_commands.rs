@@ -7,6 +7,7 @@ use omega::{Args, Command, Input, Percent, Plugin, Surface, Ui};
 struct SetVolume {
     volume: omega::platform::audio::Volume,
 }
+
 impl Command for SetVolume {
     const ID: &'static str = "volume";
 
@@ -152,6 +153,7 @@ struct Credentials {
     #[omega(label = "Password", help = "Leave blank for saved networks", secret)]
     password: String,
 }
+
 #[derive(omega::Command)]
 struct Connect {}
 impl Command for Connect {
@@ -209,6 +211,7 @@ struct Level {
     value: Percent,
     muted: bool,
 }
+
 #[test]
 fn structured_inputs_preserve_field_types() {
     let level = Level {
@@ -232,6 +235,7 @@ impl Command for Ping {
         Ok(())
     }
 }
+
 #[test]
 fn plugin_commands_bind_and_duplicate_names_are_refused() {
     let drawn = Drawn::of_ui(Button::new("Ping").on_press(Ping).into());
@@ -256,6 +260,7 @@ impl Command for Submit {
         Ok(())
     }
 }
+
 #[test]
 fn plugin_commands_support_forms_and_bound_inputs() {
     let form = Drawn::of_ui(Form::new(Submit).into());

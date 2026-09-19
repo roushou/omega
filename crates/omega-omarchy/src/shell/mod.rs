@@ -189,11 +189,13 @@ pub enum BarItem {
     Native(Native),
     Plugin(PluginWidget),
 }
+
 impl From<Native> for BarItem {
     fn from(value: Native) -> Self {
         Self::Native(value)
     }
 }
+
 impl From<PluginWidget> for BarItem {
     fn from(value: PluginWidget) -> Self {
         Self::Plugin(value)
@@ -207,6 +209,7 @@ pub struct Native {
     id: NativeId,
     options: BTreeMap<String, Value>,
 }
+
 impl Native {
     pub fn new(id: impl Into<String>) -> Self {
         Self::try_new(id).expect("valid native plugin id")
@@ -260,6 +263,7 @@ pub struct PluginWidget {
     panel: Option<String>,
     settings: BTreeMap<String, omega_proto::omega::Value>,
 }
+
 impl PluginWidget {
     /// Place a widget using its defining crate and declared surface name.
     ///
@@ -366,6 +370,7 @@ pub struct Idle {
     lock: Duration,
     extensions: BTreeMap<String, Value>,
 }
+
 impl Default for Idle {
     fn default() -> Self {
         Self {
@@ -375,6 +380,7 @@ impl Default for Idle {
         }
     }
 }
+
 impl Idle {
     pub fn new() -> Self {
         Self::default()

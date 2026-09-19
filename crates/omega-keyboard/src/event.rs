@@ -33,6 +33,7 @@ pub enum Key {
     F11,
     F12,
 }
+
 impl Key {
     /// Canonical identity for adapters. Named keys and characters have distinct prefixes.
     pub fn identity(self) -> String {
@@ -93,6 +94,7 @@ impl Modifiers {
         }
     }
 }
+
 impl BitOr for Modifiers {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self {
@@ -115,6 +117,7 @@ pub struct KeyEvent {
     pub phase: Phase,
     pub repeat: bool,
 }
+
 impl KeyEvent {
     pub const fn pressed(key: Key, modifiers: Modifiers) -> Self {
         Self {

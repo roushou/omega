@@ -1,5 +1,6 @@
 //! Inspect registered command contracts, provider availability, and execution diagnostics.
 use crate::{operator::Operator, ui::Ui};
+
 #[derive(Debug, clap::Args)]
 pub struct CommandsCmd {
     /// Limit the catalogue to one plugin or command host.
@@ -8,6 +9,7 @@ pub struct CommandsCmd {
     #[arg(long)]
     pub json: bool,
 }
+
 impl CommandsCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         let mut catalogue = Operator::new().commands().await?;

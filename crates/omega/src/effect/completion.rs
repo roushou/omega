@@ -23,6 +23,7 @@ pub enum EffectError {
     #[error("unexpected effect response")]
     UnexpectedResponse,
 }
+
 impl EffectError {
     pub(crate) fn refusal(&self) -> Refusal {
         match self {
@@ -45,6 +46,7 @@ pub struct Receipt<T = Option<Value>> {
     decode: fn(Option<Value>) -> Result<T, EffectError>,
     pub(crate) receiver: oneshot::Receiver<Completion>,
 }
+
 impl Receipt {
     pub(crate) fn raw(receiver: oneshot::Receiver<Completion>) -> Self {
         Self {
@@ -59,6 +61,7 @@ impl Receipt {
         }
     }
 }
+
 impl<T> Receipt<T> {
     /// Wait without blocking the SDK's connection loop.
     ///
@@ -120,6 +123,7 @@ impl Effect {
         Self::decoded(submission, |_| Ok(()))
     }
 }
+
 impl<T> Effect<T> {
     pub(crate) fn decoded(
         submission: Submission,

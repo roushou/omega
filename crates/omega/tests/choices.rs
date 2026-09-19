@@ -11,6 +11,7 @@ use omega_proto::{
 struct SetPowerProfile {
     profiles: SetProfile,
 }
+
 impl Command for SetPowerProfile {
     const ID: &'static str = "set-power-profile";
 

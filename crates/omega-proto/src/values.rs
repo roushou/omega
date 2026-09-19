@@ -203,6 +203,7 @@ impl<T: IntoValue> IntoValue for Option<T> {
         self.map(IntoValue::into_value).unwrap_or_default()
     }
 }
+
 impl<T: FromValue> FromValue for Option<T> {
     fn from_value(value: &Value) -> Option<Self> {
         match value.kind {
@@ -221,6 +222,7 @@ impl FromValue for crate::omega::PowerProfile {
         }
     }
 }
+
 impl IntoValue for crate::omega::PowerProfile {
     fn into_value(self) -> Value {
         self.as_str_name().into_value()

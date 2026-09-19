@@ -53,6 +53,7 @@ pub struct Indicator {
     media: Media,
     selection: Watch<Selection>,
 }
+
 impl Surface for Indicator {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -98,6 +99,7 @@ pub struct Panel {
     media: Media,
     selection: Watch<Selection>,
 }
+
 impl Surface for Panel {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -215,6 +217,7 @@ pub struct SelectPlayer {
     media: Media,
     selection: Own<Selection>,
 }
+
 impl Command for SelectPlayer {
     const ID: &'static str = "select-player";
 
@@ -234,6 +237,7 @@ impl Command for SelectPlayer {
 pub struct PlayPause {
     media: MediaControl,
 }
+
 impl Command for PlayPause {
     const ID: &'static str = "play-pause";
 
@@ -248,6 +252,7 @@ impl Command for PlayPause {
 pub struct Previous {
     media: MediaControl,
 }
+
 impl Command for Previous {
     const ID: &'static str = "previous";
 
@@ -262,6 +267,7 @@ impl Command for Previous {
 pub struct Next {
     media: MediaControl,
 }
+
 impl Command for Next {
     const ID: &'static str = "next";
 

@@ -65,6 +65,7 @@ impl FromValue for PlayerId {
         Self::try_from(String::from_value(value)?).ok()
     }
 }
+
 impl IntoValue for PlayerId {
     fn into_value(self) -> Value {
         self.0.into_value()

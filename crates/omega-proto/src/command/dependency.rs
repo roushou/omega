@@ -10,6 +10,7 @@ impl CommandEndpoint {
         }
     }
 }
+
 /// Cross-check declarations once all workspace manifests are available.
 #[derive(Debug)]
 pub struct CommandContracts;

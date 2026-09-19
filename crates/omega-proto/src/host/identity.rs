@@ -11,17 +11,20 @@ impl std::str::FromStr for HostId {
         value.parse().map(Self)
     }
 }
+
 impl TryFrom<String> for HostId {
     type Error = crate::IdentError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         crate::PluginName::try_from(value).map(Self)
     }
 }
+
 impl HostId {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
+
 impl fmt::Display for HostId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
@@ -40,12 +43,14 @@ impl ProcessId {
         self.0.get()
     }
 }
+
 impl TryFrom<u64> for ProcessId {
     type Error = std::num::TryFromIntError;
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         NonZeroU64::try_from(value).map(Self)
     }
 }
+
 impl fmt::Display for ProcessId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
@@ -64,12 +69,14 @@ impl InvocationId {
         self.0.get()
     }
 }
+
 impl TryFrom<u64> for InvocationId {
     type Error = std::num::TryFromIntError;
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         NonZeroU64::try_from(value).map(Self)
     }
 }
+
 impl fmt::Display for InvocationId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)

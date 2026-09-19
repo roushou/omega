@@ -7,6 +7,7 @@ use std::time::Duration;
 pub(crate) struct Activation {
     pub(crate) timeout: Duration,
 }
+
 impl Activation {
     pub(crate) async fn wait_for(
         &self,

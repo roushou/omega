@@ -44,6 +44,7 @@ impl<S: omega::Surface> Surface<S> {
         Ok(Self(harness))
     }
 }
+
 impl<S: omega::Surface> Scene for Surface<S> {
     fn draw(&mut self) -> Drawn {
         self.0.draw()

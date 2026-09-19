@@ -167,6 +167,7 @@ pub(crate) struct PreparedProgram {
     pub(crate) kind: ProgramKind,
     pub(crate) registrations: Registrations,
 }
+
 impl PreparedProgram {
     pub(crate) fn run(self) -> Result<(), Error> {
         if std::env::args().any(|argument| argument == Manifest::DESCRIBE) {

@@ -17,6 +17,7 @@ use omega_proto::omega::{ChangePresentation, PresentationAction, invoke};
 pub struct Presentation {
     context: Context,
 }
+
 impl Wiring for Presentation {
     fn build(context: &Context) -> Self {
         Self {
@@ -24,6 +25,7 @@ impl Wiring for Presentation {
         }
     }
 }
+
 impl Does for Presentation {}
 impl Presentation {
     /// Dismiss this instance. Closing cancels its managed work; external operations

@@ -17,6 +17,7 @@ pub enum ShellApplyError {
     #[error(transparent)]
     Compile(#[from] omega_omarchy::shell::ShellError),
 }
+
 #[derive(Debug)]
 pub struct ShellApplication;
 impl ShellApplication {

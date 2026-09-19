@@ -46,6 +46,7 @@ pub struct Bind<I> {
     args: Vec<Value>,
     input: PhantomData<fn(I)>,
 }
+
 impl<C: Command> From<CommandRef<C>> for Bind<C::Input> {
     fn from(_: CommandRef<C>) -> Self {
         Self {
@@ -58,6 +59,7 @@ impl<C: Command> From<CommandRef<C>> for Bind<C::Input> {
         }
     }
 }
+
 impl<I> Bind<I> {
     pub(crate) fn local(id: u64) -> Self {
         Self {

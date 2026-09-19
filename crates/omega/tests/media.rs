@@ -11,6 +11,7 @@ use omega_proto::{
 struct Pause {
     media: MediaControl,
 }
+
 impl Command for Pause {
     const ID: &'static str = "pause";
 
@@ -25,6 +26,7 @@ impl Command for Pause {
 struct Toggle {
     media: MediaControl,
 }
+
 impl Command for Toggle {
     const ID: &'static str = "toggle";
 
@@ -86,6 +88,7 @@ fn player_identity_round_trips_through_bindings_and_records() {
 struct Inspect {
     media: Media,
 }
+
 impl Command for Inspect {
     const ID: &'static str = "inspect";
 

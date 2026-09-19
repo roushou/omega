@@ -14,6 +14,7 @@ pub struct Model {
     selected: String,
     status: String,
 }
+
 #[derive(Debug)]
 pub enum Message {
     Edited(TextEdit),
@@ -22,6 +23,7 @@ pub enum Message {
     Activate(String),
     Clear,
 }
+
 #[derive(Debug, omega::Surface)]
 pub struct Search {}
 impl Search {
@@ -40,6 +42,7 @@ impl Search {
         )
     }
 }
+
 impl Surface for Search {
     type Model = Model;
     type Message = Message;
@@ -119,6 +122,7 @@ impl Surface for Search {
         }
     }
 }
+
 fn main() -> omega::Result<()> {
     omega::plugin!().surface(Search).run()
 }

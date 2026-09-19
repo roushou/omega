@@ -1,5 +1,6 @@
 use super::*;
 use omega_proto::omega::{StateDocument, module};
+
 #[test]
 fn placement_is_the_source_of_both_outputs() {
     let shell = Shell::new().bar(
@@ -35,6 +36,7 @@ fn placement_is_the_source_of_both_outputs() {
         }
     }
 }
+
 #[test]
 fn duplicate_placements_and_competing_bars_are_rejected() {
     let shell = Shell::new().bar(Bar::top().right([
@@ -54,6 +56,7 @@ fn duplicate_placements_and_competing_bars_are_rejected() {
     };
     assert!(CompiledShell::of(&document).is_err());
 }
+
 #[test]
 fn import_preserves_native_options_and_unknown_fields() {
     let value = json!({
@@ -73,6 +76,7 @@ fn import_preserves_native_options_and_unknown_fields() {
     assert!(source.contains("Native::new"));
     assert!(!source.contains("from_omarchy"));
 }
+
 #[test]
 fn extensions_cannot_overwrite_typed_fields() {
     assert!(Shell::new().extension("bar", json!({})).is_err());
@@ -84,6 +88,7 @@ fn extensions_cannot_overwrite_typed_fields() {
     assert!(Bar::top().extension("layout", json!({})).is_err());
     assert!(Idle::new().extension("lock", 0).is_err());
 }
+
 #[test]
 fn unsupported_versions_and_ambiguous_imports_fail_loudly() {
     assert!(Shell::from_omarchy(r#"{"version":2}"#).is_err());

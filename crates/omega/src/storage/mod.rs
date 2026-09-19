@@ -187,6 +187,7 @@ impl<S: Storage> Page<S> {
         self.entries
     }
 }
+
 pub(crate) struct Contract<S>(PhantomData<S>);
 impl<S: Storage> Contract<S> {
     pub(crate) fn descriptor(writable: bool) -> StorageDescriptor {

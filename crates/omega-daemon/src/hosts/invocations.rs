@@ -167,6 +167,7 @@ pub(super) struct Execution {
     registry: Arc<Invocations>,
     finished: bool,
 }
+
 impl Execution {
     pub(super) fn starting(&self, now: Instant) {
         let mut state = self.registry.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -211,6 +212,7 @@ impl Execution {
         }
     }
 }
+
 impl Drop for Execution {
     fn drop(&mut self) {
         self.complete(Completion::Abandoned, Instant::now());

@@ -19,6 +19,7 @@ struct Selection {
     name: String,
     count: u64,
 }
+
 #[derive(omega::Command)]
 struct Select {}
 impl Command for Select {

@@ -26,11 +26,13 @@ pub struct Caller<C> {
     context: Context,
     command: PhantomData<fn() -> C>,
 }
+
 impl<C> std::fmt::Debug for Caller<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Caller").finish_non_exhaustive()
     }
 }
+
 impl<C> Clone for Caller<C> {
     fn clone(&self) -> Self {
         Self {
@@ -39,6 +41,7 @@ impl<C> Clone for Caller<C> {
         }
     }
 }
+
 impl<C: Command> Wiring for Caller<C> {
     fn commands() -> Vec<omega_proto::omega::CommandDependency> {
         vec![CommandRef::<C>::INSTANCE.descriptor().dependency()]
@@ -50,6 +53,7 @@ impl<C: Command> Wiring for Caller<C> {
         }
     }
 }
+
 impl<C: Command> Does for Caller<C> {}
 impl<C: Command> Caller<C> {
     pub fn call(&self, input: C::Input) -> Effect<C::Output> {
@@ -76,6 +80,7 @@ pub struct Invocation<C: Command> {
     pub(crate) args: Vec<omega_proto::omega::Value>,
     command: PhantomData<fn() -> C>,
 }
+
 impl<C: Command> std::fmt::Debug for Invocation<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Invocation")
@@ -83,6 +88,7 @@ impl<C: Command> std::fmt::Debug for Invocation<C> {
             .finish_non_exhaustive()
     }
 }
+
 impl<C: Command> Invocation<C> {
     pub(crate) fn new(input: C::Input) -> Self {
         Self {

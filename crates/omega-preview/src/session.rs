@@ -23,6 +23,7 @@ pub(crate) struct Session {
     effects: BTreeMap<EffectId, CapturedEffect>,
     events: VecDeque<String>,
 }
+
 impl Session {
     fn new(cases: Cases, generation: u32) -> Result<Self, Error> {
         let selected = cases

@@ -41,11 +41,13 @@ impl ApplicationId {
         &self.0
     }
 }
+
 impl fmt::Display for ApplicationId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid desktop-entry id: {0:?}")]
 pub struct ApplicationIdError(String);
@@ -54,6 +56,7 @@ impl FromValue for ApplicationId {
         Self::try_from(String::from_value(value)?).ok()
     }
 }
+
 impl IntoValue for ApplicationId {
     fn into_value(self) -> Value {
         self.0.into_value()

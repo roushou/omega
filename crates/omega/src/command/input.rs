@@ -174,6 +174,7 @@ impl FromValue for Percent {
         }
     }
 }
+
 impl IntoValue for Percent {
     fn into_value(self) -> Value {
         self.fraction().into_value()

@@ -42,6 +42,7 @@ impl NativeId {
         &self.0
     }
 }
+
 impl<'de> Deserialize<'de> for NativeId {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
@@ -53,6 +54,7 @@ impl<'de> Deserialize<'de> for NativeId {
 pub struct Clock {
     native: Native,
 }
+
 impl Default for Clock {
     fn default() -> Self {
         Self {
@@ -60,6 +62,7 @@ impl Default for Clock {
         }
     }
 }
+
 impl Clock {
     pub fn new() -> Self {
         Self::default()
@@ -83,6 +86,7 @@ impl Clock {
         self
     }
 }
+
 impl From<Clock> for BarItem {
     fn from(clock: Clock) -> Self {
         Self::Native(clock.native)

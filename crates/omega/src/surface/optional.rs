@@ -12,17 +12,20 @@ pub struct Optional<R: Reads> {
     reading: R,
     context: Context,
 }
+
 impl<R: Reads> Optional<R> {
     pub fn is_pending(&self) -> bool {
         !self.context.holds(R::TOPICS)
     }
 }
+
 impl<R: Reads> std::ops::Deref for Optional<R> {
     type Target = R;
     fn deref(&self) -> &R {
         &self.reading
     }
 }
+
 impl<R: Reads> Wiring for Optional<R> {
     const TOPICS: &'static [omega_proto::SystemTopic] = R::TOPICS;
     const CAPABILITIES: &'static [omega_proto::omega::Capability] = R::CAPABILITIES;
@@ -39,4 +42,5 @@ impl<R: Reads> Wiring for Optional<R> {
         }
     }
 }
+
 impl<R: Reads> Reads for Optional<R> {}

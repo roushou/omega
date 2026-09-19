@@ -12,6 +12,7 @@ use omega_proto::{
 pub struct Applications {
     worker: Option<worker::Worker>,
 }
+
 impl Applications {
     pub fn new() -> Self {
         Self::default()
@@ -20,6 +21,7 @@ impl Applications {
         self.worker.as_mut().ok_or_else(BrokerError::gone)
     }
 }
+
 #[async_trait]
 impl Broker for Applications {
     fn name(&self) -> &'static str {

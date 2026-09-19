@@ -204,6 +204,7 @@ pub struct Credentials {
 pub struct Connect {
     wifi: WifiControl,
 }
+
 impl Command for Connect {
     const ID: &'static str = "connect";
 

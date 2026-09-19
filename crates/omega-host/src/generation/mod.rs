@@ -266,6 +266,7 @@ pub struct Rollback {
     generation: Generation,
     _transaction: FileLock,
 }
+
 impl Rollback {
     pub fn generation(&self) -> &Generation {
         &self.generation

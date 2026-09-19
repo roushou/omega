@@ -2,6 +2,7 @@
 pub(crate) use crate::process::session::SessionLink;
 pub use crate::process::session::{REQUEST_TIMEOUT, Request, RequestError};
 use omega_proto::PluginName;
+
 /// Deregisters a plugin when its session ends, however it ends.
 #[derive(Debug)]
 pub struct SessionGuard {

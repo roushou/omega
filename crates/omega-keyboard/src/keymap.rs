@@ -5,11 +5,13 @@ use crate::{Chord, KeyEvent};
 pub struct Keymap<A> {
     bindings: Vec<(Chord, A)>,
 }
+
 impl<A> Default for Keymap<A> {
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl<A> Keymap<A> {
     pub const fn new() -> Self {
         Self {
@@ -68,11 +70,13 @@ impl<A> Keymap<A> {
 pub struct Conflict {
     pub chord: Chord,
 }
+
 impl std::fmt::Display for Conflict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "overlapping keyboard binding: {:?}", self.chord)
     }
 }
+
 impl std::error::Error for Conflict {}
 
 #[cfg(test)]

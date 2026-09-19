@@ -291,6 +291,7 @@ fn lua_window_actions_preserve_targets_and_restrictions() {
         .is_none()
     );
 }
+
 use omega_proto::omega::{
     CloseWindow, Direction, MoveToMonitor, MoveToWorkspace, SwitchWorkspace, ToggleFloating,
     ToggleFullscreen, WindowSelector, action, move_to_workspace, switch_workspace, window_selector,

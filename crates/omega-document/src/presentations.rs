@@ -72,6 +72,7 @@ pub struct Window {
     entry: omega::ConfiguredPresentation,
     spec: omega::WindowPresentation,
 }
+
 impl Window {
     pub fn configured(mut self, settings: &impl Fields) -> Self {
         self.entry.config = settings.write().into_map();
@@ -92,6 +93,7 @@ impl Window {
         self
     }
 }
+
 impl From<Window> for omega::ConfiguredPresentation {
     fn from(mut window: Window) -> Self {
         window.entry.presentation = Some(omega::Presentation {
@@ -107,6 +109,7 @@ pub struct Overlay {
     entry: omega::ConfiguredPresentation,
     spec: omega::OverlayPresentation,
 }
+
 impl Overlay {
     pub fn configured(mut self, settings: &impl Fields) -> Self {
         self.entry.config = settings.write().into_map();
@@ -135,6 +138,7 @@ impl Overlay {
         self
     }
 }
+
 impl From<Overlay> for omega::ConfiguredPresentation {
     fn from(mut overlay: Overlay) -> Self {
         overlay.entry.presentation = Some(omega::Presentation {

@@ -25,6 +25,7 @@ pub enum Timer {
     },
     Complete,
 }
+
 impl Timer {
     const DURATION: u64 = 25 * 60 * 1000;
     fn now() -> u64 {
@@ -75,10 +76,12 @@ impl Timer {
         false
     }
 }
+
 impl PluginState for Timer {
     const PLUGIN: &'static str = env!("CARGO_PKG_NAME");
     const KEY: &'static str = "timer";
 }
+
 impl Fields for Timer {
     fn read(values: &Values) -> Self {
         match values.get::<String>("phase").as_deref() {
@@ -118,6 +121,7 @@ impl Fields for Timer {
 pub struct Indicator {
     timer: Watch<Timer>,
 }
+
 impl Surface for Indicator {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -136,10 +140,12 @@ impl Surface for Indicator {
         Text::new(format!("Focus {:02}:{:02}", seconds / 60, seconds % 60)).into()
     }
 }
+
 #[derive(omega::Surface, Debug)]
 pub struct Panel {
     timer: Watch<Timer>,
 }
+
 impl Surface for Panel {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -187,10 +193,12 @@ impl Surface for Panel {
             .into()
     }
 }
+
 #[derive(omega::Command, Debug)]
 pub struct Start {
     timer: Own<Timer>,
 }
+
 impl Command for Start {
     const ID: &'static str = "start";
 
@@ -200,10 +208,12 @@ impl Command for Start {
         self.timer.update(|timer| timer.start(Timer::now())).await
     }
 }
+
 #[derive(omega::Command, Debug)]
 pub struct Pause {
     timer: Own<Timer>,
 }
+
 impl Command for Pause {
     const ID: &'static str = "pause";
 
@@ -213,10 +223,12 @@ impl Command for Pause {
         self.timer.update(|timer| timer.pause(Timer::now())).await
     }
 }
+
 #[derive(omega::Command, Debug)]
 pub struct Reset {
     timer: Own<Timer>,
 }
+
 impl Command for Reset {
     const ID: &'static str = "reset";
 
@@ -226,11 +238,13 @@ impl Command for Reset {
         self.timer.set(&Timer::Idle).await
     }
 }
+
 #[derive(omega::Command, Debug)]
 pub struct Tick {
     timer: Own<Timer>,
     notify: Notify,
 }
+
 impl Command for Tick {
     const ID: &'static str = "tick";
 
@@ -250,6 +264,7 @@ impl Command for Tick {
         Ok(())
     }
 }
+
 pub fn plugin() -> Plugin {
     Plugin::new(PLUGIN, env!("CARGO_PKG_VERSION"))
         .surface_as::<Indicator>("indicator")
@@ -259,6 +274,7 @@ pub fn plugin() -> Plugin {
         .command::<Reset>()
         .command::<Tick>()
 }
+
 fn main() -> omega::Result<()> {
     plugin().run()
 }

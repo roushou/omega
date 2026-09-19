@@ -20,6 +20,7 @@ use tokio::sync::{Semaphore, mpsc, oneshot};
 pub(crate) struct Hosts {
     inner: Arc<Inner>,
 }
+
 #[derive(Debug)]
 struct Inner {
     environment: Mutex<Option<(Socket, Shutdown)>>,
@@ -29,6 +30,7 @@ struct Inner {
     bytes: Arc<Semaphore>,
     process_slots: Arc<Semaphore>,
 }
+
 #[derive(Debug)]
 struct Provider {
     manifest: Arc<Manifest>,

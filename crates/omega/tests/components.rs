@@ -18,6 +18,7 @@ struct VolumeControl {
     value: Percent,
     change: Bind<Percent>,
 }
+
 impl Component for VolumeControl {
     fn render(&self) -> View {
         Row::new()
@@ -30,6 +31,7 @@ impl Component for VolumeControl {
             .into()
     }
 }
+
 impl VolumeControl {
     fn new() -> Self {
         Self {

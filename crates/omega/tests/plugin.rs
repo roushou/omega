@@ -655,6 +655,7 @@ struct FormValues {
     #[omega(label = "Name")]
     name: String,
 }
+
 macro_rules! ui_command {
     ($ty:ident, $input:ty, $name:literal) => {
         #[derive(omega::Command)]
@@ -1218,6 +1219,7 @@ async fn consecutive_record_updates_see_local_writes_before_replication() {
 struct FillRecords {
     counter: omega::record::Own<Counter>,
 }
+
 impl Command for FillRecords {
     const ID: &'static str = "fill-records";
 
@@ -1256,6 +1258,7 @@ async fn rejected_record_admission_does_not_change_local_state_or_run_the_update
 struct ForwardRecord {
     counter: omega::record::Own<Counter>,
 }
+
 impl Command for ForwardRecord {
     const ID: &'static str = "forward-record";
 
@@ -1265,6 +1268,7 @@ impl Command for ForwardRecord {
         self.counter.update(|counter| counter.value += 1).await
     }
 }
+
 #[tokio::test]
 async fn command_fixtures_complete_forwarded_record_publications() {
     let called = Called::raw::<ForwardRecord>(&State::new(), vec![]).await;
@@ -1281,6 +1285,7 @@ struct LargeRecord {
 struct FillRecordBytes {
     record: Own<LargeRecord>,
 }
+
 impl Command for FillRecordBytes {
     const ID: &'static str = "fill-record-bytes";
 
@@ -1313,6 +1318,7 @@ async fn exhausted_record_byte_budget_preserves_the_local_record() {
 struct OversizedRecord {
     record: Own<LargeRecord>,
 }
+
 impl Command for OversizedRecord {
     const ID: &'static str = "oversized-record";
 

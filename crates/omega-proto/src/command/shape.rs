@@ -67,6 +67,7 @@ impl CommandType {
         Ok(())
     }
 }
+
 impl CommandEndpoint {
     pub fn validate(&self) -> Result<CommandId, CommandContractError> {
         let id = self.id.parse()?;

@@ -13,10 +13,12 @@ pub(crate) struct Hosts {
     socket: PathBuf,
     shutdown: Shutdown,
 }
+
 struct Host {
     stop: Shutdown,
     task: tokio::task::JoinHandle<()>,
 }
+
 impl Hosts {
     pub(crate) fn new(hub: Hub, layout: Layout, socket: PathBuf, shutdown: Shutdown) -> Self {
         Self {

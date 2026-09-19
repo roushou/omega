@@ -17,6 +17,7 @@ struct Probe<const KIND: u8> {
     context: Context,
     label: String,
 }
+
 impl<const KIND: u8> Wired for Probe<KIND> {
     fn topics() -> Vec<SystemTopic> {
         match KIND {
@@ -40,6 +41,7 @@ impl<const KIND: u8> Wired for Probe<KIND> {
         }
     }
 }
+
 impl<const KIND: u8> Surface for Probe<KIND> {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -76,6 +78,7 @@ struct Peer {
     streams: DaemonStreams,
     task: tokio::task::JoinHandle<Result<(), Error>>,
 }
+
 impl Peer {
     fn identity(surface: &str, name: &str) -> omega_proto::omega::InstanceRef {
         omega_proto::omega::InstanceRef {
@@ -211,6 +214,7 @@ impl Peer {
         omega_proto::FromValue::from_value(root.props.get("text").unwrap()).unwrap()
     }
 }
+
 impl Drop for Peer {
     fn drop(&mut self) {
         self.task.abort();
@@ -328,6 +332,7 @@ async fn explicit_absence_is_ready_and_empty_first_views_are_published() {
 struct Forward {
     context: Context,
 }
+
 impl Wired for Forward {
     fn topics() -> Vec<SystemTopic> {
         vec![]
@@ -359,6 +364,7 @@ impl crate::Command for Forward {
         Ok(())
     }
 }
+
 impl Peer {
     async fn command_start(&mut self) -> (u64, u64) {
         let command = self.streams.allocate();
@@ -492,6 +498,7 @@ async fn oversized_pull_results_are_refused_without_installing_or_caching_the_in
 struct Sequence {
     notify: crate::platform::notification::Notify,
 }
+
 impl crate::Command for Sequence {
     const ID: &'static str = "forward";
 
@@ -560,6 +567,7 @@ async fn question_mark_preserves_the_refusal_and_skips_later_effects() {
 struct Delayed {
     notify: crate::platform::notification::Notify,
 }
+
 impl crate::Command for Delayed {
     const ID: &'static str = "forward";
 
@@ -633,6 +641,7 @@ async fn shared_required_readings_are_reported_once() {
 struct Bounded {
     battery: crate::platform::power::Battery,
 }
+
 impl Surface for Bounded {
     type Model = ();
     type Message = ();
@@ -694,6 +703,7 @@ impl crate::storage::Storage for StoredTasks {
     const ID: &'static str = "test.tasks";
     const POLICY: crate::storage::StoragePolicy = crate::storage::StoragePolicy::Memory;
 }
+
 struct TaskQuery;
 impl crate::storage::Subscription for TaskQuery {
     type Storage = StoredTasks;
@@ -701,10 +711,12 @@ impl crate::storage::Subscription for TaskQuery {
         crate::storage::Query::new()
     }
 }
+
 #[derive(crate::Surface)]
 struct StoredSurface {
     tasks: crate::storage::Subscribed<TaskQuery>,
 }
+
 impl Surface for StoredSurface {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -735,6 +747,7 @@ impl Surface for StoredSurface {
         match message {}
     }
 }
+
 impl Peer {
     async fn storage_update(&mut self, subscription: u64, revision: u64, text: &str) {
         self.send(Frame {
@@ -762,6 +775,7 @@ impl Peer {
         .await;
     }
 }
+
 #[tokio::test]
 async fn storage_pushes_invalidate_the_instance_and_stale_snapshots_do_not_regress_it() {
     let mut peer = Peer::start(
@@ -787,6 +801,7 @@ async fn storage_pushes_invalidate_the_instance_and_stale_snapshots_do_not_regre
     peer.storage_update(request.subscription, 1, "old").await;
     peer.quiet().await;
 }
+
 #[tokio::test]
 async fn subscription_refusal_is_rendered_without_waiting_for_a_storage_push() {
     let mut peer = Peer::start(
@@ -812,6 +827,7 @@ impl crate::Command for FailingHandler {
         panic!("fixture handler panic")
     }
 }
+
 #[tokio::test]
 async fn a_handler_panic_answers_its_stream_before_ending_the_session() {
     let mut peer = Peer::start(

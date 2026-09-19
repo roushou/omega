@@ -265,11 +265,13 @@ pub(crate) struct Connection {
     id: ProcessId,
     stop: Shutdown,
 }
+
 impl Connection {
     pub(crate) async fn cancelled(&self) {
         self.stop.wait().await;
     }
 }
+
 impl Drop for Connection {
     fn drop(&mut self) {
         self.processes.disconnect(self.id);

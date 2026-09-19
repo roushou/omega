@@ -117,6 +117,7 @@ impl Cases {
         }
     }
 }
+
 #[test]
 fn renderer_matching_corpus_is_current() {
     let path =

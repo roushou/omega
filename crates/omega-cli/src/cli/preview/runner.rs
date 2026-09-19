@@ -18,6 +18,7 @@ pub(super) struct Runner {
     pub read: Reader<OwnedReadHalf>,
     pub write: Writer<OwnedWriteHalf>,
 }
+
 impl Runner {
     pub(super) async fn start(
         binary: &Path,

@@ -7,6 +7,7 @@ pub struct CompiledShell {
     config: Value,
     bar: WireBar,
 }
+
 impl CompiledShell {
     pub fn config(&self) -> &Value {
         &self.config
@@ -29,6 +30,7 @@ impl CompiledShell {
         Shell::decode(&document.shell_json)?.compile().map(Some)
     }
 }
+
 impl Shell {
     pub fn compile(&self) -> Result<CompiledShell, ShellError> {
         Self::reserved(&self.extensions, &["version", "bar", "idle", "plugins"])?;
@@ -140,6 +142,7 @@ impl Shell {
         Ok(())
     }
 }
+
 impl Native {
     fn compile(&self) -> Result<Value, ShellError> {
         if self.id.as_str() == "omega.view" {

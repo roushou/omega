@@ -279,6 +279,7 @@ pub enum Emphasis {
     Secondary,
     Muted,
 }
+
 impl Emphasis {
     fn as_str(self) -> &'static str {
         match self {
@@ -297,6 +298,7 @@ pub enum Tone {
     Error,
     Success,
 }
+
 impl Tone {
     fn as_str(self) -> &'static str {
         match self {

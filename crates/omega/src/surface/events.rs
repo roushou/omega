@@ -11,6 +11,7 @@ pub(crate) type Decoder<M> = Arc<dyn Fn(Args) -> Result<M, Error> + Send + Sync>
 pub struct Events<M> {
     bindings: Mutex<Bindings<M>>,
 }
+
 impl<M: Send + 'static> Events<M> {
     pub(crate) fn new() -> Self {
         Self {

@@ -5,6 +5,7 @@ struct Fixture {
     root: PathBuf,
     layout: Layout,
 }
+
 impl Fixture {
     fn new() -> Self {
         let root = TempPath::sibling(&std::env::temp_dir().join("omega-generations"), "test");
@@ -17,6 +18,7 @@ impl Fixture {
         generation.commit().unwrap()
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);

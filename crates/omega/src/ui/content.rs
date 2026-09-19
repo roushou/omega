@@ -15,6 +15,7 @@ use std::fmt::Display;
 pub struct Section {
     node: Node,
 }
+
 impl Section {
     pub fn new(title: impl Display) -> Self {
         Self {
@@ -49,6 +50,7 @@ pub struct Metric {
     value: String,
     label: Option<String>,
 }
+
 impl Metric {
     pub fn new(value: impl Display) -> Self {
         Self {

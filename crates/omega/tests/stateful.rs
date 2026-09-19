@@ -11,11 +11,13 @@ struct Counter {}
 struct Model {
     value: u32,
 }
+
 enum Message {
     Add(u32),
     Work(u32, u64),
     Done(omega::Result<u32>),
 }
+
 impl Surface for Counter {
     type Model = Model;
     type Message = Message;
@@ -45,6 +47,7 @@ impl Surface for Counter {
         Task::none()
     }
 }
+
 #[tokio::test]
 async fn models_and_bindings_belong_to_one_instance_and_one_render() {
     let mut first = SurfaceHarness::<Counter>::new(&State::new()).unwrap();
@@ -59,6 +62,7 @@ async fn models_and_bindings_belong_to_one_instance_and_one_render() {
     assert_eq!(first.model().value, 3);
     assert_eq!(second.model().value, 0);
 }
+
 #[tokio::test(start_paused = true)]
 async fn replacement_and_close_invalidate_task_delivery() {
     let mut instance = SurfaceHarness::<Counter>::new(&State::new()).unwrap();
@@ -117,6 +121,7 @@ fn harness_respects_disabled_and_busy_ancestors() {
         assert_eq!(*harness.model(), busy);
     }
 }
+
 #[test]
 fn text_resets_reject_old_edits_and_reordered_updates() {
     let mut value = TextValue::default();
@@ -138,10 +143,12 @@ fn text_resets_reject_old_edits_and_reordered_updates() {
     }));
     assert_eq!(value.text(), "reset");
 }
+
 #[derive(omega::Surface)]
 struct Loading {
     battery: omega::surface::Optional<omega::platform::power::Battery>,
 }
+
 impl omega::Surface for Loading {
     type Model = ();
     type Message = std::convert::Infallible;
@@ -165,6 +172,7 @@ impl omega::Surface for Loading {
         .into()
     }
 }
+
 #[test]
 fn optional_readings_distinguish_pending_absent_and_available() {
     use omega::testing::{Drawn, SystemTopic};

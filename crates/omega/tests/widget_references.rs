@@ -4,6 +4,7 @@ use omega::{Surface, View, surface::SurfaceRef, ui::Text};
 struct Indicator {
     battery: omega::platform::power::Battery,
 }
+
 impl Surface for Indicator {
     type Model = ();
     type Message = std::convert::Infallible;

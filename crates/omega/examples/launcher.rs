@@ -14,6 +14,7 @@ pub struct Model {
     launching: bool,
     error: String,
 }
+
 #[derive(Debug)]
 pub enum Message {
     Edited(TextEdit),
@@ -22,15 +23,18 @@ pub enum Message {
     Launched(omega::Result<()>),
     Dismissed(omega::Result<()>),
 }
+
 #[derive(Debug, omega::Effects)]
 pub struct Effects {
     launcher: Activation,
     presentation: Presentation,
 }
+
 #[derive(Debug, omega::Surface)]
 pub struct Launcher {
     applications: Optional<Applications>,
 }
+
 impl Launcher {
     fn results(&self, query: &str) -> Option<Vec<Application>> {
         let entries = self.applications.entries()?;
@@ -82,6 +86,7 @@ impl Launcher {
         )
     }
 }
+
 impl Surface for Launcher {
     type Model = Model;
     type Message = Message;
@@ -198,6 +203,7 @@ impl Surface for Launcher {
         Task::none()
     }
 }
+
 fn main() -> omega::Result<()> {
     omega::plugin!().surface(Launcher).run()
 }

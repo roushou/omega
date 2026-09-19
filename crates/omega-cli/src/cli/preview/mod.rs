@@ -45,6 +45,7 @@ pub struct PreviewCmd {
     #[arg(long)]
     pub no_watch: bool,
 }
+
 #[derive(Debug)]
 struct SessionDirectory(PathBuf);
 impl Drop for SessionDirectory {
@@ -52,6 +53,7 @@ impl Drop for SessionDirectory {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
 impl PreviewCmd {
     fn manifest_cargo(path: &std::path::Path) -> anyhow::Result<Cargo> {
         let resolved = std::fs::canonicalize(path)

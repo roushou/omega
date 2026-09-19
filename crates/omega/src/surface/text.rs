@@ -8,6 +8,7 @@ pub struct TextEdit {
     pub revision: u32,
     pub reset: u32,
 }
+
 impl Input for TextEdit {
     fn decode(args: Args) -> Result<Self, Error> {
         if args.len() != 1 {
@@ -38,6 +39,7 @@ impl Input for TextEdit {
         ]
     }
 }
+
 /// Controlled text that preserves newer renderer edits across delayed views.
 #[derive(Debug, Clone, Default)]
 pub struct TextValue {
@@ -45,6 +47,7 @@ pub struct TextValue {
     revision: u32,
     reset: u32,
 }
+
 impl TextValue {
     pub fn new(text: impl Into<String>) -> Self {
         Self {

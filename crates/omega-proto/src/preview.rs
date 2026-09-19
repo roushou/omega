@@ -37,6 +37,7 @@ impl CaseId {
         &self.0
     }
 }
+
 impl std::fmt::Display for CaseId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -54,6 +55,7 @@ pub enum PreviewError {
     #[error("preview message exceeds the frame budget")]
     TooLarge,
 }
+
 #[derive(Debug)]
 pub struct Reader<R>(FramedRead<R, LinesCodec>);
 impl<R: AsyncRead + Unpin> Reader<R> {
@@ -74,6 +76,7 @@ impl<R: AsyncRead + Unpin> Reader<R> {
             .transpose()
     }
 }
+
 #[derive(Debug)]
 pub struct Writer<W>(FramedWrite<W, LinesCodec>);
 impl<W: AsyncWrite + Unpin> Writer<W> {

@@ -30,6 +30,7 @@ impl Default for ExecutionPolicy {
         Self::serial()
     }
 }
+
 impl ExecutionPolicy {
     /// Caller ceiling: three bounded phases and process cleanup. Provider deadlines
     /// usually terminate a call much sooner; expiration never permits replay.

@@ -14,6 +14,7 @@ pub struct InitCmd {
     #[arg(long, conflicts_with = "bare")]
     pub debug: bool,
 }
+
 impl InitCmd {
     pub async fn run(self, ui: &mut Ui) -> anyhow::Result<()> {
         Initialize {

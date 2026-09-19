@@ -281,11 +281,13 @@ impl ChoiceValue for String {
         self.as_str()
     }
 }
+
 impl ChoiceValue for omega_proto::PlayerId {
     fn key(&self) -> &str {
         self.as_str()
     }
 }
+
 impl ChoiceValue for omega_proto::omega::PowerProfile {
     fn key(&self) -> &str {
         self.as_str_name()
@@ -418,6 +420,7 @@ pub trait FormInput: Input {
 pub struct Form {
     node: Node,
 }
+
 impl Form {
     pub fn new<C: Command>(command: impl Into<CommandRef<C>>) -> Self
     where

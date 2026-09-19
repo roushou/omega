@@ -23,6 +23,7 @@ struct Fixture {
     server: tokio::task::JoinHandle<()>,
     _path: common::TempSocket,
 }
+
 impl Fixture {
     fn new(tag: &str) -> Self {
         let path = common::TempSocket::new(tag);
@@ -163,15 +164,18 @@ impl Fixture {
         assert_eq!(error.code, code as i32, "{}", error.message);
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         self.server.abort();
     }
 }
+
 struct Observer {
     reader: BufReader<tokio::net::UnixStream>,
     stream: u64,
 }
+
 impl Observer {
     async fn ask(&mut self, op: invoke::Op) -> result::Outcome {
         let stream = self.stream;

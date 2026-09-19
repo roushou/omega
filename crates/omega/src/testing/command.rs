@@ -15,6 +15,7 @@ pub struct CommandCall<C: Command> {
     input: C::Input,
     effect: CapturedEffect,
 }
+
 impl<C: Command> std::fmt::Debug for CommandCall<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CommandCall")
@@ -23,6 +24,7 @@ impl<C: Command> std::fmt::Debug for CommandCall<C> {
             .finish_non_exhaustive()
     }
 }
+
 impl<C: Command> CommandCall<C> {
     pub fn input(&self) -> &C::Input {
         &self.input
@@ -46,6 +48,7 @@ impl<C: Command> CommandCall<C> {
         Ok(())
     }
 }
+
 impl CapturedEffect {
     /// Decode a call to the exact declared endpoint, including its signature.
     pub fn command<C: Command>(self) -> crate::Result<CommandCall<C>> {
@@ -79,6 +82,7 @@ pub struct CommandList {
     effect: CapturedEffect,
     catalogue: omega_proto::omega::CommandCatalogue,
 }
+
 impl CommandList {
     pub fn entry<C: Command>(mut self, command: CommandRef<C>, available: bool) -> Self {
         let descriptor = command.descriptor();
@@ -99,6 +103,7 @@ impl CommandList {
         Ok(())
     }
 }
+
 impl CapturedEffect {
     pub fn commands(self) -> crate::Result<CommandList> {
         if !matches!(self.operation(), invoke::Op::ListCommands(_)) {

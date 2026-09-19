@@ -10,6 +10,7 @@ use omega_proto::omega::{Capability, Direction, action, invoke, switch_workspace
 struct Select {
     control: WorkspaceControl,
 }
+
 impl Command for Select {
     const ID: &'static str = "select";
 
@@ -24,6 +25,7 @@ impl Command for Select {
 struct Named {
     control: WorkspaceControl,
 }
+
 impl Command for Named {
     const ID: &'static str = "named";
 
@@ -38,6 +40,7 @@ impl Command for Named {
 struct Cycle {
     control: WorkspaceControl,
 }
+
 impl Command for Cycle {
     const ID: &'static str = "cycle";
 

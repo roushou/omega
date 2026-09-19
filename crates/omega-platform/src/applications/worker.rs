@@ -18,6 +18,7 @@ pub(super) struct Worker {
     requests: mpsc::Sender<Request>,
     changes: watch::Receiver<u64>,
 }
+
 impl Worker {
     pub(super) fn start() -> Result<Self, BrokerError> {
         let (requests, inbox) = mpsc::channel(16);

@@ -8,6 +8,7 @@ struct Machine {
     root: PathBuf,
     layout: Layout,
 }
+
 impl Machine {
     fn new() -> Self {
         let root = TempPath::sibling(&std::env::temp_dir().join("omega-recovery-cli"), "test");
@@ -44,6 +45,7 @@ impl Machine {
             .unwrap()
     }
 }
+
 impl Drop for Machine {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);

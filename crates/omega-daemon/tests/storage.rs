@@ -13,6 +13,7 @@ use omega_proto::{
 struct Fixture {
     layout: Layout,
 }
+
 impl Fixture {
     fn new() -> Self {
         let root = TempPath::sibling(&std::env::temp_dir().join("omega-storage"), "test");
@@ -64,6 +65,7 @@ impl Fixture {
         }
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.layout.state);

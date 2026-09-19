@@ -1,6 +1,7 @@
 //! Every replicated topic has exactly one primitive SDK reading.
 use omega::internal::Wiring;
 use omega_proto::SystemTopic;
+
 struct Coverage;
 impl Coverage {
     const TOPICS: &'static [&'static [SystemTopic]] = &[
@@ -29,6 +30,7 @@ impl Coverage {
         <omega::plugin::Plugins as Wiring>::TOPICS,
     ];
 }
+
 #[test]
 fn every_topic_has_one_primitive_reading() {
     let mut actual: Vec<_> = Coverage::TOPICS

@@ -53,11 +53,13 @@ impl BluetoothDeviceId {
         &self.0
     }
 }
+
 impl fmt::Display for BluetoothDeviceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid Bluetooth device id: {0:?}")]
 pub struct BluetoothDeviceIdError(String);
@@ -66,6 +68,7 @@ impl FromValue for BluetoothDeviceId {
         Self::try_from(String::from_value(value)?).ok()
     }
 }
+
 impl IntoValue for BluetoothDeviceId {
     fn into_value(self) -> Value {
         self.0.into_value()

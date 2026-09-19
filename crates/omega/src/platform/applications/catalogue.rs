@@ -24,6 +24,7 @@ pub struct Application {
     id: ApplicationId,
     entry: omega_proto::omega::Application,
 }
+
 impl TryFrom<omega_proto::omega::Application> for Application {
     type Error = omega_proto::ApplicationIdError;
 
@@ -65,6 +66,7 @@ impl Application {
         self.entry.terminal
     }
 }
+
 impl Applications {
     /// Read the validated collection, distinguishing pending, unavailable, and
     /// malformed readings from a successfully empty collection.

@@ -21,6 +21,7 @@ pub use validation::{DocumentValidation, ValidationError};
 pub use omega_proto::omega::StateDocument;
 
 pub use omega_proto::Cadence;
+
 /// Protocol types used by the document builders.
 pub use omega_proto::omega::{
     Action, Bar, Edge, Keybind, Modifier, Module, PluginRef, Schedule, Setting, Value, value,

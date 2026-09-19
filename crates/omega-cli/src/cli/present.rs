@@ -36,6 +36,7 @@ pub struct PresentCmd {
     #[arg(long)]
     pub json: bool,
 }
+
 impl PresentCmd {
     fn settings(json: &str) -> anyhow::Result<std::collections::HashMap<String, omega::Value>> {
         let fields: std::collections::HashMap<String, serde_json::Value> =

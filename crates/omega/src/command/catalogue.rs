@@ -21,6 +21,7 @@ pub struct Available {
     pub available: bool,
     signature: Vec<u8>,
 }
+
 /// Read the caller-scoped command catalogue and invoke dynamically selected entries.
 /// Listing never grants access: declare each target using [`super::Caller`].
 /// The daemon rechecks the signature and access when an entry is invoked.
@@ -28,6 +29,7 @@ pub struct Available {
 pub struct Commands {
     context: Context,
 }
+
 impl Wiring for Commands {
     fn build(context: &Context) -> Self {
         Self {
@@ -35,6 +37,7 @@ impl Wiring for Commands {
         }
     }
 }
+
 impl Does for Commands {}
 impl Commands {
     /// Return a sorted snapshot. Availability may change before a subsequent call.

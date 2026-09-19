@@ -121,6 +121,7 @@ macro_rules! modifiers {
             }
     };
 }
+
 pub(crate) use modifiers;
 
 macro_rules! styled {
@@ -145,4 +146,5 @@ macro_rules! styled {
         }
     };
 }
+
 pub(crate) use styled;

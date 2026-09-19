@@ -12,6 +12,7 @@ pub struct SurfaceHarness<S: Surface> {
     effects: crate::effect::queue::Effects,
     revision: u64,
 }
+
 impl<S: Surface> SurfaceHarness<S> {
     fn identity() -> omega_proto::instance::InstanceKey {
         omega_proto::instance::InstanceKey {
@@ -247,6 +248,7 @@ impl<S: Surface> SurfaceHarness<S> {
             .apply(&omega_proto::omega::StatePatch { topics });
     }
 }
+
 impl<S: Surface> std::fmt::Debug for SurfaceHarness<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SurfaceHarness").finish_non_exhaustive()
@@ -272,6 +274,7 @@ impl CapturedEffect {
         self.0.complete(outcome).map(|_| ())
     }
 }
+
 impl std::fmt::Debug for CapturedEffect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CapturedEffect").finish_non_exhaustive()

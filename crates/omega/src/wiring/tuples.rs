@@ -27,6 +27,7 @@ impl<A: Wiring> Wired for (A,) {
         (A::build(context),)
     }
 }
+
 impl<A: Wiring, B: Wiring> Wired for (A, B) {
     fn topics() -> Vec<SystemTopic> {
         [A::TOPICS.to_vec(), B::TOPICS.to_vec()]
@@ -65,6 +66,7 @@ impl<A: Wiring, B: Wiring> Wired for (A, B) {
         (A::build(context), B::build(context))
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring> Wired for (A, B, C) {
     fn topics() -> Vec<SystemTopic> {
         [A::TOPICS.to_vec(), B::TOPICS.to_vec(), C::TOPICS.to_vec()]
@@ -114,6 +116,7 @@ impl<A: Wiring, B: Wiring, C: Wiring> Wired for (A, B, C) {
         (A::build(context), B::build(context), C::build(context))
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring> Wired for (A, B, C, D) {
     fn topics() -> Vec<SystemTopic> {
         [
@@ -180,6 +183,7 @@ impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring> Wired for (A, B, C, D) {
         )
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring> Wired for (A, B, C, D, E) {
     fn topics() -> Vec<SystemTopic> {
         [
@@ -263,6 +267,7 @@ impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring> Wired for (A, B, C, 
         )
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring, F: Wiring> Wired
     for (A, B, C, D, E, F)
 {
@@ -355,6 +360,7 @@ impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring, F: Wiring> Wired
         )
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring, F: Wiring, G: Wiring> Wired
     for (A, B, C, D, E, F, G)
 {
@@ -454,6 +460,7 @@ impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring, F: Wiring, G: Wiring
         )
     }
 }
+
 impl<A: Wiring, B: Wiring, C: Wiring, D: Wiring, E: Wiring, F: Wiring, G: Wiring, H: Wiring> Wired
     for (A, B, C, D, E, F, G, H)
 {

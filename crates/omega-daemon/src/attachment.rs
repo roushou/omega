@@ -13,6 +13,7 @@ pub(crate) struct Attachment {
     features: Vec<RendererFeature>,
     fingerprint: Option<omega_proto::instance::RendererFingerprint>,
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Scope {
     Plugin(PluginName),
@@ -236,6 +237,7 @@ pub(crate) struct InstancePermit {
     pub(crate) key: InstanceKey,
     active: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
+
 impl InstancePermit {
     pub(crate) fn new(attachment: &Attachment, key: InstanceKey) -> Self {
         Self {

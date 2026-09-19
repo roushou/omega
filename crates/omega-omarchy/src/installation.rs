@@ -51,6 +51,7 @@ struct Receipt {
 pub struct ShellInstallation {
     layout: Layout,
 }
+
 impl ShellInstallation {
     pub fn new(layout: &Layout) -> Self {
         Self {

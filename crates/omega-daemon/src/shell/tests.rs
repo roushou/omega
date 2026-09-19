@@ -6,6 +6,7 @@ struct Server {
     socket: Socket,
     task: tokio::task::JoinHandle<Result<(), ShellError>>,
 }
+
 impl Server {
     fn start() -> Self {
         let path = omega_host::TempPath::sibling(
@@ -32,6 +33,7 @@ impl Server {
         assert!(Refusal::of(&frame).is_some());
     }
 }
+
 impl Drop for Server {
     fn drop(&mut self) {
         self.task.abort();

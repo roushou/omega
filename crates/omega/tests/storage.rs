@@ -15,6 +15,7 @@ impl Storage for Tasks {
     const ID: &'static str = "example.tasks";
     const POLICY: StoragePolicy = StoragePolicy::Memory;
 }
+
 struct FirstTask;
 impl Subscription for FirstTask {
     type Storage = Tasks;
@@ -22,14 +23,17 @@ impl Subscription for FirstTask {
         Query::new().limit(1)
     }
 }
+
 #[derive(omega::Effects)]
 struct Writes {
     tasks: Store<Tasks>,
 }
+
 #[derive(omega::Surface)]
 struct List {
     tasks: Subscribed<FirstTask>,
 }
+
 impl Surface for List {
     type Model = ();
     type Message = Infallible;
@@ -121,6 +125,7 @@ fn fields_derive_storage_access_including_surface_effects_without_system_grants(
 struct Unstarted {
     tasks: Subscribed<FirstTask>,
 }
+
 impl Surface for Unstarted {
     type Model = ();
     type Message = Infallible;
@@ -133,6 +138,7 @@ impl Surface for Unstarted {
         match message {}
     }
 }
+
 #[test]
 fn omitted_initialization_is_an_error_before_render() {
     let error = SurfaceHarness::<Unstarted>::new(&State::new()).unwrap_err();

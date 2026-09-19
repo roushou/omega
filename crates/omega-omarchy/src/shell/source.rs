@@ -99,6 +99,7 @@ impl Shell {
         Ok(source)
     }
 }
+
 impl Native {
     fn source(&self) -> String {
         let mut source = format!("Native::new({:?})", self.id.as_str());
@@ -109,6 +110,7 @@ impl Native {
         source
     }
 }
+
 struct RustSource;
 impl RustSource {
     fn value(value: &Value) -> String {

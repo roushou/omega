@@ -44,6 +44,7 @@ pub struct Cases {
     factories: BTreeMap<CaseId, Factory>,
     error: Option<String>,
 }
+
 impl std::fmt::Debug for Cases {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Cases")
@@ -51,6 +52,7 @@ impl std::fmt::Debug for Cases {
             .finish()
     }
 }
+
 impl Cases {
     pub fn new() -> Self {
         Self::default()

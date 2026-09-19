@@ -63,6 +63,7 @@ pub(crate) struct SpawnIdentity {
     token: SpawnToken,
     pid: Option<i32>,
 }
+
 impl SpawnIdentity {
     pub(crate) fn new(token: SpawnToken) -> Self {
         Self { token, pid: None }
