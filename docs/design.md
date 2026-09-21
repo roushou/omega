@@ -2,6 +2,8 @@
 
 The [architecture](architecture.md) describes the implemented contracts, and the
 [desktop platform design](desktop-platform.md) records composition decisions.
+[Desktop capability surface](desktop-capabilities.md) is the expansion plan for
+UI primitives and platform capabilities toward Omarchy parity.
 This file tracks remaining limitations and future work.
 
 [Command interoperability](command-interoperability.md) documents typed calls,
