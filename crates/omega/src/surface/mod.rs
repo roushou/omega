@@ -126,6 +126,9 @@ pub(crate) mod instance;
 mod optional;
 pub use optional::Optional;
 
+mod search;
+pub use search::{Matchable, Matches, Search};
+
 mod text;
 pub use text::{TextEdit, TextValue};
 
