@@ -50,8 +50,19 @@ impl Presentations {
                 height: 320,
                 output: String::new(),
                 keyboard: omega::KeyboardPolicy::OnDemand as i32,
+                timeout_ms: 0,
             },
         }
+    }
+    /// A summoned menu: keyboard-on-demand and dismissed by an outside click.
+    pub fn menu<W: SurfaceIdentity>(id: impl Into<String>, surface: SurfaceRef<W>) -> Overlay {
+        Self::overlay(id, surface).dismiss_on_outside()
+    }
+    /// A transient on-screen display: no keyboard and a short auto-hide timeout.
+    pub fn osd<W: SurfaceIdentity>(id: impl Into<String>, surface: SurfaceRef<W>) -> Overlay {
+        Self::overlay(id, surface)
+            .keyboard(Keyboard::None)
+            .timeout_ms(2_000)
     }
     fn entry<W: SurfaceIdentity>(
         id: impl Into<String>,
@@ -137,6 +148,11 @@ impl Overlay {
         self.spec.output = name.into();
         self
     }
+    /// Auto-hide this overlay after the timeout. Zero keeps it until dismissed.
+    pub fn timeout_ms(mut self, timeout_ms: u32) -> Self {
+        self.spec.timeout_ms = timeout_ms;
+        self
+    }
 }
 
 impl From<Overlay> for omega::ConfiguredPresentation {
@@ -154,4 +170,55 @@ pub enum Keyboard {
     None,
     OnDemand,
     Exclusive,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::omega::View;
+    use ::omega::ui::Text;
+
+    #[derive(::omega::Surface)]
+    struct Osd {}
+    impl ::omega::Surface for Osd {
+        type Model = ();
+        type Message = std::convert::Infallible;
+        type Effects = ();
+        fn update(
+            &self,
+            _: &mut (),
+            message: Self::Message,
+            _: &(),
+        ) -> ::omega::surface::Task<Self::Message> {
+            match message {}
+        }
+        fn render(&self, _: &(), _: &::omega::surface::Events<Self::Message>) -> View {
+            Text::new("60%").into()
+        }
+    }
+
+    fn spec(kind: &omega::presentation::Kind) -> omega::OverlayPresentation {
+        let omega::presentation::Kind::Overlay(overlay) = kind else {
+            panic!("expected overlay");
+        };
+        overlay.clone()
+    }
+
+    #[test]
+    fn a_menu_is_an_on_demand_overlay_that_dismisses_on_outside() {
+        let entry: omega::ConfiguredPresentation = Presentations::menu("menu", Osd).into();
+        let overlay = spec(entry.presentation.unwrap().kind.as_ref().unwrap());
+        assert!(overlay.dismiss_on_outside);
+        assert_eq!(overlay.keyboard, omega::KeyboardPolicy::OnDemand as i32);
+        assert_eq!(overlay.timeout_ms, 0);
+    }
+
+    #[test]
+    fn an_osd_is_a_nonfocused_overlay_with_a_short_timeout() {
+        let entry: omega::ConfiguredPresentation = Presentations::osd("osd", Osd).into();
+        let overlay = spec(entry.presentation.unwrap().kind.as_ref().unwrap());
+        assert_eq!(overlay.keyboard, omega::KeyboardPolicy::None as i32);
+        assert_eq!(overlay.timeout_ms, 2_000);
+        assert!(!overlay.dismiss_on_outside);
+    }
 }

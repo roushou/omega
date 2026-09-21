@@ -21,6 +21,9 @@ pub(crate) struct Instance {
     pub config: HashMap<String, Value>,
     pub presentation: PresentationSpec,
     pub(super) state: PresentationState,
+    /// Incremented on every Present request, so a stale auto-hide timer cannot
+    /// dismiss a newly re-presented instance.
+    pub(super) epoch: u64,
     pub ready: bool,
 }
 
@@ -55,8 +58,19 @@ impl Instance {
             singleton,
             placement,
             state: PresentationState::new(requested, Observation::Known(Visibility::Hidden)),
+            epoch: 0,
             ready: false,
         })
+    }
+
+    /// The auto-hide timeout, when this is a timed overlay.
+    pub(crate) fn timeout_ms(&self) -> Option<u64> {
+        match self.presentation.wire().kind.as_ref() {
+            Some(omega::presentation::Kind::Overlay(overlay)) if overlay.timeout_ms > 0 => {
+                Some(u64::from(overlay.timeout_ms))
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn config_bytes(&self) -> usize {

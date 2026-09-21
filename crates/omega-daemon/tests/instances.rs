@@ -1007,3 +1007,49 @@ async fn a_foreign_binding_preserves_its_owner_and_uses_the_source_plugins_grant
         handler.abort();
     }
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_timed_overlay_hides_itself_after_the_timeout() {
+    let fixture = Fixture::new("instances-osd");
+    let mut owner = fixture.observer().await;
+    let created = owner
+        .ask(invoke::Op::CreateInstance(omega::CreateInstance {
+            plugin: "example".into(),
+            surface: "panel".into(),
+            singleton: String::new(),
+            config: Default::default(),
+            presentation: Some(omega::Presentation {
+                kind: Some(presentation::Kind::Overlay(omega::OverlayPresentation {
+                    output: String::new(),
+                    width: 480,
+                    height: 320,
+                    keyboard: omega::KeyboardPolicy::None as i32,
+                    dismiss_on_outside: false,
+                    timeout_ms: 2_000,
+                })),
+            }),
+        }))
+        .await;
+    let snapshot = Fixture::snapshot(created);
+    assert_eq!(snapshot.requested, omega::PresentationState::Visible as i32);
+
+    tokio::time::advance(Duration::from_millis(2_500)).await;
+    let hidden = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let snapshot = fixture
+                .plugins
+                .inspect_instances(None)
+                .instances
+                .into_iter()
+                .find(|instance| instance.instance == snapshot.instance)
+                .expect("instance retained");
+            if snapshot.requested == omega::PresentationState::Hidden as i32 {
+                break snapshot;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("timed overlay must auto-hide");
+    assert_eq!(hidden.requested, omega::PresentationState::Hidden as i32);
+}

@@ -954,3 +954,70 @@ async fn persistent_command_hosts_keep_serving_after_a_completed_call() {
         );
     }
 }
+
+#[test]
+fn a_service_surface_declares_the_service_kind_and_never_renders() {
+    #[derive(omega::Surface)]
+    struct Service {}
+    impl Surface for Service {
+        type Model = ();
+        type Message = std::convert::Infallible;
+        type Effects = ();
+        fn update(
+            &self,
+            _: &mut (),
+            message: Self::Message,
+            _: &(),
+        ) -> crate::surface::Task<Self::Message> {
+            match message {}
+        }
+        fn render(&self, _: &(), _: &crate::surface::Events<Self::Message>) -> View {
+            View::empty()
+        }
+    }
+    let manifest = crate::Plugin::new("service", "0.1.0")
+        .service_as::<Service>("worker")
+        .manifest()
+        .unwrap();
+    assert_eq!(manifest.surfaces.len(), 1);
+    assert_eq!(
+        manifest.surfaces[0].declared().unwrap(),
+        omega_proto::omega::SurfaceKind::Service
+    );
+}
+
+static MOUNTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tokio::test]
+async fn a_service_runs_its_startup_hook_without_publishing() {
+    #[derive(omega::Surface)]
+    struct Service {}
+    impl Surface for Service {
+        type Model = ();
+        type Message = std::convert::Infallible;
+        type Effects = ();
+        fn update(
+            &self,
+            _: &mut (),
+            message: Self::Message,
+            _: &(),
+        ) -> crate::surface::Task<Self::Message> {
+            match message {}
+        }
+        fn render(&self, _: &(), _: &crate::surface::Events<Self::Message>) -> View {
+            panic!("services never render")
+        }
+        fn mounted(&self, _: &mut (), _: &()) -> crate::surface::Task<Self::Message> {
+            MOUNTED.store(true, std::sync::atomic::Ordering::SeqCst);
+            crate::surface::Task::none()
+        }
+    }
+    MOUNTED.store(false, std::sync::atomic::Ordering::SeqCst);
+    let plugin = crate::Plugin::new("service", "0.1.0").service_as::<Service>("worker");
+    let mut peer = Peer::start(plugin, vec![]).await;
+    // One round-trip proves the runtime reached its loop, and no service view
+    // was published before it.
+    peer.quiet().await;
+    assert!(MOUNTED.load(std::sync::atomic::Ordering::SeqCst));
+    peer.task.abort();
+}

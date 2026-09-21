@@ -1,6 +1,6 @@
 //! Shared executable declarations and validated runtime inputs.
 use crate::error::Error;
-use omega_proto::omega::{HostKind, SurfaceKind};
+use omega_proto::omega::HostKind;
 use omega_proto::{Address, Manifest, Surface as Declaration, SystemTopic};
 use registration::{CommandEntry, ReactionEntry, SurfaceEntry};
 use std::collections::BTreeSet;
@@ -81,27 +81,27 @@ impl Program {
         let mut surfaces = Vec::new();
         let mut commands = Vec::new();
 
-        let mut widget_names = BTreeSet::new();
-        for widget in &self.registrations.surfaces {
-            if let Some(plugin) = widget.plugin
+        let mut surface_names = BTreeSet::new();
+        for surface in &self.registrations.surfaces {
+            if let Some(plugin) = surface.plugin
                 && plugin != self.name
             {
                 return Err(Error::invalid(format!(
-                    "widget {} belongs to {plugin}, not {}",
-                    widget.surface, self.name
+                    "surface {} belongs to {plugin}, not {}",
+                    surface.surface, self.name
                 )));
             }
-            if !widget_names.insert(&widget.surface) {
+            if !surface_names.insert(&surface.surface) {
                 return Err(Error::invalid(format!(
-                    "duplicate widget: {}",
-                    widget.surface
+                    "duplicate surface: {}",
+                    surface.surface
                 )));
             }
-            widget.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
+            surface.declare(&mut capabilities, &mut topics, &mut keyspaces, &mut storage);
             surfaces.push(Declaration::new(
-                &omega_proto::SurfaceId::try_from(widget.surface.clone())
-                    .map_err(|source| Error::Name(widget.surface.clone(), source))?,
-                SurfaceKind::Widget,
+                &omega_proto::SurfaceId::try_from(surface.surface.clone())
+                    .map_err(|source| Error::Name(surface.surface.clone(), source))?,
+                surface.kind,
             ));
         }
         let mut command_names = BTreeSet::new();

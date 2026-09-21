@@ -176,3 +176,24 @@ fn scheduled_commands_must_name_a_built_plugins_command_surface() {
         );
     }
 }
+
+#[test]
+fn a_service_surface_is_not_placeable() {
+    let manifest = Manifest::new(&"clock".parse::<PluginName>().unwrap(), "1").exposing([
+        Surface::new(&"time".parse::<SurfaceId>().unwrap(), SurfaceKind::Widget),
+        Surface::new(
+            &"worker".parse::<SurfaceId>().unwrap(),
+            SurfaceKind::Service,
+        ),
+    ]);
+    // A service resolves to nothing placeable: naming it is a missing widget.
+    assert!(matches!(
+        DocumentValidation::surface(&manifest, "worker"),
+        Err(omega_document::ValidationError::MissingSurface { .. })
+    ));
+    // The single placeable surface is the widget, not the service.
+    assert_eq!(
+        DocumentValidation::surface(&manifest, "").unwrap().as_str(),
+        "time"
+    );
+}

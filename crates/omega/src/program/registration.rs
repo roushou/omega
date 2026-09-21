@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 
-use omega_proto::omega::{Capability, Event, EventKind};
+use omega_proto::omega::{Capability, Event, EventKind, SurfaceKind};
 use omega_proto::{IntoValue, SystemTopic, Values};
 
 use crate::Input;
@@ -23,6 +23,7 @@ type Declaration = fn(
 pub(crate) struct SurfaceEntry {
     pub(crate) surface: String,
     pub(crate) plugin: Option<&'static str>,
+    pub(crate) kind: SurfaceKind,
     declare: Declaration,
     commands: fn() -> Vec<omega_proto::omega::CommandDependency>,
     required: fn() -> Vec<SystemTopic>,
@@ -31,9 +32,18 @@ pub(crate) struct SurfaceEntry {
 
 impl SurfaceEntry {
     pub(crate) fn of<S: crate::Surface>(surface: String) -> Self {
+        Self::with_kind::<S>(surface, SurfaceKind::Widget)
+    }
+
+    pub(crate) fn service<S: crate::Surface>(surface: String) -> Self {
+        Self::with_kind::<S>(surface, SurfaceKind::Service)
+    }
+
+    fn with_kind<S: crate::Surface>(surface: String, kind: SurfaceKind) -> Self {
         Self {
             surface,
             plugin: None,
+            kind,
             commands: || {
                 S::commands()
                     .into_iter()

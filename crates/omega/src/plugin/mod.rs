@@ -95,6 +95,45 @@ impl Plugin {
         self
     }
 
+    /// Register a headless service surface. It runs for the plugin session and
+    /// never renders, has no placement, and no presentation.
+    ///
+    /// ```
+    /// use omega::platform::time::Clock;
+    /// #[derive(omega::Surface)]
+    /// struct Service { clock: Clock }
+    /// impl omega::Surface for Service {
+    ///     type Model = ();
+    ///     type Message = std::convert::Infallible;
+    ///     type Effects = ();
+    ///     fn update(&self, _: &mut (), message: Self::Message, _: &()) -> omega::surface::Task<Self::Message> {
+    ///         match message {}
+    ///     }
+    ///     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> omega::View { omega::View::empty() }
+    /// }
+    /// let plugin = omega::plugin!().service(Service);
+    /// assert_eq!(plugin.manifest().unwrap().surfaces[0].kind, omega_proto::omega::SurfaceKind::Service as i32);
+    /// ```
+    pub fn service<W: Surface + crate::surface::SurfaceIdentity>(
+        mut self,
+        reference: impl Into<crate::surface::SurfaceRef<W>>,
+    ) -> Self {
+        let reference = reference.into();
+        let mut entry = SurfaceEntry::service::<W>(reference.surface().into());
+        entry.plugin = Some(reference.plugin());
+        self.program.registrations.surfaces.push(entry);
+        self
+    }
+
+    /// Register a headless service surface with an explicit surface ID.
+    pub fn service_as<W: Surface>(mut self, surface: impl Into<String>) -> Self {
+        self.program
+            .registrations
+            .surfaces
+            .push(SurfaceEntry::service::<W>(surface.into()));
+        self
+    }
+
     /// Register a typed command endpoint.
     pub fn command<C: Command>(mut self) -> Self {
         self.program

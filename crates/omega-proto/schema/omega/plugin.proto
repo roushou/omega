@@ -30,6 +30,8 @@ enum SurfaceKind {
   SURFACE_KIND_WIDGET = 1;
   reserved 2;
   reserved "SURFACE_KIND_COMMAND";
+  // Headless, session-scoped: no render, no placement, no presentation.
+  SURFACE_KIND_SERVICE = 3;
 }
 
 // Build-time plugin declarations and handshake identity.

@@ -267,6 +267,10 @@ impl PluginRegistry {
             .or_refuse()?;
         held.ready = true;
         pending.committed = true;
+        if let Some(timeout_ms) = held.timeout_ms() {
+            // Overlays start visible; a timed one arms its own dismissal.
+            self.schedule_auto_hide(held.key.clone(), held.epoch, timeout_ms);
+        }
         Ok(self
             .inner
             .hub
@@ -464,7 +468,7 @@ impl PluginRegistry {
     ) -> Result<(), Refusal> {
         // Intent publication and its acknowledgement must retain their order per instance.
         let _lifecycle = self.lifecycle_gate(key)?.lock_owned().await;
-        let notification = {
+        let (notification, auto_hide) = {
             let mut records = self.lock();
             if let Some(permit) = permit {
                 permit.validate()?;
@@ -483,8 +487,15 @@ impl PluginRegistry {
                 .get_mut(&key.id)
                 .expect("resolved instance");
             let mut next = instance.clone();
+            let mut presented = false;
             next.state = match update {
                 PresentationUpdate::Request(action) => {
+                    presented = action == PresentationAction::Present;
+                    if presented {
+                        // Each Present re-arms the timeout; a stale timer from an
+                        // earlier Present must not dismiss this one.
+                        next.epoch = next.epoch.wrapping_add(1);
+                    }
                     next.state.request(Visibility::requested(action)?)
                 }
                 PresentationUpdate::Observed(state) => next.state.report(state),
@@ -496,15 +507,26 @@ impl PluginRegistry {
                 .publish_view(next.update(&record.name, view.view.clone()))
                 .or_refuse()?;
             *instance = next;
-            if changed {
+            let notify = if changed {
                 record
                     .session
                     .clone()
                     .map(|session| (record.name.clone(), session, instance.state.requested()))
             } else {
                 None
-            }
+            };
+            let hide = if presented {
+                instance
+                    .timeout_ms()
+                    .map(|ms| (key.clone(), instance.epoch, ms))
+            } else {
+                None
+            };
+            (notify, hide)
         };
+        if let Some((key, epoch, timeout_ms)) = auto_hide {
+            self.schedule_auto_hide(key, epoch, timeout_ms);
+        }
         if let Some((plugin, session, state)) = notification {
             let delivery = LifecycleDelivery(Some(session.stop.clone()));
             let outcome = Self::request_on(
@@ -527,6 +549,39 @@ impl PluginRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Arm an auto-hide timer for a just-presented timed overlay. The timer
+    /// re-checks the epoch before hiding, so a re-Present cancels it.
+    fn schedule_auto_hide(&self, key: InstanceKey, epoch: u64, timeout_ms: u64) {
+        let plugins = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
+            let _ = plugins.auto_hide(&key, epoch).await;
+        });
+    }
+
+    async fn auto_hide(&self, key: &InstanceKey, epoch: u64) -> Result<(), Refusal> {
+        let still_visible = self
+            .lock()
+            .values()
+            .find_map(|record| record.instances.get(&key.id))
+            .is_some_and(|instance| {
+                instance.key == *key
+                    && instance.ready
+                    && instance.epoch == epoch
+                    && instance.state.requested() == Visibility::Visible
+            });
+        if still_visible {
+            self.transition_presentation(
+                key,
+                None,
+                PresentationUpdate::Request(PresentationAction::Hide),
+            )
+            .await
+        } else {
+            Ok(())
+        }
     }
 
     async fn destroy_instance(&self, key: &InstanceKey) -> Result<(), Refusal> {

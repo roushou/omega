@@ -55,6 +55,9 @@ impl TryFrom<Presentation> for PresentationSpec {
                         return Err(PresentationError::Keyboard);
                     }
                 }
+                if overlay.timeout_ms > 86_400_000 {
+                    return Err(PresentationError::Timeout);
+                }
             }
         }
         Ok(Self(value))
@@ -97,6 +100,38 @@ pub enum PresentationError {
     Output,
     #[error("overlay requires an explicit supported keyboard policy")]
     Keyboard,
+    #[error("overlay timeout must be at most one day")]
+    Timeout,
     #[error(transparent)]
     Identifier(#[from] crate::IdentError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::omega::{KeyboardPolicy, OverlayPresentation};
+
+    fn overlay(timeout_ms: u32) -> Presentation {
+        Presentation {
+            kind: Some(presentation::Kind::Overlay(OverlayPresentation {
+                output: String::new(),
+                width: 480,
+                height: 320,
+                keyboard: KeyboardPolicy::None as i32,
+                dismiss_on_outside: false,
+                timeout_ms,
+            })),
+        }
+    }
+
+    #[test]
+    fn a_timed_overlay_accepts_zero_and_a_bounded_timeout() {
+        assert!(PresentationSpec::try_from(overlay(0)).is_ok());
+        assert!(PresentationSpec::try_from(overlay(2_000)).is_ok());
+        assert!(PresentationSpec::try_from(overlay(86_400_000)).is_ok());
+        assert!(matches!(
+            PresentationSpec::try_from(overlay(86_400_001)),
+            Err(PresentationError::Timeout)
+        ));
+    }
 }

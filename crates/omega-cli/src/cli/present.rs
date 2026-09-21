@@ -90,6 +90,7 @@ impl PresentCmd {
                 output: self.output.clone().unwrap_or_default(),
                 dismiss_on_outside: self.dismiss_on_outside,
                 keyboard: omega::KeyboardPolicy::Exclusive as i32,
+                timeout_ms: 0,
             })
         } else {
             presentation::Kind::Window(omega::WindowPresentation {

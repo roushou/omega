@@ -1,13 +1,14 @@
 //! Executable session loop: authentication, state replication, rendering,
 //! command dispatch, and effect forwarding.
 
-use omega_proto::omega::{Frame, Invoke, PublishView, frame, invoke, result};
+use omega_proto::omega::{Frame, Invoke, PublishView, SurfaceKind, frame, invoke, result};
 use omega_proto::{Client, Handshake, Socket, Values};
 use tokio::net::UnixStream;
 
 use crate::error::Error;
 use crate::program::PreparedProgram;
 use crate::runtime::context::Context;
+use crate::surface::instance::MountedSurface;
 use execution::ExecutionMode;
 
 mod commands;
@@ -84,6 +85,17 @@ impl Runtime {
     pub(crate) async fn serve(mut self) -> Result<(), Error> {
         let mut instances: Vec<Instance> = Vec::new();
 
+        // Headless services run for the session: constructed once, never
+        // rendered, never placed. Their tasks are polled like any instance's.
+        let mut services: Vec<Box<dyn MountedSurface>> = Vec::new();
+        for entry in &self.program.registrations.surfaces {
+            if entry.kind == SurfaceKind::Service {
+                let mut service = entry.build(&self.context, &self.settings);
+                service.mounted()?;
+                services.push(service);
+            }
+        }
+
         let mut commands =
             Commands::new(&self.program.registrations, &self.context, &self.settings)?;
 
@@ -103,6 +115,9 @@ impl Runtime {
                 completed = std::future::poll_fn(|cx| {
                     for instance in &mut instances {
                         if let std::task::Poll::Ready(answer) = instance.poll(cx) { return std::task::Poll::Ready(answer); }
+                    }
+                    for service in &mut services {
+                        if let std::task::Poll::Ready(answer) = service.poll(cx) { return std::task::Poll::Ready(answer); }
                     }
                     std::task::Poll::Pending
                 }) => {

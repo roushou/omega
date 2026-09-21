@@ -35,6 +35,9 @@ message OverlayPresentation {
   uint32 height = 3;
   KeyboardPolicy keyboard = 4;
   bool dismiss_on_outside = 5;
+  // Auto-hide this overlay after the timeout. Zero keeps it until dismissed.
+  // An OSD sets a short timeout and no keyboard policy.
+  uint32 timeout_ms = 6;
 }
 
 enum KeyboardPolicy {
