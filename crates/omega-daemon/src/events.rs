@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use omega_proto::omega::{
-    BatteryState, CustomEvent, Event, EventKind, PowerEvent, StatePatch, Value, event, state_topic,
+    BatteryState, ClipboardEvent, CustomEvent, Event, EventKind, IdleEvent, PowerEvent, StatePatch,
+    Value, event, state_topic,
 };
 
 /// Assigns every event its id and timestamp.
@@ -51,6 +52,8 @@ impl EventStamp {
 pub struct Transitions {
     battery: Option<BatteryState>,
     mains: Option<bool>,
+    idle: Option<bool>,
+    clipboard: Option<String>,
 }
 
 impl Transitions {
@@ -63,8 +66,9 @@ impl Transitions {
         Self::default()
     }
 
-    /// The events a patch implies, given everything seen before it.
-    pub fn of(&mut self, patch: &StatePatch) -> Vec<EventKind> {
+    /// The events a patch implies, given everything seen before it, with the
+    /// detail each subscriber receives.
+    pub fn of(&mut self, patch: &StatePatch) -> Vec<(EventKind, Option<event::Detail>)> {
         let mut events = Vec::new();
         for topic in &patch.topics {
             match topic.value.as_ref() {
@@ -73,22 +77,51 @@ impl Transitions {
                     if let Some(previous) = self.mains.replace(mains.connected)
                         && previous != mains.connected
                     {
-                        events.push(if mains.connected {
-                            EventKind::EventAcPlugged
-                        } else {
-                            EventKind::EventAcUnplugged
-                        });
+                        events.push((
+                            if mains.connected {
+                                EventKind::EventAcPlugged
+                            } else {
+                                EventKind::EventAcUnplugged
+                            },
+                            Some(event::Detail::Power(PowerEvent::default())),
+                        ));
+                    }
+                }
+                Some(state_topic::Value::Idle(idle)) => {
+                    if let Some(previous) = self.idle.replace(idle.idle)
+                        && previous != idle.idle
+                    {
+                        events.push((
+                            if idle.idle {
+                                EventKind::EventIdleEntered
+                            } else {
+                                EventKind::EventIdleExited
+                            },
+                            Some(event::Detail::Idle(IdleEvent {})),
+                        ));
+                    }
+                }
+                Some(state_topic::Value::Clipboard(clipboard)) => {
+                    if let Some(previous) = self.clipboard.replace(clipboard.text.clone())
+                        && previous != clipboard.text
+                    {
+                        events.push((
+                            EventKind::EventClipboardChanged,
+                            Some(event::Detail::Clipboard(ClipboardEvent {})),
+                        ));
                     }
                 }
                 None if topic.topic == "battery" => self.battery = None,
                 None if topic.topic == "mains" => self.mains = None,
+                None if topic.topic == "idle" => self.idle = None,
+                None if topic.topic == "clipboard" => self.clipboard = None,
                 _ => {}
             }
         }
         events
     }
 
-    fn battery(&mut self, next: BatteryState) -> Vec<EventKind> {
+    fn battery(&mut self, next: BatteryState) -> Vec<(EventKind, Option<event::Detail>)> {
         let previous = self.battery.replace(next);
 
         let Some(previous) = previous else {
@@ -99,38 +132,20 @@ impl Transitions {
         let mut events = Vec::new();
 
         if Self::crossed(previous.level, next.level, Self::CRITICAL) {
-            events.push(EventKind::EventBatteryCritical);
+            events.push((EventKind::EventBatteryCritical, Self::power(next.level)));
         } else if Self::crossed(previous.level, next.level, Self::LOW) {
-            events.push(EventKind::EventBatteryLow);
+            events.push((EventKind::EventBatteryLow, Self::power(next.level)));
         }
 
         events
     }
 
+    fn power(battery_percent: f64) -> Option<event::Detail> {
+        Some(event::Detail::Power(PowerEvent { battery_percent }))
+    }
+
     /// Whether a level fell past a threshold it was above.
     fn crossed(previous: f64, next: f64, threshold: f64) -> bool {
         previous > threshold && next <= threshold
-    }
-}
-
-/// Power events carry no detail beyond their kind; this is the empty body the
-/// schema specifies for them.
-#[derive(Debug)]
-pub struct PowerDetail;
-
-impl PowerDetail {
-    pub fn of(kind: EventKind) -> Option<event::Detail> {
-        matches!(
-            kind,
-            EventKind::EventAcPlugged
-                | EventKind::EventAcUnplugged
-                | EventKind::EventBatteryLow
-                | EventKind::EventBatteryCritical
-                | EventKind::EventLidClosed
-                | EventKind::EventLidOpened
-                | EventKind::EventSuspend
-                | EventKind::EventResume
-        )
-        .then_some(event::Detail::Power(PowerEvent {}))
     }
 }

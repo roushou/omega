@@ -23,6 +23,8 @@ message Event {
     ScheduleFired schedule = 14;
     KeybindTriggered keybind = 15;
     CustomEvent custom = 16;
+    IdleEvent idle = 17;
+    ClipboardEvent clipboard = 18;
   }
 }
 
@@ -47,6 +49,9 @@ enum EventKind {
   EVENT_BATTERY_CRITICAL = 25;
   EVENT_SUSPEND = 26;
   EVENT_RESUME = 27;
+  // idle
+  EVENT_IDLE_ENTERED = 28;
+  EVENT_IDLE_EXITED = 29;
   // notification
   EVENT_NOTIFICATION_DISMISSED = 30;
   EVENT_NOTIFICATION_CLICKED = 31;
@@ -54,6 +59,8 @@ enum EventKind {
   // schedule / keybind
   EVENT_SCHEDULE_FIRED = 40;
   EVENT_KEYBIND_TRIGGERED = 41;
+  // clipboard
+  EVENT_CLIPBOARD_CHANGED = 42;
   // plugin-emitted
   EVENT_CUSTOM = 50;
 }
@@ -67,8 +74,16 @@ message WindowEvent {
 }
 
 message PowerEvent {
-  // Power-transition identity is carried by kind; no additional payload.
+  // Power-transition identity is carried by kind; battery crossings carry the
+  // level that crossed, as a fraction 0..1. Other power events leave it unset.
+  double battery_percent = 1;
 }
+
+// Idle transitions carry no payload; IdleState carries the duration.
+message IdleEvent {}
+
+// Clipboard changes carry no payload; ClipboardState carries the content.
+message ClipboardEvent {}
 
 message NotificationEvent {
   uint32 notification_id = 1;

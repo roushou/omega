@@ -11,7 +11,7 @@ use omega_proto::omega::{
 };
 use omega_proto::{ModuleId, PluginName, SurfaceId};
 
-use crate::events::{EventStamp, PowerDetail, Transitions};
+use crate::events::{EventStamp, Transitions};
 use crate::state::StateStore;
 
 /// A surface declaration and its optional configuration placement.
@@ -206,8 +206,8 @@ impl Hub {
         let size = changed.encoded_len();
         self.inner.state.send(changed, size);
 
-        for kind in derived {
-            self.publish_event(self.inner.stamp.stamp(kind, PowerDetail::of(kind)))
+        for (kind, detail) in derived {
+            self.publish_event(self.inner.stamp.stamp(kind, detail))
                 .expect("derived events have bounded payloads");
         }
         Ok(())
