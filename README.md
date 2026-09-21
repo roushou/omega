@@ -5,25 +5,66 @@ _A declarative Rust framework and plugin runtime for [Omarchy](https://omarchy.o
 Omega lets you write plugins, compose your bar, and build interactive interfaces in Rust.
 Your desktop configuration is an ordinary Cargo workspace, and plugins are compiled to binaries.
 
-No QML, JavaScript, or shell scripts required to write plugins.
+No QML, JavaScript, or shell scripts.
+
+## Why
+
+Why write plugins fully in Rust when Omarchy already provides a native way to write them?
+
+Several reasons:
+
+- **One language.** An Omarchy plugin is a `manifest.json`, a QML component,
+  JavaScript, and often a shell script for system access. An Omega plugin is a
+  single Rust crate.
+
+- **Typed API.** Readings, commands, and settings are declared as typed fields.
+  A wrong property name or bad argument fails at `cargo build` instead of
+  turning up in the shell console after a reload.
+
+- **Just a Rust workspace.** Your shell layout and every plugin are ordinary
+  crates in one workspace, kept in Git as a single repo. Your desktop diffs,
+  branches, and merges like any other Rust project, and shared code is a crate
+  dependency rather than a copy.
+
+- **Testable.** Plugins are ordinary crates, so `cargo test`, Clippy, and CI
+  apply to them as they do to any other crate.
+
+- **The Rust ecosystem.** Parsing, networking, async, and serialization come
+  from the battle-tested Rust ecosystem instead of being hand-rolled in JavaScript.
+
+- **Process isolation.** Omarchy plugins run unsandboxed inside the one
+  `omarchy-shell` process. Each Omega plugin is its own process, supervised by
+  the daemon, so a failure does not take the shell with it.
+
+## How it works
+
+A configuration is a Cargo workspace with two kinds of members:
+
+- `system/` computes the desired desktop from ordinary Rust code: which plugins
+  run, where widgets are placed, and what settings they receive. It has no side
+  effects.
+- `plugins/` are independently runnable features, each compiled to its own binary.
+
+The Omega daemon runs those binaries, shares system readings, routes commands and
+UI interactions, and keeps the running desktop in line with what `system/`
+declares. Plugins run as your user in separate supervised processes.
 
 ## Features
 
-- Keep your desktop configuration in a Git repo: it's an ordinary Cargo workspace.
-- Use Rust crates, extract shared libraries, and run tests, Clippy, and CI.
-- Compile plugins into separate executables, supervised by Omega's daemon.
 - Compose bar widgets, popup panels, and standalone windows and overlays.
 - Build reusable UI components and preview them with sample data.
 - Read system state and control devices through typed Rust APIs.
-- Register typed commands, call other plugins, react to events, and schedule background work.
-
-The daemon runs plugins, shares system readings, and routes commands and UI
-interactions. Plugins run as your user in separate processes.
+- Register typed commands, call other plugins, react to events, and schedule
+  background work.
+- Keep the configuration in Git as an ordinary Cargo workspace, with shared
+  crates, tests, Clippy, and CI.
+- Compile each plugin into a separate executable supervised by the daemon.
 
 ## Requirements
 
-- Omarchy Quattro
-- Rust 1.88+
+- Linux running Omarchy Quattro
+- A systemd user manager
+- Rust 1.88 or newer
 
 ## Installation
 
