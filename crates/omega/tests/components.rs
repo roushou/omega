@@ -1,5 +1,5 @@
 use omega::testing::Drawn;
-use omega::ui::{Bind, Button, Choice, Column, Component, List, Row, Slider, Text};
+use omega::ui::{Bind, Button, Choice, Column, Component, Dropdown, List, Row, Slider, Text};
 use omega::{Percent, Ui, View};
 
 #[derive(omega::Command)]
@@ -227,6 +227,36 @@ impl Component for TwoChoices {
 #[test]
 fn sibling_controls_can_use_identical_domain_values() {
     let drawn = Drawn::of_view(TwoChoices.key("settings"));
+    for key in ["settings/first/same", "settings/second/same"] {
+        assert_eq!(drawn.prop(key, "selection_key").as_deref(), Some("same"));
+    }
+    let keys = drawn.keys();
+    let unique: std::collections::BTreeSet<_> = keys.iter().collect();
+    assert_eq!(keys.len(), unique.len());
+}
+
+struct Dropdowns;
+impl Component for Dropdowns {
+    fn render(&self) -> View {
+        Column::new()
+            .child(
+                Dropdown::new()
+                    .option("same".to_string(), Text::new("One"))
+                    .selected(Some("same".into()))
+                    .key("first"),
+            )
+            .child(
+                Dropdown::new()
+                    .option("same".to_string(), Text::new("Two"))
+                    .key("second"),
+            )
+            .into()
+    }
+}
+
+#[test]
+fn dropdown_scoping_preserves_domain_values_like_choice() {
+    let drawn = Drawn::of_view(Dropdowns.key("settings"));
     for key in ["settings/first/same", "settings/second/same"] {
         assert_eq!(drawn.prop(key, "selection_key").as_deref(), Some("same"));
     }

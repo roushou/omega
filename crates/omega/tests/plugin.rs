@@ -9,8 +9,9 @@ use omega::platform::time::Clock;
 use omega::record::{Own, PluginState, Watch};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
-    Button, Choice, Field, Glyph, Graph, Grid, Header, Icon, Image, List, Progress, Row, Separator,
-    Slider, Spacer, Text, Toggle,
+    Badge, Button, Checkbox, Choice, Dialog, Disclosure, Dropdown, EmptyState, Field, Glyph, Graph,
+    Grid, Header, Icon, Image, Keycap, List, Progress, Row, Scroll, Separator, Slider, Spacer,
+    Text, Toggle,
 };
 use omega::{Args, Command, Percent, Surface, Ui};
 use omega_proto::SystemTopic;
@@ -724,6 +725,47 @@ fn every_node() -> Ui {
         .child(Image::new("/tmp/art.png"))
         .child(Image::new("https://example.invalid/art.png"))
         .child(omega::ui::Form::new(UiSave))
+        .child(Checkbox::new(true).label("Autostart").on_change(UiMute))
+        .child(
+            Dropdown::new()
+                .option("auto".to_string(), Text::new("Auto"))
+                .option("5".to_string(), Text::new("5 GHz"))
+                .selected(Some("auto".to_string()))
+                .placeholder("Band")
+                .on_select(UiBand),
+        )
+        .child(
+            Disclosure::new("Advanced")
+                .open(true)
+                .on_toggle(UiMute)
+                .child(Text::new("Details")),
+        )
+        .child(
+            Dialog::new("Confirm")
+                .body("Proceed?")
+                .confirm_label("Yes")
+                .cancel_label("No")
+                .on_confirm(UiForget)
+                .on_cancel(UiCancel)
+                .on_dismiss(UiForget),
+        )
+        .child(Badge::new(3).hidden_when_zero())
+        .child(Keycap::new("Ctrl"))
+        .child(
+            EmptyState::new("Empty")
+                .message("Nothing here")
+                .icon(Glyph::Search),
+        )
+        .child(
+            Scroll::new()
+                .child(Text::new("First"))
+                .child(Text::new("Second")),
+        )
+        .child(
+            Field::new("Age")
+                .numeric(0.0, 150.0, 1.0)
+                .on_submit(UiConnect),
+        )
         .into()
 }
 
@@ -836,6 +878,64 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
         "/tmp/art.png"
     );
     assert!(children[19]["props"].get("source").is_none());
+
+    // A checkbox reports the boolean change; its label is separate from on.
+    assert_eq!(children[21]["type"], "checkbox");
+    assert_eq!(children[21]["props"]["on"]["boolValue"], true);
+    assert_eq!(children[21]["props"]["label"]["stringValue"], "Autostart");
+    assert_eq!(children[21]["events"]["change"]["command"], "mute");
+
+    // A dropdown collapses its options but carries the same keyed selection.
+    assert_eq!(children[22]["type"], "dropdown");
+    assert_eq!(children[22]["props"]["selected"]["stringValue"], "auto");
+    assert_eq!(children[22]["props"]["placeholder"]["stringValue"], "Band");
+    assert_eq!(children[22]["events"]["select"]["command"], "band");
+    assert_eq!(children[22]["children"][1]["key"], "5");
+
+    // A disclosure reports the requested open state and hides its children.
+    assert_eq!(children[23]["type"], "disclosure");
+    assert_eq!(children[23]["props"]["title"]["stringValue"], "Advanced");
+    assert_eq!(children[23]["props"]["open"]["boolValue"], true);
+    assert_eq!(children[23]["events"]["toggle"]["command"], "mute");
+    assert_eq!(children[23]["children"][0]["type"], "text");
+
+    // A dialog names its actions; confirm and dismiss share a target here.
+    assert_eq!(children[24]["type"], "dialog");
+    assert_eq!(children[24]["props"]["title"]["stringValue"], "Confirm");
+    assert_eq!(children[24]["props"]["body"]["stringValue"], "Proceed?");
+    assert_eq!(children[24]["props"]["confirm"]["stringValue"], "Yes");
+    assert_eq!(children[24]["props"]["cancel"]["stringValue"], "No");
+    assert_eq!(children[24]["events"]["confirm"]["command"], "forget");
+    assert_eq!(children[24]["events"]["cancel"]["command"], "cancel");
+    assert_eq!(children[24]["events"]["dismiss"]["command"], "forget");
+
+    // A badge counts; the flag hides it at zero.
+    assert_eq!(children[25]["type"], "badge");
+    assert_eq!(children[25]["props"]["count"]["intValue"], "3");
+    assert_eq!(children[25]["props"]["hidden_when_zero"]["boolValue"], true);
+
+    assert_eq!(children[26]["type"], "keycap");
+    assert_eq!(children[26]["props"]["label"]["stringValue"], "Ctrl");
+
+    assert_eq!(children[27]["type"], "status");
+    assert_eq!(children[27]["props"]["title"]["stringValue"], "Empty");
+    assert_eq!(
+        children[27]["props"]["message"]["stringValue"],
+        "Nothing here"
+    );
+    assert_eq!(children[27]["props"]["icon"]["stringValue"], "search");
+
+    // A scroll container has no props of its own; children stay its children.
+    assert_eq!(children[28]["type"], "scroll");
+    assert!(children[28]["props"].is_null());
+    assert_eq!(children[28]["children"][0]["type"], "text");
+
+    // A numeric field carries range and step as fractions.
+    assert_eq!(children[29]["type"], "field");
+    assert_eq!(children[29]["props"]["numeric"]["boolValue"], true);
+    assert_eq!(children[29]["props"]["min"]["doubleValue"], 0.0);
+    assert_eq!(children[29]["props"]["max"]["doubleValue"], 150.0);
+    assert_eq!(children[29]["props"]["step"]["doubleValue"], 1.0);
 
     // Stable keys preserve renderer node identity.
     assert_eq!(root["key"], "root");

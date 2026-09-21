@@ -171,7 +171,7 @@ impl Node {
         } else {
             scope
         };
-        let selectable = matches!(self.kind, "list" | "group");
+        let selectable = matches!(self.kind, "list" | "group" | "dropdown");
         for (index, child) in self.children.iter_mut().enumerate() {
             let value = child.key.clone();
             let positional = if scope.is_some() {

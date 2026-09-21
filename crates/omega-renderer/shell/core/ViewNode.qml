@@ -107,6 +107,10 @@ FocusScope {
             case "button": return "nodes/Button.qml"
             case "slider": return "nodes/Slider.qml"
             case "toggle": return "nodes/Toggle.qml"
+            case "checkbox": return "nodes/Checkbox.qml"
+            case "dropdown": return "nodes/Dropdown.qml"
+            case "disclosure": return "nodes/Disclosure.qml"
+            case "dialog": return "nodes/Dialog.qml"
             case "form": return "nodes/Form.qml"
             case "field": return "nodes/Field.qml"
             case "list": return "nodes/List.qml"
@@ -118,6 +122,10 @@ FocusScope {
             case "group": return "nodes/Group.qml"
             case "grid": return "nodes/Grid.qml"
             case "image": return "nodes/Image.qml"
+            case "badge": return "nodes/Badge.qml"
+            case "keycap": return "nodes/Keycap.qml"
+            case "status": return "nodes/Status.qml"
+            case "scroll": return "nodes/Scroll.qml"
             default: return ""
         }
     }

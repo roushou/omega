@@ -98,3 +98,77 @@ impl Image {
 }
 
 styled!(Image);
+
+/// A small count pill. Hide when the count is zero with
+/// [`hidden_when_zero`](Self::hidden_when_zero); tone carries its meaning.
+#[derive(Debug, Clone)]
+pub struct Badge {
+    node: Node,
+}
+
+impl Badge {
+    pub fn new(count: u32) -> Self {
+        Self {
+            node: Node::new("badge").number("count", count),
+        }
+    }
+
+    /// Draw nothing when the count is zero.
+    pub fn hidden_when_zero(mut self) -> Self {
+        self.node = self.node.flag("hidden_when_zero", true);
+        self
+    }
+}
+
+styled!(Badge);
+
+/// A single key or chord drawn as a keycap, for shortcuts and hints.
+#[derive(Debug, Clone)]
+pub struct Keycap {
+    node: Node,
+}
+
+impl Keycap {
+    pub fn new(label: impl std::fmt::Display) -> Self {
+        Self {
+            node: Node::new("keycap").text_prop("label", label.to_string()),
+        }
+    }
+}
+
+styled!(Keycap);
+
+/// An empty, loading, or failed state with an optional glyph, a heading, and
+/// a message. It is a display, not a control; pair it with a button for a
+/// recovery action.
+///
+/// ```
+/// use omega::ui::{EmptyState, Glyph};
+/// let none = EmptyState::new("No devices").icon(Glyph::Bluetooth);
+/// ```
+#[derive(Debug, Clone)]
+pub struct EmptyState {
+    node: Node,
+}
+
+impl EmptyState {
+    pub fn new(title: impl std::fmt::Display) -> Self {
+        Self {
+            node: Node::new("status").text_prop("title", title.to_string()),
+        }
+    }
+
+    /// Supporting text under the title.
+    pub fn message(mut self, message: impl std::fmt::Display) -> Self {
+        self.node = self.node.text_prop("message", message.to_string());
+        self
+    }
+
+    /// A [`Glyph`](crate::ui::Glyph) name to draw above the title.
+    pub fn icon(mut self, glyph: crate::ui::Glyph) -> Self {
+        self.node = self.node.text_prop("icon", glyph.name());
+        self
+    }
+}
+
+styled!(EmptyState);

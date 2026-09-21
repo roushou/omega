@@ -161,3 +161,38 @@ impl Grid {
 }
 
 styled!(Grid);
+
+/// Children in a scrollable viewport. Set [`height`](Self::height) to bound the
+/// viewport; without one it sizes to its children and does not scroll.
+#[derive(Debug, Clone)]
+pub struct Scroll {
+    node: Node,
+}
+
+impl Scroll {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("scroll"),
+        }
+    }
+
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
+        self.node = self.node.child(child);
+        self
+    }
+
+    pub fn children<C: Into<crate::View>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
+        for child in children {
+            self.node = self.node.child(child);
+        }
+        self
+    }
+}
+
+impl Default for Scroll {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(Scroll);

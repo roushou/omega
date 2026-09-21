@@ -13,6 +13,29 @@ Item {
     property alias text: input.text
     readonly property int textSize: host.typeSize(Props.fieldSize(host.model), host.fontSize)
     readonly property bool secret: Props.fieldSecret(host.model)
+    readonly property bool numeric: Props.fieldNumeric(host.model)
+    readonly property real minimum: Props.fieldMin(host.model)
+    readonly property real maximum: Props.fieldMax(host.model)
+    readonly property real step: Props.fieldStep(host.model)
+
+    function numericValid(text) {
+        if (!field.numeric) return true
+        var value = Number(text)
+        if (isNaN(value)) return false
+        if (value < field.minimum || value > field.maximum) return false
+        if (field.step > 0) {
+            var steps = (value - field.minimum) / field.step
+            if (Math.abs(steps - Math.round(steps)) > 0.0001) return false
+        }
+        return true
+    }
+
+    DoubleValidator {
+        id: numberValidator
+        bottom: field.minimum
+        top: field.maximum
+        locale: "C"
+    }
 
     readonly property bool controlled: Props.fieldControlled(host.model)
     property bool composing: input.inputMethodComposing
@@ -59,6 +82,7 @@ Item {
             var bound = Props.bind(field.host.model, "change")
             if (!field.queuedEdit || !bound || field.host.pending || field.composing) return
             if (field.sentBinding !== null && bound.local === field.sentBinding) return
+            if (field.numeric && !field.numericValid(input.text)) return
             var value = { text: input.text, revision: field.editRevision, reset: field.resetRevision }
             if (field.host.invoke("change", value)) { field.queuedEdit = false; field.sentBinding = bound.local || null }
         }
@@ -123,6 +147,8 @@ Item {
             activeFocusOnTab: true
             readOnly: (field.controlled ? !field.enabled : !field.host.interactive) || (field.host.form && !field.host.form.host.interactive)
             echoMode: field.secret ? TextInput.Password : TextInput.Normal
+            inputMethodHints: field.numeric ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
+            validator: field.numeric ? numberValidator : null
 
             onTextEdited: field.edited()
             Accessible.role: Accessible.EditableText
@@ -132,8 +158,9 @@ Item {
             onAccepted: {
                 if (field.host.session && field.host.session.navigation && field.navigationTarget) { if (!field.navigationReady) return; field.host.session.navigation.activate(field.host.model.key, field.navigationTarget); return }
                 if (input.readOnly) return
-                if (field.host.form) { field.host.form.submit(); return }
+                if (field.host.form) { if (field.numeric && !field.numericValid(input.text)) return; field.host.form.submit(); return }
                 if (field.bound === null) return
+                if (field.numeric && !field.numericValid(input.text)) return
                 field.host.invoke("submit", input.text)
             }
 

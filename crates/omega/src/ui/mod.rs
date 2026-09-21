@@ -43,10 +43,13 @@ mod text;
 pub use omega_proto::Glyph;
 
 pub use bind::Bind;
-pub use content::{Metric, Section};
-pub use control::{Button, Choice, ChoiceValue, Field, Form, FormInput, List, Slider, Toggle};
-pub use display::{Graph, Image, Progress};
-pub use layout::{Column, Grid, Row, Separator, Spacer, Stack};
+pub use content::{Detail, ItemRow, Labelled, Metric, PanelHeader, SearchSelect, Section};
+pub use control::{
+    Button, Checkbox, Choice, ChoiceValue, Dialog, Disclosure, Dropdown, Field, Form, FormInput,
+    List, Slider, Toggle,
+};
+pub use display::{Badge, EmptyState, Graph, Image, Keycap, Progress};
+pub use layout::{Column, Grid, Row, Scroll, Separator, Spacer, Stack};
 pub use navigation::ViewError;
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
 pub use text::{Header, Icon, Text};

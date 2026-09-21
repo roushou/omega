@@ -187,6 +187,19 @@ impl Field {
         self
     }
 
+    /// Restrict entry to numeric values within an inclusive range.
+    /// Commit is refused while the value is out of range or not a number;
+    /// submitted values remain strings and decode through [`Input`](crate::Input).
+    pub fn numeric(mut self, min: f64, max: f64, step: f64) -> Self {
+        self.node = self
+            .node
+            .flag("numeric", true)
+            .fraction("min", min)
+            .fraction("max", max)
+            .fraction("step", step);
+        self
+    }
+
     /// Set the field's model value. A changed value replaces the local draft;
     /// repeated unchanged values preserve edits. Use [`Self::controlled`] for
     /// revision-aware updates and explicit resets.
@@ -209,7 +222,7 @@ styled!(Field);
 /// child a stable [`key`](crate::ui::Text::key); selection and activation submit
 /// that key. Use [`Self::selected`] and [`Self::on_select`] for model-owned selection.
 ///
-/// Set [`Self::height`] to constrain the viewport and enable scrolling.
+/// Set [`Self::height`](crate::ui::Text::height) to constrain the viewport and enable scrolling.
 /// Without it, the list sizes to its rows.
 #[derive(Debug, Clone)]
 pub struct List {
@@ -442,3 +455,206 @@ impl Form {
     }
 }
 styled!(Form);
+
+/// A labelled box that submits a boolean when toggled.
+/// The renderer draws the change immediately; later views supply the state.
+#[derive(Debug, Clone)]
+pub struct Checkbox {
+    node: Node,
+}
+
+impl Checkbox {
+    pub fn new(on: bool) -> Self {
+        Self {
+            node: Node::new("checkbox").flag("on", on),
+        }
+    }
+
+    /// Text drawn beside the box.
+    pub fn label(mut self, label: impl Display) -> Self {
+        self.node = self.node.text_prop("label", label.to_string());
+        self
+    }
+
+    /// Bind changes to a command or local message accepting `bool`.
+    pub fn on_change(mut self, change: impl Into<Bind<bool>>) -> Self {
+        self.node = self.node.on("change", change);
+        self
+    }
+}
+
+styled!(Checkbox);
+
+/// A collapsed select that opens to its keyed options, like [`Choice`] but
+/// occupying one row until opened. The renderer owns the popover; the SDK
+/// declares options, selection, and the typed selection binding.
+///
+/// ```
+/// use omega::{Command, platform::power::{PowerProfile, SetProfile}, ui::{Dropdown, Text}};
+/// #[derive(omega::Command)]
+/// struct SetPowerProfile { profiles: SetProfile }
+/// impl Command for SetPowerProfile {
+///     const ID: &'static str = "set-power-profile";
+///
+///     type Input = PowerProfile;
+///     type Output = ();
+///     async fn call(&self, profile: PowerProfile) -> omega::Result<()> {
+///         self.profiles.set(profile).await
+///     }
+/// }
+/// let picker = Dropdown::new()
+///     .option(PowerProfile::Balanced, Text::new("Balanced"))
+///     .option(PowerProfile::Saver, Text::new("Saver"))
+///     .selected(Some(PowerProfile::Balanced))
+///     .on_select(SetPowerProfile);
+/// ```
+#[derive(Debug, Clone)]
+pub struct Dropdown<T: ChoiceValue = String> {
+    node: Node,
+    value: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T: ChoiceValue> Dropdown<T> {
+    pub fn new() -> Self {
+        Self {
+            node: Node::new("dropdown"),
+            value: std::marker::PhantomData,
+        }
+    }
+
+    /// Add a value and its presentation. The value supplies the option's key.
+    pub fn option(mut self, value: T, label: impl Into<crate::View>) -> Self {
+        self.node = self.node.child(label.into().key(value.key()));
+        self
+    }
+
+    /// Add options from an iterator of values and labels.
+    pub fn options<N: Into<crate::View>>(
+        mut self,
+        options: impl IntoIterator<Item = (T, N)>,
+    ) -> Self {
+        for (value, label) in options {
+            self = self.option(value, label);
+        }
+        self
+    }
+
+    /// Select a value. `None` or a value absent from the options selects nothing.
+    pub fn selected(mut self, value: Option<T>) -> Self {
+        self.node = self.node.text_prop(
+            "selected",
+            value.as_ref().map(ChoiceValue::key).unwrap_or_default(),
+        );
+        self
+    }
+
+    /// Shown while nothing is selected.
+    pub fn placeholder(mut self, text: impl Display) -> Self {
+        self.node = self.node.text_prop("placeholder", text.to_string());
+        self
+    }
+
+    /// Invoke a command accepting this choice's value type.
+    pub fn on_select(mut self, select: impl Into<Bind<T>>) -> Self {
+        self.node = self.node.on("select", select);
+        self
+    }
+}
+
+impl<T: ChoiceValue> Default for Dropdown<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+styled!(Dropdown<T: ChoiceValue>);
+
+/// A heading that reveals or hides its children. `open` supplies the observed
+/// state; the toggle reports the requested new state through a boolean binding.
+#[derive(Debug, Clone)]
+pub struct Disclosure {
+    node: Node,
+}
+
+impl Disclosure {
+    pub fn new(title: impl Display) -> Self {
+        Self {
+            node: Node::new("disclosure").text_prop("title", title.to_string()),
+        }
+    }
+
+    /// Set the observed open state.
+    pub fn open(mut self, open: bool) -> Self {
+        self.node = self.node.flag("open", open);
+        self
+    }
+
+    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
+        self.node = self.node.child(child);
+        self
+    }
+
+    /// Bind toggles to a command or local message accepting `bool`.
+    pub fn on_toggle(mut self, toggle: impl Into<Bind<bool>>) -> Self {
+        self.node = self.node.on("toggle", toggle);
+        self
+    }
+}
+
+styled!(Disclosure);
+
+/// A confirm card with a primary and a dismiss action. Drawn inline as a card;
+/// modal stacking above an instance belongs to presentation, not this node.
+/// Bind [`confirm`](Self::on_confirm) and [`cancel`](Self::on_cancel) to the
+/// two actions, and [`dismiss`](Self::on_dismiss) to outside/Escape dismissal.
+#[derive(Debug, Clone)]
+pub struct Dialog {
+    node: Node,
+}
+
+impl Dialog {
+    pub fn new(title: impl Display) -> Self {
+        Self {
+            node: Node::new("dialog").text_prop("title", title.to_string()),
+        }
+    }
+
+    /// Explanatory text under the title.
+    pub fn body(mut self, body: impl Display) -> Self {
+        self.node = self.node.text_prop("body", body.to_string());
+        self
+    }
+
+    /// Label the primary action. Defaults to `Confirm`.
+    pub fn confirm_label(mut self, label: impl Display) -> Self {
+        self.node = self.node.text_prop("confirm", label.to_string());
+        self
+    }
+
+    /// Label the dismiss action. Defaults to `Cancel`.
+    pub fn cancel_label(mut self, label: impl Display) -> Self {
+        self.node = self.node.text_prop("cancel", label.to_string());
+        self
+    }
+
+    /// Bind the primary action to a command or local message.
+    pub fn on_confirm(mut self, confirm: impl Into<Bind<()>>) -> Self {
+        self.node = self.node.on("confirm", confirm);
+        self
+    }
+
+    /// Bind the secondary action to a command or local message.
+    pub fn on_cancel(mut self, cancel: impl Into<Bind<()>>) -> Self {
+        self.node = self.node.on("cancel", cancel);
+        self
+    }
+
+    /// Bind outside or Escape dismissal. Without it the dialog cannot be dismissed
+    /// except through its actions.
+    pub fn on_dismiss(mut self, dismiss: impl Into<Bind<()>>) -> Self {
+        self.node = self.node.on("dismiss", dismiss);
+        self
+    }
+}
+
+styled!(Dialog);

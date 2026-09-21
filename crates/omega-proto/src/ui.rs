@@ -173,6 +173,8 @@ nodes! {
     Slider => "slider" { value: Fraction },
     /// Something on or off.
     Toggle => "toggle" { on: Flag },
+    /// A labelled box that is ticked or not.
+    Checkbox => "checkbox" { on: Flag, label: Text },
     /// Text input with optional model value and controlled-edit metadata.
     Form => "form" { label: Text },
     Field => "field" {
@@ -184,11 +186,29 @@ nodes! {
         placeholder: Text,
         secret: Flag,
         value: Text,
+        numeric: Flag,
+        min: Fraction,
+        max: Fraction,
+        step: Fraction,
     },
     /// Rows to pick from, which owns its own cursor.
     List => "list" { gap: Number, selected: Text = "null" },
     /// One of several options, chosen by key.
     Group => "group" { selected: Text = "null" },
+    /// A collapsed select that opens to its keyed options.
+    Dropdown => "dropdown" {
+        selected: Text = "null",
+        placeholder: Text,
+    },
+    /// A heading that reveals or hides its children.
+    Disclosure => "disclosure" { title: Text, open: Flag },
+    /// A confirm card with primary and dismiss actions.
+    Dialog => "dialog" {
+        title: Text,
+        body: Text,
+        confirm: Text,
+        cancel: Text,
+    },
     /// How full something is.
     Progress => "progress" { value: Fraction },
     /// Numeric series with optional explicit scale bounds.
@@ -199,6 +219,14 @@ nodes! {
     },
     /// A picture, by path or URL.
     Image => "image" { source: Text },
+    /// A small count pill.
+    Badge => "badge" { count: Number, hidden_when_zero: Flag },
+    /// A single key or chord, drawn as a keycap.
+    Keycap => "keycap" { label: Text },
+    /// An empty, loading, or failed state with a heading and message.
+    Status => "status" { title: Text, message: Text, icon: Text },
+    /// Children in a scrollable viewport.
+    Scroll => "scroll" {},
 }
 
 impl NodeKind {

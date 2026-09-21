@@ -53,8 +53,28 @@ impl Core {
             contents: include_str!("../shell/core/Icons.js"),
         },
         Asset {
+            name: "core/nodes/Badge.qml",
+            contents: include_str!("../shell/core/nodes/Badge.qml"),
+        },
+        Asset {
             name: "core/nodes/Button.qml",
             contents: include_str!("../shell/core/nodes/Button.qml"),
+        },
+        Asset {
+            name: "core/nodes/Checkbox.qml",
+            contents: include_str!("../shell/core/nodes/Checkbox.qml"),
+        },
+        Asset {
+            name: "core/nodes/Dialog.qml",
+            contents: include_str!("../shell/core/nodes/Dialog.qml"),
+        },
+        Asset {
+            name: "core/nodes/Disclosure.qml",
+            contents: include_str!("../shell/core/nodes/Disclosure.qml"),
+        },
+        Asset {
+            name: "core/nodes/Dropdown.qml",
+            contents: include_str!("../shell/core/nodes/Dropdown.qml"),
         },
         Asset {
             name: "core/nodes/Field.qml",
@@ -89,12 +109,20 @@ impl Core {
             contents: include_str!("../shell/core/nodes/Image.qml"),
         },
         Asset {
+            name: "core/nodes/Keycap.qml",
+            contents: include_str!("../shell/core/nodes/Keycap.qml"),
+        },
+        Asset {
             name: "core/nodes/List.qml",
             contents: include_str!("../shell/core/nodes/List.qml"),
         },
         Asset {
             name: "core/nodes/Progress.qml",
             contents: include_str!("../shell/core/nodes/Progress.qml"),
+        },
+        Asset {
+            name: "core/nodes/Scroll.qml",
+            contents: include_str!("../shell/core/nodes/Scroll.qml"),
         },
         Asset {
             name: "core/nodes/Separator.qml",
@@ -111,6 +139,10 @@ impl Core {
         Asset {
             name: "core/nodes/Stack.qml",
             contents: include_str!("../shell/core/nodes/Stack.qml"),
+        },
+        Asset {
+            name: "core/nodes/Status.qml",
+            contents: include_str!("../shell/core/nodes/Status.qml"),
         },
         Asset {
             name: "core/nodes/Text.qml",

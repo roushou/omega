@@ -171,6 +171,16 @@ function toggleOn(node) {
     return readFlag(node, "on", false)
 }
 
+// ---- checkbox ----
+
+function checkboxOn(node) {
+    return readFlag(node, "on", false)
+}
+
+function checkboxLabel(node) {
+    return readText(node, "label", "")
+}
+
 // ---- form ----
 
 function formLabel(node) {
@@ -227,6 +237,22 @@ function fieldValue(node) {
     return readText(node, "value", "")
 }
 
+function fieldNumeric(node) {
+    return readFlag(node, "numeric", false)
+}
+
+function fieldMin(node) {
+    return readFraction(node, "min", 0)
+}
+
+function fieldMax(node) {
+    return readFraction(node, "max", 0)
+}
+
+function fieldStep(node) {
+    return readFraction(node, "step", 0)
+}
+
 // ---- list ----
 
 function listGap(node) {
@@ -241,6 +267,44 @@ function listSelected(node) {
 
 function groupSelected(node) {
     return readText(node, "selected", null)
+}
+
+// ---- dropdown ----
+
+function dropdownSelected(node) {
+    return readText(node, "selected", null)
+}
+
+function dropdownPlaceholder(node) {
+    return readText(node, "placeholder", "")
+}
+
+// ---- disclosure ----
+
+function disclosureTitle(node) {
+    return readText(node, "title", "")
+}
+
+function disclosureOpen(node) {
+    return readFlag(node, "open", false)
+}
+
+// ---- dialog ----
+
+function dialogTitle(node) {
+    return readText(node, "title", "")
+}
+
+function dialogBody(node) {
+    return readText(node, "body", "")
+}
+
+function dialogConfirm(node) {
+    return readText(node, "confirm", "")
+}
+
+function dialogCancel(node) {
+    return readText(node, "cancel", "")
 }
 
 // ---- progress ----
@@ -267,6 +331,36 @@ function graphHigh(node) {
 
 function imageSource(node) {
     return readText(node, "source", "")
+}
+
+// ---- badge ----
+
+function badgeCount(node) {
+    return readNumber(node, "count", 0)
+}
+
+function badgeHidden_when_zero(node) {
+    return readFlag(node, "hidden_when_zero", false)
+}
+
+// ---- keycap ----
+
+function keycapLabel(node) {
+    return readText(node, "label", "")
+}
+
+// ---- status ----
+
+function statusTitle(node) {
+    return readText(node, "title", "")
+}
+
+function statusMessage(node) {
+    return readText(node, "message", "")
+}
+
+function statusIcon(node) {
+    return readText(node, "icon", "")
 }
 
 // ---- what a node is, besides its props ----
