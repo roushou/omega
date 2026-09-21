@@ -43,7 +43,9 @@ mod text;
 pub use omega_proto::Glyph;
 
 pub use bind::Bind;
-pub use content::{Detail, ItemRow, Labelled, Metric, PanelHeader, SearchSelect, Section};
+pub use content::{
+    Detail, ItemRow, Labelled, LevelControl, Metric, PanelHeader, SearchSelect, Section,
+};
 pub use control::{
     Button, Checkbox, Choice, ChoiceValue, Dialog, Disclosure, Dropdown, Field, Form, FormInput,
     List, Slider, Toggle,

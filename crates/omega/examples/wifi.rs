@@ -121,7 +121,7 @@ impl Surface for Panel {
             WifiPhase::Disconnected => "Wi-Fi disconnected".to_string(),
             WifiPhase::Unspecified => "Wi-Fi unavailable".to_string(),
         };
-        let mut panel = Section::new("Wi-Fi").child(Text::new(state));
+        let mut panel = Section::new().title("Wi-Fi").child(Text::new(state));
 
         if self.network.is_connected() {
             panel = panel

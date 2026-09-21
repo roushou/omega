@@ -114,20 +114,23 @@ impl Surface for Panel {
     }
     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
         if !self.media.has_reading() {
-            return Section::new("Media")
+            return Section::new()
+                .title("Media")
                 .child(Text::new("Media service unavailable"))
                 .into();
         }
         let players = self.media.players();
         let selected = self.selection.get();
         let Some(player) = selected.resolve(&players) else {
-            return Section::new("Media")
+            return Section::new()
+                .title("Media")
                 .child(Text::new("No media players"))
                 .child(Text::new("Start playback in a music app or browser.").muted())
                 .into();
         };
         let id = player.id().to_owned();
-        let mut panel = Section::new("Media")
+        let mut panel = Section::new()
+            .title("Media")
             .child(Text::new(Selection::title(player)).bold())
             .child(Text::new(player.artist()).muted())
             .child(Text::new(player.album()).muted())
@@ -206,7 +209,7 @@ impl Surface for Panel {
                     .on_press(SelectPlayer.with(Some(option.id().clone()))),
                 );
             }
-            panel = panel.child(Section::new("Player").child(choices));
+            panel = panel.child(Section::new().title("Player").child(choices));
         }
         panel.into()
     }

@@ -56,7 +56,8 @@ impl Surface for Panel {
         if !self.audio.has_reading() {
             return Text::new("Audio unavailable").into();
         }
-        Section::new("Audio")
+        Section::new()
+            .title("Audio")
             .child(
                 Metric::new(self.audio.volume()).label(if self.audio.is_muted() {
                     "Output muted"

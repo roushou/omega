@@ -177,7 +177,8 @@ impl Surface for Panel {
             })
             .on_press(Start)
         };
-        Section::new("Focus")
+        Section::new()
+            .title("Focus")
             .child(Metric::new(format!("{:02}:{:02}", seconds / 60, seconds % 60)).label(label))
             .child(
                 Row::new()

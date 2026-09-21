@@ -113,7 +113,7 @@ impl Surface for Panel {
         match message {}
     }
     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
-        let panel = Section::new("Bluetooth");
+        let panel = Section::new().title("Bluetooth");
         let panel = match self.bluetooth.status() {
             BluetoothStatus::Unavailable => {
                 return panel.child(Text::new("Bluetooth state unavailable")).into();

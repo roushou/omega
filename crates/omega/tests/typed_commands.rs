@@ -81,7 +81,8 @@ impl Surface for Controls {
         match message {}
     }
     fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> Ui {
-        Section::new("Audio")
+        Section::new()
+            .title("Audio")
             .child(Metric::new(Percent::whole(40)).label("Output volume"))
             .child(
                 Slider::new(Percent::whole(40))
@@ -118,10 +119,10 @@ fn bindings_share_registration_identity_without_acquiring_command_capabilities()
             .is_empty()
     );
     let drawn = Drawn::of::<Controls>(&State::new()).unwrap();
-    let binding = &drawn.node("volume").unwrap().events["change"];
+    let binding = &drawn.node("root/volume").unwrap().events["change"];
     assert_eq!(binding.command, "volume");
     assert!(binding.args.is_empty());
-    let quiet = &drawn.node("quiet").unwrap().events["press"];
+    let quiet = &drawn.node("root/quiet").unwrap().events["press"];
     assert_eq!(quiet.command, "volume");
     assert_eq!(
         Args::new(quiet.args.clone()).get::<Percent>(0),
@@ -314,7 +315,13 @@ async fn input_refusals_travel_through_the_real_runtime() {
 fn repeated_components_keep_unique_keys_and_replace_labels() {
     let first = Metric::new("10").label("Old").label("First").primary();
     let second = Metric::new("20").label("Second").warning();
-    let drawn = Drawn::of_ui(Section::new("Readings").child(first).child(second).into());
+    let drawn = Drawn::of_ui(
+        Section::new()
+            .title("Readings")
+            .child(first)
+            .child(second)
+            .into(),
+    );
     let keys = drawn.keys();
     assert_eq!(
         keys.iter().collect::<std::collections::BTreeSet<_>>().len(),

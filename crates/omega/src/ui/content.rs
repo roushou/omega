@@ -1,44 +1,69 @@
 //! Content hierarchy composed from ordinary UI nodes.
 use super::style::styled;
-use super::{Bind, Column, Component, Field, List, Node, Row, Size, Spacer, Text, View};
+use super::{Bind, Column, Component, Field, List, Node, Row, Size, Slider, Spacer, Text, View};
 use crate::surface::{TextEdit, TextValue};
 use crate::ui::ChoiceValue;
+use crate::units::Percent;
 use std::fmt::Display;
 
-/// A titled group of related content, with consistent section spacing.
+/// A group of arbitrary views with an optional heading.
 ///
 /// ```
-/// use omega::ui::{Metric, Section};
-/// use omega::Percent;
-/// let panel = Section::new("Audio")
-///     .child(Metric::new(Percent::whole(80)).label("Output volume"));
+/// use omega::ui::{Header, Section, Text};
+/// let section = Section::new().heading(Header::new("Devices"))
+///     .gap(8).children([Text::new("Keyboard"), Text::new("Mouse")]);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Section {
-    node: Node,
+    heading: View,
+    children: Vec<View>,
+    gap: u32,
 }
 
 impl Section {
-    pub fn new(title: impl Display) -> Self {
+    pub fn new() -> Self {
         Self {
-            node: Column::new()
-                .gap(12)
-                .child(Text::new(title).size(Size::Title).bold())
-                .into(),
+            gap: 14,
+            ..Self::default()
         }
     }
-    pub fn child(mut self, child: impl Into<crate::View>) -> Self {
-        self.node = self.node.child(child);
+
+    /// An optional heading drawn above the children.
+    pub fn heading(mut self, view: impl Into<View>) -> Self {
+        self.heading = view.into();
         self
     }
-    pub fn children<N: Into<crate::View>>(mut self, children: impl IntoIterator<Item = N>) -> Self {
-        for child in children {
-            self.node = self.node.child(child);
-        }
+
+    /// A title heading using the theme's title style.
+    pub fn title(self, title: impl Display) -> Self {
+        self.heading(Text::new(title).size(Size::Title).bold())
+    }
+
+    pub fn gap(mut self, pixels: u32) -> Self {
+        self.gap = pixels;
+        self
+    }
+
+    pub fn child(mut self, view: impl Into<View>) -> Self {
+        self.children.push(view.into());
+        self
+    }
+
+    pub fn children<V: Into<View>>(mut self, views: impl IntoIterator<Item = V>) -> Self {
+        self.children.extend(views.into_iter().map(Into::into));
         self
     }
 }
-styled!(Section);
+
+impl Component for Section {
+    fn render(&self) -> View {
+        Column::new()
+            .gap(self.gap)
+            .child(self.heading.clone())
+            .children(self.children.iter().cloned())
+            .into()
+    }
+}
 
 /// A prominent reading and an optional supporting label.
 ///
@@ -108,6 +133,15 @@ impl Detail {
     /// A muted label and a text value in one row.
     pub fn row(label: impl Display, value: impl Display) -> View {
         Self::new(Text::new(label).muted(), Text::new(value)).render()
+    }
+
+    /// A muted caption above a text value, separated by a small gap.
+    pub fn tile(label: &str, value: impl Display) -> View {
+        Column::new()
+            .gap(2)
+            .child(Text::new(label).size(Size::Caption).muted())
+            .child(Text::new(value))
+            .into()
     }
 }
 
@@ -227,6 +261,16 @@ impl PanelHeader {
         }
     }
 
+    /// A title with an uppercase, muted status caption as its subtitle.
+    pub fn labelled(title: impl Display, status: impl Display) -> Self {
+        Self::new(Text::new(title).size(Size::Title).bold()).subtitle(
+            Text::new(status.to_string().to_uppercase())
+                .size(Size::Caption)
+                .bold()
+                .muted(),
+        )
+    }
+
     pub fn leading(mut self, view: impl Into<View>) -> Self {
         self.leading = view.into();
         self
@@ -310,6 +354,45 @@ impl Component for Labelled {
             .child(self.detail.render())
             .child(self.control.clone())
             .into()
+    }
+}
+
+/// A labelled percentage slider with the desktop's caption styling.
+/// The caller owns the typed change binding; the slider's local key is `slider`.
+///
+/// ```
+/// use omega::{Percent, ui::LevelControl};
+/// #[derive(omega::Command)]
+/// struct SetVolume {}
+/// impl omega::Command for SetVolume {
+///     const ID: &'static str = "set-volume";
+///     type Input = Percent;
+///     type Output = ();
+///     async fn call(&self, _: Percent) -> omega::Result<()> { Ok(()) }
+/// }
+/// let level = LevelControl { label: "Volume", level: Percent::whole(60), change: SetVolume.into() };
+/// ```
+#[derive(Debug, Clone)]
+pub struct LevelControl<'a> {
+    pub label: &'a str,
+    pub level: Percent,
+    pub change: Bind<Percent>,
+}
+
+impl Component for LevelControl<'_> {
+    fn render(&self) -> View {
+        Labelled::new(
+            Text::new(self.label.to_uppercase())
+                .size(Size::Caption)
+                .bold()
+                .muted(),
+            Text::new(self.level).size(Size::Caption).muted(),
+            Slider::new(self.level)
+                .key("slider")
+                .on_change(self.change.clone()),
+        )
+        .label_gap(0)
+        .render()
     }
 }
 
