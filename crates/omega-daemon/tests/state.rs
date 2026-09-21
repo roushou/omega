@@ -84,6 +84,9 @@ async fn the_welcome_mirror_carries_only_declared_topics() {
                     volume: 0.3,
                     muted: false,
                     default_sink: "sink".into(),
+                    input_volume: 0.0,
+                    input_muted: true,
+                    default_source: String::new(),
                 })),
             }],
         })

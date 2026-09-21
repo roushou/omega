@@ -59,8 +59,6 @@ macro_rules! actions {
 actions! {
     LaunchApp => Spawn,
     RunCommand => Spawn,
-    SetSetting => SystemControl,
-    ToggleSetting => SystemControl,
     SwitchWorkspace => None,
     MoveToWorkspace => None,
     MoveToMonitor => None,
@@ -84,6 +82,15 @@ actions! {
     DisconnectWifi => Network,
     ConnectBluetooth => Bluetooth,
     DisconnectBluetooth => Bluetooth,
+    CaptureText => Screenshot,
+    RecordScreen => Screenshot,
+    WriteClipboard => Clipboard,
+    ClearClipboard => Clipboard,
+    SetStreamVolume => Audio,
+    SetStreamMute => Audio,
+    SetDefaultSink => Audio,
+    SetInputMute => Audio,
+    SetInputVolume => Audio,
 }
 
 mod validation;

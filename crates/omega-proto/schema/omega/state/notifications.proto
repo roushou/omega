@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package omega;
+
+// Notifications Omega has raised and not yet closed. A freedesktop
+// notification client cannot enumerate the server's history, so this is the
+// daemon's own in-flight list, not a catalogue of every application's.
+message NotificationsState {
+  repeated ActiveNotification notifications = 1;
+}
+
+message ActiveNotification {
+  uint32 id = 1;               // server-assigned id
+  string summary = 2;
+  string body = 3;
+  string icon = 4;
+}

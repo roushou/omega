@@ -12,8 +12,6 @@ message Action {
   oneof kind {
     LaunchApp launch_app = 1;
     RunCommand run_command = 2;
-    SetSetting set_setting = 3;
-    ToggleSetting toggle_setting = 4;
     SwitchWorkspace switch_workspace = 5;
     MoveToWorkspace move_to_workspace = 6;
     MoveToMonitor move_to_monitor = 7;
@@ -36,7 +34,19 @@ message Action {
     DisconnectWifi disconnect_wifi = 24;
     ConnectBluetooth connect_bluetooth = 25;
     DisconnectBluetooth disconnect_bluetooth = 26;
+    CaptureText capture_text = 27;
+    RecordScreen record_screen = 28;
+    WriteClipboard write_clipboard = 29;
+    ClearClipboard clear_clipboard = 30;
+    SetStreamVolume set_stream_volume = 31;
+    SetStreamMute set_stream_mute = 32;
+    SetDefaultSink set_default_sink = 33;
+    SetInputMute set_input_mute = 34;
+    SetInputVolume set_input_volume = 35;
   }
+
+  // Removed settings actions; runtime settings have no owner yet.
+  reserved 3, 4;
 }
 
 // Launch a desktop entry by ID without shell parsing.
@@ -53,13 +63,67 @@ message RunCommand {
   string command = 1;
 }
 
-message SetSetting {
-  string setting_id = 1;        // id from the state document's settings
-  Value value = 2;
+// OCR a selected region into the clipboard. The recognized text is placed on
+// the clipboard; nothing is returned in the action result.
+message CaptureText {
+  // Restrict region selection to this output, or empty for the host choice.
+  string region_monitor_id = 1;
 }
 
-message ToggleSetting {
-  string setting_id = 1;
+// Start or stop a screen recording. Start admits after spawning; completion
+// acknowledges only admission, not the eventual recording.
+message RecordScreen {
+  oneof command {
+    RecordingConfig start = 1;
+    // Must be true when selected: stop the active recording.
+    bool stop = 2;
+  }
+}
+
+message RecordingConfig {
+  // Required destination file. Recordings are never dropped in the daemon's cwd.
+  string output_path = 1;
+  // Capture the full screen; otherwise an interactive region selection runs first.
+  bool fullscreen = 2;
+  // Include desktop audio.
+  bool with_audio = 3;
+  // Restrict capture to this output, or empty for the host choice.
+  string region_monitor_id = 4;
+}
+
+// Copy text into the clipboard.
+message WriteClipboard {
+  string text = 1;
+}
+
+// Remove clipboard content.
+message ClearClipboard {}
+
+// Set one application stream's volume.
+message SetStreamVolume {
+  uint32 stream_index = 1;
+  double absolute = 2;          // 0.0 .. 1.0
+}
+
+// Mute one application stream.
+message SetStreamMute {
+  uint32 stream_index = 1;
+  bool muted = 2;
+}
+
+// Select the default output sink by its PulseAudio name.
+message SetDefaultSink {
+  string sink_name = 1;
+}
+
+// Mute the default input source: `true` mutes and `false` unmutes.
+message SetInputMute {
+  bool muted = 1;
+}
+
+// Set the default input source's volume.
+message SetInputVolume {
+  double absolute = 1;          // 0.0 .. 1.0
 }
 
 message SwitchWorkspace {

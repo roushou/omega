@@ -1,23 +1,29 @@
-//! Read and control the default audio sink through pactl.
-//! A persistent subscription triggers JSON queries after sink or server changes.
+//! Read and control audio sinks, sources, and per-application streams through
+//! pactl. A persistent subscription triggers JSON queries after audio changes.
+
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
-use omega_proto::omega::{AudioState, StatePatch, StateTopic, action, set_volume, state_topic};
+use omega_proto::omega::{
+    AudioState, AudioStream, AudioStreamsState, StatePatch, StateTopic, action, set_volume,
+    state_topic,
+};
 use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, opaque_debug};
 
-/// One sink, as `pactl --format=json list sinks` describes it.
+/// One sink or source, as `pactl --format=json list sinks` describes it.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct Sink {
+pub struct Device {
     pub name: String,
     pub mute: bool,
     /// Per-channel volume values.
-    pub volume: std::collections::HashMap<String, Channel>,
+    #[serde(default)]
+    pub volume: HashMap<String, Channel>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
@@ -26,44 +32,101 @@ pub struct Channel {
     pub value: u32,
 }
 
+/// One application stream, as `pactl --format=json list sink-inputs` describes it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SinkInput {
+    pub index: u32,
+    pub mute: bool,
+    #[serde(default)]
+    pub volume: HashMap<String, Channel>,
+    #[serde(rename = "application.name", default)]
+    pub application_name: String,
+}
+
+/// `PA_VOLUME_NORM`: the raw value that means unattenuated.
+const NORM: f64 = 65536.0;
+
+/// Return the loudest channel as a fraction, clamped to 1.0.
+fn level(volume: &HashMap<String, Channel>) -> f64 {
+    volume
+        .values()
+        .map(|channel| f64::from(channel.value) / NORM)
+        .fold(0.0, f64::max)
+        .clamp(0.0, 1.0)
+}
+
 /// Decode pactl JSON and convert PulseAudio volume units.
 #[derive(Debug)]
 pub struct Sinks;
 
 impl Sinks {
-    /// `PA_VOLUME_NORM`: the raw value that means unattenuated.
-    const NORM: f64 = 65536.0;
-
     pub fn parse(json: &str, default: &str) -> Result<AudioState, BrokerError> {
-        let sinks: Vec<Sink> = serde_json::from_str(json)
+        let sinks: Vec<Device> = serde_json::from_str(json)
             .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
         Ok(Self::of(&sinks, default))
     }
 
     /// Read the default sink. If no sink exists, report zero volume and muted state.
-    pub fn of(sinks: &[Sink], default: &str) -> AudioState {
+    pub fn of(sinks: &[Device], default: &str) -> AudioState {
         let Some(sink) = sinks.iter().find(|sink| sink.name == default) else {
             return AudioState {
                 volume: 0.0,
                 muted: true,
                 default_sink: default.to_string(),
+                input_volume: 0.0,
+                input_muted: true,
+                default_source: String::new(),
             };
         };
 
         AudioState {
-            volume: Self::level(sink),
+            volume: level(&sink.volume),
             muted: sink.mute,
             default_sink: sink.name.clone(),
+            input_volume: 0.0,
+            input_muted: true,
+            default_source: String::new(),
         }
     }
+}
 
-    /// Return the loudest channel as a fraction, clamped to 1.0.
-    fn level(sink: &Sink) -> f64 {
-        sink.volume
-            .values()
-            .map(|channel| f64::from(channel.value) / Self::NORM)
-            .fold(0.0, f64::max)
-            .clamp(0.0, 1.0)
+/// Decode the default source's input level and mute state.
+#[derive(Debug)]
+pub struct Sources;
+
+impl Sources {
+    pub fn parse(json: &str, default: &str) -> Result<(f64, bool), BrokerError> {
+        let sources: Vec<Device> = serde_json::from_str(json)
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
+        Ok(Self::of(&sources, default))
+    }
+
+    /// Read the default source. If none exists, report silence and muted.
+    pub fn of(sources: &[Device], default: &str) -> (f64, bool) {
+        match sources.iter().find(|source| source.name == default) {
+            Some(source) => (level(&source.volume), source.mute),
+            None => (0.0, true),
+        }
+    }
+}
+
+/// Decode per-application streams.
+#[derive(Debug)]
+pub struct Streams;
+
+impl Streams {
+    pub fn parse(json: &str) -> Result<Vec<AudioStream>, BrokerError> {
+        let inputs: Vec<SinkInput> = serde_json::from_str(json)
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
+        Ok(inputs
+            .into_iter()
+            .map(|input| AudioStream {
+                index: input.index,
+                app: input.application_name,
+                volume: level(&input.volume),
+                muted: input.mute,
+            })
+            .collect())
     }
 }
 
@@ -75,8 +138,9 @@ struct Link {
 }
 
 impl Link {
-    /// Refresh only for sink and server changes, not individual audio streams.
-    const WATCHED: &'static [&'static str] = &["on sink", "on server"];
+    /// Refresh for sink, source, stream, and server changes.
+    const WATCHED: &'static [&'static str] =
+        &["on sink", "on sink-input", "on source", "on server"];
 
     async fn open() -> Result<Self, BrokerError> {
         let mut child = Command::new("pactl")
@@ -97,7 +161,7 @@ impl Link {
         })
     }
 
-    /// Wait for a default-output state change.
+    /// Wait for an audio state change.
     async fn wait(&mut self) -> Result<(), BrokerError> {
         loop {
             match self.events.next_line().await {
@@ -114,10 +178,21 @@ impl Link {
         }
     }
 
-    async fn read() -> Result<AudioState, BrokerError> {
+    async fn read_sinks() -> Result<AudioState, BrokerError> {
         let default = Self::run(&["get-default-sink"]).await?;
         let sinks = Self::run(&["--format=json", "list", "sinks"]).await?;
         Sinks::parse(&sinks, default.trim())
+    }
+
+    async fn read_sources() -> Result<(f64, bool), BrokerError> {
+        let default = Self::run(&["get-default-source"]).await?;
+        let sources = Self::run(&["--format=json", "list", "sources"]).await?;
+        Sources::parse(&sources, default.trim())
+    }
+
+    async fn read_streams() -> Result<Vec<AudioStream>, BrokerError> {
+        let inputs = Self::run(&["--format=json", "list", "sink-inputs"]).await?;
+        Streams::parse(&inputs)
     }
 
     /// One `pactl` invocation, and its output.
@@ -150,8 +225,9 @@ pub struct PipeWire {
 }
 
 impl PipeWire {
-    /// Resolve the default sink at command execution time.
-    const DEFAULT: &'static str = "@DEFAULT_SINK@";
+    /// Resolve the default devices at command execution time.
+    const DEFAULT_SINK: &'static str = "@DEFAULT_SINK@";
+    const DEFAULT_SOURCE: &'static str = "@DEFAULT_SOURCE@";
 
     pub fn new() -> Self {
         Self::default()
@@ -162,14 +238,14 @@ impl PipeWire {
         match change {
             set_volume::Change::Absolute(level) => vec![
                 "set-sink-volume".into(),
-                Self::DEFAULT.into(),
+                Self::DEFAULT_SINK.into(),
                 format!("{}%", (level.clamp(0.0, 1.0) * 100.0).round()),
             ],
             set_volume::Change::Delta(delta) => {
                 let percent = (delta * 100.0).round();
                 vec![
                     "set-sink-volume".into(),
-                    Self::DEFAULT.into(),
+                    Self::DEFAULT_SINK.into(),
                     // The sign has to be written even when it is positive:
                     // `pactl set-sink-volume 5%` sets it to five.
                     format!("{}{}%", if percent < 0.0 { "" } else { "+" }, percent),
@@ -177,24 +253,43 @@ impl PipeWire {
             }
             set_volume::Change::ToggleMute(_) => vec![
                 "set-sink-mute".into(),
-                Self::DEFAULT.into(),
+                Self::DEFAULT_SINK.into(),
                 "toggle".into(),
             ],
             set_volume::Change::Muted(muted) => vec![
                 "set-sink-mute".into(),
-                Self::DEFAULT.into(),
+                Self::DEFAULT_SINK.into(),
                 if *muted { "1" } else { "0" }.into(),
             ],
         }
     }
 
-    fn patch(state: AudioState) -> StatePatch {
+    async fn read_all() -> Result<StatePatch, BrokerError> {
+        let mut audio = Link::read_sinks().await?;
+        let (input_volume, input_muted) = Link::read_sources().await?;
+        audio.input_volume = input_volume;
+        audio.input_muted = input_muted;
+        audio.default_source = Link::run(&["get-default-source"]).await?.trim().into();
+        let streams = Link::read_streams().await?;
+        Ok(Self::patch(audio, streams))
+    }
+
+    fn patch(audio: AudioState, streams: Vec<AudioStream>) -> StatePatch {
         StatePatch {
-            topics: vec![StateTopic {
-                topic: SystemTopic::Audio.as_str().into(),
-                revision: 0, // the Hub assigns the real revision
-                value: Some(state_topic::Value::Audio(state)),
-            }],
+            topics: vec![
+                StateTopic {
+                    topic: SystemTopic::Audio.as_str().into(),
+                    revision: 0, // the Hub assigns the real revision
+                    value: Some(state_topic::Value::Audio(audio)),
+                },
+                StateTopic {
+                    topic: SystemTopic::AudioStreams.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::AudioStreams(AudioStreamsState {
+                        streams,
+                    })),
+                },
+            ],
         }
     }
 }
@@ -206,11 +301,18 @@ impl Broker for PipeWire {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Audio]
+        &[SystemTopic::Audio, SystemTopic::AudioStreams]
     }
 
     fn actions(&self) -> &'static [ActionKind] {
-        &[ActionKind::SetVolume]
+        &[
+            ActionKind::SetVolume,
+            ActionKind::SetStreamVolume,
+            ActionKind::SetStreamMute,
+            ActionKind::SetDefaultSink,
+            ActionKind::SetInputMute,
+            ActionKind::SetInputVolume,
+        ]
     }
 
     fn disconnect(&mut self) {
@@ -231,25 +333,58 @@ impl Broker for PipeWire {
     }
 
     async fn read(&mut self) -> Result<StatePatch, BrokerError> {
-        Ok(Self::patch(Link::read().await?))
+        Self::read_all().await
     }
 
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
-        let action::Kind::SetVolume(set) = action else {
-            return Err(BrokerError::Unserved(ActionKind::of(action)));
-        };
-        let Some(change) = set.change.as_ref() else {
-            return Err(BrokerError::Unreadable(
-                "SetVolume carries no change".into(),
-            ));
-        };
+        match action {
+            action::Kind::SetVolume(set) => {
+                let Some(change) = set.change.as_ref() else {
+                    return Err(BrokerError::Unreadable(
+                        "SetVolume carries no change".into(),
+                    ));
+                };
+                let arguments = Self::arguments(change);
+                let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+                Link::run(&borrowed).await?;
+            }
+            action::Kind::SetStreamVolume(set) => {
+                let percent = format!("{}%", (set.absolute.clamp(0.0, 1.0) * 100.0).round());
+                Link::run(&[
+                    "set-sink-input-volume",
+                    &set.stream_index.to_string(),
+                    &percent,
+                ])
+                .await?;
+            }
+            action::Kind::SetStreamMute(set) => {
+                Link::run(&[
+                    "set-sink-input-mute",
+                    &set.stream_index.to_string(),
+                    if set.muted { "1" } else { "0" },
+                ])
+                .await?;
+            }
+            action::Kind::SetDefaultSink(set) => {
+                Link::run(&["set-default-sink", &set.sink_name]).await?;
+            }
+            action::Kind::SetInputMute(set) => {
+                Link::run(&[
+                    "set-source-mute",
+                    Self::DEFAULT_SOURCE,
+                    if set.muted { "1" } else { "0" },
+                ])
+                .await?;
+            }
+            action::Kind::SetInputVolume(set) => {
+                let percent = format!("{}%", (set.absolute.clamp(0.0, 1.0) * 100.0).round());
+                Link::run(&["set-source-volume", Self::DEFAULT_SOURCE, &percent]).await?;
+            }
+            other => return Err(BrokerError::Unserved(ActionKind::of(other))),
+        }
 
-        let arguments = Self::arguments(change);
-        let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
-        Link::run(&borrowed).await?;
-
-        // The broker that just set it knows the new value, and the
+        // The broker that just set it knows the new values, and the
         // subscription would take a moment to say so.
-        Ok(Some(Self::patch(Link::read().await?)))
+        Ok(Some(Self::read_all().await?))
     }
 }

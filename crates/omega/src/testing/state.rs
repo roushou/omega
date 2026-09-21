@@ -97,6 +97,13 @@ impl State {
         })
     }
 
+    /// Set current clipboard text.
+    pub fn clipboard(self, text: &str) -> Self {
+        self.with(omega_proto::omega::ClipboardState {
+            text: text.to_string(),
+        })
+    }
+
     pub(super) fn snapshot(&self) -> StateSnapshot {
         StateSnapshot {
             topics: self.topics.clone(),

@@ -13,6 +13,8 @@
 pub mod applications;
 pub mod audio;
 pub mod bluetooth;
+pub mod capture;
+pub mod clipboard;
 pub mod desktop;
 pub mod network;
 pub mod notification;

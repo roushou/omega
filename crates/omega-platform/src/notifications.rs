@@ -1,12 +1,17 @@
-//! Send notifications through the session bus. Notification history is not provided.
+//! Send notifications through the session bus and track the ones Omega has
+//! raised until the server reports them closed. A freedesktop client cannot
+//! enumerate the server's history, so the reading is the daemon's own list.
 
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use zbus::zvariant::Value;
-use zbus::{Connection, Proxy};
+use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
-use omega_proto::omega::{StatePatch, action};
+use omega_proto::omega::{
+    ActiveNotification, NotificationsState, StatePatch, StateTopic, action, state_topic,
+};
 use omega_proto::{ActionKind, SystemTopic};
 
 use crate::broker::{Broker, BrokerError, opaque_debug};
@@ -38,7 +43,9 @@ impl Sent {
 }
 
 struct Link {
-    notifications: Proxy<'static>,
+    connection: Connection,
+    /// `NotificationClosed` signals, matched without borrowing the connection.
+    closed: MessageStream,
 }
 
 impl Link {
@@ -49,23 +56,38 @@ impl Link {
         let connection = Connection::session()
             .await
             .map_err(BrokerError::unreadable)?;
-        let notifications = Proxy::new(&connection, Self::SERVICE, Self::PATH, Self::SERVICE)
+
+        let rule = MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender(Self::SERVICE)
+            .map_err(BrokerError::unreadable)?
+            .interface(Self::SERVICE)
+            .map_err(BrokerError::unreadable)?
+            .member("NotificationClosed")
+            .map_err(BrokerError::unreadable)?
+            .build();
+
+        let closed = MessageStream::for_match_rule(rule, &connection, None)
             .await
             .map_err(BrokerError::unreadable)?;
-        Ok(Self { notifications })
+
+        Ok(Self { connection, closed })
     }
 
-    async fn send(&self, sent: &Sent) -> Result<(), BrokerError> {
+    async fn send(&self, sent: &Sent) -> Result<u32, BrokerError> {
+        let proxy = Proxy::new(&self.connection, Self::SERVICE, Self::PATH, Self::SERVICE)
+            .await
+            .map_err(BrokerError::unreadable)?;
+
         let hints: HashMap<&str, Value<'_>> = HashMap::new();
         let actions: Vec<&str> = Vec::new();
-        self.notifications
+        let reply = proxy
             .call_method(
                 "Notify",
                 &(
                     // Use the daemon's application name for notification attribution.
                     "omega",
-                    // Replaces nothing: Omega has no notification ids yet, so
-                    // every send is a new one.
+                    // Replaces nothing: each send is a new notification.
                     0u32,
                     sent.icon.as_str(),
                     sent.summary.as_str(),
@@ -76,8 +98,27 @@ impl Link {
                 ),
             )
             .await
-            .map(|_| ())
+            .map_err(BrokerError::unreadable)?;
+
+        reply
+            .body()
+            .deserialize::<u32>()
             .map_err(BrokerError::unreadable)
+    }
+
+    /// Wait for the server to close one notification, returning its id.
+    async fn closed_id(&mut self) -> Result<u32, BrokerError> {
+        let message = self
+            .closed
+            .next()
+            .await
+            .ok_or_else(|| BrokerError::Unreadable("notifications stopped".into()))?
+            .map_err(BrokerError::unreadable)?;
+        let (id, _reason): (u32, u32) = message
+            .body()
+            .deserialize()
+            .map_err(BrokerError::unreadable)?;
+        Ok(id)
     }
 }
 
@@ -86,11 +127,39 @@ opaque_debug!(Link);
 #[derive(Debug, Default)]
 pub struct Notifications {
     link: Option<Link>,
+    raised: Vec<ActiveNotification>,
 }
 
 impl Notifications {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn patch(&self) -> StatePatch {
+        StatePatch {
+            topics: vec![StateTopic {
+                topic: SystemTopic::Notifications.as_str().into(),
+                revision: 0, // the Hub assigns the real revision
+                value: Some(state_topic::Value::Notifications(NotificationsState {
+                    notifications: self.raised.clone(),
+                })),
+            }],
+        }
+    }
+
+    fn remember(&mut self, id: u32, sent: &Sent) -> StatePatch {
+        self.raised.retain(|held| held.id != id);
+        self.raised.push(ActiveNotification {
+            id,
+            summary: sent.summary.clone(),
+            body: sent.body.clone(),
+            icon: sent.icon.clone(),
+        });
+        self.patch()
+    }
+
+    fn forget(&mut self, id: u32) {
+        self.raised.retain(|held| held.id != id);
     }
 }
 
@@ -100,10 +169,8 @@ impl Broker for Notifications {
         "notifications"
     }
 
-    /// None yet. What is on screen and what was dismissed is worth a topic,
-    /// and claiming one it does not fill would make a plugin wait forever.
     fn topics(&self) -> &'static [SystemTopic] {
-        &[]
+        &[SystemTopic::Notifications]
     }
 
     fn actions(&self) -> &'static [ActionKind] {
@@ -112,6 +179,7 @@ impl Broker for Notifications {
 
     fn disconnect(&mut self) {
         self.link = None;
+        self.raised.clear();
     }
 
     async fn connect(&mut self) -> Result<(), BrokerError> {
@@ -119,16 +187,35 @@ impl Broker for Notifications {
         Ok(())
     }
 
+    async fn wake(&mut self) -> Result<(), BrokerError> {
+        let id = self
+            .link
+            .as_mut()
+            .ok_or_else(BrokerError::gone)?
+            .closed_id()
+            .await?;
+        self.forget(id);
+        Ok(())
+    }
+
+    async fn read(&mut self) -> Result<StatePatch, BrokerError> {
+        Ok(self.patch())
+    }
+
     async fn act(&mut self, action: &action::Kind) -> Result<Option<StatePatch>, BrokerError> {
         let action::Kind::Notify(notify) = action else {
             return Err(BrokerError::Unserved(ActionKind::of(action)));
         };
 
-        self.link
+        let sent = Sent::of(notify);
+        let id = self
+            .link
             .as_ref()
             .ok_or_else(BrokerError::gone)?
-            .send(&Sent::of(notify))
+            .send(&sent)
             .await?;
-        Ok(None)
+
+        // The raised list changed; publish it without waiting for the next wake.
+        Ok(Some(self.remember(id, &sent)))
     }
 }

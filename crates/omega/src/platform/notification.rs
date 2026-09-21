@@ -2,10 +2,26 @@
 
 use std::time::Duration;
 
-use omega_proto::omega::{Notify as NotifyAction, action};
+use omega_proto::omega::{ActiveNotification, Notify as NotifyAction, action};
 
 use crate::runtime::context::Context;
 use crate::wiring::does;
+
+crate::wiring::reading! {
+    /// Notifications Omega has raised and not yet closed. A freedesktop client
+    /// cannot enumerate the server's history, so this is the daemon's own
+    /// in-flight list, not every application's.
+    Notifications: omega_proto::omega::NotificationsState
+}
+
+impl Notifications {
+    /// The in-flight notifications, newest last.
+    pub fn active(&self) -> Vec<ActiveNotification> {
+        self.read()
+            .map(|state| state.notifications)
+            .unwrap_or_default()
+    }
+}
 
 /// Permission to raise a desktop notification.
 #[derive(Debug)]

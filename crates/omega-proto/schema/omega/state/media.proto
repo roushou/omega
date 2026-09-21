@@ -8,6 +8,23 @@ message AudioState {
   double volume = 1;            // 0.0 .. 1.0
   bool muted = 2;
   string default_sink = 3;
+  // Input (microphone) state, independent of output.
+  double input_volume = 4;      // 0.0 .. 1.0
+  bool input_muted = 5;
+  string default_source = 6;
+}
+
+// Per-application audio streams, as PulseAudio reports them. Separate from
+// [`AudioState`] because streams change more often than the default sink.
+message AudioStreamsState {
+  repeated AudioStream streams = 1;
+}
+
+message AudioStream {
+  uint32 index = 1;             // pactl sink-input index, stable per stream
+  string app = 2;               // the application's name, as the server knows it
+  double volume = 3;            // 0.0 .. 1.0
+  bool muted = 4;
 }
 
 // MPRIS player catalogue and active-player selection.

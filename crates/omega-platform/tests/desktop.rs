@@ -61,6 +61,28 @@ fn a_path_that_would_start_a_second_command_is_refused() {
 #[test]
 fn it_claims_capturing_and_reports_nothing() {
     let broker = Desktop::new();
-    assert_eq!(broker.actions(), &[ActionKind::Screenshot]);
+    assert_eq!(
+        broker.actions(),
+        &[
+            ActionKind::Screenshot,
+            ActionKind::CaptureText,
+            ActionKind::RecordScreen
+        ]
+    );
     assert!(broker.topics().is_empty());
+}
+
+#[test]
+fn ocr_commands_never_embed_a_hostile_region() {
+    use omega_proto::omega::CaptureText;
+    assert_eq!(
+        Capture::text_command(&CaptureText::default()).unwrap(),
+        "grim -g \"$(slurp)\" - | tesseract stdin stdout | wl-copy"
+    );
+    assert!(
+        Capture::text_command(&CaptureText {
+            region_monitor_id: "eDP-1;rm -rf ~".into(),
+        })
+        .is_none()
+    );
 }

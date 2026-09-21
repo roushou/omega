@@ -4,8 +4,10 @@ package omega;
 
 import "omega/state/display.proto";
 import "omega/state/applications.proto";
+import "omega/state/clipboard.proto";
 import "omega/state/media.proto";
 import "omega/state/network.proto";
+import "omega/state/notifications.proto";
 import "omega/state/power.proto";
 import "omega/state/session.proto";
 import "omega/state/system.proto";
@@ -50,6 +52,9 @@ message StateTopic {
     ThroughputState throughput = 31;
     ThermalsState thermals = 32;
     ApplicationsState applications = 33;
+    ClipboardState clipboard = 34;
+    AudioStreamsState audio_streams = 35;
+    NotificationsState notifications = 36;
 
     Value generic = 1000;       // plugin keyspace + forward-compatible topics
   }

@@ -28,13 +28,6 @@ impl Fixture {
             action::Kind::RunCommand(RunCommand {
                 command: "echo first\necho second".into(),
             }),
-            action::Kind::SetSetting(SetSetting {
-                setting_id: "theme".into(),
-                value: Some(Value::default()),
-            }),
-            action::Kind::ToggleSetting(ToggleSetting {
-                setting_id: "theme".into(),
-            }),
             action::Kind::SwitchWorkspace(SwitchWorkspace {
                 target: Some(switch_workspace::Target::Index(1)),
             }),
@@ -81,6 +74,34 @@ impl Fixture {
             action::Kind::SetPowerProfile(SetPowerProfile {
                 profile: PowerProfile::Balanced as i32,
             }),
+            action::Kind::CaptureText(CaptureText::default()),
+            action::Kind::RecordScreen(RecordScreen {
+                command: Some(record_screen::Command::Start(RecordingConfig {
+                    output_path: "/tmp/rec.mp4".into(),
+                    fullscreen: true,
+                    ..Default::default()
+                })),
+            }),
+            action::Kind::RecordScreen(RecordScreen {
+                command: Some(record_screen::Command::Stop(true)),
+            }),
+            action::Kind::WriteClipboard(WriteClipboard {
+                text: "copied".into(),
+            }),
+            action::Kind::ClearClipboard(ClearClipboard {}),
+            action::Kind::SetStreamVolume(SetStreamVolume {
+                stream_index: 1,
+                absolute: 0.5,
+            }),
+            action::Kind::SetStreamMute(SetStreamMute {
+                stream_index: 1,
+                muted: true,
+            }),
+            action::Kind::SetDefaultSink(SetDefaultSink {
+                sink_name: "alsa_output.pci-0000_00_1f.3.analog-stereo".into(),
+            }),
+            action::Kind::SetInputMute(SetInputMute { muted: false }),
+            action::Kind::SetInputVolume(SetInputVolume { absolute: 1.0 }),
         ]
     }
 }
@@ -165,11 +186,6 @@ fn required_strings_identifiers_selectors_and_destinations_are_checked() {
         action::Kind::RunCommand(RunCommand {
             command: "echo\0bad".into(),
         }),
-        action::Kind::SetSetting(SetSetting {
-            setting_id: "theme".into(),
-            value: None,
-        }),
-        action::Kind::ToggleSetting(ToggleSetting::default()),
         action::Kind::SwitchWorkspace(SwitchWorkspace {
             target: Some(switch_workspace::Target::Name(" ".into())),
         }),
@@ -194,6 +210,32 @@ fn required_strings_identifiers_selectors_and_destinations_are_checked() {
             output_path: "bad\0path".into(),
             ..Default::default()
         }),
+        action::Kind::RecordScreen(RecordScreen::default()),
+        action::Kind::RecordScreen(RecordScreen {
+            command: Some(record_screen::Command::Stop(false)),
+        }),
+        action::Kind::RecordScreen(RecordScreen {
+            command: Some(record_screen::Command::Start(RecordingConfig::default())),
+        }),
+        action::Kind::RecordScreen(RecordScreen {
+            command: Some(record_screen::Command::Start(RecordingConfig {
+                output_path: "/tmp/$(rm -rf ~)".into(),
+                ..Default::default()
+            })),
+        }),
+        action::Kind::WriteClipboard(WriteClipboard {
+            text: "bad\0text".into(),
+        }),
+        action::Kind::SetStreamVolume(SetStreamVolume {
+            stream_index: 0,
+            absolute: f64::NAN,
+        }),
+        action::Kind::SetStreamVolume(SetStreamVolume {
+            stream_index: 0,
+            absolute: 1.5,
+        }),
+        action::Kind::SetInputVolume(SetInputVolume { absolute: -0.1 }),
+        action::Kind::SetDefaultSink(SetDefaultSink::default()),
         action::Kind::Notify(Notify {
             body: "bad\0body".into(),
             ..Default::default()
@@ -239,6 +281,11 @@ fn zero_values_deltas_and_implicit_focus_remain_valid() {
         action::Kind::CloseWindow(CloseWindow {
             window: Some(WindowSelector::default()),
         }),
+        action::Kind::WriteClipboard(WriteClipboard {
+            text: "plain text".into(),
+        }),
+        action::Kind::ClearClipboard(ClearClipboard {}),
+        action::Kind::CaptureText(CaptureText::default()),
     ] {
         action.validate().unwrap();
     }

@@ -2,7 +2,7 @@ use super::ActionKind;
 use crate::PluginName;
 use crate::omega::{
     Action, Direction, PowerProfile, WindowSelector, action, media_key, move_to_workspace,
-    set_backlight, set_volume, switch_workspace, window_selector,
+    record_screen, set_backlight, set_volume, switch_workspace, window_selector,
 };
 
 /// A malformed action payload, independent of permissions or machine state.
@@ -85,11 +85,6 @@ impl action::Kind {
                 "must name a Bluetooth device",
             )?,
             Self::RunCommand(run) => input.text("command", &run.command)?,
-            Self::SetSetting(set) => {
-                input.text("setting_id", &set.setting_id)?;
-                input.require("value", set.value.is_some(), "is required")?;
-            }
-            Self::ToggleSetting(toggle) => input.text("setting_id", &toggle.setting_id)?,
             Self::SwitchWorkspace(switch) => match &switch.target {
                 Some(switch_workspace::Target::Index(index)) => input.index(*index)?,
                 Some(switch_workspace::Target::Name(name)) => input.workspace_name(name)?,
@@ -205,6 +200,49 @@ impl action::Kind {
                 ),
                 "must name a power profile",
             )?,
+            Self::CaptureText(capture) => {
+                if !capture.region_monitor_id.is_empty() {
+                    input.text("region_monitor_id", &capture.region_monitor_id)?;
+                }
+            }
+            Self::RecordScreen(record) => match &record.command {
+                Some(record_screen::Command::Start(start)) => {
+                    input.text("start.output_path", &start.output_path)?;
+                    input.require(
+                        "start.output_path",
+                        !start
+                            .output_path
+                            .contains(['\'', '"', ';', '&', '|', '$', '`']),
+                        "must be a plain file path",
+                    )?;
+                    if !start.region_monitor_id.is_empty() {
+                        input.text("start.region_monitor_id", &start.region_monitor_id)?;
+                    }
+                }
+                Some(record_screen::Command::Stop(stop)) => {
+                    input.require("stop", *stop, "must be true when selected")?;
+                }
+                None => return input.invalid("command", "is required"),
+            },
+            Self::WriteClipboard(write) => input.string("text", &write.text)?,
+            Self::ClearClipboard(_) => {}
+            Self::SetStreamVolume(set) => {
+                input.require(
+                    "absolute",
+                    set.absolute.is_finite() && (0.0..=1.0).contains(&set.absolute),
+                    "must be finite and between 0 and 1",
+                )?;
+            }
+            Self::SetStreamMute(_) => {}
+            Self::SetDefaultSink(set) => input.text("sink_name", &set.sink_name)?,
+            Self::SetInputMute(_) => {}
+            Self::SetInputVolume(set) => {
+                input.require(
+                    "absolute",
+                    set.absolute.is_finite() && (0.0..=1.0).contains(&set.absolute),
+                    "must be finite and between 0 and 1",
+                )?;
+            }
         }
         Ok(())
     }

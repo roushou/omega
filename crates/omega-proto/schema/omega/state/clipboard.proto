@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package omega;
+
+// Observed clipboard content. History is not provided; a reading is the
+// current plain-text content only.
+message ClipboardState {
+  // Current plain-text content, empty when nothing is selected or only
+  // non-text content exists.
+  string text = 1;
+}

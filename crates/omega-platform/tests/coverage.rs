@@ -12,7 +12,7 @@ const UNSERVED_TOPICS: &[SystemTopic] = &[];
 const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Plugins];
 
 /// Actions without current handlers. Daemon-owned actions are listed separately.
-const UNSERVED_ACTIONS: &[ActionKind] = &[ActionKind::SetSetting, ActionKind::ToggleSetting];
+const UNSERVED_ACTIONS: &[ActionKind] = &[];
 
 /// Actions handled by the daemon.
 const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokePlugin];

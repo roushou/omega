@@ -4,8 +4,8 @@ mod common;
 
 use omega_platform::notifications::Sent;
 use omega_platform::{Broker, Notifications};
-use omega_proto::ActionKind;
-use omega_proto::omega::{Notify, action};
+use omega_proto::omega::{Notify, action, state_topic};
+use omega_proto::{ActionKind, SystemTopic};
 
 fn notify(timeout_ms: u32) -> Notify {
     Notify {
@@ -32,10 +32,10 @@ fn the_words_are_carried_through_unchanged() {
 }
 
 #[test]
-fn it_claims_only_notifying() {
+fn it_claims_notifying_and_tracks_its_own_notifications() {
     let broker = Notifications::new();
     assert_eq!(broker.actions(), &[ActionKind::Notify]);
-    assert!(broker.topics().is_empty());
+    assert_eq!(broker.topics(), &[SystemTopic::Notifications]);
 }
 
 #[tokio::test]
@@ -45,6 +45,12 @@ async fn it_reaches_the_desktop_it_is_running_on() {
     let sent = common::serve(&mut broker, &action::Kind::Notify(notify(2_000))).await;
 
     assert!(sent.is_ok(), "{sent:?}");
-    // Nothing observable changed that this broker reports: it has no topics.
-    assert!(sent.unwrap().is_none());
+    let Some(patch) = sent.unwrap() else {
+        panic!("raising a notification changes the tracked list");
+    };
+    assert_eq!(patch.topics[0].topic, "notifications");
+    assert!(matches!(
+        patch.topics[0].value,
+        Some(state_topic::Value::Notifications(_))
+    ));
 }

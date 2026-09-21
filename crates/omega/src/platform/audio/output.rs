@@ -2,7 +2,9 @@
 
 use crate::units::Percent;
 
-use omega_proto::omega::{SetVolume, action, set_volume};
+use omega_proto::omega::{
+    SetDefaultSink, SetInputMute, SetInputVolume, SetVolume, action, set_volume,
+};
 
 use crate::runtime::context::Context;
 
@@ -24,6 +26,24 @@ impl Audio {
 
     pub fn is_muted(&self) -> bool {
         self.read().is_some_and(|audio| audio.muted)
+    }
+
+    /// Input (microphone) volume as a percentage.
+    pub fn input_volume(&self) -> Percent {
+        self.read()
+            .map(|audio| Percent::of(audio.input_volume))
+            .unwrap_or(Percent::ZERO)
+    }
+
+    pub fn is_input_muted(&self) -> bool {
+        self.read().is_some_and(|audio| audio.input_muted)
+    }
+
+    /// The default input source's PulseAudio name, or `None` if unavailable.
+    pub fn default_source(&self) -> Option<String> {
+        self.read()
+            .map(|audio| audio.default_source)
+            .filter(|name| !name.is_empty())
     }
 }
 
@@ -70,6 +90,45 @@ impl Volume {
     fn change(&self, change: set_volume::Change) -> crate::effect::Effect {
         self.act(action::Kind::SetVolume(SetVolume {
             change: Some(change),
+        }))
+    }
+}
+
+/// Permission to select the default output sink.
+#[derive(Debug)]
+pub struct SinkControl {
+    context: Context,
+}
+
+does!(SinkControl, Audio);
+
+impl SinkControl {
+    /// Set the default output sink by its PulseAudio name.
+    pub fn set_default(&self, name: impl Into<String>) -> crate::effect::Effect {
+        self.act(action::Kind::SetDefaultSink(SetDefaultSink {
+            sink_name: name.into(),
+        }))
+    }
+}
+
+/// Permission to change the default input source.
+#[derive(Debug)]
+pub struct SourceControl {
+    context: Context,
+}
+
+does!(SourceControl, Audio);
+
+impl SourceControl {
+    /// Set the default input source's mute state: `true` mutes and `false` unmutes.
+    pub fn set_muted(&self, muted: bool) -> crate::effect::Effect {
+        self.act(action::Kind::SetInputMute(SetInputMute { muted }))
+    }
+
+    /// Set the default input source's volume.
+    pub fn set_volume(&self, level: Percent) -> crate::effect::Effect {
+        self.act(action::Kind::SetInputVolume(SetInputVolume {
+            absolute: level.fraction(),
         }))
     }
 }

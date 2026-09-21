@@ -4,10 +4,11 @@
 use std::fmt;
 
 use crate::omega::{
-    ApplicationsState, AudioState, BacklightState, BatteryState, BluetoothState, DiskState,
-    IdleState, InputState, MainsState, MediaState, MonitorsState, NetworkState, PeripheralsState,
-    PluginsState, PowerProfileState, SystemState, ThermalsState, ThroughputState, TimeState,
-    VpnState, WifiState, WindowState, WorkspacesState, state_topic,
+    ApplicationsState, AudioState, AudioStreamsState, BacklightState, BatteryState, BluetoothState,
+    ClipboardState, DiskState, IdleState, InputState, MainsState, MediaState, MonitorsState,
+    NetworkState, NotificationsState, PeripheralsState, PluginsState, PowerProfileState,
+    SystemState, ThermalsState, ThroughputState, TimeState, VpnState, WifiState, WindowState,
+    WorkspacesState, state_topic,
 };
 
 /// Generate topic names, enumeration, and payload mapping from the protocol oneof.
@@ -99,6 +100,12 @@ topics! {
     Throughput => "throughput": ThroughputState,
     /// How hot it is, and what the fans are doing.
     Thermals => "thermals": ThermalsState,
+    /// What is on the clipboard.
+    Clipboard => "clipboard": ClipboardState,
+    /// What is playing through each application.
+    AudioStreams => "audio-streams": AudioStreamsState,
+    /// Notifications Omega has raised and not yet closed.
+    Notifications => "notifications": NotificationsState,
 }
 
 impl std::str::FromStr for SystemTopic {
