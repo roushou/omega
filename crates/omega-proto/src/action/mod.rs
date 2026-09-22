@@ -59,6 +59,7 @@ macro_rules! actions {
 actions! {
     LaunchApp => Spawn,
     RunCommand => Spawn,
+    CaptureCommand => Spawn,
     SwitchWorkspace => None,
     MoveToWorkspace => None,
     MoveToMonitor => None,

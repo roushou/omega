@@ -43,6 +43,7 @@ message Action {
     SetDefaultSink set_default_sink = 33;
     SetInputMute set_input_mute = 34;
     SetInputVolume set_input_volume = 35;
+    CaptureCommand capture_command = 36;
   }
 
   // Removed settings actions; runtime settings have no owner yet.
@@ -60,6 +61,12 @@ message LaunchApp {
 
 // The raw shell escape hatch. Requires CAPABILITY_SPAWN.
 message RunCommand {
+  string command = 1;
+}
+
+// Run a shell command and return its bounded stdout to the caller. Requires
+// CAPABILITY_SPAWN. Prefer RunCommand when the output is not needed.
+message CaptureCommand {
   string command = 1;
 }
 

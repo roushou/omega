@@ -4,15 +4,18 @@ mod common;
 
 use std::time::Duration;
 
-use common::{Harness, expect_ok, expect_refusal, next_result, policy_manifest, widget_manifest};
+use common::{
+    Harness, expect_ok, expect_outcome, expect_refusal, next_result, policy_manifest,
+    widget_manifest,
+};
 use omega_daemon::manifest::ManifestStore;
 use omega_proto::Manifest;
 use std::sync::{Arc, Mutex};
 
 use omega_proto::ActionKind;
 use omega_proto::omega::{
-    Act, Action, Capability, ErrorCode, Frame, Invoke, Lock, RunCommand, SetBacklight, StatePatch,
-    action, frame, invoke, set_backlight,
+    Act, Action, Capability, CaptureCommand, ErrorCode, Frame, Invoke, Lock, RunCommand,
+    SetBacklight, StatePatch, action, frame, invoke, result, set_backlight,
 };
 
 fn act(stream_id: u64, kind: action::Kind) -> Frame {
@@ -130,6 +133,48 @@ async fn a_granted_command_actually_runs() {
     }
     assert!(marker.exists(), "the command should have run");
     let _ = std::fs::remove_file(&marker);
+}
+
+#[tokio::test]
+async fn a_granted_capture_returns_the_command_stdout() {
+    let (_harness, mut transport) = connected("act-capture", policy_manifest("policy")).await;
+
+    transport
+        .send(act(
+            1,
+            action::Kind::CaptureCommand(CaptureCommand {
+                command: "printf 'hello world'".into(),
+            }),
+        ))
+        .await
+        .unwrap();
+
+    let outcome = expect_outcome(next_result(&mut transport).await);
+    let result::Outcome::Value(value) = outcome else {
+        panic!("expected a value, got {outcome:?}");
+    };
+    assert_eq!(
+        <String as omega_proto::FromValue>::from_value(&value).as_deref(),
+        Some("hello world")
+    );
+}
+
+#[tokio::test]
+async fn a_failing_capture_is_a_refusal_not_an_empty_reading() {
+    let (_harness, mut transport) = connected("act-capture-fail", policy_manifest("policy")).await;
+
+    transport
+        .send(act(
+            1,
+            action::Kind::CaptureCommand(CaptureCommand {
+                command: "exit 3".into(),
+            }),
+        ))
+        .await
+        .unwrap();
+
+    let refusal = expect_refusal(next_result(&mut transport).await);
+    assert!(refusal.message.contains("exit"), "{refusal}");
 }
 
 #[tokio::test]

@@ -28,6 +28,9 @@ impl Fixture {
             action::Kind::RunCommand(RunCommand {
                 command: "echo first\necho second".into(),
             }),
+            action::Kind::CaptureCommand(CaptureCommand {
+                command: "printf hello".into(),
+            }),
             action::Kind::SwitchWorkspace(SwitchWorkspace {
                 target: Some(switch_workspace::Target::Index(1)),
             }),
@@ -185,6 +188,9 @@ fn required_strings_identifiers_selectors_and_destinations_are_checked() {
         }),
         action::Kind::RunCommand(RunCommand {
             command: "echo\0bad".into(),
+        }),
+        action::Kind::CaptureCommand(CaptureCommand {
+            command: " \n".into(),
         }),
         action::Kind::SwitchWorkspace(SwitchWorkspace {
             target: Some(switch_workspace::Target::Name(" ".into())),

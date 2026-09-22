@@ -1,8 +1,8 @@
 //! Authorize protocol actions and route them to daemon, plugin, or broker handlers.
 
 use omega_proto::ActionKind;
-use omega_proto::omega::{RunCommand, action};
-use omega_proto::{CommandAnswer, Refusal};
+use omega_proto::omega::{CaptureCommand, RunCommand, action};
+use omega_proto::{CommandAnswer, IntoValue, Refusal};
 
 use crate::refusal::Refusable;
 
@@ -19,6 +19,11 @@ pub struct Actions {
 }
 
 impl Actions {
+    /// Bounded wait for a captured command.
+    const CAPTURE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+    /// Per-stream byte limit for captured output.
+    const CAPTURE_BYTES: usize = 64 * 1024;
+
     pub fn new(plugins: PluginRegistry, brokers: Brokerage) -> Self {
         Self { plugins, brokers }
     }
@@ -44,6 +49,7 @@ impl Actions {
             // The daemon's own: spawning a process is not brokering a
             // subsystem, and routing between plugins is its own job.
             action::Kind::RunCommand(run) => Self::run(run),
+            action::Kind::CaptureCommand(capture) => Self::capture(capture).await,
             action::Kind::InvokePlugin(invoke) => self.plugins.invoke_command(invoke, None).await,
             other => self.broker(other).await,
         }
@@ -60,6 +66,33 @@ impl Actions {
             Some(Ok(())) => Ok(CommandAnswer::Acknowledged),
             Some(Err(error)) => Err(error.refusal()),
         }
+    }
+
+    /// Run a shell command and return its bounded stdout to the caller.
+    async fn capture(capture: &CaptureCommand) -> Result<CommandAnswer, Refusal> {
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command.arg("-c").arg(&capture.command);
+        let output = omega_host::process::Process::new(command)
+            .timeout(Self::CAPTURE_TIMEOUT)
+            .capture(omega_host::process::OutputLimits {
+                stdout: Self::CAPTURE_BYTES,
+                stderr: Self::CAPTURE_BYTES,
+            })
+            .await
+            .map_err(|error| Refusal::unavailable(error.to_string()))?;
+
+        if !output.status.success() {
+            return Err(Refusal::unavailable(format!(
+                "command exited {}",
+                output.status
+            )));
+        }
+        Ok(CommandAnswer::Value(
+            String::from_utf8_lossy(&output.stdout)
+                .trim_end()
+                .to_string()
+                .into_value(),
+        ))
     }
 
     /// Spawn a shell command without waiting for its exit.

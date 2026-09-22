@@ -15,7 +15,11 @@ const DAEMON_TOPICS: &[SystemTopic] = &[SystemTopic::Plugins];
 const UNSERVED_ACTIONS: &[ActionKind] = &[];
 
 /// Actions handled by the daemon.
-const DAEMON_ACTIONS: &[ActionKind] = &[ActionKind::RunCommand, ActionKind::InvokePlugin];
+const DAEMON_ACTIONS: &[ActionKind] = &[
+    ActionKind::RunCommand,
+    ActionKind::CaptureCommand,
+    ActionKind::InvokePlugin,
+];
 
 fn served_topics() -> HashSet<SystemTopic> {
     Brokers::all()

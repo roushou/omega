@@ -85,6 +85,7 @@ impl action::Kind {
                 "must name a Bluetooth device",
             )?,
             Self::RunCommand(run) => input.text("command", &run.command)?,
+            Self::CaptureCommand(capture) => input.text("command", &capture.command)?,
             Self::SwitchWorkspace(switch) => match &switch.target {
                 Some(switch_workspace::Target::Index(index)) => input.index(*index)?,
                 Some(switch_workspace::Target::Name(name)) => input.workspace_name(name)?,

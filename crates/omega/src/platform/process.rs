@@ -1,7 +1,9 @@
 //! Shell command and process execution.
 
-use omega_proto::omega::{LaunchApp, RunCommand, action};
+use omega_proto::FromValue;
+use omega_proto::omega::{Act, Action, CaptureCommand, LaunchApp, RunCommand, action, invoke};
 
+use crate::effect::{Effect, EffectError};
 use crate::runtime::context::Context;
 use crate::wiring::does;
 
@@ -23,6 +25,29 @@ impl Shell {
         self.act(action::Kind::RunCommand(RunCommand {
             command: command.into(),
         }))
+    }
+
+    /// Run a command line and return its standard output as text.
+    /// Trailing whitespace is trimmed; output is bounded and the command is
+    /// killed on timeout. A nonzero exit is an effect error, not an empty reading.
+    ///
+    /// ```no_run
+    /// # async fn example(shell: &omega::platform::process::Shell) -> Result<(), omega::Error> {
+    /// let version = shell.capture("uname -r").await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn capture(&self, command: impl Into<String>) -> Effect<String> {
+        let submission = self.context.act(invoke::Op::Act(Act {
+            action: Some(Action {
+                kind: Some(action::Kind::CaptureCommand(CaptureCommand {
+                    command: command.into(),
+                })),
+            }),
+        }));
+        Effect::decoded(submission, |value| match value {
+            Some(value) => String::from_value(&value).ok_or(EffectError::UnexpectedResponse),
+            None => Err(EffectError::UnexpectedResponse),
+        })
     }
 
     /// Run a program with literal arguments, without interpreting them as shell syntax.
