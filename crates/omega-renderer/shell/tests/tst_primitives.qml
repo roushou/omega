@@ -46,7 +46,8 @@ TestCase {
             {type:"scroll",key:"j",children:[
                 {type:"text",key:"one",props:{text:{stringValue:"One"}}},
                 {type:"text",key:"two",props:{text:{stringValue:"Two"}}}
-            ]}
+            ]},
+            {type:"textarea",key:"k",props:{rows:{intValue:"4"},label:{stringValue:"Notes"},placeholder:{stringValue:"Write"},controlled:{boolValue:true},edit_revision:{intValue:"0"},reset_revision:{intValue:"0"}},events:{change:{command:"text"}}}
         ]
         for (var i = 0; i < models.length; i++) {
             var view = createTemporaryObject(primitiveView, test, { model: models[i] })

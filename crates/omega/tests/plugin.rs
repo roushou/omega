@@ -7,11 +7,12 @@ use omega::platform::power::Battery;
 use omega::platform::session::Session;
 use omega::platform::time::Clock;
 use omega::record::{Own, PluginState, Watch};
+use omega::surface::{TextEdit, TextValue};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
     Badge, Button, Checkbox, Choice, Dialog, Disclosure, Dropdown, EmptyState, Field, Glyph, Graph,
     Grid, Header, Icon, Image, Keycap, List, Progress, Row, Scroll, Separator, Slider, Spacer,
-    Text, Toggle,
+    Text, TextArea, Toggle,
 };
 use omega::{Args, Command, Percent, Surface, Ui};
 use omega_proto::SystemTopic;
@@ -680,6 +681,7 @@ ui_command!(UiForget, (), "forget");
 ui_command!(UiCancel, (), "cancel");
 ui_command!(UiBand, String, "band");
 ui_command!(UiSave, FormValues, "save");
+ui_command!(UiText, TextEdit, "text");
 
 fn every_node() -> Ui {
     Row::new()
@@ -765,6 +767,12 @@ fn every_node() -> Ui {
             Field::new("Age")
                 .numeric(0.0, 150.0, 1.0)
                 .on_submit(UiConnect),
+        )
+        .child(
+            TextArea::new("Notes")
+                .rows(4)
+                .controlled(&TextValue::default())
+                .on_change(UiText),
         )
         .into()
 }
@@ -936,6 +944,13 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[29]["props"]["min"]["doubleValue"], 0.0);
     assert_eq!(children[29]["props"]["max"]["doubleValue"], 150.0);
     assert_eq!(children[29]["props"]["step"]["doubleValue"], 1.0);
+
+    // A textarea shares the field's controlled-edit metadata and adds a row count.
+    assert_eq!(children[30]["type"], "textarea");
+    assert_eq!(children[30]["props"]["label"]["stringValue"], "Notes");
+    assert_eq!(children[30]["props"]["rows"]["intValue"], "4");
+    assert_eq!(children[30]["props"]["controlled"]["boolValue"], true);
+    assert_eq!(children[30]["events"]["change"]["command"], "text");
 
     // Stable keys preserve renderer node identity.
     assert_eq!(root["key"], "root");

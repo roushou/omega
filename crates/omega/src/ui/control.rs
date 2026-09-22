@@ -217,6 +217,59 @@ impl Field {
 
 styled!(Field);
 
+/// A multi-line text input with a persistent label and the same controlled-edit
+/// revision protocol as [`Field`]. Committed edits arrive through `on_change`;
+/// there is no submit-on-Enter.
+#[derive(Debug, Clone)]
+pub struct TextArea {
+    node: Node,
+}
+
+impl TextArea {
+    pub fn new(label: impl Display) -> Self {
+        Self {
+            node: Node::new("textarea").text_prop("label", label.to_string()),
+        }
+    }
+
+    /// Set the visible height in rows.
+    pub fn rows(mut self, rows: u32) -> Self {
+        self.node = self.node.number("rows", rows);
+        self
+    }
+
+    /// An example shown only while the area is empty.
+    pub fn placeholder(mut self, text: impl Display) -> Self {
+        self.node = self.node.text_prop("placeholder", text.to_string());
+        self
+    }
+
+    /// Give this area initial keyboard focus when its instance appears.
+    pub fn autofocus(mut self) -> Self {
+        self.node = self.node.flag("autofocus", true);
+        self
+    }
+
+    /// Model-owned text with edit/reset revisions; use with `on_change`.
+    pub fn controlled(mut self, value: &crate::surface::TextValue) -> Self {
+        self.node = self
+            .node
+            .text_prop("value", value.text())
+            .number("edit_revision", value.revision())
+            .number("reset_revision", value.reset_revision())
+            .flag("controlled", true);
+        self
+    }
+
+    /// Notify local behavior of committed edits while typing remains immediate.
+    pub fn on_change(mut self, change: impl Into<Bind<crate::surface::TextEdit>>) -> Self {
+        self.node = self.node.on("change", change);
+        self
+    }
+}
+
+styled!(TextArea);
+
 /// A selectable list with keyboard and pointer activation.
 /// Arrow keys change selection; Enter or a click activates a row. Assign each
 /// child a stable [`key`](crate::ui::Text::key); selection and activation submit

@@ -253,6 +253,40 @@ function fieldStep(node) {
     return readFraction(node, "step", 0)
 }
 
+// ---- textarea ----
+
+function textareaRows(node) {
+    return readNumber(node, "rows", 4)
+}
+
+function textareaLabel(node) {
+    return readText(node, "label", "")
+}
+
+function textareaPlaceholder(node) {
+    return readText(node, "placeholder", "")
+}
+
+function textareaControlled(node) {
+    return readFlag(node, "controlled", false)
+}
+
+function textareaEdit_revision(node) {
+    return readNumber(node, "edit_revision", 0)
+}
+
+function textareaReset_revision(node) {
+    return readNumber(node, "reset_revision", 0)
+}
+
+function textareaAutofocus(node) {
+    return readFlag(node, "autofocus", false)
+}
+
+function textareaValue(node) {
+    return readText(node, "value", "")
+}
+
 // ---- list ----
 
 function listGap(node) {

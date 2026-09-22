@@ -149,6 +149,10 @@ impl Core {
             contents: include_str!("../shell/core/nodes/Text.qml"),
         },
         Asset {
+            name: "core/nodes/TextArea.qml",
+            contents: include_str!("../shell/core/nodes/TextArea.qml"),
+        },
+        Asset {
             name: "core/nodes/Toggle.qml",
             contents: include_str!("../shell/core/nodes/Toggle.qml"),
         },

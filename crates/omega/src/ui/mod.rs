@@ -48,7 +48,7 @@ pub use content::{
 };
 pub use control::{
     Button, Checkbox, Choice, ChoiceValue, Dialog, Disclosure, Dropdown, Field, Form, FormInput,
-    List, Slider, Toggle,
+    List, Slider, TextArea, Toggle,
 };
 pub use display::{Badge, EmptyState, Graph, Image, Keycap, Progress};
 pub use layout::{Column, Grid, Row, Scroll, Separator, Spacer, Stack};

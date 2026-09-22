@@ -191,6 +191,17 @@ nodes! {
         max: Fraction,
         step: Fraction,
     },
+    /// Multi-line text input with the same controlled-edit metadata as a field.
+    TextArea => "textarea" {
+        rows: Number = "4",
+        label: Text,
+        placeholder: Text,
+        controlled: Flag,
+        edit_revision: Number,
+        reset_revision: Number,
+        autofocus: Flag,
+        value: Text,
+    },
     /// Rows to pick from, which owns its own cursor.
     List => "list" { gap: Number, selected: Text = "null" },
     /// One of several options, chosen by key.

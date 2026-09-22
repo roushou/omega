@@ -113,6 +113,7 @@ FocusScope {
             case "dialog": return "nodes/Dialog.qml"
             case "form": return "nodes/Form.qml"
             case "field": return "nodes/Field.qml"
+            case "textarea": return "nodes/TextArea.qml"
             case "list": return "nodes/List.qml"
             case "stack": return "nodes/Stack.qml"
             case "separator": return "nodes/Separator.qml"
