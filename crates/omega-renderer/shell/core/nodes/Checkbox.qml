@@ -10,16 +10,17 @@ Item {
     readonly property var bound: Props.bind(host.model, "change")
     readonly property bool published: Props.checkboxOn(host.model)
 
-    // Optimistic state, cleared when the published value arrives.
-    property var optimistic: null
-    readonly property bool checked:
-        box.optimistic === null ? box.published : box.optimistic
-
-    onPublishedChanged: box.optimistic = null
+    // Optimistic state, reconciled when the published value or pending state
+    // arrives. Assigned rather than bound: a ternary over mutable optimistic
+    // state is reported as a binding loop on older Qt.
+    property bool checked: false
+    function sync() { box.checked = box.published }
+    onPublishedChanged: box.sync()
     Connections {
         target: box.host
-        function onPendingChanged() { if (!box.host.pending) box.optimistic = null }
+        function onPendingChanged() { if (!box.host.pending) box.sync() }
     }
+    Component.onCompleted: box.sync()
 
     readonly property bool pressable: box.bound !== null && box.host.interactive
     enabled: box.bound !== null
@@ -30,8 +31,8 @@ Item {
     function activate() {
         if (!box.pressable) return
         var next = !box.checked
-        box.optimistic = next
-        if (!box.host.invoke("change", next)) box.optimistic = null
+        box.checked = next
+        if (!box.host.invoke("change", next)) box.checked = box.published
     }
 
     Row {

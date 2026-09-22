@@ -10,17 +10,16 @@ Rectangle {
     readonly property var bound: Props.bind(host.model, "change")
     readonly property bool published: Props.toggleOn(host.model)
 
-    // Optimistic toggle state, cleared when the published value arrives.
-    property var optimistic: null
-    readonly property bool checked:
-        swtch.optimistic === null ? swtch.published : swtch.optimistic
-
-    // The plugin answered; stop second-guessing it.
-    onPublishedChanged: swtch.optimistic = null
+    // Optimistic toggle state, reconciled when the published value or pending
+    // state arrives. Assigned rather than bound to avoid a binding loop.
+    property bool checked: false
+    function sync() { swtch.checked = swtch.published }
+    onPublishedChanged: swtch.sync()
     Connections {
         target: swtch.host
-        function onPendingChanged() { if (!swtch.host.pending) swtch.optimistic = null }
+        function onPendingChanged() { if (!swtch.host.pending) swtch.sync() }
     }
+    Component.onCompleted: swtch.sync()
 
     readonly property bool pressable: swtch.bound !== null && swtch.host.interactive
     activeFocusOnTab: true
@@ -31,8 +30,8 @@ Rectangle {
     function activate() {
         if (!swtch.pressable) return
         var next = !swtch.checked
-        swtch.optimistic = next
-        if (!swtch.host.invoke("change", next)) swtch.optimistic = null
+        swtch.checked = next
+        if (!swtch.host.invoke("change", next)) swtch.checked = swtch.published
     }
     Keys.onReturnPressed: activate()
     Keys.onEnterPressed: activate()

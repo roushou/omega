@@ -9,23 +9,24 @@ Item {
     readonly property var bound: Props.bind(host.model, "toggle")
     readonly property bool published: Props.disclosureOpen(host.model)
 
-    property var optimistic: null
-    readonly property bool open:
-        disclosure.optimistic === null ? disclosure.published : disclosure.optimistic
-
-    onPublishedChanged: disclosure.optimistic = null
+    // Optimistic state, reconciled when the published value or pending state
+    // arrives. Assigned rather than bound to avoid a binding loop on older Qt.
+    property bool open: false
+    function sync() { disclosure.open = disclosure.published }
+    onPublishedChanged: disclosure.sync()
     Connections {
         target: disclosure.host
-        function onPendingChanged() { if (!disclosure.host.pending) disclosure.optimistic = null }
+        function onPendingChanged() { if (!disclosure.host.pending) disclosure.sync() }
     }
+    Component.onCompleted: disclosure.sync()
 
     readonly property bool pressable: disclosure.bound !== null && disclosure.host.interactive
 
     function toggle() {
         if (!disclosure.pressable) return
         var next = !disclosure.open
-        disclosure.optimistic = next
-        if (!disclosure.host.invoke("toggle", next)) disclosure.optimistic = null
+        disclosure.open = next
+        if (!disclosure.host.invoke("toggle", next)) disclosure.open = disclosure.published
     }
 
     implicitWidth: Math.max(header.implicitWidth, body.implicitWidth)

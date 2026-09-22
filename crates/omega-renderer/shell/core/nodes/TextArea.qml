@@ -26,17 +26,25 @@ Item {
     property int resetRevision: 0
     property bool queuedEdit: false
     property var sentBinding: null
+    // A programmatic text write is not a user edit.
+    property bool setting: false
+    function apply(value) {
+        if (input.text === value) return
+        area.setting = true
+        input.text = value
+        area.setting = false
+    }
 
     function synchronize() {
         if (area.composing) return
-        if (!controlled) { if (lastGiven !== given) input.text = given; lastGiven = given; return }
+        if (!controlled) { if (lastGiven !== given) area.apply(given); lastGiven = given; return }
         var reset = Props.textareaReset_revision(host.model)
         var revision = Props.textareaEdit_revision(host.model)
         if (reset > resetRevision || revision >= editRevision) {
             if (reset > resetRevision) { queuedEdit = false; sentBinding = null }
             resetRevision = reset
             editRevision = revision
-            if (input.text !== given) input.text = given
+            area.apply(given)
         }
         flush.restart()
     }
@@ -106,7 +114,9 @@ Item {
             activeFocusOnTab: true
             readOnly: area.controlled ? !area.enabled : !area.host.interactive
 
-            onTextEdited: area.edited()
+            // TextEdit has no textEdited on Qt 6.4; a guarded textChanged is
+            // equivalent and programmatic writes are not edits.
+            onTextChanged: if (!area.setting) area.edited()
             Accessible.role: Accessible.EditableText
             Accessible.name: areaLabel.text
 
