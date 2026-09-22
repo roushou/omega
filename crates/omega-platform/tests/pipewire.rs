@@ -9,6 +9,7 @@ use omega_proto::omega::set_volume;
 const SINKS: &str = r#"[
   {
     "name": "speakers",
+    "description": "Built-in Audio",
     "mute": false,
     "volume": {
       "front-left":  { "value": 51123, "value_percent": "78%" },
@@ -17,6 +18,7 @@ const SINKS: &str = r#"[
   },
   {
     "name": "headphones",
+    "description": "Headset",
     "mute": true,
     "volume": { "mono": { "value": 65536, "value_percent": "100%" } }
   }
@@ -70,6 +72,18 @@ fn a_machine_with_no_default_sink_is_silent_rather_than_absent() {
     let state = Sinks::parse(SINKS, "nothing-here").unwrap();
     assert_eq!(state.volume, 0.0);
     assert!(state.muted);
+}
+
+#[test]
+fn the_sink_catalogue_keeps_names_and_descriptions() {
+    let devices: Vec<omega_platform::pipewire::Device> =
+        serde_json::from_str(SINKS).expect("valid sinks");
+    let catalogue = Sinks::catalogue(&devices);
+    assert_eq!(catalogue.len(), 2);
+    assert_eq!(catalogue[0].name, "speakers");
+    assert_eq!(catalogue[0].description, "Built-in Audio");
+    assert_eq!(catalogue[1].name, "headphones");
+    assert_eq!(catalogue[1].description, "Headset");
 }
 
 #[test]

@@ -28,6 +28,13 @@ impl Audio {
         self.read().is_some_and(|audio| audio.muted)
     }
 
+    /// The default output sink's PulseAudio name, or `None` if unavailable.
+    pub fn default_sink(&self) -> Option<String> {
+        self.read()
+            .map(|audio| audio.default_sink)
+            .filter(|name| !name.is_empty())
+    }
+
     /// Input (microphone) volume as a percentage.
     pub fn input_volume(&self) -> Percent {
         self.read()

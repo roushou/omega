@@ -71,3 +71,44 @@ fn stream_and_device_controls_declare_the_audio_capability() {
     let granted = manifest.granted().unwrap();
     assert!(granted.contains(&Capability::Audio));
 }
+
+#[derive(omega::Surface)]
+struct Devices {
+    sinks: omega::platform::audio::Sinks,
+}
+
+impl Surface for Devices {
+    type Model = ();
+    type Message = std::convert::Infallible;
+    type Effects = ();
+    fn update(
+        &self,
+        _: &mut (),
+        message: Self::Message,
+        _: &(),
+    ) -> omega::surface::Task<Self::Message> {
+        match message {}
+    }
+    fn render(&self, _: &(), _: &omega::surface::Events<Self::Message>) -> View {
+        Text::new(self.sinks.all().len()).into()
+    }
+}
+
+#[test]
+fn sinks_read_their_topic() {
+    use omega_proto::omega::{AudioSinksState, SinkInfo};
+    let drawn = Drawn::of::<Devices>(&State::new().with(AudioSinksState {
+        sinks: vec![
+            SinkInfo {
+                name: "speakers".into(),
+                description: "Built-in Audio".into(),
+            },
+            SinkInfo {
+                name: "headphones".into(),
+                description: "Headset".into(),
+            },
+        ],
+    }))
+    .unwrap();
+    assert_eq!(drawn.text(), "2");
+}

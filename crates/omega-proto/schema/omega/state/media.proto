@@ -27,6 +27,17 @@ message AudioStream {
   bool muted = 4;
 }
 
+// Available output sinks, as PulseAudio reports them. Separate from
+// [`AudioState`] because the catalogue changes only when devices appear or go.
+message AudioSinksState {
+  repeated SinkInfo sinks = 1;
+}
+
+message SinkInfo {
+  string name = 1;              // PulseAudio sink name
+  string description = 2;       // human-readable description
+}
+
 // MPRIS player catalogue and active-player selection.
 message MediaState {
   repeated PlayerInfo players = 1;

@@ -17,6 +17,7 @@ impl Coverage {
         <omega::platform::bluetooth::Bluetooth as Wiring>::TOPICS,
         <omega::platform::audio::Audio as Wiring>::TOPICS,
         <omega::platform::audio::Streams as Wiring>::TOPICS,
+        <omega::platform::audio::Sinks as Wiring>::TOPICS,
         <omega::platform::audio::Media as Wiring>::TOPICS,
         <omega::platform::desktop::Backlight as Wiring>::TOPICS,
         <omega::platform::desktop::Monitors as Wiring>::TOPICS,

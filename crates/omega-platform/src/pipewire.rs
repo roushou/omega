@@ -9,8 +9,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
 use omega_proto::omega::{
-    AudioState, AudioStream, AudioStreamsState, StatePatch, StateTopic, action, set_volume,
-    state_topic,
+    AudioSinksState, AudioState, AudioStream, AudioStreamsState, SinkInfo, StatePatch, StateTopic,
+    action, set_volume, state_topic,
 };
 use omega_proto::{ActionKind, SystemTopic};
 
@@ -21,6 +21,9 @@ use crate::broker::{Broker, BrokerError, opaque_debug};
 pub struct Device {
     pub name: String,
     pub mute: bool,
+    /// Human-readable description, as PulseAudio reports it.
+    #[serde(default)]
+    pub description: String,
     /// Per-channel volume values.
     #[serde(default)]
     pub volume: HashMap<String, Channel>,
@@ -64,6 +67,17 @@ impl Sinks {
         let sinks: Vec<Device> = serde_json::from_str(json)
             .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
         Ok(Self::of(&sinks, default))
+    }
+
+    /// The available sinks, as names and descriptions.
+    pub fn catalogue(sinks: &[Device]) -> Vec<SinkInfo> {
+        sinks
+            .iter()
+            .map(|sink| SinkInfo {
+                name: sink.name.clone(),
+                description: sink.description.clone(),
+            })
+            .collect()
     }
 
     /// Read the default sink. If no sink exists, report zero volume and muted state.
@@ -178,10 +192,12 @@ impl Link {
         }
     }
 
-    async fn read_sinks() -> Result<AudioState, BrokerError> {
+    async fn read_sinks() -> Result<(AudioState, Vec<SinkInfo>), BrokerError> {
         let default = Self::run(&["get-default-sink"]).await?;
-        let sinks = Self::run(&["--format=json", "list", "sinks"]).await?;
-        Sinks::parse(&sinks, default.trim())
+        let json = Self::run(&["--format=json", "list", "sinks"]).await?;
+        let sinks: Vec<Device> = serde_json::from_str(&json)
+            .map_err(|error| BrokerError::Unreadable(error.to_string()))?;
+        Ok((Sinks::of(&sinks, default.trim()), Sinks::catalogue(&sinks)))
     }
 
     async fn read_sources() -> Result<(f64, bool), BrokerError> {
@@ -265,16 +281,16 @@ impl PipeWire {
     }
 
     async fn read_all() -> Result<StatePatch, BrokerError> {
-        let mut audio = Link::read_sinks().await?;
+        let (mut audio, sinks) = Link::read_sinks().await?;
         let (input_volume, input_muted) = Link::read_sources().await?;
         audio.input_volume = input_volume;
         audio.input_muted = input_muted;
         audio.default_source = Link::run(&["get-default-source"]).await?.trim().into();
         let streams = Link::read_streams().await?;
-        Ok(Self::patch(audio, streams))
+        Ok(Self::patch(audio, streams, sinks))
     }
 
-    fn patch(audio: AudioState, streams: Vec<AudioStream>) -> StatePatch {
+    fn patch(audio: AudioState, streams: Vec<AudioStream>, sinks: Vec<SinkInfo>) -> StatePatch {
         StatePatch {
             topics: vec![
                 StateTopic {
@@ -289,6 +305,11 @@ impl PipeWire {
                         streams,
                     })),
                 },
+                StateTopic {
+                    topic: SystemTopic::AudioSinks.as_str().into(),
+                    revision: 0,
+                    value: Some(state_topic::Value::AudioSinks(AudioSinksState { sinks })),
+                },
             ],
         }
     }
@@ -301,7 +322,11 @@ impl Broker for PipeWire {
     }
 
     fn topics(&self) -> &'static [SystemTopic] {
-        &[SystemTopic::Audio, SystemTopic::AudioStreams]
+        &[
+            SystemTopic::Audio,
+            SystemTopic::AudioStreams,
+            SystemTopic::AudioSinks,
+        ]
     }
 
     fn actions(&self) -> &'static [ActionKind] {

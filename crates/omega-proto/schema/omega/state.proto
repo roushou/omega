@@ -55,6 +55,7 @@ message StateTopic {
     ClipboardState clipboard = 34;
     AudioStreamsState audio_streams = 35;
     NotificationsState notifications = 36;
+    AudioSinksState audio_sinks = 37;
 
     Value generic = 1000;       // plugin keyspace + forward-compatible topics
   }

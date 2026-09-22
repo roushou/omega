@@ -4,11 +4,11 @@
 use std::fmt;
 
 use crate::omega::{
-    ApplicationsState, AudioState, AudioStreamsState, BacklightState, BatteryState, BluetoothState,
-    ClipboardState, DiskState, IdleState, InputState, MainsState, MediaState, MonitorsState,
-    NetworkState, NotificationsState, PeripheralsState, PluginsState, PowerProfileState,
-    SystemState, ThermalsState, ThroughputState, TimeState, VpnState, WifiState, WindowState,
-    WorkspacesState, state_topic,
+    ApplicationsState, AudioSinksState, AudioState, AudioStreamsState, BacklightState,
+    BatteryState, BluetoothState, ClipboardState, DiskState, IdleState, InputState, MainsState,
+    MediaState, MonitorsState, NetworkState, NotificationsState, PeripheralsState, PluginsState,
+    PowerProfileState, SystemState, ThermalsState, ThroughputState, TimeState, VpnState, WifiState,
+    WindowState, WorkspacesState, state_topic,
 };
 
 /// Generate topic names, enumeration, and payload mapping from the protocol oneof.
@@ -106,6 +106,8 @@ topics! {
     AudioStreams => "audio-streams": AudioStreamsState,
     /// Notifications Omega has raised and not yet closed.
     Notifications => "notifications": NotificationsState,
+    /// The output sinks a machine can send audio to.
+    AudioSinks => "audio-sinks": AudioSinksState,
 }
 
 impl std::str::FromStr for SystemTopic {
