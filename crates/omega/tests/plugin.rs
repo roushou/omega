@@ -10,9 +10,9 @@ use omega::record::{Own, PluginState, Watch};
 use omega::surface::{TextEdit, TextValue};
 use omega::testing::{Called, Drawn, State, TestDaemon, manifest_of};
 use omega::ui::{
-    Badge, Button, Checkbox, Choice, Dialog, Disclosure, Dropdown, EmptyState, Field, Glyph, Graph,
-    Grid, Header, Icon, Image, Keycap, List, Progress, Row, Scroll, Separator, Slider, Spacer,
-    Text, TextArea, Toggle,
+    Badge, Button, Checkbox, Choice, Dialog, Disclosure, Dropdown, EmptyState, Field, Fit, Glyph,
+    Graph, Grid, Header, Icon, Image, Keycap, List, Progress, Row, Scroll, Separator, Slider,
+    Spacer, Text, TextArea, Toggle, Viewport,
 };
 use omega::{Args, Command, Percent, Surface, Ui};
 use omega_proto::SystemTopic;
@@ -724,7 +724,7 @@ fn every_node() -> Ui {
                 .on_select(UiBand),
         )
         .child(Grid::new(2).gap(4).child(Text::new("Sent")))
-        .child(Image::new("/tmp/art.png"))
+        .child(Image::new("/tmp/art.png").fit(Fit::Cover))
         .child(Image::new("https://example.invalid/art.png"))
         .child(omega::ui::Form::new(UiSave))
         .child(Checkbox::new(true).label("Autostart").on_change(UiMute))
@@ -773,6 +773,13 @@ fn every_node() -> Ui {
                 .rows(4)
                 .controlled(&TextValue::default())
                 .on_change(UiText),
+        )
+        .child(
+            Viewport::new()
+                .fit(Fit::Cover)
+                .zoom(1.5)
+                .offset(10.0, -4.0)
+                .child(Image::new("/tmp/art.png")),
         )
         .into()
 }
@@ -885,6 +892,7 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
         children[18]["props"]["source"]["stringValue"],
         "/tmp/art.png"
     );
+    assert_eq!(children[18]["props"]["fit"]["stringValue"], "cover");
     assert!(children[19]["props"].get("source").is_none());
 
     // A checkbox reports the boolean change; its label is separate from on.
@@ -951,6 +959,14 @@ fn every_node_kind_carries_the_props_the_renderer_reads() {
     assert_eq!(children[30]["props"]["rows"]["intValue"], "4");
     assert_eq!(children[30]["props"]["controlled"]["boolValue"], true);
     assert_eq!(children[30]["events"]["change"]["command"], "text");
+
+    // A viewport owns the pan and zoom applied to its content.
+    assert_eq!(children[31]["type"], "viewport");
+    assert_eq!(children[31]["props"]["fit"]["stringValue"], "cover");
+    assert_eq!(children[31]["props"]["zoom"]["doubleValue"], 1.5);
+    assert_eq!(children[31]["props"]["offset_x"]["doubleValue"], 10.0);
+    assert_eq!(children[31]["props"]["offset_y"]["doubleValue"], -4.0);
+    assert_eq!(children[31]["children"][0]["type"], "image");
 
     // Stable keys preserve renderer node identity.
     assert_eq!(root["key"], "root");

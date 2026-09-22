@@ -1,8 +1,8 @@
 use omega::{
-    Surface, View,
+    Args, Input, Surface, View,
     surface::{Events, Lifecycle, Task, TextEdit, TextValue},
     testing::{State, SurfaceHarness},
-    ui::{Button, Text},
+    ui::{Button, Text, Viewport, ViewportGesture},
 };
 
 #[derive(omega::Surface)]
@@ -192,4 +192,108 @@ fn optional_readings_distinguish_pending_absent_and_available() {
             .text(),
         "available"
     );
+}
+
+#[derive(omega::Surface)]
+struct Zoomer;
+
+impl Surface for Zoomer {
+    type Model = f64;
+    type Message = f64;
+    type Effects = ();
+
+    fn render(&self, zoom: &f64, events: &Events<f64>) -> View {
+        omega::ui::Image::new("/tmp/art.png")
+            .key("art")
+            .width((100.0 * zoom) as u32)
+            .height(100)
+            .on_wheel(events.on(|delta: f64| delta))
+            .into()
+    }
+
+    fn update(&self, zoom: &mut f64, message: f64, _: &()) -> Task<f64> {
+        *zoom += message;
+        Task::none()
+    }
+}
+
+#[tokio::test]
+async fn wheel_bindings_receive_a_numeric_delta() {
+    let mut harness = SurfaceHarness::<Zoomer>::new(&State::new()).unwrap();
+    let drawn = harness.draw();
+    harness.interact(&drawn, "art", "wheel", 120.0_f64).unwrap();
+    assert_eq!(*harness.model(), 120.0);
+}
+
+#[test]
+fn viewport_gestures_round_trip_and_accept_integer_fields() {
+    use omega::config::{IntoValue, Values};
+
+    let gesture = ViewportGesture {
+        zoom: 1.25,
+        offset_x: 10.0,
+        offset_y: -5.0,
+        x: 4.0,
+        y: 5.0,
+        dx: 2.0,
+        dy: -3.0,
+    };
+    assert_eq!(
+        ViewportGesture::decode(Args::new(gesture.encode())).unwrap(),
+        gesture
+    );
+
+    // The renderer encodes whole-number pointer positions as int64 strings.
+    let value = Values::new()
+        .with("zoom", 1.0)
+        .with("x", 300_i64)
+        .with("y", 200_i64)
+        .into_value();
+    let decoded = ViewportGesture::decode(Args::new(vec![value])).unwrap();
+    assert_eq!((decoded.x, decoded.y), (300.0, 200.0));
+}
+
+#[derive(omega::Surface)]
+struct Panner;
+
+impl Surface for Panner {
+    type Model = ViewportGesture;
+    type Message = ViewportGesture;
+    type Effects = ();
+
+    fn render(&self, _: &ViewportGesture, events: &Events<ViewportGesture>) -> View {
+        Viewport::new()
+            .key("view")
+            .on_wheel(events.on(|gesture: ViewportGesture| gesture))
+            .child(Text::new("canvas"))
+            .into()
+    }
+
+    fn update(
+        &self,
+        model: &mut ViewportGesture,
+        message: ViewportGesture,
+        _: &(),
+    ) -> Task<ViewportGesture> {
+        *model = message;
+        Task::none()
+    }
+}
+
+#[tokio::test]
+async fn viewport_wheel_bindings_receive_a_gesture() {
+    let mut harness = SurfaceHarness::<Panner>::new(&State::new()).unwrap();
+    let drawn = harness.draw();
+    let gesture = ViewportGesture {
+        zoom: 1.25,
+        offset_x: 12.0,
+        offset_y: 8.0,
+        x: 10.0,
+        y: 20.0,
+        dx: 0.0,
+        dy: 0.0,
+    };
+    harness.interact(&drawn, "view", "wheel", gesture).unwrap();
+    assert_eq!(harness.model().zoom, 1.25);
+    assert_eq!(harness.model().offset_x, 12.0);
 }

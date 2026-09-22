@@ -1,5 +1,6 @@
 //! Progress indicators, graphs, and images.
 
+use crate::ui::Bind;
 use crate::ui::node::Node;
 use crate::ui::style::styled;
 use crate::units::Percent;
@@ -51,13 +52,42 @@ impl Graph {
 
 styled!(Graph);
 
+/// How an [`Image`] fills its allocated box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fit {
+    /// Scale down or up to fit inside the box, preserving aspect (default).
+    Contain,
+    /// Fill the box, preserving aspect and cropping the overflow.
+    Cover,
+    /// Stretch to the box, ignoring aspect ratio.
+    Fill,
+    /// Draw at the source's natural size without scaling.
+    None,
+}
+
+impl Fit {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Contain => "contain",
+            Self::Cover => "cover",
+            Self::Fill => "fill",
+            Self::None => "none",
+        }
+    }
+}
+
 /// Display an image from an absolute path, local `file:` URI, or `data:` URI.
 /// Unsupported sources, including HTTP URLs, render no image.
-/// Set [`width`](Self::width) and [`height`](Self::height) to override its natural size.
+///
+/// By default the image fills its allocated box, preserving aspect and never
+/// cropping. Set [`width`](Self::width) and [`height`](Self::height) to size
+/// the box, or [`fill_width`](Self::fill_width) to take the parent's width.
+/// Choose another [`Fit`] to crop or stretch.
 ///
 /// ```
-/// use omega::ui::Image;
+/// use omega::ui::{Fit, Image};
 /// let art = Image::new("/home/me/.cache/art.png").width(64).height(64);
+/// let cover = Image::new("/home/me/art.png").fit(Fit::Cover);
 /// ```
 #[derive(Debug, Clone)]
 pub struct Image {
@@ -89,6 +119,19 @@ impl Image {
             node = node.text_prop("source", source);
         }
         Self { node }
+    }
+
+    /// Choose how the image fills its allocated box.
+    pub fn fit(mut self, fit: Fit) -> Self {
+        self.node = self.node.text_prop("fit", fit.as_str());
+        self
+    }
+
+    /// Receive vertical wheel deltas while the pointer is over the image.
+    /// Positive is away from the user (typically zoom in).
+    pub fn on_wheel(mut self, wheel: impl Into<Bind<f64>>) -> Self {
+        self.node = self.node.on("wheel", wheel);
+        self
     }
 
     /// Allow absolute paths, local `file:` URIs, and inline `data:` sources only.

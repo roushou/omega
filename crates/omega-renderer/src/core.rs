@@ -156,5 +156,9 @@ impl Core {
             name: "core/nodes/Toggle.qml",
             contents: include_str!("../shell/core/nodes/Toggle.qml"),
         },
+        Asset {
+            name: "core/nodes/Viewport.qml",
+            contents: include_str!("../shell/core/nodes/Viewport.qml"),
+        },
     ];
 }

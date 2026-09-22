@@ -123,6 +123,7 @@ FocusScope {
             case "group": return "nodes/Group.qml"
             case "grid": return "nodes/Grid.qml"
             case "image": return "nodes/Image.qml"
+            case "viewport": return "nodes/Viewport.qml"
             case "badge": return "nodes/Badge.qml"
             case "keycap": return "nodes/Keycap.qml"
             case "status": return "nodes/Status.qml"

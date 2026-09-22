@@ -367,6 +367,32 @@ function imageSource(node) {
     return readText(node, "source", "")
 }
 
+function imageFit(node) {
+    return readText(node, "fit", "contain")
+}
+
+// ---- viewport ----
+
+function viewportZoom(node) {
+    return readFraction(node, "zoom", 1)
+}
+
+function viewportOffset_x(node) {
+    return readFraction(node, "offset_x", 0)
+}
+
+function viewportOffset_y(node) {
+    return readFraction(node, "offset_y", 0)
+}
+
+function viewportFit(node) {
+    return readText(node, "fit", "contain")
+}
+
+function viewportRevision(node) {
+    return readNumber(node, "revision", 0)
+}
+
 // ---- badge ----
 
 function badgeCount(node) {

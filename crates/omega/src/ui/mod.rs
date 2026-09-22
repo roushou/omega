@@ -50,7 +50,7 @@ pub use control::{
     Button, Checkbox, Choice, ChoiceValue, Dialog, Disclosure, Dropdown, Field, Form, FormInput,
     List, Slider, TextArea, Toggle,
 };
-pub use display::{Badge, EmptyState, Graph, Image, Keycap, Progress};
+pub use display::{Badge, EmptyState, Fit, Graph, Image, Keycap, Progress};
 pub use layout::{Column, Grid, Row, Scroll, Separator, Spacer, Stack};
 pub use navigation::ViewError;
 pub use node::{Align, Emphasis, Node, Role, Size, Tone};
@@ -61,6 +61,8 @@ pub type Ui = View;
 
 mod view;
 pub use view::{Component, View};
+mod viewport;
+pub use viewport::{Viewport, ViewportGesture};
 
 #[cfg(test)]
 mod tests {

@@ -228,8 +228,18 @@ nodes! {
         low: Fraction,
         high: Fraction,
     },
-    /// A picture, by path or URL.
-    Image => "image" { source: Text },
+    /// A picture, by path or URL. `fit` selects how it fills its box.
+    Image => "image" { source: Text, fit: Text = "\"contain\"" },
+    /// A clipped, zoomable, pannable view of its content.
+    /// The renderer owns the live transform; the surface publishes `revision`
+    /// to command a new `zoom`/`offset`, and observes gestures as events.
+    Viewport => "viewport" {
+        zoom: Fraction = "1",
+        offset_x: Fraction,
+        offset_y: Fraction,
+        fit: Text = "\"contain\"",
+        revision: Number = "0",
+    },
     /// A small count pill.
     Badge => "badge" { count: Number, hidden_when_zero: Flag },
     /// A single key or chord, drawn as a keycap.
