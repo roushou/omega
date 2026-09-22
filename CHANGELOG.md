@@ -1,3 +1,49 @@
+## What's Changed in 0.5.0
+* feat(renderer): add image fit, EXIF orientation, and viewport gestures
+* docs: rewrite the capability reference + record phase 5 re-scope
+* feat(process): capture command output
+* feat(audio): add output sink catalogue
+* feat(ui): add multi-line textarea
+* feat(ui): add panel content helpers
+* feat(search): add typed local search ranking
+* docs: record desktop capability plan and progress
+* feat(events): derive idle, clipboard and battery events
+* feat(presentation): add service surfaces and osd timeout
+* feat(platform): add capture, clipboard, audio and notification state
+* feat(ui): add dropdown, checkbox, dialog and display primitives
+* docs: update README
+* chore: add one line spacing
+
+### Highlights
+
+* Images gained a `fit` mode (`contain`, `cover`, `fill`, `none`) and honor
+  embedded EXIF orientation. A new `viewport` node clips and transforms its
+  canvas with pointer-anchored wheel and pinch zoom and drag panning; the renderer
+  owns the live transform so gestures are immediate, and surfaces command changes
+  through a revision.
+* The platform gained capture, clipboard, audio-sink, and notification state, plus
+  derived idle, clipboard, and battery events. Service surfaces and OSD timeouts
+  support headless and transient presentations.
+* New UI primitives: multi-line `TextArea`, `Dropdown`, `Checkbox`, `Dialog`, and
+  display helpers, plus typed local search ranking and panel content helpers.
+* `omega::platform::process` can capture a command's bounded standard output.
+
+### Upgrade notes
+
+* Update configuration dependencies to 0.5.0 and rebuild with `omega build`.
+  Update the CLI, daemon (`omega daemon install`), and renderer
+  (`omega shell install`) together. Protocol 2 is unchanged, so 0.4.x daemons and
+  plugin binaries remain wire-compatible; a 0.4.x renderer does not understand
+  `image.fit` or the `viewport` node, so install the 0.5.0 renderer before
+  publishing views that use them.
+* `image` now fills its allocated box and applies EXIF orientation by default.
+  Explicit `width`/`height` still bound the box; `Fit::None` keeps the decoded
+  natural size.
+* Images accept a new `wheel` binding. The `viewport` node adds `wheel`, `drag`,
+  and `pinch` bindings with a `ViewportGesture` value.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.4.0...v0.5.0
+
 ## What's Changed in 0.4.0
 * feat(commands): add isolated command hosts
 * feat(commands): add typed plugin interoperability

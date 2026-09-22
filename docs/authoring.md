@@ -194,6 +194,58 @@ Keep private components in ordinary Rust modules. For cross-plugin reuse, create
 a library with `omega new desktop-ui --lib --into plugins/audio`, then add other
 consumers explicitly. Files and directories do not register components.
 
+## Display images and viewports
+
+`Image::new` accepts an absolute path, a `file:` URI, or a `data:` URI; an HTTP
+URL draws nothing. `Image::icon` resolves a freedesktop icon name through the
+host. By default a picture fills its allocated box and preserves its aspect
+ratio; `Image::fit` chooses `Contain`, `Cover`, `Fill`, or `None`, and
+`width`/`height` size the box. The renderer applies embedded EXIF orientation, so
+a rotated photo draws upright without re-encoding.
+
+```rust
+use omega::ui::{Fit, Image};
+
+let picture = Image::new("/home/me/photo.png")
+    .fit(Fit::Contain)
+    .fill_width()
+    .height(400);
+```
+
+`Viewport` clips and transforms one canvas with wheel, drag, and pinch gestures.
+The renderer owns the live transform so gestures are immediate; the surface
+observes them through `ViewportGesture` bindings and commands a new transform
+with `zoom`, `offset`, and a changed `revision`. A gesture reports the resulting
+`zoom` and `offset_x`/`offset_y`, the gesture origin `x`/`y`, and a drag's
+`dx`/`dy`.
+
+```rust
+use omega::{
+    View,
+    ui::{Fit, Image, Viewport, ViewportGesture},
+};
+
+enum Message {
+    Gesture(ViewportGesture),
+}
+
+fn canvas(events: &omega::surface::Events<Message>) -> View {
+    Viewport::new()
+        .fit(Fit::Contain)
+        .on_wheel(events.on(Message::Gesture))
+        .on_drag(events.on(Message::Gesture))
+        .on_pinch(events.on(Message::Gesture))
+        .fill_width()
+        .height(400)
+        .child(Image::new("/home/me/photo.png").fit(Fit::None))
+        .into()
+}
+```
+
+Track the reported transform in the model for a zoom readout or a later command.
+To reset or step the view, change `zoom`, `offset`, and `revision` together; the
+renderer adopts them only when `revision` changes.
+
 ## Preserve identity and editing state
 
 Assign `.key(item.id())` to children that can be inserted, removed, or reordered.

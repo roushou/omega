@@ -979,6 +979,15 @@ readers, SDK emission tests and the shell's explicit undrawn-prop list keep the
 vocabulary aligned. See the [renderer contract](../crates/omega-renderer/shell/README.md)
 for interaction, host integration and node implementation.
 
+Some nodes own high-frequency presentation state. A `viewport` keeps its live
+zoom and pan in QML so wheel, drag, and pinch gestures never wait on a
+round-trip; it reports the settled transform as events. The surface commands a
+new transform by changing `revision` alongside `zoom` and `offset`, and the
+renderer adopts those props only when the revision changes. A running gesture is
+never overwritten by a surface render, and a render never reloads the viewport's
+content. Images fill their allocated box according to `fit` and honor embedded
+EXIF orientation; `Fit::None` keeps the decoded natural size.
+
 ## Design constraints
 
 - Keep typed APIs concise for common desktop operations.
