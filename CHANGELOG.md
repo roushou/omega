@@ -1,3 +1,19 @@
+## What's Changed in 0.5.1
+* fix(cli): clear every omega patch when unlinking
+* fix(renderer): render the new primitives on Qt 6.4
+
+### Fixes
+
+* `omega link --published` now removes every `[patch.crates-io]` entry for an
+  Omega crate, not just the scaffolded ones. A stale `omega-proto` patch could
+  leave a config building from a local checkout after it reported using the
+  published crates.
+* Checkbox, Disclosure, and Toggle reconcile optimistic state without a binding
+  loop, and the multi-line editor detects edits without `TextEdit.textEdited`,
+  which Qt 6.4 lacks. The renderer passes its warning check on Qt 6.4 again.
+
+**Full Changelog**: https://github.com/roushou/omega/compare/v0.5.0...v0.5.1
+
 ## What's Changed in 0.5.0
 * feat(renderer): add image fit, EXIF orientation, and viewport gestures
 * docs: rewrite the capability reference + record phase 5 re-scope
