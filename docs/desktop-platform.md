@@ -3,8 +3,8 @@
 Maintainer design reference for composition and ownership boundaries.
 [Architecture](architecture.md) describes current runtime contracts,
 [open questions](design.md) tracks remaining work, and
-[desktop capabilities](desktop-capabilities.md) plans the expansion toward
-Omarchy plugin parity.
+[desktop capabilities](desktop-capabilities.md) is the reference for the
+authoring surface against Omarchy.
 The [architectural principles](principles.md) govern primitives, layering, and review.
 
 ## Purpose

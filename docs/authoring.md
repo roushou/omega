@@ -103,15 +103,11 @@ or `Actions::invoke_with(audio::SetVolume, Percent::whole(50))` for typed input.
 These examples require dependencies on libraries exporting those commands.
 The daemon resolves each command to its configured provider.
 
-More controls: `Checkbox::new(true).label("Autostart").on_change(SetAutostart)`,
-`Dropdown::new().option(...).on_select(SetPowerProfile)` (a collapsed [`Choice`]),
-`Disclosure::new("Advanced").on_toggle(...)` for revealing children, and
-`Dialog::new("Confirm").on_confirm(...)` for an inline confirm card. A numeric
-`Field` uses `Field::new("Age").numeric(0.0, 150.0, 1.0)` to constrain entry.
-Reusable row/panel layouts (`Detail`, `ItemRow`, `PanelHeader`, `Labelled`,
-`SearchSelect`) live under `omega::ui`.
-
-[`Choice`]: #compose-reusable-ui
+Other controls: `Checkbox`, `Dropdown` (a collapsed choice), `Disclosure` for
+revealing children, and `Dialog` for an inline confirm card. A numeric `Field`
+uses `Field::new("Age").numeric(0.0, 150.0, 1.0)`. Reusable row and panel layouts
+(`Detail`, `ItemRow`, `PanelHeader`, `Labelled`, `SearchSelect`) live under
+`omega::ui`.
 
 ### Separate command hosts
 
