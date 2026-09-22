@@ -48,6 +48,11 @@ impl<'a> CheckoutLink<'a> {
         Self { workspace }
     }
 
+    /// Whether a `[patch]` package belongs to the Omega workspace.
+    fn is_omega(name: &str) -> bool {
+        name == "omega" || name.starts_with("omega-")
+    }
+
     pub(crate) fn prepare(&self, source: Option<&SourceTree>) -> Result<PreparedLink<'a>> {
         let layout = self.workspace.layout();
         let mut config = FileEdit::read(layout.cargo_config())?;
@@ -69,14 +74,22 @@ impl<'a> CheckoutLink<'a> {
         let specs = Scaffold::omega_crates()
             .chain(Scaffold::PREVIEW_DEPENDENCIES.iter().filter(|_| preview))
             .collect::<Vec<_>>();
-        editor.update_patches(
-            Config::REGISTRY,
-            &Scaffold::omega_crates()
+        // Linking owns the scaffold crates. Unlinking must also clear an omega
+        // patch a config added directly, so `--published` leaves no local path.
+        let names: Vec<String> = match source {
+            Some(_) => Scaffold::omega_crates()
                 .chain(Scaffold::PREVIEW_DEPENDENCIES)
-                .map(|s| s.package())
-                .collect::<Vec<_>>(),
-            &patch,
-        )?;
+                .map(|spec| spec.package().to_string())
+                .collect(),
+            None => editor
+                .patches(Config::REGISTRY)?
+                .names()
+                .filter(|name| Self::is_omega(name))
+                .map(str::to_string)
+                .collect(),
+        };
+        let names = names.iter().map(String::as_str).collect::<Vec<_>>();
+        editor.update_patches(Config::REGISTRY, &names, &patch)?;
         config.replace(editor.to_string());
         let mut edits = Vec::new();
         if let Some(source) = source {

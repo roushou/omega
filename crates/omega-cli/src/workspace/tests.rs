@@ -329,6 +329,29 @@ fn linking_preserves_other_patches_and_dependency_options() {
 }
 
 #[test]
+fn unlinking_clears_omega_patches_it_did_not_add() {
+    let f = Fixture::new();
+    f.init();
+    f.write(
+        f.layout.cargo_config(),
+        "[patch.crates-io]\nomega-rs = { path = \"/checkout/omega\" }\nomega-proto = { path = \"/checkout/omega-proto\" } # added directly\nother = { path = \"/somewhere\" }\n",
+    );
+    let workspace = f.open();
+    CheckoutLink::new(&workspace)
+        .prepare(None)
+        .unwrap()
+        .apply()
+        .unwrap();
+    let config = std::fs::read_to_string(f.layout.cargo_config()).unwrap();
+    assert!(!config.contains("omega-rs"));
+    assert!(!config.contains("omega-proto"));
+    assert!(
+        config.contains("other = { path = \"/somewhere\" }"),
+        "unrelated patches must survive: {config}"
+    );
+}
+
+#[test]
 fn retry_completes_manifest_references_left_before_plugin_publication() {
     let f = Fixture::new();
     f.init();
