@@ -1,5 +1,10 @@
 # Omega
 
+[![CI](https://github.com/roushou/omega/actions/workflows/ci.yml/badge.svg)](https://github.com/roushou/omega/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/omega-rs.svg)](https://crates.io/crates/omega-rs)
+[![docs.rs](https://img.shields.io/docsrs/omega-rs)](https://docs.rs/omega-rs)
+[![license](https://img.shields.io/crates/l/omega-rs.svg)](https://github.com/roushou/omega/blob/main/LICENSE)
+
 _A declarative Rust framework and plugin runtime for [Omarchy](https://omarchy.org)._
 
 Omega lets you write plugins, compose your bar, and build interactive interfaces in Rust.
