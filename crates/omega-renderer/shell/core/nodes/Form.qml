@@ -59,6 +59,7 @@ Item {
                 host: QtObject {
                     readonly property var model: rootForm.fields[field.index]
                     readonly property var form: rootForm
+                    readonly property var navigation: rootForm.host.navigation
                     readonly property var theme: rootForm.host.theme
                     readonly property bool interactive: rootForm.host.interactive
                     readonly property color ink: rootForm.host.ink

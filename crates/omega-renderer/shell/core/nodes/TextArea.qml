@@ -96,40 +96,60 @@ Item {
 
         HoverHandler { id: hover }
 
-        TextEdit {
-            id: input
-            cursorVisible: activeFocus && area.host.theme.motion
-            objectName: "editor"
+        Flickable {
+            id: editorViewport
+            objectName: "editorViewport"
             anchors.fill: parent
             anchors.leftMargin: area.host.space(10)
             anchors.rightMargin: area.host.space(10)
             anchors.topMargin: area.host.space(8)
             anchors.bottomMargin: area.host.space(8)
-            wrapMode: TextEdit.Wrap
             clip: true
-            color: area.host.ink
-            font.family: area.host.fontFamily
-            font.pixelSize: area.textSize
-            selectByMouse: true
-            activeFocusOnTab: true
-            readOnly: area.controlled ? !area.enabled : !area.host.interactive
+            boundsBehavior: Flickable.StopAtBounds
+            contentWidth: width
+            contentHeight: input.height
+            onHeightChanged: Qt.callLater(revealCursor)
 
-            // TextEdit has no textEdited on Qt 6.4; a guarded textChanged is
-            // equivalent and programmatic writes are not edits.
-            onTextChanged: if (!area.setting) area.edited()
-            Accessible.role: Accessible.EditableText
-            Accessible.name: areaLabel.text
+            function revealCursor() {
+                var caret = input.cursorRectangle
+                var top = Math.min(contentY, caret.y)
+                top = Math.max(top, caret.y + caret.height - height)
+                contentY = Math.max(0, Math.min(top, contentHeight - height))
+            }
 
-            Text {
-                anchors.fill: parent
-                anchors.topMargin: area.host.space(8)
-                verticalAlignment: Text.AlignTop
-                text: Props.textareaPlaceholder(area.host.model)
-                color: Qt.darker(area.host.ink, 1.4)
+            TextEdit {
+                id: input
+                cursorVisible: activeFocus && area.host.theme.motion
+                objectName: "editor"
+                width: editorViewport.width
+                height: Math.max(implicitHeight, editorViewport.height)
+                onCursorRectangleChanged: editorViewport.revealCursor()
+                onActiveFocusChanged: if (activeFocus) editorViewport.revealCursor()
+                wrapMode: TextEdit.Wrap
+                color: area.host.ink
                 font.family: area.host.fontFamily
                 font.pixelSize: area.textSize
-                wrapMode: Text.Wrap
-                visible: input.text === ""
+                selectByMouse: true
+                activeFocusOnTab: true
+                readOnly: area.controlled ? !area.enabled : !area.host.interactive
+
+                // TextEdit has no textEdited on Qt 6.4; a guarded textChanged is
+                // equivalent and programmatic writes are not edits.
+                onTextChanged: if (!area.setting) area.edited()
+                Accessible.role: Accessible.EditableText
+                Accessible.name: areaLabel.text
+
+                Text {
+                    anchors.fill: parent
+                    anchors.topMargin: area.host.space(8)
+                    verticalAlignment: Text.AlignTop
+                    text: Props.textareaPlaceholder(area.host.model)
+                    color: Qt.darker(area.host.ink, 1.4)
+                    font.family: area.host.fontFamily
+                    font.pixelSize: area.textSize
+                    wrapMode: Text.Wrap
+                    visible: input.text === ""
+                }
             }
         }
     }

@@ -1,4 +1,5 @@
 import QtQuick
+import ".."
 import "../Props.js" as Props
 
 // Children in a scrollable viewport. The ViewNode wrapper bounds the height
@@ -6,6 +7,11 @@ import "../Props.js" as Props
 Flickable {
     id: scroll
     required property var host
+
+    readonly property var wanted: Props.children(scroll.host.model)
+    KeyedChildren { id: childRows }
+    onWantedChanged: childRows.reconcile(wanted)
+    Component.onCompleted: childRows.reconcile(wanted)
 
     clip: true
     contentWidth: content.implicitWidth
@@ -18,7 +24,7 @@ Flickable {
         width: scroll.width
 
         Repeater {
-            model: Props.children(scroll.host.model)
+            model: childRows
             delegate: child
         }
     }
@@ -27,10 +33,11 @@ Flickable {
         id: child
         Loader {
             id: cell
-            required property var modelData
+            required property var node
             Component.onCompleted: setSource("../ViewNode.qml", {
-                "model": cell.modelData,
+                "model": Qt.binding(function() { return cell.node }),
                 "session": Qt.binding(function() { return scroll.host.session }),
+                "navigation": Qt.binding(function() { return scroll.host.navigation || null }),
                 "theme": Qt.binding(function() { return scroll.host.theme }),
                 "assets": Qt.binding(function() { return scroll.host.assets }),
                 "foreground": Qt.binding(function() { return scroll.host.ink })

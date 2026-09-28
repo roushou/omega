@@ -66,7 +66,6 @@ ShellRoot {
     }
     QtObject {
         id: previewSession
-        property Navigation navigation: Navigation {}
         property var requests: requestsProxy
         function press(bound, value, key, event) {
             if (preview.captureMode) return false

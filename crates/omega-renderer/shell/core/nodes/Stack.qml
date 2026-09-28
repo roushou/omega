@@ -1,6 +1,6 @@
 import QtQuick
-import QtQml.Models
 import QtQuick.Layouts
+import ".."
 import "../Props.js" as Props
 
 // Row or column layout with keyed delegates. Load children by URL to support recursion.
@@ -14,7 +14,7 @@ Loader {
     sourceComponent: stack.column ? columnLayout : rowLayout
 
     // Retain matching delegates while updating their QVariantMap payloads.
-    ListModel { id: rows; dynamicRoles: true }
+    KeyedChildren { id: rows }
 
     readonly property var wanted: Props.children(stack.host.model)
 
@@ -30,47 +30,8 @@ Loader {
     onWantedChanged: stack.reconcile()
     Component.onCompleted: stack.reconcile()
 
-    // Remove what is gone, then walk the wanted order moving or inserting.
-    // Quadratic, which for a stack of this size costs less than the layout.
     function reconcile() {
-        var wanted = stack.wanted
-
-        function keyOf(node) {
-            return node && node.key ? node.key : ""
-        }
-
-        // Anything whose key is no longer wanted.
-        for (var i = rows.count - 1; i >= 0; i--) {
-            var held = rows.get(i).key
-            var stillWanted = false
-            for (var w = 0; w < wanted.length; w++) {
-                if (keyOf(wanted[w]) === held) { stillWanted = true; break }
-            }
-            if (!stillWanted) rows.remove(i)
-        }
-
-        for (var target = 0; target < wanted.length; target++) {
-            var key = keyOf(wanted[target])
-            var payload = JSON.stringify(wanted[target])
-
-            var found = -1
-            for (var j = target; j < rows.count; j++) {
-                if (rows.get(j).key === key) { found = j; break }
-            }
-
-            if (found === -1) {
-                rows.insert(target, { "key": key, "node": wanted[target], "payload": payload })
-                continue
-            }
-            if (found !== target) rows.move(found, target, 1)
-            // Include bindings and descendants: only identical wire payloads can be retained.
-            if (rows.get(target).payload !== payload) {
-                rows.setProperty(target, "node", wanted[target])
-                rows.setProperty(target, "payload", payload)
-            }
-        }
-
-        while (rows.count > wanted.length) rows.remove(rows.count - 1)
+        rows.reconcile(stack.wanted)
         // Refresh cached layout items before resize can access removed delegates (Qt 6.4).
         if (stack.item) stack.item.ensurePolished()
     }
@@ -131,8 +92,9 @@ Loader {
             Component.onCompleted: setSource("../ViewNode.qml", {
                 "model": child.node,
                 "session": Qt.binding(function() { return stack.host.session }),
-"theme": Qt.binding(function() { return stack.host.theme }),
-"assets": Qt.binding(function() { return stack.host.assets }),
+                "navigation": Qt.binding(function() { return stack.host.navigation || null }),
+                "theme": Qt.binding(function() { return stack.host.theme }),
+                "assets": Qt.binding(function() { return stack.host.assets }),
                 "foreground": Qt.binding(function() { return stack.host.ink }),
                 "axis": stack.column ? "column" : "row"
             })

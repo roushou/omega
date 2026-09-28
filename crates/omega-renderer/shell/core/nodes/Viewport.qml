@@ -90,22 +90,32 @@ Item {
         x: viewport.width / 2 + viewport.offsetX - width * viewport.scale / 2
         y: viewport.height / 2 + viewport.offsetY - height * viewport.scale / 2
 
-        // A viewport presents one canvas. Load it once and update the retained
-        // ViewNode's model in place, so a surface render never reloads the image.
+        // A matching canvas key and kind retain local state across payload updates.
         Loader {
             id: content
             readonly property var canvas: {
                 var children = Props.children(viewport.host.model)
                 return children && children.length > 0 ? children[0] : null
             }
-            onCanvasChanged: if (content.item) content.item.model = content.canvas
-            Component.onCompleted: if (content.canvas) setSource("../ViewNode.qml", {
-                "model": content.canvas,
-                "session": Qt.binding(function() { return viewport.host.session }),
-                "theme": Qt.binding(function() { return viewport.host.theme }),
-                "assets": Qt.binding(function() { return viewport.host.assets }),
-                "foreground": Qt.binding(function() { return viewport.host.ink })
-            })
+            onCanvasChanged: content.synchronize()
+            Component.onCompleted: content.synchronize()
+            function synchronize() {
+                if (!content.canvas) { setSource(""); return }
+                if (content.item && content.item.model.key === content.canvas.key
+                        && content.item.model.type === content.canvas.type) {
+                    content.item.model = content.canvas
+                    return
+                }
+                setSource("")
+                setSource("../ViewNode.qml", {
+                    "model": content.canvas,
+                    "session": Qt.binding(function() { return viewport.host.session }),
+                    "navigation": Qt.binding(function() { return viewport.host.navigation || null }),
+                    "theme": Qt.binding(function() { return viewport.host.theme }),
+                    "assets": Qt.binding(function() { return viewport.host.assets }),
+                    "foreground": Qt.binding(function() { return viewport.host.ink })
+                })
+            }
         }
     }
 

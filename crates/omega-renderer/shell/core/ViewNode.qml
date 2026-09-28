@@ -57,6 +57,7 @@ FocusScope {
     enabled: !node.disabled && !node.busy
     readonly property bool interactive: node.enabled && !node.pending
 
+    property Navigation navigation: Navigation {}
     property var session: null
     property var form: null
     readonly property bool pending: session !== null && (session.busy ? session.busy(model ? model.key : "") : session.requests.busy(model ? model.key : ""))
@@ -96,7 +97,8 @@ FocusScope {
         : content.implicitHeight + node.padding * 2
 
     // Controlled editors keep accepting local drafts while a change is in flight.
-    readonly property bool localEditing: node.model && node.model.type === "field" && Props.fieldControlled(node.model)
+    readonly property bool localEditing: node.model && ((node.model.type === "field" && Props.fieldControlled(node.model))
+        || (node.model.type === "textarea" && Props.textareaControlled(node.model)))
     opacity: node.enabled && (node.localEditing || !node.pending) ? 1.0 : 0.5
 
     function delegateFor(type) {
@@ -162,7 +164,7 @@ FocusScope {
         anchors.centerIn: parent
 
         width: Math.max(0, node.width - node.padding * 2)
-        height: Math.max(content.implicitHeight, node.height - node.padding * 2)
+        height: Math.max(0, node.height - node.padding * 2)
 
         readonly property string delegateUrl:
             node.model ? node.delegateFor(node.model.type) : ""

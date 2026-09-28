@@ -11,11 +11,9 @@ TestCase {
     height: 250
     property var calls: []
     Renderer.Requests { id: requestState }
-    Renderer.Navigation { id: navigationState }
     QtObject {
         id: testSession
         property var requests: requestState
-        property var navigation: navigationState
         function press(bound, value, key, event) { test.calls.push({value:value,event:event}); return requestState.begin(test.calls.length,key,Date.now()) }
     }
     Component { id: factory; Renderer.ViewNode { width: 350; session: testSession } }
@@ -132,14 +130,14 @@ TestCase {
         var view = createTemporaryObject(factory, test, {model:tree})
         var field = findChild(view, "query")
         tryVerify(function() { return findChild(field, "editor").activeFocus })
-        compare(navigationState.resolve("search/editor", field.navigationTarget),
-                navigationState.controls["results/items"])
+        compare(view.navigation.resolve("search/editor", field.navigationTarget),
+                view.navigation.controls["results/items"])
         keyClick(Qt.Key_Down)
         keyClick(Qt.Key_Return)
         tryCompare(test, "calls", [{value:"first",event:"activate"}])
         input.navigationTarget = "removed"
         view.model = JSON.parse(JSON.stringify(tree))
-        compare(navigationState.resolve("search/editor", field.navigationTarget), null)
+        compare(view.navigation.resolve("search/editor", field.navigationTarget), null)
     }
 
 }

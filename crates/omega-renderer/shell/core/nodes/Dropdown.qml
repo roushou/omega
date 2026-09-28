@@ -36,7 +36,8 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Math.max(dropdown.host.space(36), triggerRow.implicitHeight + dropdown.host.space(16))
+        implicitWidth: triggerRow.implicitWidth + dropdown.host.space(20)
+        implicitHeight: Math.max(dropdown.host.space(36), triggerRow.implicitHeight + dropdown.host.space(16))
         radius: dropdown.host.radius
         color: trigger.containsMouse ? dropdown.host.hoverFill : dropdown.host.idleFill
         activeFocusOnTab: true
@@ -72,6 +73,7 @@ Item {
                     setSource("../ViewNode.qml", {
                         "model": selected.node,
                         "session": Qt.binding(function() { return dropdown.host.session }),
+                        "navigation": Qt.binding(function() { return dropdown.host.navigation || null }),
                         "theme": Qt.binding(function() { return dropdown.host.theme }),
                         "assets": Qt.binding(function() { return dropdown.host.assets }),
                         "foreground": Qt.binding(function() { return dropdown.host.ink })
@@ -154,6 +156,7 @@ Item {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": optionRow.modelData,
                     "session": Qt.binding(function() { return dropdown.host.session }),
+                    "navigation": Qt.binding(function() { return dropdown.host.navigation || null }),
                     "theme": Qt.binding(function() { return dropdown.host.theme }),
                     "assets": Qt.binding(function() { return dropdown.host.assets }),
                     "foreground": Qt.binding(function() { return dropdown.host.ink })

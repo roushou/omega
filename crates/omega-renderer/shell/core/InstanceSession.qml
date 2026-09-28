@@ -3,7 +3,6 @@ import QtQuick
 // Control feedback belongs to one instance even when its transport serves several.
 QtObject {
     id: session
-    property Navigation navigation: Navigation {}
     required property var connection
     required property var snapshot
     readonly property var identity: snapshot ? snapshot.instance : null

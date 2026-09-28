@@ -1,6 +1,6 @@
 import QtQuick
 
-// Registry lifetime is one instance, so identical node keys in other windows cannot match.
+// Registry lifetime is one rendered root, including all of its descendant nodes.
 QtObject {
     property var sources: ({})
     function registerSource(key, source) { var next = Object.assign({}, sources); next[key] = source; sources = next }
@@ -8,7 +8,7 @@ QtObject {
     function ready(control) {
         for (var key in sources) {
             var source = sources[key]
-            if (source && resolve(key, source.navigationTarget) === control && !source.navigationReady) return false
+            if (source && source.visible && resolve(key, source.navigationTarget) === control && !source.navigationReady) return false
         }
         return true
     }
@@ -16,10 +16,13 @@ QtObject {
     function register(key, control) { var next = Object.assign({}, controls); next[key] = control; controls = next }
     function forget(key, control) { if (controls[key] !== control) return; var next = Object.assign({}, controls); delete next[key]; controls = next }
     function resolve(from, target) {
-        if (sources[from] && sources[from].navigationResolved) return controls[target] || null
-        var split = from.lastIndexOf("/")
-        var scoped = split < 0 ? target : from.substring(0, split + 1) + target.replace(/~/g, "~0").replace(/\//g, "~1")
-        return controls[scoped] || null
+        var key = target
+        if (!sources[from] || !sources[from].navigationResolved) {
+            var split = from.lastIndexOf("/")
+            key = split < 0 ? target : from.substring(0, split + 1) + target.replace(/~/g, "~0").replace(/\//g, "~1")
+        }
+        var control = controls[key]
+        return control && control.visible ? control : null
     }
     function move(from, target, direction) { var control = resolve(from, target); if (control) control.move(direction) }
     function activate(from, target) { var control = resolve(from, target); if (control) control.activate(control.selected) }

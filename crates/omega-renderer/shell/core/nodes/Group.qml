@@ -70,8 +70,9 @@ Row {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": segment.modelData,
                     "session": Qt.binding(function() { return group.host.session }),
-"theme": Qt.binding(function() { return group.host.theme }),
-"assets": Qt.binding(function() { return group.host.assets }),
+                    "navigation": Qt.binding(function() { return group.host.navigation || null }),
+                "theme": Qt.binding(function() { return group.host.theme }),
+                "assets": Qt.binding(function() { return group.host.assets }),
                     "foreground": Qt.binding(function() { return group.host.ink })
                 })
             }

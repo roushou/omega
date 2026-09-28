@@ -1,5 +1,5 @@
 import QtQuick
-import QtQml.Models
+import ".."
 import "../Props.js" as Props
 
 // Keyed delegates preserve rows across updates. Navigation is immediate in QML;
@@ -29,7 +29,7 @@ Rectangle {
         : Math.min(rows.contentHeight, list.cap)
 
     onWantedChanged: list.reconcile()
-    readonly property var navigation: host.session && host.session.navigation ? host.session.navigation : null
+    readonly property var navigation: host.navigation || null
     readonly property string registeredKey: host.model ? host.model.key : ""
     Component.onCompleted: { list.reconcile(); if (navigation) navigation.register(registeredKey, list) }
     Component.onDestruction: if (navigation) navigation.forget(registeredKey, list)
@@ -53,45 +53,9 @@ Rectangle {
         }
     }
 
-    function keyOf(node) {
-        return node && node.key ? node.key : ""
-    }
-
-    // Reconcile rows by key and update retained delegate payloads.
     function reconcile() {
-        var wanted = list.wanted
         var selectedKey = list.selected >= 0 && list.selected < held.count ? held.get(list.selected).key : null
-
-        for (var i = held.count - 1; i >= 0; i--) {
-            // Avoid a local named held: function-scoped var would shadow the model.
-            var existing = held.get(i).key
-            var stillWanted = false
-            for (var w = 0; w < wanted.length; w++) {
-                if (list.keyOf(wanted[w]) === existing) { stillWanted = true; break }
-            }
-            if (!stillWanted) held.remove(i)
-        }
-
-        for (var target = 0; target < wanted.length; target++) {
-            var key = list.keyOf(wanted[target])
-            var payload = JSON.stringify(wanted[target])
-            var found = -1
-            for (var j = target; j < held.count; j++) {
-                if (held.get(j).key === key) { found = j; break }
-            }
-            if (found === -1) {
-                held.insert(target, { "key": key, "node": wanted[target], "payload": payload })
-                continue
-            }
-            if (found !== target) held.move(found, target, 1)
-            // Include bindings and descendants: only identical wire payloads can be retained.
-            if (held.get(target).payload !== payload) {
-                held.setProperty(target, "node", wanted[target])
-                held.setProperty(target, "payload", payload)
-            }
-        }
-
-        while (held.count > wanted.length) held.remove(held.count - 1)
+        held.reconcile(list.wanted)
 
         list.selected = -1
         for (var index = 0; index < held.count; index++) {
@@ -112,7 +76,7 @@ Rectangle {
     }
 
     // Node payloads are QVariantMaps, including nested children and props.
-    ListModel { id: held; dynamicRoles: true }
+    KeyedChildren { id: held }
 
     ListView {
         id: rows
@@ -166,6 +130,7 @@ Rectangle {
                 Component.onCompleted: setSource("../ViewNode.qml", {
                     "model": Qt.binding(function() { return row.node }),
                     "session": Qt.binding(function() { return list.host.session }),
+                    "navigation": Qt.binding(function() { return list.host.navigation || null }),
                     "theme": Qt.binding(function() { return list.host.theme }),
                     "assets": Qt.binding(function() { return list.host.assets }),
                     "foreground": Qt.binding(function() { return list.host.ink })

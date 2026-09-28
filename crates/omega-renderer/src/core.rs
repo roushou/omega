@@ -13,6 +13,10 @@ impl Core {
     pub const SOURCE: &'static str = "crates/omega-renderer/shell/core";
     pub const FILES: &'static [Asset] = &[
         Asset {
+            name: "core/KeyedChildren.qml",
+            contents: include_str!("../shell/core/KeyedChildren.qml"),
+        },
+        Asset {
             name: "core/Keyboard.js",
             contents: include_str!("../shell/core/Keyboard.js"),
         },

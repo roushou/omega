@@ -153,6 +153,17 @@ keeps its identity when its theme or siblings change. `Theme.qml` provides defau
 tokens; `OmarchyTheme.qml` maps them to Omarchy's current `Color` and `Style`.
 `Assets.qml` accepts local files and image data URIs without fetching remote URLs.
 
+`KeyedChildren.qml` retains children of stacks, lists, grids, scroll containers,
+and disclosures by sibling key and node kind. Payload updates and reordering keep
+local drafts and focus; removing a child or changing its kind ends that state.
+Collapsing a disclosure hides its children without destroying their drafts.
+
+Node implicit dimensions describe preferred size, including padding. The parent
+allocates the actual width and height; the delegate receives that allocation minus
+padding, even when its natural content is larger. Scroll containers keep their
+content dimensions separate from their viewport dimensions. Multiline editors
+scroll their content to reveal the caret.
+
 The isolated normal-window harness uses this same core:
 
 ```sh
@@ -174,7 +185,10 @@ incoming resets until the input method commits.
 
 `Field::autofocus()` requests initial focus. `Field::navigate("results")` delegates
 Up/Down and Enter to `List::new().id("results")` in the same component scope without transferring text focus. Navigation is
-qualified by component and instance scope. `List::selected` / `on_select` support
+qualified by component and rendered-root scope. Each root owns a navigation
+registry shared by its descendants; separate roots sharing an instance transport
+remain isolated. Hidden controls cannot be navigation targets.
+`List::selected` / `on_select` support
 model-owned stable selection; disabled entries are skipped during navigation.
 
 Application icons use `Image::icon`: hosts inject local theme lookup into

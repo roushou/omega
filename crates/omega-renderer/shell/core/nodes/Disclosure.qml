@@ -1,10 +1,15 @@
 import QtQuick
+import ".."
 import "../Props.js" as Props
 
 // A heading that reveals or hides its children inline.
 Item {
     id: disclosure
     required property var host
+
+    readonly property var wanted: Props.children(disclosure.host.model)
+    KeyedChildren { id: childRows }
+    onWantedChanged: childRows.reconcile(wanted)
 
     readonly property var bound: Props.bind(host.model, "toggle")
     readonly property bool published: Props.disclosureOpen(host.model)
@@ -18,7 +23,7 @@ Item {
         target: disclosure.host
         function onPendingChanged() { if (!disclosure.host.pending) disclosure.sync() }
     }
-    Component.onCompleted: disclosure.sync()
+    Component.onCompleted: { childRows.reconcile(wanted); disclosure.sync() }
 
     readonly property bool pressable: disclosure.bound !== null && disclosure.host.interactive
 
@@ -38,7 +43,8 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Math.max(disclosure.host.space(32), title.implicitHeight + disclosure.host.space(8))
+        implicitWidth: title.implicitWidth + disclosure.host.space(16)
+        implicitHeight: Math.max(disclosure.host.space(32), title.implicitHeight + disclosure.host.space(8))
         radius: disclosure.host.radius
         color: headerHover.containsMouse ? disclosure.host.hoverFill : "transparent"
         activeFocusOnTab: true
@@ -71,7 +77,7 @@ Item {
         visible: disclosure.open
 
         Repeater {
-            model: disclosure.open ? Props.children(disclosure.host.model) : []
+            model: childRows
             delegate: child
         }
     }
@@ -80,10 +86,11 @@ Item {
         id: child
         Loader {
             id: cell
-            required property var modelData
+            required property var node
             Component.onCompleted: setSource("../ViewNode.qml", {
-                "model": cell.modelData,
+                "model": Qt.binding(function() { return cell.node }),
                 "session": Qt.binding(function() { return disclosure.host.session }),
+                "navigation": Qt.binding(function() { return disclosure.host.navigation || null }),
                 "theme": Qt.binding(function() { return disclosure.host.theme }),
                 "assets": Qt.binding(function() { return disclosure.host.assets }),
                 "foreground": Qt.binding(function() { return disclosure.host.ink })
