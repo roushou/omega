@@ -17,6 +17,18 @@ The same foundations support bar indicators, panels, independent overlays,
 normal windows, and isolated previews. The application launcher exercises them
 with real platform services; a full file explorer remains a future workload.
 
+## Delivery status
+
+The five foundation phases are complete: workspace and reusable renderer
+foundations, explicit instances and presentations, stateful surfaces and managed
+tasks, application services and the launcher, and isolated previews with regression
+tooling. These are implemented contracts described in [architecture](architecture.md).
+
+The separate [capability expansion](desktop-capabilities.md#delivery-status)
+records delivered scope and deferred domains. [Open design questions](design.md)
+tracks remaining runtime limitations; completion of the foundations does not
+resolve those limitations.
+
 ## Workspace composition
 
 ```text
@@ -26,14 +38,20 @@ with real platform services; a full file explorer remains a future workload.
   plugins/                   independently runnable features
     power/
     launcher/
-  crates/                 reusable Rust crates
+  commands/                  explicitly configured command hosts
+    audio-commands/
+  crates/                    reusable Rust crates
     desktop-ui/
 ```
 
 `system/` selects settings, presentations, placements, and desktop automation.
-Plugins expose surfaces, commands, and reactions. Libraries hold reusable UI,
-logic, or domain contracts without acquiring an implicit process lifecycle.
-Private components remain ordinary Rust modules; file names do not register UI.
+Plugins expose surfaces, commands, and reactions. Packages under `commands/`
+export command libraries and executables; the system document declares their
+[host deployment and lifetime](isolated-commands.md#hosting-policy). Directory
+membership alone does not start a command host. Libraries under `crates/` hold
+reusable UI, logic, or domain contracts without acquiring an implicit process
+lifecycle. Private components remain ordinary Rust modules; file names do not
+register UI.
 
 System code depends on plugins and libraries. Plugins depend on libraries and
 may consume another plugin’s typed published records. Reusable libraries should
@@ -54,7 +72,7 @@ configuration author.
 | Instance     | Owns a model, construction settings, bindings, and managed tasks |
 | Presentation | Describes where an instance appears and its visibility           |
 | Placement    | Gives a configured presentation a stable identity                |
-| Command      | Exposes a typed public plugin endpoint                           |
+| Command      | Exposes a typed endpoint served by a plugin or command host      |
 | Reaction     | Handles an external transition                                   |
 
 `Surface` declares a per-instance model, local messages, and a separate effect set.

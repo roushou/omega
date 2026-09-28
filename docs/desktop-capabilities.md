@@ -8,6 +8,35 @@ records composition decisions, and [design.md](design.md) tracks open questions.
 Parity means an author can build the same artifact from Rust. It does not mean
 exposing QML, raw shell strings, or in-process unsandboxed code.
 
+## Delivery status
+
+The capability expansion is shipped in 0.5.0; 0.5.1 adds renderer compatibility
+and CLI fixes. See the [release notes](../CHANGELOG.md). This sequence is separate
+from the completed [desktop platform foundations](desktop-platform.md#delivery-status).
+
+| Phase                           | Status                          | Delivered scope                                                                                                                                           |
+| ------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — UI primitives               | Complete                        | Dropdown, checkbox, inline dialog, display controls, and numeric fields; typed search, panel helpers, textarea, and image/viewport gestures also shipped. |
+| 2 — Platform state and controls | Complete for the selected scope | Capture/OCR/recording, plain-text clipboard, audio streams/input/output sinks, and Omega-owned notification state. Other domains remain deferred below.   |
+| 3 — Presentations and services  | Complete                        | Menus and timed OSDs as overlay refinements; headless, session-scoped services. Authentication surfaces remain out of scope.                              |
+| 4 — Events                      | Complete for observed state     | Idle transitions, clipboard changes, and battery-level payloads. Host-originated events remain deferred below.                                            |
+| 5 — Command polling             | Re-scoped and shipped           | `Shell::capture` supplies bounded command output; a surface owns its polling interval, result decoding, and model updates.                                |
+
+Phase 5 does not provide a `Poll<T>` reading or manifest-declared polling jobs.
+[`Shell::capture`](../crates/omega/src/platform/process.rs) is an effect requiring
+the spawn capability. It returns text with trailing whitespace trimmed and reports
+nonzero exits as errors. Surface behavior runs the effect and stores the result in
+its model; rendering reads that model.
+
+## Next work
+
+No further numbered phase is scheduled. Start the next capability change from a
+concrete consumer and its missing contract. For command polling, exercise the
+shipped capture effect in a real widget before introducing shared polling or
+decoding APIs. The deferred domains below need a consumer and an explicit owner
+before implementation. Cross-cutting runtime limitations remain in
+[open design questions](design.md).
+
 ## Authoring surface
 
 | Surface                 | Declared in                                      | Guarded by                                         |

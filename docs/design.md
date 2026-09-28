@@ -4,7 +4,9 @@ The [architecture](architecture.md) describes the implemented contracts, and the
 [desktop platform design](desktop-platform.md) records composition decisions.
 [Desktop capability surface](desktop-capabilities.md) is the reference for the
 UI primitives and platform capabilities an author can build with.
-This file tracks remaining limitations and future work.
+Its [delivery status](desktop-capabilities.md#delivery-status) distinguishes
+shipped phases, the command-polling re-scope, and deferred work. This file tracks
+remaining limitations and future work.
 
 [Command interoperability](command-interoperability.md) documents typed calls,
 scoped discovery, and the launcher integration. Dynamic permission adoption and
@@ -51,11 +53,13 @@ they share a placement ID.
 
 ## Feature boundaries
 
-`SetSetting` and `ToggleSetting` have no handler. Settings currently construct
-plugins from the desired document; changing them restarts affected plugins. Runtime
-setting changes need an owner and persistence semantics consistent with that model.
-The broker [coverage test](../crates/omega-platform/tests/coverage.rs) lists the
-unserved actions and separates broker responsibilities from daemon responsibilities.
+Settings construct plugins from the desired document; changing them restarts
+affected plugins. Runtime setting changes need an owner and persistence semantics
+consistent with that model. `SetSetting` and `ToggleSetting` are absent from the
+[action vocabulary](../crates/omega-proto/schema/omega/action.proto); their tags
+are reserved. The broker [coverage test](../crates/omega-platform/tests/coverage.rs)
+assigns each declared topic and action to a broker, the daemon, or an explicit
+unsupported entry. Both unsupported lists are currently empty.
 
 Untrusted native plugins would require OS isolation. Manifest capabilities are
 session authorization, not hostile-code confinement. A WASM or sandboxed tier

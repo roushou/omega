@@ -3,16 +3,18 @@
 ## Commands
 
 ```bash
-cargo build
-cargo test
-cargo clippy --all-targets
-cargo fmt --check
+cargo build --workspace --all-targets --locked
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo fmt --all --check
 crates/omega-renderer/shell/lint.sh   # QML static checks
 ```
 
-All five must pass; CI runs the same five. `protoc` is bundled — nothing to
-install. `cargo test -- --ignored` additionally runs `omega-cli/tests/e2e.rs`,
-which compiles a scaffolded config through the real binaries.
+All five must pass. `mise run check` also runs headless renderer tests, document
+formatting, dependency checks, and workflow checks. CI runs these task groups plus
+the MSRV check; see [development](docs/development.md) and `mise.toml` for commands.
+`protoc` is bundled — nothing to install. `mise run test:e2e` runs the ignored CLI
+tests that compile scaffolded configurations through the real binaries.
 
 ## Architectural rules
 
@@ -251,7 +253,8 @@ omega-cli      the binary
   file edits, shared build validation, installation, daemon verification, publication,
   and shell activation. `--bare` stops at workspace files. A failed step stops the
   sequence; service failures are errors and completed effects remain recoverable.
-- `omega new <name>` scaffolds a plugin; --lib scaffolds a reusable library.
+- `omega new <name>` scaffolds a plugin; --lib scaffolds a reusable library;
+  --command-host scaffolds a command library and executable under `commands/`.
 - `omega new` wires Cargo dependencies and prints a placement hint without editing
   layout. Scaffold::placement_hint uses fully qualified exported symbols.
 - `omega daemon` runs the daemon; `omega daemon install` installs its service.
@@ -289,14 +292,16 @@ omega-cli      the binary
 - `docs/previews.md` — preview setup and visual testing
 - `docs/architecture.md` — runtime contracts and maintainer reference
 - `docs/design.md` — open design questions and feature boundaries
+- `docs/desktop-capabilities.md` — capability delivery status, next work, and deferred domains
 - `crates/omega-proto/schema/README.md` — schema rules
 - `crates/omega-renderer/shell/README.md` — the renderer and the shell socket
 
 ## Desktop workspace foundations
 
-- Config members are `system/`, `plugins/<name>/`, or `crates/<name>/`.
-  Only plugins are queried for manifests and supervised. Libraries never imply
-  execution. Runtime generation paths remain `plugins/`.
+- Config members are `system/`, `plugins/<name>/`, `commands/<name>/`, or
+  `crates/<name>/`. Membership under `plugins/` declares supervised execution;
+  command hosts require an explicit system-document deployment. Libraries never
+  imply execution. Runtime plugin generation paths remain `plugins/`.
 - Source mutations and builds hold the same workspace lock.
 - `Document::with` composes a `DocumentExtension`. Core document validation never
   interprets Omarchy payloads: `omega-omarchy` handles and projects them first.
