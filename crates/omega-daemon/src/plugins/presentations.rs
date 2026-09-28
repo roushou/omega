@@ -681,44 +681,46 @@ impl PluginRegistry {
             if view.requested != PresentationState::Visible as i32 {
                 return Err(Refusal::precondition("presentation is not visible"));
             }
-            let dispatch =
-                match omega_proto::Interaction::resolve(&view.view, &event.node, &event.event)? {
-                    omega_proto::Interaction::Local(binding) => {
-                        BoundInteraction::Local(invoke::Op::SurfaceEvent(omega::SurfaceEvent {
-                            instance: Some(key.wire()),
-                            binding: binding.get(),
-                            value: event.value.clone(),
-                        }))
+            let dispatch = match omega_proto::Interaction::resolve_value(
+                &view.view,
+                &event.node,
+                &event.event,
+                event.value.as_ref(),
+            )? {
+                omega_proto::Interaction::Local(binding) => {
+                    BoundInteraction::Local(invoke::Op::SurfaceEvent(omega::SurfaceEvent {
+                        instance: Some(key.wire()),
+                        binding: binding.get(),
+                        value: event.value.clone(),
+                    }))
+                }
+                omega_proto::Interaction::Command {
+                    plugin: target,
+                    command,
+                    signature,
+                    args,
+                } => {
+                    let manifest = record
+                        .session
+                        .as_ref()
+                        .and_then(|session| session.manifest.as_ref())
+                        .ok_or_else(|| Refusal::precondition("plugin has no session manifest"))?;
+                    let grants = crate::authorization::Grants::of(manifest)?;
+                    let mut args = args.to_vec();
+                    if let Some(value) = &event.value {
+                        args.push(value.clone());
                     }
-                    omega_proto::Interaction::Command {
-                        plugin: target,
-                        command,
-                        signature,
-                        args,
-                    } => {
-                        let manifest = record
-                            .session
-                            .as_ref()
-                            .and_then(|session| session.manifest.as_ref())
-                            .ok_or_else(|| {
-                                Refusal::precondition("plugin has no session manifest")
-                            })?;
-                        let grants = crate::authorization::Grants::of(manifest)?;
-                        let mut args = args.to_vec();
-                        if let Some(value) = &event.value {
-                            args.push(value.clone());
-                        }
-                        BoundInteraction::Command(
-                            omega::InvokePlugin {
-                                plugin: target.to_owned(),
-                                command: command.to_owned(),
-                                signature: signature.to_vec(),
-                                args,
-                            },
-                            grants,
-                        )
-                    }
-                };
+                    BoundInteraction::Command(
+                        omega::InvokePlugin {
+                            plugin: target.to_owned(),
+                            command: command.to_owned(),
+                            signature: signature.to_vec(),
+                            args,
+                        },
+                        grants,
+                    )
+                }
+            };
             (
                 record.name.clone(),
                 record

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import "../core"
+import "../core/Props.js" as Props
 
 ShellRoot {
     id: preview
@@ -67,10 +68,12 @@ ShellRoot {
     QtObject {
         id: previewSession
         property var requests: requestsProxy
-        function press(bound, value, key, event) {
+        function press(bound, value, key, event, model) {
             if (preview.captureMode) return false
+            var encoded = Props.encodeEvent(model, event, value)
+            if (encoded === null) { requestsProxy.error = "Unsupported control value for this event."; return false }
             return preview.send({interact: {revision: preview.snapshot.view.revision, node: key, event: event,
-                value: value === undefined ? null : preview.value(value)}}, key)
+                value: encoded === undefined ? null : encoded}}, key)
         }
     }
     Requests { id: requestsProxy }
@@ -78,16 +81,6 @@ ShellRoot {
         target: requests
         function onSettled(key, success) { requestsProxy.error = requests.error; requestsProxy.settled(key, success) }
         function onPendingChanged() { requestsProxy.pending = requests.pending }
-    }
-    function value(input) {
-        if (input === null) return {}
-        if (typeof input === "boolean") return {boolValue: input}
-        if (typeof input === "number") return Number.isInteger(input) ? {intValue: String(input)} : {doubleValue: input}
-        if (typeof input === "string") return {stringValue: input}
-        if (Array.isArray(input)) return {list: {values: input.map(preview.value)}}
-        var entries = {}
-        for (var key in input) entries[key] = preview.value(input[key])
-        return {map: {entries: entries}}
     }
     FloatingWindow {
         id: window

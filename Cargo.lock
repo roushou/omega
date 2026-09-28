@@ -1095,6 +1095,8 @@ version = "0.5.1"
 dependencies = [
  "omega-keyboard",
  "omega-proto",
+ "omega-rs",
+ "serde_json",
  "sha2",
 ]
 

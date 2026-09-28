@@ -31,7 +31,7 @@ TestCase {
         link.onLine(JSON.stringify({streamId:link.attachmentStream,result:{instances:{instances:[]}}}))
         snapshot(link, "1")
         compare(external.connection.tree, laptop.connection.tree)
-        verify(external.connection.interact(link.instance, "1", "volume", "press"))
+        verify(external.connection.interact(link.instance, "1", "volume", "press", undefined, {type:"button"}))
         verify(laptop.connection.busy("volume"))
         snapshot(link, "2")
         compare(external.connection.revision, "2")

@@ -4,9 +4,11 @@ use std::collections::HashMap;
 
 use super::Node;
 
-/// Invalid IDs or references in a completed view.
+/// Invalid IDs, references, or node contracts in a completed view.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ViewError {
+    #[error(transparent)]
+    Contract(#[from] omega_proto::ui::ContractError),
     #[error("node {node:?} has an empty ID")]
     EmptyId { node: String },
     #[error("duplicate ID {id:?} on nodes {first:?} and {second:?} in the same component scope")]

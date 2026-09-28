@@ -6,7 +6,7 @@ Rectangle {
     id: badge
     required property var host
 
-    readonly property int count: Props.badgeCount(host.model)
+    readonly property double count: Props.badgeCount(host.model)
     visible: !(Props.badgeHidden_when_zero(host.model) && badge.count === 0)
 
     implicitWidth: label.implicitWidth + host.space(10)

@@ -32,23 +32,38 @@ pub struct ViewportGesture {
 
 impl Default for ViewportGesture {
     fn default() -> Self {
-        Self {
-            zoom: 1.0,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            x: 0.0,
-            y: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-        }
+        Self::from_values(&Values::new())
     }
 }
 
 impl ViewportGesture {
-    fn number(values: &Values, name: &str) -> Option<f64> {
+    fn number(values: &Values, name: &str) -> f64 {
         values
             .get::<f64>(name)
             .or_else(|| values.get::<i64>(name).map(|held| held as f64))
+            .unwrap_or_else(|| {
+                let field = omega_proto::ui::Payload::Gesture
+                    .fields()
+                    .iter()
+                    .find(|field| field.name == name)
+                    .expect("declared gesture field");
+                match field.fallback {
+                    Some(omega_proto::ui::DefaultValue::Fraction(value)) => value,
+                    _ => unreachable!("gesture fields have fractional defaults"),
+                }
+            })
+    }
+
+    fn from_values(values: &Values) -> Self {
+        Self {
+            zoom: Self::number(values, "zoom"),
+            offset_x: Self::number(values, "offset_x"),
+            offset_y: Self::number(values, "offset_y"),
+            x: Self::number(values, "x"),
+            y: Self::number(values, "y"),
+            dx: Self::number(values, "dx"),
+            dy: Self::number(values, "dy"),
+        }
     }
 }
 
@@ -60,15 +75,10 @@ impl Input for ViewportGesture {
         let values: Values = args
             .get(0)
             .ok_or_else(|| Error::invalid("expected a viewport gesture map"))?;
-        Ok(Self {
-            zoom: Self::number(&values, "zoom").unwrap_or(1.0),
-            offset_x: Self::number(&values, "offset_x").unwrap_or(0.0),
-            offset_y: Self::number(&values, "offset_y").unwrap_or(0.0),
-            x: Self::number(&values, "x").unwrap_or(0.0),
-            y: Self::number(&values, "y").unwrap_or(0.0),
-            dx: Self::number(&values, "dx").unwrap_or(0.0),
-            dy: Self::number(&values, "dy").unwrap_or(0.0),
-        })
+        if !omega_proto::ui::Payload::Gesture.accepts(Some(&values.clone().into_value())) {
+            return Err(Error::invalid("invalid viewport gesture payload"));
+        }
+        Ok(Self::from_values(&values))
     }
 
     fn encode(self) -> Vec<Value> {
@@ -110,7 +120,9 @@ impl Viewport {
         }
     }
 
-    /// Append content. The viewport measures its natural size to fit it.
+    /// Set the sole canvas, measured at its natural size before fitting.
+    /// Compose multiple elements inside a layout. A second nonempty child is
+    /// rejected by [`crate::View::try_into_tree`].
     pub fn child(mut self, child: impl Into<crate::View>) -> Self {
         self.node = self.node.child(child);
         self
@@ -122,7 +134,8 @@ impl Viewport {
         self
     }
 
-    /// Magnification over the fitted size. `1.0` fits.
+    /// Magnification over the fitted size, from `0.25` through `8.0`. `1.0` fits.
+    /// Out-of-range or nonfinite values fail view finalization.
     pub fn zoom(mut self, zoom: f64) -> Self {
         self.node = self.node.fraction("zoom", zoom);
         self
@@ -148,7 +161,7 @@ impl Viewport {
         self
     }
 
-    /// Receive pan deltas.
+    /// Receive the total pan delta and final transform when a drag ends.
     pub fn on_drag(mut self, drag: impl Into<Bind<ViewportGesture>>) -> Self {
         self.node = self.node.on("drag", drag);
         self

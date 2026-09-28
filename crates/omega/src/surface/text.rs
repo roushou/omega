@@ -17,6 +17,9 @@ impl Input for TextEdit {
         let values: Values = args
             .get(0)
             .ok_or_else(|| Error::invalid("expected a text edit map"))?;
+        if !omega_proto::ui::Payload::TextEdit.accepts(Some(&values.clone().into_value())) {
+            return Err(Error::invalid("invalid text edit payload"));
+        }
         Ok(Self {
             text: values
                 .get("text")
@@ -29,6 +32,7 @@ impl Input for TextEdit {
                 .ok_or_else(|| Error::invalid("edit requires a reset revision"))?,
         })
     }
+
     fn encode(self) -> Vec<omega_proto::omega::Value> {
         vec![
             Values::new()

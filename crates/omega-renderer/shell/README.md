@@ -128,8 +128,11 @@ to the host's `Color` singleton.
 
 ## Generated readers and checks
 
-`omega-proto::NodeKind` defines the property vocabulary. `Props.js` is generated
-from it and handles protobuf JSON values, including integers encoded as strings.
+`omega-proto::NodeKind` defines properties, typed defaults, numeric bounds, child
+structure, and native event payloads. `Props.js` generates readers and event
+encoders from that contract, including integers encoded as strings. Preview and
+live sessions use the same encoder. Structured edits encode revisions as integers;
+gesture coordinates and slider values encode as doubles even when integral.
 `Icons.js` maps the protocol's icon names to glyphs. Do not edit either generated
 file by hand.
 
@@ -144,6 +147,16 @@ crates/omega-renderer/shell/test.sh
 Rust tests compare generated readers and embedded assets with the checked-in
 files. QML lint checks the renderer sources; the offscreen interaction suite
 checks view updates, input state, forms, and control behavior.
+
+The generated `tests/fixtures/UiContract.js` vectors cover every native event.
+QML checks canonical JSON encoding, and SDK tests decode those same vectors through
+the public input types. Unknown native events are not emitted by this renderer;
+declared shortcuts carry no control value.
+
+A viewport accepts one optional canvas. Put a layout inside that canvas to compose
+multiple elements. `contain` and `cover` preserve aspect ratio, `fill` scales each
+axis independently, and `none` preserves natural size before zoom. Drag events
+report the final transform and total applied deltas. Zoom is between 0.25 and 8.
 
 ## Shared renderer inputs
 

@@ -112,6 +112,8 @@ struct ViewRegistry {
 #[derive(Debug, thiserror::Error)]
 pub enum PublishError {
     #[error(transparent)]
+    Contract(#[from] omega_proto::ui::ContractError),
+    #[error(transparent)]
     Readiness(#[from] omega_proto::ui::ReadinessError),
     #[error(transparent)]
     State(#[from] crate::state::StateError),
@@ -263,6 +265,7 @@ impl Hub {
         if size > Self::PUBLICATION_BYTES {
             return Err(PublishError::TooLarge);
         }
+        update.view.validate_contract()?;
         let mut registry = self.views();
 
         if registry.latest.get(&update.instance).is_some_and(|prev| {
@@ -413,6 +416,30 @@ impl Default for Hub {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_known_contract_cannot_replace_a_retained_view() {
+        use crate::refusal::Refusable;
+        let hub = Hub::new();
+        let mut update = Fixture::view("panel", 1);
+        update.view.root.as_mut().unwrap().r#type = "text".into();
+        hub.publish_view(update.clone()).unwrap();
+        let previous = hub.view(&update.instance).unwrap();
+        update
+            .view
+            .root
+            .as_mut()
+            .unwrap()
+            .children
+            .push(omega_proto::omega::ViewNode::default());
+        let error = hub.publish_view(update.clone()).unwrap_err();
+        assert!(matches!(error, PublishError::Contract(_)));
+        assert_eq!(
+            error.refusal().code,
+            omega_proto::omega::ErrorCode::InvalidArgument
+        );
+        assert_eq!(hub.view(&update.instance).unwrap().view, previous.view);
+    }
 
     struct Fixture;
     impl Fixture {

@@ -1,6 +1,11 @@
-//! Node kinds and property schemas shared by the SDK and renderer.
-//! The SDK validates emitted properties against this table; the renderer generates
-//! `Props.js` accessors from it. Wire kind names remain strings for forward compatibility.
+//! Shared UI vocabulary: properties, child structure, and interaction payloads.
+//! SDK finalization and daemon publication validate known contracts. Unknown kinds
+//! and properties remain extensible; renderer readers and encoders are generated here.
+
+mod contract;
+mod payload;
+pub use contract::{Children, ContractError};
+pub use payload::{Event, Payload, PayloadField};
 
 use std::fmt;
 
@@ -11,7 +16,7 @@ use std::fmt;
 pub enum PropKind {
     /// `Value::string_value`.
     Text,
-    /// `Value::int_value` — written as a JSON string, and parsed back.
+    /// Unsigned 32-bit value in `Value::int_value`, written as a JSON string.
     Number,
     /// `Value::double_value`.
     Fraction,
@@ -22,47 +27,48 @@ pub enum PropKind {
 }
 
 impl PropKind {
-    /// JavaScript fallback value for an absent property.
-    pub const fn zero(self) -> &'static str {
+    /// Default for an omitted property.
+    pub const fn default_value(self) -> DefaultValue {
         match self {
-            Self::Text => "\"\"",
-            Self::Number => "0",
-            Self::Fraction => "0",
-            Self::Flag => "false",
-            Self::Fractions => "[]",
-        }
-    }
-
-    /// The generated reader that decodes this kind.
-    pub const fn reader(self) -> &'static str {
-        match self {
-            Self::Text => "readText",
-            Self::Number => "readNumber",
-            Self::Fraction => "readFraction",
-            Self::Flag => "readFlag",
-            Self::Fractions => "readFractions",
+            Self::Text => DefaultValue::Text(""),
+            Self::Number => DefaultValue::Integer(0),
+            Self::Fraction => DefaultValue::Fraction(0.0),
+            Self::Flag => DefaultValue::Flag(false),
+            Self::Fractions => DefaultValue::EmptyList,
         }
     }
 }
 
+/// Typed default for an omitted property; `Absent` preserves optional presence.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DefaultValue {
+    Absent,
+    Text(&'static str),
+    Integer(u32),
+    Fraction(f64),
+    Flag(bool),
+    EmptyList,
+}
+
 /// One property of one node kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Prop {
     /// The key it takes in `ViewNode.props`.
     pub name: &'static str,
     pub kind: PropKind,
-    /// What a shell reads when it is absent, as a JavaScript literal.
-    pub fallback: &'static str,
+    pub fallback: DefaultValue,
+    /// Inclusive numeric bounds, in addition to the property encoding.
+    pub range: Option<(f64, f64)>,
 }
 
 /// Declare node kinds and their properties, including nonzero default values.
 macro_rules! nodes {
     (
-        shared { $( $(#[$smeta:meta])* $sprop:ident : $skind:ident $(= $sfall:literal)? ),* $(,)? }
+        shared { $( $(#[$smeta:meta])* $sprop:ident : $skind:ident $([$smin:literal, $smax:literal])? $(= $sfall:expr)? ),* $(,)? }
         $(
             $(#[$kmeta:meta])*
-            $Kind:ident => $kname:literal {
-                $( $(#[$pmeta:meta])* $prop:ident : $pkind:ident $(= $fall:literal)? ),* $(,)?
+            $Kind:ident => $kname:literal [$children:ident; $($event:ident : $payload:ident),*] {
+                $( $(#[$pmeta:meta])* $prop:ident : $pkind:ident $([$min:literal, $max:literal])? $(= $fall:expr)? ),* $(,)?
             }
         ),* $(,)?
     ) => {
@@ -83,6 +89,16 @@ macro_rules! nodes {
                 }
             }
 
+            /// Child structure accepted by this kind.
+            pub const fn children(self) -> Children {
+                match self { $(Self::$Kind => Children::$children,)* }
+            }
+
+            /// Native events and their control-value encodings. Shortcuts carry no value.
+            pub const fn events(self) -> &'static [Event] {
+                match self { $(Self::$Kind => &[$(Event { name: stringify!($event), payload: Payload::$payload },)*],)* }
+            }
+
             /// The props only this kind carries. [`SHARED`] is the rest.
             pub const fn props(self) -> &'static [Prop] {
                 match self {
@@ -93,6 +109,7 @@ macro_rules! nodes {
                             name: stringify!($prop),
                             kind: PropKind::$pkind,
                             fallback: nodes!(@fallback $pkind $(, $fall)?),
+                            range: nodes!(@range $($min, $max)?),
                         },)*];
                         PROPS
                     })*
@@ -105,11 +122,14 @@ macro_rules! nodes {
             name: stringify!($sprop),
             kind: PropKind::$skind,
             fallback: nodes!(@fallback $skind $(, $sfall)?),
+            range: nodes!(@range $($smin, $smax)?),
         },)*];
     };
 
-    (@fallback $kind:ident) => { PropKind::$kind.zero() };
-    (@fallback $kind:ident, $fallback:literal) => { $fallback };
+    (@range) => { None };
+    (@range $min:literal, $max:literal) => { Some(($min as f64, $max as f64)) };
+    (@fallback $kind:ident) => { PropKind::$kind.default_value() };
+    (@fallback $kind:ident, $fallback:expr) => { $fallback };
 }
 
 nodes! {
@@ -127,7 +147,7 @@ nodes! {
         /// Space around it, in the shell's plugins.
         pad: Number,
         /// Original list or choice value, independent of its scoped render key.
-        selection_key: Text = "null",
+        selection_key: Text = DefaultValue::Absent,
         /// Shown when someone hovers it.
         tooltip: Text,
         /// Drawn, but not usable.
@@ -141,43 +161,43 @@ nodes! {
     }
 
     /// Children in a row or a column.
-    Stack => "stack" {
+    Stack => "stack" [Many; ] {
         /// `"row"` or `"column"`.
-        align: Text = "\"row\"",
+        align: Text = DefaultValue::Text("row"),
         gap: Number,
     },
     /// Text with a semantic size role. Unknown size names fall back to body size.
-    Text => "text" {
+    Text => "text" [None; ] {
         text: Text,
-        size: Text = "\"body\"",
+        size: Text = DefaultValue::Text("body"),
     },
     /// Named glyph with an optional semantic size. Unset size uses the theme icon size.
-    Icon => "icon" {
+    Icon => "icon" [None; ] {
         name: Text,
         size: Text,
     },
     /// A heading over a section of a panel.
-    Header => "header" { text: Text },
+    Header => "header" [None; ] { text: Text },
     /// A rule between sections.
-    Separator => "separator" {},
+    Separator => "separator" [None; ] {},
     /// Blank space. Sized by the shared `width` and `height`.
-    Spacer => "spacer" {},
+    Spacer => "spacer" [None; ] {},
     /// Children in a fixed number of columns.
-    Grid => "grid" {
-        columns: Number = "1",
+    Grid => "grid" [Many; ] {
+        columns: Number [1, 2147483647] = DefaultValue::Integer(1),
         gap: Number,
     },
     /// Something to press.
-    Button => "button" { label: Text, icon: Text, flat: Flag },
+    Button => "button" [None; press: None] { label: Text, icon: Text, flat: Flag },
     /// A reading the user can drag.
-    Slider => "slider" { value: Fraction },
+    Slider => "slider" [None; change: Percent] { value: Fraction [0.0, 1.0] },
     /// Something on or off.
-    Toggle => "toggle" { on: Flag },
+    Toggle => "toggle" [None; change: Flag] { on: Flag },
     /// A labelled box that is ticked or not.
-    Checkbox => "checkbox" { on: Flag, label: Text },
+    Checkbox => "checkbox" [None; change: Flag] { on: Flag, label: Text },
     /// Text input with optional model value and controlled-edit metadata.
-    Form => "form" { label: Text },
-    Field => "field" {
+    Form => "form" [Fields; submit: FormFields] { label: Text },
+    Field => "field" [None; submit: Text, change: TextEdit] {
         size: Text,
         navigation: Text, controlled: Flag, edit_revision: Number, reset_revision: Number, autofocus: Flag,
         label: Text,
@@ -192,8 +212,8 @@ nodes! {
         step: Fraction,
     },
     /// Multi-line text input with the same controlled-edit metadata as a field.
-    TextArea => "textarea" {
-        rows: Number = "4",
+    TextArea => "textarea" [None; change: TextEdit] {
+        rows: Number [1, 4294967295u32] = DefaultValue::Integer(4),
         label: Text,
         placeholder: Text,
         controlled: Flag,
@@ -203,51 +223,51 @@ nodes! {
         value: Text,
     },
     /// Rows to pick from, which owns its own cursor.
-    List => "list" { gap: Number, selected: Text = "null" },
+    List => "list" [Many; select: Text, activate: Text] { gap: Number, selected: Text = DefaultValue::Absent },
     /// One of several options, chosen by key.
-    Group => "group" { selected: Text = "null" },
+    Group => "group" [Many; select: Text] { selected: Text = DefaultValue::Absent },
     /// A collapsed select that opens to its keyed options.
-    Dropdown => "dropdown" {
-        selected: Text = "null",
+    Dropdown => "dropdown" [Many; select: Text] {
+        selected: Text = DefaultValue::Absent,
         placeholder: Text,
     },
     /// A heading that reveals or hides its children.
-    Disclosure => "disclosure" { title: Text, open: Flag },
+    Disclosure => "disclosure" [Many; toggle: Flag] { title: Text, open: Flag },
     /// A confirm card with primary and dismiss actions.
-    Dialog => "dialog" {
+    Dialog => "dialog" [None; confirm: None, cancel: None, dismiss: None] {
         title: Text,
         body: Text,
         confirm: Text,
         cancel: Text,
     },
     /// How full something is.
-    Progress => "progress" { value: Fraction },
+    Progress => "progress" [None; ] { value: Fraction [0.0, 1.0] },
     /// Numeric series with optional explicit scale bounds.
-    Graph => "graph" {
+    Graph => "graph" [None; ] {
         points: Fractions,
         low: Fraction,
         high: Fraction,
     },
     /// A picture, by path or URL. `fit` selects how it fills its box.
-    Image => "image" { source: Text, fit: Text = "\"contain\"" },
+    Image => "image" [None; wheel: Fraction] { source: Text, fit: Text = DefaultValue::Text("contain") },
     /// A clipped, zoomable, pannable view of its content.
     /// The renderer owns the live transform; the surface publishes `revision`
     /// to command a new `zoom`/`offset`, and observes gestures as events.
-    Viewport => "viewport" {
-        zoom: Fraction = "1",
+    Viewport => "viewport" [Canvas; wheel: Gesture, drag: Gesture, pinch: Gesture] {
+        zoom: Fraction [0.25, 8.0] = DefaultValue::Fraction(1.0),
         offset_x: Fraction,
         offset_y: Fraction,
-        fit: Text = "\"contain\"",
-        revision: Number = "0",
+        fit: Text = DefaultValue::Text("contain"),
+        revision: Number,
     },
     /// A small count pill.
-    Badge => "badge" { count: Number, hidden_when_zero: Flag },
+    Badge => "badge" [None; ] { count: Number, hidden_when_zero: Flag },
     /// A single key or chord, drawn as a keycap.
-    Keycap => "keycap" { label: Text },
+    Keycap => "keycap" [None; ] { label: Text },
     /// An empty, loading, or failed state with a heading and message.
-    Status => "status" { title: Text, message: Text, icon: Text },
+    Status => "status" [None; ] { title: Text, message: Text, icon: Text },
     /// Children in a scrollable viewport.
-    Scroll => "scroll" {},
+    Scroll => "scroll" [Many; ] {},
 }
 
 impl NodeKind {

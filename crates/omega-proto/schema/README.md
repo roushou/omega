@@ -187,3 +187,43 @@ bounded startup errors, and invocation counts. Its recent failures contain only
 command identity, invocation identity, timing, and outcome codes. Caller-scoped
 catalogues include failures only for visible commands. `CommandHostPhase` is a
 closed enum; an unspecified phase is unknown, not idle or healthy.
+
+## UI vocabulary and behavior
+
+[`NodeKind`](../src/ui/mod.rs) owns the extensible UI vocabulary on top of
+`ViewNode`: property encodings, typed defaults, inclusive numeric bounds, allowed
+children, and native event payloads. SDK view finalization also rejects vocabulary
+that this version does not declare. Daemon publication validates known contracts
+while preserving extensions from newer peers. A malformed publication returns `INVALID_ARGUMENT` and
+does not replace the retained tree. Unknown properties and event names remain
+extensible. Unknown node kinds are opaque, including their descendants.
+
+Leaves accept no children; layouts and choices accept sequences; forms accept
+fields with unique nonempty names; viewports accept at most one canvas. Compose
+multiple viewport elements inside a layout. Integer properties use nonnegative
+32-bit values in `int_value`; fractions and fraction lists must be finite.
+Viewport zoom is bounded to 0.25–8 and slider/progress fractions to 0–1.
+
+| Event family                                     | Control value                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| Button press, dialog actions, declared shortcuts | Absent                                                                      |
+| Toggle, checkbox, disclosure changes             | Boolean                                                                     |
+| List and choice selection, field submission      | String                                                                      |
+| Slider changes                                   | Double between 0 and 1                                                      |
+| Image wheel                                      | Finite double                                                               |
+| Field and textarea edits                         | Map: string `text`, unsigned `revision` and `reset`                         |
+| Form submission                                  | Map of strings                                                              |
+| Viewport wheel, drag, pinch                      | Map of finite doubles: `zoom`, `offset_x`, `offset_y`, `x`, `y`, `dx`, `dy` |
+
+Edit fields are required. Missing gesture fields default to zoom 1 and zero
+coordinates/deltas; supplied fields must have valid types. Additional fields are ignored.
+Integral gesture coordinates from older renderers are accepted, but canonical
+encoders always emit doubles. Edit revisions are encoded as protobuf JSON integer
+strings, including values above the signed 32-bit range. Fixed command arguments
+keep their declared encoding; these rules govern the appended control value.
+
+The daemon validates known event payloads against the retained node after
+identity, freshness, availability, and binding checks. Preview/harness dispatch
+uses the same resolver. The renderer generates event encoders from this vocabulary
+and shares them between live and preview transports. Cross-language fixtures test
+canonical protobuf JSON against QML encoding and SDK input decoding.

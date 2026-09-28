@@ -4,7 +4,10 @@
 
 use std::fmt::Write as _;
 
-use omega_proto::{NodeKind, Prop, ui::SHARED};
+use omega_proto::{
+    NodeKind, Prop, PropKind,
+    ui::{DefaultValue, Payload, SHARED},
+};
 
 /// The generated reader module.
 #[derive(Debug)]
@@ -63,6 +66,20 @@ impl Props {
             }
         }
 
+        out.push_str("\nvar contracts = {\n");
+        for kind in NodeKind::ALL {
+            let _ = write!(
+                out,
+                "    {:?}: {{children: {:?}, events: {{",
+                kind.name(),
+                kind.children().name()
+            );
+            for event in kind.events() {
+                let _ = write!(out, "{:?}: {},", event.name, Self::payload(event.payload));
+            }
+            out.push_str("}},\n");
+        }
+        out.push_str("}\n");
         out.push_str(Self::EPILOGUE);
         out
     }
@@ -71,10 +88,57 @@ impl Props {
         let _ = write!(
             out,
             "\nfunction {accessor}(node) {{\n    return {}(node, {:?}, {})\n}}\n",
-            prop.kind.reader(),
+            Self::reader(prop.kind),
             prop.name,
-            prop.fallback
+            Self::fallback(prop.fallback)
         );
+    }
+
+    fn reader(kind: PropKind) -> &'static str {
+        match kind {
+            PropKind::Text => "readText",
+            PropKind::Number => "readNumber",
+            PropKind::Fraction => "readFraction",
+            PropKind::Flag => "readFlag",
+            PropKind::Fractions => "readFractions",
+        }
+    }
+
+    fn fallback(value: DefaultValue) -> String {
+        match value {
+            DefaultValue::Absent => "null".into(),
+            DefaultValue::Text(value) => format!("{value:?}"),
+            DefaultValue::Integer(value) => value.to_string(),
+            DefaultValue::Fraction(value) => value.to_string(),
+            DefaultValue::Flag(value) => value.to_string(),
+            DefaultValue::EmptyList => "[]".into(),
+        }
+    }
+
+    fn payload(payload: Payload) -> String {
+        Self::payload_default(payload, None)
+    }
+
+    fn payload_default(payload: Payload, fallback: Option<DefaultValue>) -> String {
+        let fields: Vec<_> = payload
+            .fields()
+            .iter()
+            .map(|field| {
+                format!(
+                    "{:?}:{}",
+                    field.name,
+                    Self::payload_default(field.payload, field.fallback)
+                )
+            })
+            .collect();
+        format!(
+            "{{kind:{:?},fields:{{{}}},fallback:{}}}",
+            payload.name(),
+            fields.join(","),
+            fallback
+                .map(Self::fallback)
+                .unwrap_or_else(|| "undefined".into())
+        )
     }
 
     /// Shared protobuf JSON decoders and non-property node helpers.
@@ -137,24 +201,44 @@ function bind(node, event) {
     return bound && (bound.command || (bound.local && bound.local !== "0")) ? bound : null
 }
 
-// Encode a JavaScript control value as a protobuf JSON Value.
-// Numbers use doubleValue; explicit int64 values require string encoding.
-function encode(value) {
-    switch (typeof value) {
-        case "boolean": return { "boolValue": value }
-        case "number": return { "doubleValue": value }
-        case "string": return { "stringValue": value }
-        case "object": {
-            if (value === null || Array.isArray(value)) return null
+// Select the encoding from the node and event, never JavaScript numeric nesting.
+// null rejects malformed/unknown events; undefined is a valid no-value event.
+function encodeEvent(node, event, value) {
+    if (!node) return null
+    var shortcuts = node.shortcuts || []
+    for (var i = 0; i < shortcuts.length; i++) {
+        if (shortcuts[i].event === event) return encodePayload({kind: "none"}, value)
+    }
+    var contract = contracts[node.type]
+    var shape = contract && contract.events[event]
+    return shape ? encodePayload(shape, value) : null
+}
+
+function encodePayload(shape, value) {
+    if (value === undefined && shape.fallback !== undefined) value = shape.fallback
+    switch (shape.kind) {
+        case "none": return value === undefined ? undefined : null
+        case "text": return typeof value === "string" ? {stringValue: value} : null
+        case "flag": return typeof value === "boolean" ? {boolValue: value} : null
+        case "unsigned": return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295
+            ? {intValue: String(value)} : null
+        case "percent": return typeof value === "number" && value >= 0 && value <= 1 ? {doubleValue: value} : null
+        case "fraction":
+        case "real": return typeof value === "number" && Number.isFinite(value) ? {doubleValue: value} : null
+        case "edit":
+        case "gesture":
+        case "form": {
+            if (!value || typeof value !== "object" || Array.isArray(value)) return null
             var fields = Object.create(null)
-            for (var key in value) {
-                if (!Object.prototype.hasOwnProperty.call(value, key)) continue
-                var item = value[key]
-                fields[key] = typeof item === "number" && Number.isSafeInteger(item)
-                    ? { intValue: String(item) } : encode(item)
-                if (fields[key] === null) return null
+            var names = shape.kind === "form" ? Object.keys(value) : Object.keys(shape.fields)
+            for (var i = 0; i < names.length; i++) {
+                var key = names[i]
+                var held = Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined
+                var field = encodePayload(shape.kind === "form" ? {kind: "text"} : shape.fields[key], held)
+                if (field === null) return null
+                fields[key] = field
             }
-            return { map: { entries: fields } }
+            return {map: {entries: fields}}
         }
         default: return null
     }

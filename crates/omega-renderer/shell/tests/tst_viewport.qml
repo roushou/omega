@@ -82,11 +82,18 @@ TestCase {
 
     function test_drag_reports_settled_transform() {
         test.submitted = null
+        viewport.adopt()
+        var beforeX = viewport.offsetX
+        var beforeY = viewport.offsetY
         // The published initial offset is (30, -10); a drag of (30, -10) adds to it.
         mouseDrag(viewport, 100, 100, 30, -10)
         verify(test.submitted !== null)
         compare(test.submittedEvent, "drag")
         verify(test.submitted.offset_x > 30)
         verify(test.submitted.offset_y < -10)
+        fuzzyCompare(test.submitted.dx, viewport.offsetX - beforeX, 0.001)
+        fuzzyCompare(test.submitted.dy, viewport.offsetY - beforeY, 0.001)
+        compare(viewport.x, 0)
+        compare(viewport.y, 0)
     }
 }

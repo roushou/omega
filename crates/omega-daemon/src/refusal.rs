@@ -123,6 +123,7 @@ impl Refusable for crate::hub::PublishError {
     fn refusal(&self) -> Refusal {
         match self {
             Self::Readiness(error) => Refusal::invalid(error.to_string()),
+            Self::Contract(error) => error.into(),
             Self::State(error) => error.refusal(),
             Self::TooLarge => Refusal::too_large(self.to_string()),
             Self::Full | Self::RevisionExhausted => Refusal::exhausted(self.to_string()),

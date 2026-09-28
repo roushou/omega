@@ -84,10 +84,16 @@ impl<S: Surface> SurfaceHarness<S> {
         event: &str,
         input: I,
     ) -> Result<(), Error> {
-        match omega_proto::Interaction::resolve(drawn.tree(), key, event)? {
-            omega_proto::Interaction::Local(binding) => self
-                .instance
-                .event(binding.get(), Args::new(input.encode())),
+        let values = input.encode();
+        if values.len() > 1 {
+            return Err(Error::invalid(
+                "interaction accepts at most one control value",
+            ));
+        }
+        match omega_proto::Interaction::resolve_value(drawn.tree(), key, event, values.first())? {
+            omega_proto::Interaction::Local(binding) => {
+                self.instance.event(binding.get(), Args::new(values))
+            }
             omega_proto::Interaction::Command { .. } => {
                 Err(Error::invalid("expected a local binding"))
             }

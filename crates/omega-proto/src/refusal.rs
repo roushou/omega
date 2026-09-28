@@ -9,6 +9,12 @@ pub struct Refusal {
     pub message: String,
 }
 
+impl From<&crate::ui::ContractError> for Refusal {
+    fn from(error: &crate::ui::ContractError) -> Self {
+        Self::invalid(error.to_string())
+    }
+}
+
 impl Refusal {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {

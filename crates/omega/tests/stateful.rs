@@ -243,7 +243,7 @@ fn viewport_gestures_round_trip_and_accept_integer_fields() {
         gesture
     );
 
-    // The renderer encodes whole-number pointer positions as int64 strings.
+    // Legacy integral coordinates and omitted gesture fields remain decodable.
     let value = Values::new()
         .with("zoom", 1.0)
         .with("x", 300_i64)
@@ -251,6 +251,14 @@ fn viewport_gestures_round_trip_and_accept_integer_fields() {
         .into_value();
     let decoded = ViewportGesture::decode(Args::new(vec![value])).unwrap();
     assert_eq!((decoded.x, decoded.y), (300.0, 200.0));
+    assert_eq!(decoded.dx, 0.0);
+    let empty = Values::new().into_value();
+    assert_eq!(
+        ViewportGesture::decode(Args::new(vec![empty])).unwrap(),
+        ViewportGesture::default()
+    );
+    let malformed = Values::new().with("zoom", "not a number").into_value();
+    assert!(ViewportGesture::decode(Args::new(vec![malformed])).is_err());
 }
 
 #[derive(omega::Surface)]

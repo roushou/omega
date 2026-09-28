@@ -423,6 +423,36 @@ function statusIcon(node) {
     return readText(node, "icon", "")
 }
 
+var contracts = {
+    "stack": {children: "many", events: {}},
+    "text": {children: "none", events: {}},
+    "icon": {children: "none", events: {}},
+    "header": {children: "none", events: {}},
+    "separator": {children: "none", events: {}},
+    "spacer": {children: "none", events: {}},
+    "grid": {children: "many", events: {}},
+    "button": {children: "none", events: {"press": {kind:"none",fields:{},fallback:undefined},}},
+    "slider": {children: "none", events: {"change": {kind:"percent",fields:{},fallback:undefined},}},
+    "toggle": {children: "none", events: {"change": {kind:"flag",fields:{},fallback:undefined},}},
+    "checkbox": {children: "none", events: {"change": {kind:"flag",fields:{},fallback:undefined},}},
+    "form": {children: "fields", events: {"submit": {kind:"form",fields:{},fallback:undefined},}},
+    "field": {children: "none", events: {"submit": {kind:"text",fields:{},fallback:undefined},"change": {kind:"edit",fields:{"text":{kind:"text",fields:{},fallback:undefined},"revision":{kind:"unsigned",fields:{},fallback:undefined},"reset":{kind:"unsigned",fields:{},fallback:undefined}},fallback:undefined},}},
+    "textarea": {children: "none", events: {"change": {kind:"edit",fields:{"text":{kind:"text",fields:{},fallback:undefined},"revision":{kind:"unsigned",fields:{},fallback:undefined},"reset":{kind:"unsigned",fields:{},fallback:undefined}},fallback:undefined},}},
+    "list": {children: "many", events: {"select": {kind:"text",fields:{},fallback:undefined},"activate": {kind:"text",fields:{},fallback:undefined},}},
+    "group": {children: "many", events: {"select": {kind:"text",fields:{},fallback:undefined},}},
+    "dropdown": {children: "many", events: {"select": {kind:"text",fields:{},fallback:undefined},}},
+    "disclosure": {children: "many", events: {"toggle": {kind:"flag",fields:{},fallback:undefined},}},
+    "dialog": {children: "none", events: {"confirm": {kind:"none",fields:{},fallback:undefined},"cancel": {kind:"none",fields:{},fallback:undefined},"dismiss": {kind:"none",fields:{},fallback:undefined},}},
+    "progress": {children: "none", events: {}},
+    "graph": {children: "none", events: {}},
+    "image": {children: "none", events: {"wheel": {kind:"fraction",fields:{},fallback:undefined},}},
+    "viewport": {children: "canvas", events: {"wheel": {kind:"gesture",fields:{"zoom":{kind:"real",fields:{},fallback:1},"offset_x":{kind:"real",fields:{},fallback:0},"offset_y":{kind:"real",fields:{},fallback:0},"x":{kind:"real",fields:{},fallback:0},"y":{kind:"real",fields:{},fallback:0},"dx":{kind:"real",fields:{},fallback:0},"dy":{kind:"real",fields:{},fallback:0}},fallback:undefined},"drag": {kind:"gesture",fields:{"zoom":{kind:"real",fields:{},fallback:1},"offset_x":{kind:"real",fields:{},fallback:0},"offset_y":{kind:"real",fields:{},fallback:0},"x":{kind:"real",fields:{},fallback:0},"y":{kind:"real",fields:{},fallback:0},"dx":{kind:"real",fields:{},fallback:0},"dy":{kind:"real",fields:{},fallback:0}},fallback:undefined},"pinch": {kind:"gesture",fields:{"zoom":{kind:"real",fields:{},fallback:1},"offset_x":{kind:"real",fields:{},fallback:0},"offset_y":{kind:"real",fields:{},fallback:0},"x":{kind:"real",fields:{},fallback:0},"y":{kind:"real",fields:{},fallback:0},"dx":{kind:"real",fields:{},fallback:0},"dy":{kind:"real",fields:{},fallback:0}},fallback:undefined},}},
+    "badge": {children: "none", events: {}},
+    "keycap": {children: "none", events: {}},
+    "status": {children: "none", events: {}},
+    "scroll": {children: "many", events: {}},
+}
+
 // ---- what a node is, besides its props ----
 
 // Return the node's event binding or null. Arguments retain protobuf JSON encoding.
@@ -432,24 +462,44 @@ function bind(node, event) {
     return bound && (bound.command || (bound.local && bound.local !== "0")) ? bound : null
 }
 
-// Encode a JavaScript control value as a protobuf JSON Value.
-// Numbers use doubleValue; explicit int64 values require string encoding.
-function encode(value) {
-    switch (typeof value) {
-        case "boolean": return { "boolValue": value }
-        case "number": return { "doubleValue": value }
-        case "string": return { "stringValue": value }
-        case "object": {
-            if (value === null || Array.isArray(value)) return null
+// Select the encoding from the node and event, never JavaScript numeric nesting.
+// null rejects malformed/unknown events; undefined is a valid no-value event.
+function encodeEvent(node, event, value) {
+    if (!node) return null
+    var shortcuts = node.shortcuts || []
+    for (var i = 0; i < shortcuts.length; i++) {
+        if (shortcuts[i].event === event) return encodePayload({kind: "none"}, value)
+    }
+    var contract = contracts[node.type]
+    var shape = contract && contract.events[event]
+    return shape ? encodePayload(shape, value) : null
+}
+
+function encodePayload(shape, value) {
+    if (value === undefined && shape.fallback !== undefined) value = shape.fallback
+    switch (shape.kind) {
+        case "none": return value === undefined ? undefined : null
+        case "text": return typeof value === "string" ? {stringValue: value} : null
+        case "flag": return typeof value === "boolean" ? {boolValue: value} : null
+        case "unsigned": return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295
+            ? {intValue: String(value)} : null
+        case "percent": return typeof value === "number" && value >= 0 && value <= 1 ? {doubleValue: value} : null
+        case "fraction":
+        case "real": return typeof value === "number" && Number.isFinite(value) ? {doubleValue: value} : null
+        case "edit":
+        case "gesture":
+        case "form": {
+            if (!value || typeof value !== "object" || Array.isArray(value)) return null
             var fields = Object.create(null)
-            for (var key in value) {
-                if (!Object.prototype.hasOwnProperty.call(value, key)) continue
-                var item = value[key]
-                fields[key] = typeof item === "number" && Number.isSafeInteger(item)
-                    ? { intValue: String(item) } : encode(item)
-                if (fields[key] === null) return null
+            var names = shape.kind === "form" ? Object.keys(value) : Object.keys(shape.fields)
+            for (var i = 0; i < names.length; i++) {
+                var key = names[i]
+                var held = Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined
+                var field = encodePayload(shape.kind === "form" ? {kind: "text"} : shape.fields[key], held)
+                if (field === null) return null
+                fields[key] = field
             }
-            return { map: { entries: fields } }
+            return {map: {entries: fields}}
         }
         default: return null
     }

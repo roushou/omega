@@ -168,21 +168,19 @@ QtObject {
 
     function busy(key) { return link.instance ? requests.busy(link.instance.id + "/" + key) : false }
 
-    function press(bound, value, key, event) {
-        return link.interact(link.instance, link.revision, key, event, value)
+    function press(bound, value, key, event, model) {
+        return link.interact(link.instance, link.revision, key, event, value, model)
     }
 
-    function interact(identity, revision, key, event, value) {
+    function interact(identity, revision, key, event, value, model) {
         if (!link.attached || !identity) {
             requests.error = "Not attached; interaction was not sent."
             return false
         }
         var interaction = { instance: identity, revision: String(revision), node: key, event: event }
-        if (value !== undefined) {
-            var encoded = Props.encode(value)
-            if (encoded === null) { requests.error = "Unsupported control value."; return false }
-            interaction.value = encoded
-        }
+        var encoded = Props.encodeEvent(model, event, value)
+        if (encoded === null) { requests.error = "Unsupported control value for this event."; return false }
+        if (encoded !== undefined) interaction.value = encoded
         var stream = link.allocateStream()
         if (!requests.begin(stream, identity.id + "/" + key, Date.now())) return false
         if (!link.send({ streamId: stream, invoke: { interact: interaction } })) {

@@ -617,13 +617,41 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
     let snapshot = fixture.plugins.inspect_instances(None).instances.remove(0);
     let mut renderer = fixture.observer().await;
     renderer.ask(Fixture::attachment(vec![1, 2, 5, 7, 8])).await;
-    let event = omega::Interact {
+    let mut event = omega::Interact {
         instance: first.instance.clone(),
         revision: snapshot.view.unwrap().revision,
         node: "button".into(),
         event: "press".into(),
         value: Some("input".into_value()),
     };
+    Fixture::refusal(
+        renderer.ask(invoke::Op::Interact(event.clone())).await,
+        omega::ErrorCode::InvalidArgument,
+    );
+    let root = tree.root.as_mut().unwrap();
+    root.r#type = "field".into();
+    let binding = root.events.remove("press").unwrap();
+    root.events.insert("submit".into(), binding);
+    fixture
+        .plugins
+        .publish_instance(
+            &common::plugin_name("example"),
+            &omega::PublishView {
+                instance: first.instance.clone(),
+                surface_id: "panel".into(),
+                view: Some(tree.clone()),
+            },
+        )
+        .unwrap();
+    event.event = "submit".into();
+    event.revision = fixture
+        .plugins
+        .inspect_instances(None)
+        .instances
+        .remove(0)
+        .view
+        .unwrap()
+        .revision;
     assert_eq!(
         renderer.ask(invoke::Op::Interact(event.clone())).await,
         result::Outcome::Value("input".into_value())
@@ -632,7 +660,7 @@ async fn local_events_are_resolved_from_the_retained_tree_not_public_commands() 
         .as_mut()
         .unwrap()
         .events
-        .get_mut("press")
+        .get_mut("submit")
         .unwrap()
         .command = "activate".into();
     fixture

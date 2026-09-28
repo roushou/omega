@@ -5,7 +5,8 @@ package omega;
 import "omega/value.proto";
 
 // Declarative view nodes with stable keys for renderer reconciliation.
-// Supported kinds are defined by the protocol node table; unknown wire kinds render nothing.
+// Properties, defaults, child structure, and event payloads are defined by
+// omega-proto::NodeKind. Unknown wire kinds render nothing.
 
 message ViewTree {
   ViewNode root = 1;
@@ -29,7 +30,7 @@ message ViewNode {
   string key = 1;               // stable per position, for the reconciler
   string type = 2;              // "box" | "text" | "button" | "progress" | "icon" | ...
   map<string, Value> props = 3;
-  repeated ViewNode children = 4;
+  repeated ViewNode children = 4; // cardinality and kinds follow NodeKind's contract
 
   // Bindings indexed by event name, such as press, change, submit, or activate.
   // Unknown event names are ignored. Properties and bindings use separate maps.

@@ -19,4 +19,7 @@ omega-proto.workspace = true
 sha2 = "0.10"
 
 [dev-dependencies]
+omega = { package = "omega-rs", path = "../omega", version = "0.5.1" }
 omega-keyboard.workspace = true
+omega-proto = { workspace = true, features = ["json"] }
+serde_json.workspace = true

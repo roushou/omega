@@ -232,9 +232,9 @@ impl TextArea {
         }
     }
 
-    /// Set the visible height in rows.
+    /// Set the visible height in rows, with a minimum of one.
     pub fn rows(mut self, rows: u32) -> Self {
-        self.node = self.node.number("rows", rows);
+        self.node = self.node.number("rows", rows.max(1));
         self
     }
 

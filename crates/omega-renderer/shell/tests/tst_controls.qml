@@ -52,7 +52,7 @@ TestCase {
         form.submit()
         compare(test.submitted.ssid, "Home")
         compare(test.submitted.password, "secret")
-        var encoded = Props.encode(test.submitted)
+        var encoded = Props.encodeEvent({type:"form"}, "submit", test.submitted)
         compare(encoded.map.entries.ssid.stringValue, "Home")
         host.pending = true
         test.submitted = null

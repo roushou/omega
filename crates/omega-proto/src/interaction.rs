@@ -44,6 +44,26 @@ impl<'a> Interaction<'a> {
     /// # Ok::<(), omega_proto::Refusal>(())
     /// ```
     pub fn resolve(tree: &'a ViewTree, key: &str, event: &str) -> Result<Self, Refusal> {
+        Self::resolve_inner(tree, key, event, None)
+    }
+
+    /// Resolve an interaction and validate its control value against the retained
+    /// node's known event contract. Unknown events remain extensible.
+    pub fn resolve_value(
+        tree: &'a ViewTree,
+        key: &str,
+        event: &str,
+        value: Option<&Value>,
+    ) -> Result<Self, Refusal> {
+        Self::resolve_inner(tree, key, event, Some(value))
+    }
+
+    fn resolve_inner(
+        tree: &'a ViewTree,
+        key: &str,
+        event: &str,
+        value: Option<Option<&Value>>,
+    ) -> Result<Self, Refusal> {
         let root = tree
             .root
             .as_ref()
@@ -70,6 +90,10 @@ impl<'a> Interaction<'a> {
             .events
             .get(event)
             .ok_or_else(|| Refusal::invalid("node has no binding for this event"))?;
+        if let Some(value) = value {
+            node.validate_event(event, value)
+                .map_err(|error| Refusal::from(&error))?;
+        }
         match NonZeroU64::new(binding.local) {
             Some(local) => {
                 if !binding.command.is_empty()

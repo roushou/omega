@@ -11,8 +11,8 @@ Rectangle {
 
     readonly property var bound: Props.bind(host.model, "activate")
     readonly property var wanted: Props.children(host.model)
-    readonly property int gap: Props.listGap(host.model)
-    readonly property int fixedHeight: Props.height(host.model)
+    readonly property double gap: Props.listGap(host.model)
+    readonly property double fixedHeight: Props.height(host.model)
 
     // Keyboard cursor index. `-1` means no row is selected.
     property int selected: -1

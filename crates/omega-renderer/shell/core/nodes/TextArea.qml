@@ -11,7 +11,7 @@ Item {
     readonly property string given: Props.textareaValue(host.model)
     property alias text: input.text
     readonly property int textSize: host.fontSize
-    readonly property int rows: Math.max(1, Props.textareaRows(host.model))
+    readonly property double rows: Math.max(1, Props.textareaRows(host.model))
 
     readonly property bool controlled: Props.textareaControlled(host.model)
     property bool composing: input.inputMethodComposing
@@ -22,8 +22,8 @@ Item {
     property var lastGiven: null
     readonly property bool requestPending: !!host.pending
     onRequestPendingChanged: flush.restart()
-    property int editRevision: 0
-    property int resetRevision: 0
+    property double editRevision: 0
+    property double resetRevision: 0
     property bool queuedEdit: false
     property var sentBinding: null
     // A programmatic text write is not a user edit.

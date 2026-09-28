@@ -65,7 +65,7 @@ fn called() -> BTreeSet<String> {
 }
 
 /// Wire-format helpers outside the node-property vocabulary.
-const HAND_WRITTEN: &[&str] = &["bind", "encode", "children", "prop"];
+const HAND_WRITTEN: &[&str] = &["bind", "encodeEvent", "children", "prop"];
 
 /// Declared properties not consumed by the renderer. Each entry requires a reason.
 const NOT_DRAWN: &[&str] = &[];

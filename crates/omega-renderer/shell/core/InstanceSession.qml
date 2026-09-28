@@ -21,9 +21,9 @@ QtObject {
             feedback.settled(key.substring(session.prefix.length), success)
         }
     }
-    function press(bound, value, key, event) {
+    function press(bound, value, key, event, model) {
         var admitted = session.connection.interact(session.identity,
-            session.snapshot && session.snapshot.view ? session.snapshot.view.revision || "0" : "0", key, event, value)
+            session.snapshot && session.snapshot.view ? session.snapshot.view.revision || "0" : "0", key, event, value, model)
         feedback.error = admitted ? "" : session.connection.requests.error
         return admitted
     }

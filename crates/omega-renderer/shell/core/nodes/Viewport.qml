@@ -22,16 +22,19 @@ Item {
         switch (fit) {
             case "cover": return Math.max(viewport.width / cw, viewport.height / ch)
             case "none": return 1
+            case "fill": return viewport.width / cw
             default: return Math.min(viewport.width / cw, viewport.height / ch)
         }
     }
     readonly property real scale: baseScale * zoom
+    readonly property real verticalScale: fit === "fill" && content.implicitHeight > 0
+        ? viewport.height / content.implicitHeight * zoom : scale
 
     property real zoom: 1
     property real offsetX: 0
     property real offsetY: 0
 
-    readonly property int publishedRevision:
+    readonly property double publishedRevision:
         host && host.model ? Props.viewportRevision(host.model) : 0
     onPublishedRevisionChanged: viewport.adopt()
     Component.onCompleted: viewport.adopt()
@@ -53,8 +56,8 @@ Item {
         var current = viewport.scale
         if (current <= 0) return Qt.point(0, 0)
         var left = viewport.width / 2 + viewport.offsetX - content.implicitWidth * current / 2
-        var top = viewport.height / 2 + viewport.offsetY - content.implicitHeight * current / 2
-        return Qt.point((px - left) / current, (py - top) / current)
+        var top = viewport.height / 2 + viewport.offsetY - content.implicitHeight * viewport.verticalScale / 2
+        return Qt.point((px - left) / current, (py - top) / viewport.verticalScale)
     }
 
     // Scale to `next`, keeping the content point under (ax, ay) fixed.
@@ -63,7 +66,7 @@ Item {
         zoom = viewport.clamp(next)
         var scaled = viewport.scale
         offsetX = ax - anchor.x * scaled - viewport.width / 2 + content.implicitWidth * scaled / 2
-        offsetY = ay - anchor.y * scaled - viewport.height / 2 + content.implicitHeight * scaled / 2
+        offsetY = ay - anchor.y * viewport.verticalScale - viewport.height / 2 + content.implicitHeight * viewport.verticalScale / 2
     }
 
     function report(event, point, dx, dy) {
@@ -87,8 +90,9 @@ Item {
         height: content.implicitHeight
         transformOrigin: Item.TopLeft
         scale: viewport.scale
+        transform: Scale { yScale: viewport.scale > 0 ? viewport.verticalScale / viewport.scale : 1 }
         x: viewport.width / 2 + viewport.offsetX - width * viewport.scale / 2
-        y: viewport.height / 2 + viewport.offsetY - height * viewport.scale / 2
+        y: viewport.height / 2 + viewport.offsetY - height * viewport.verticalScale / 2
 
         // A matching canvas key and kind retain local state across payload updates.
         Loader {
@@ -134,6 +138,7 @@ Item {
 
     DragHandler {
         id: drag
+        target: null
         enabled: viewport.host.interactive && Props.bind(viewport.host.model, "drag") !== null
         property real heldX: 0
         property real heldY: 0
@@ -144,7 +149,7 @@ Item {
             } else {
                 // Panning is local; report the settled transform once so the
                 // surface can track it without a render per mouse move.
-                viewport.report("drag", null, 0, 0)
+                viewport.report("drag", null, drag.heldX, drag.heldY)
             }
         }
         onTranslationChanged: {
@@ -160,6 +165,7 @@ Item {
 
     PinchHandler {
         id: pinch
+        target: null
         enabled: viewport.host.interactive && Props.bind(viewport.host.model, "pinch") !== null
         property real held: 1
         onActiveChanged: {

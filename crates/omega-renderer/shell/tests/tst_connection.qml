@@ -41,7 +41,7 @@ TestCase {
         var link = connection()
         phase(link, "PLUGIN_PHASE_RUNNING")
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
-        verify(link.press({command:"volume"}, 0.5, "slider"))
+        verify(link.press({command:"volume"}, 0.5, "slider", "change", {type:"slider"}))
         verify(link.busy("slider"))
         link.disconnected()
         compare(link.tree, null)
@@ -54,7 +54,7 @@ TestCase {
         phase(link, "PLUGIN_PHASE_RUNNING")
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text",key:"volume"}}}))
         compare(link.status, "")
-        verify(link.press({command:"volume"}, 0.4, "slider"))
+        verify(link.press({command:"volume"}, 0.4, "slider", "change", {type:"slider"}))
         compare(link.requests.error, "")
     }
     function test_timeout_preserves_its_explanation_across_disconnect() {
@@ -71,15 +71,24 @@ TestCase {
     function test_unsent_command_is_rejected_without_pending_state() {
         var link = connection()
         link.disconnected()
-        verify(!link.press({command:"volume"}, 0.5, "slider"))
+        verify(!link.press({command:"volume"}, 0.5, "slider", "change", {type:"slider"}))
         verify(!link.busy("slider"))
         verify(link.requests.error.indexOf("not sent") >= 0)
+    }
+    function test_invalid_control_value_is_rejected_before_admission() {
+        var link = connection()
+        link.instance = {id:"test",incarnation:"session"}
+        var before = link.socket.written
+        verify(!link.press({local:"1"}, "wrong type", "slider", "change", {type:"slider"}))
+        verify(!link.busy("slider"))
+        compare(link.socket.written, before)
+        verify(link.requests.error.indexOf("Unsupported control value") >= 0)
     }
     function test_recreated_socket_subscribes_and_accepts_commands() {
         var link = connection()
         verify(link.socket.written.indexOf("plugins") >= 0)
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
-        verify(link.press({command:"volume"}, 0.5, "slider"))
+        verify(link.press({command:"volume"}, 0.5, "slider", "change", {type:"slider"}))
         link.reconnect()
         compare(link.socket, null)
         compare(link.tree, null)
@@ -88,7 +97,7 @@ TestCase {
         link.attached = true
         verify(link.socket.written.indexOf("plugins") >= 0)
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"test",incarnation:"test-session"},view:{root:{type:"text"}}}))
-        verify(link.press({command:"volume"}, 0.4, "slider"))
+        verify(link.press({command:"volume"}, 0.4, "slider", "change", {type:"slider"}))
     }
 
     function test_socket_close_retries_without_waiting_for_heartbeat() {
@@ -96,7 +105,7 @@ TestCase {
         link.heartbeat.stop()
         link.retry.interval = 20
         link.onLine(JSON.stringify({plugin:"audio",surface:"panel",instance:{id:"old",incarnation:"old-session"},requested:2,view:{revision:"9",root:{type:"text"}}}))
-        verify(link.press({}, 0.5, "slider"))
+        verify(link.press({}, 0.5, "slider", "change", {type:"slider"}))
         link.socket.connected = false
         verify(!link.connected)
         verify(!link.attached)

@@ -65,7 +65,7 @@ FocusScope {
         if (!node.interactive || !node.session) return false
         var bound = Props.bind(node.model, event)
         if (!bound) return false
-        return node.session.press(bound, value, node.model.key, event)
+        return node.session.press(bound, value, node.model.key, event, node.model)
     }
 
     Keys.priority: Keys.AfterItem
@@ -84,10 +84,10 @@ FocusScope {
         node.invoke(binding.event, undefined)
     }
 
-    readonly property int fixedWidth: node.space(Props.width(node.model))
-    readonly property int fixedHeight: node.space(Props.height(node.model))
+    readonly property double fixedWidth: node.space(Props.width(node.model))
+    readonly property double fixedHeight: node.space(Props.height(node.model))
 
-    readonly property int padding: node.space(Props.pad(node.model))
+    readonly property double padding: node.space(Props.pad(node.model))
 
     implicitWidth: node.fixedWidth > 0
         ? node.fixedWidth

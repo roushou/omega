@@ -46,8 +46,8 @@ Item {
     property var lastGiven: null
     readonly property bool requestPending: !!host.pending
     onRequestPendingChanged: flush.restart()
-    property int editRevision: 0
-    property int resetRevision: 0
+    property double editRevision: 0
+    property double resetRevision: 0
     property bool queuedEdit: false
     readonly property var navigation: host.navigation || null
     readonly property bool navigationResolved: !!(host.model && host.model.navigationTarget)
