@@ -18,11 +18,11 @@ use requests::Requests;
 use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 
-use omega_proto::omega::{Frame, Invoke, frame};
+use omega_proto::omega::{Frame, Heartbeat, Invoke, frame};
 use omega_proto::{Observation, Refusal, Socket};
 
 use crate::broker::Brokerage;
-use crate::hub::{Heartbeat, Hub, ViewUpdate};
+use crate::hub::{Hub, ViewUpdate};
 use crate::plugins::PluginRegistry;
 use crate::session::admission::Peer;
 use crate::session::{Dispatcher, Subscriptions};
@@ -250,10 +250,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                 line = self.requests.next_line() => match line? {
                     Some(line) if line.trim().is_empty() => {}
                     Some(line) => {
-                        let frame: Frame = match serde_json::from_str(&line) {
+                        let frame = match Observation::decode_request(&line) {
                             Ok(frame) => frame,
                             Err(error) => {
-                                self.write_answer(&Refusal::invalid(format!("not a request: {error}")).frame(0)).await?;
+                                self.write_answer(&Refusal::from(&error).frame(error.stream_id())).await?;
                                 continue;
                             }
                         };
@@ -385,7 +385,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                     self.write_answer(&refusal.clone().frame(0)).await?;
                     return Err(ShellError::Renderer(refusal));
                 }
-                self.write_line(view.as_ref()).await?;
+                self.write_line(&view.snapshot()).await?;
                 if view.view.root.is_some() {
                     self.sent_views.insert(
                         view.instance.clone(),
@@ -427,10 +427,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
     }
 
     async fn write_line(&mut self, observed: &impl serde::Serialize) -> Result<(), ShellError> {
-        self.write(serde_json::to_string(observed)?).await
+        self.write(omega_proto::json::Json::encode(observed)?).await
     }
 
     async fn write_answer(&mut self, answer: &Frame) -> Result<(), ShellError> {
+        let line = match Observation::line(answer) {
+            Ok(line) => line,
+            Err(error) => {
+                let refusal = Refusal::from(&error).frame(answer.stream_id);
+                return self.write(Observation::line(&refusal)?).await;
+            }
+        };
         if let Some(frame::Body::Result(omega_proto::omega::Result {
             outcome: Some(omega_proto::omega::result::Outcome::Instances(instances)),
             ..
@@ -447,7 +454,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ShellConnection<S> {
                 }
             }
         }
-        self.write(Observation::line(answer)?).await
+        self.write(line).await
     }
 
     const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);

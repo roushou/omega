@@ -7,6 +7,100 @@ struct Server {
     task: tokio::task::JoinHandle<Result<(), ShellError>>,
 }
 
+#[tokio::test]
+async fn an_unencodable_answer_is_replaced_by_a_correlated_refusal() {
+    use omega_proto::{IntoValue, omega::result};
+    let (server, client) = UnixStream::pair().unwrap();
+    let hub = Hub::new();
+    let mut connection = ShellConnection::new(
+        server,
+        hub.subscribe_views().1,
+        hub.subscribe_state().1,
+        hub,
+        Err(Refusal::denied("test")),
+        None,
+    );
+    let answer = Frame::reply(37, result::Outcome::Value(f64::NAN.into_value()));
+    connection.write_answer(&answer).await.unwrap();
+    let mut client = BufReader::new(client);
+    let mut line = String::new();
+    tokio::time::timeout(Duration::from_secs(2), client.read_line(&mut line))
+        .await
+        .unwrap()
+        .unwrap();
+    let answer = Observation::answer(&line).unwrap();
+    assert_eq!(answer.stream_id, 37);
+    assert_eq!(
+        Refusal::of(&answer).unwrap().code,
+        omega_proto::omega::ErrorCode::InvalidArgument
+    );
+}
+
+#[tokio::test]
+async fn malformed_requests_keep_correlation_and_leave_the_connection_usable() {
+    let (server, client) = UnixStream::pair().unwrap();
+    let hub = Hub::new();
+    let (snapshot, state) = hub.subscribe_state();
+    let (views, updates) = hub.subscribe_views();
+    let connection = ShellConnection::new(
+        server,
+        updates,
+        state,
+        hub,
+        Err(Refusal::denied("test")),
+        None,
+    );
+    let task = tokio::spawn(connection.stream(views, snapshot));
+    let mut client = BufReader::new(client);
+    for (request, stream, code) in [
+        (
+            r#"{"streamId":"9007199254740993","invoke":{"futureOperation":{}}}"#,
+            9007199254740993,
+            omega_proto::omega::ErrorCode::InvalidArgument,
+        ),
+        (
+            r#"{"stream_id":"18446744073709551615","invoke":{"subscribe":{"replace":"bad"}}}"#,
+            u64::MAX,
+            omega_proto::omega::ErrorCode::InvalidArgument,
+        ),
+        (
+            r#"{"streamId":5,"invoke":{"interact":{"value":{"doubleValue":"NaN"}}}}"#,
+            5,
+            omega_proto::omega::ErrorCode::InvalidArgument,
+        ),
+        (
+            r#"{"streamId":7,"stream_id":9,"invoke":{"futureOperation":{}}}"#,
+            0,
+            omega_proto::omega::ErrorCode::InvalidArgument,
+        ),
+        (
+            r#"{"streamId":11,"invoke":{"subscribe":{}}}"#,
+            11,
+            omega_proto::omega::ErrorCode::Unimplemented,
+        ),
+    ] {
+        client
+            .get_mut()
+            .write_all(format!("{request}\n").as_bytes())
+            .await
+            .unwrap();
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(2), client.read_line(&mut line))
+            .await
+            .unwrap()
+            .unwrap();
+        let answer = Observation::answer(&line).unwrap();
+        assert_eq!(answer.stream_id, stream, "{line}");
+        assert_eq!(Refusal::of(&answer).unwrap().code, code);
+    }
+    drop(client);
+    tokio::time::timeout(Duration::from_secs(2), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
 impl Server {
     fn start() -> Self {
         let path = omega_host::TempPath::sibling(
@@ -399,8 +493,8 @@ async fn lag_recovery_removes_large_views_using_only_address_and_revision() {
         });
         written.unwrap();
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&line).unwrap(),
-            serde_json::to_value(snapshot[0].as_ref()).unwrap()
+            serde_json::from_str::<omega_proto::omega::InstanceSnapshot>(&line).unwrap(),
+            snapshot[0].snapshot()
         );
         let revision = snapshot[0].view.revision;
         assert_eq!(
@@ -536,7 +630,7 @@ async fn a_blocked_observer_does_not_hold_up_another_observers_large_view() {
                     line
                 });
                 written.unwrap();
-                assert_eq!(serde_json::from_str::<serde_json::Value>(&line).unwrap(), serde_json::to_value(updates[0].as_ref()).unwrap());
+                assert_eq!(serde_json::from_str::<omega_proto::omega::InstanceSnapshot>(&line).unwrap(), updates[0].snapshot());
             } => {}
         }
         assert!(slow.sent_views.is_empty());

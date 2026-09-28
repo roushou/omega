@@ -195,6 +195,11 @@ async fn shell_socket_streams_views() {
     let mut reader = BufReader::new(stream);
 
     let first = ViewFixture::attach(&mut reader).await;
+    let snapshot: omega_proto::omega::InstanceSnapshot = serde_json::from_str(&first).unwrap();
+    assert_eq!(
+        snapshot.requested,
+        omega_proto::omega::PresentationState::Visible as i32
+    );
     assert_eq!(surface_of(&first), "battery-widget.battery");
     assert_eq!(text_of(&first), "50%");
 
@@ -256,7 +261,7 @@ async fn the_observation_socket_streams_state_as_it_changes() {
 
 #[tokio::test]
 async fn a_view_line_is_not_mistaken_for_a_topic() {
-    let line = serde_json::to_string(&battery("50%")).unwrap();
+    let line = serde_json::to_string(&battery("50%").snapshot()).unwrap();
     assert!(Observation::topic(&line).is_none(), "{line}");
 }
 

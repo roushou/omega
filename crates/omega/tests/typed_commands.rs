@@ -366,7 +366,11 @@ fn output_records_decode_strictly_without_configuration_defaults() {
         })
         .is_err()
     );
-    assert!(<u64 as CommandValue>::decode_value(&u64::MAX.into_value()).is_err());
+    assert_eq!(
+        <u64 as CommandValue>::decode_value(&u64::MAX.into_value()).unwrap(),
+        u64::MAX
+    );
+    assert!(<u64 as CommandValue>::decode_value(&(-1_i64).into_value()).is_err());
 }
 
 #[test]

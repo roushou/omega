@@ -73,6 +73,8 @@ message CommandType {
     OPTIONAL = 7;
     RECORD = 8;
     CHOICE = 9;
+    // uint_value, or a nonnegative legacy int_value.
+    UNSIGNED = 10;
   }
   Kind kind = 1;
   repeated CommandField fields = 2;

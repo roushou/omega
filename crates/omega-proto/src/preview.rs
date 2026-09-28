@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 /// Preview protocol version, independent of the production connection version.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CaseId(String);
@@ -65,14 +65,14 @@ impl<R: AsyncRead + Unpin> Reader<R> {
             LinesCodec::new_with_max_length(crate::MAX_FRAME_LEN),
         ))
     }
-    pub async fn receive<T: serde::de::DeserializeOwned>(
+    pub async fn receive<T: serde::de::DeserializeOwned + serde::Serialize>(
         &mut self,
     ) -> Result<Option<T>, PreviewError> {
         self.0
             .next()
             .await
             .transpose()?
-            .map(|line| serde_json::from_str(&line).map_err(Into::into))
+            .map(|line| crate::json::Json::decode(&line).map_err(Into::into))
             .transpose()
     }
 }
@@ -87,7 +87,7 @@ impl<W: AsyncWrite + Unpin> Writer<W> {
         ))
     }
     pub async fn send<T: serde::Serialize>(&mut self, value: &T) -> Result<(), PreviewError> {
-        let line = serde_json::to_string(value)?;
+        let line = crate::json::Json::encode(value)?;
         if line.len() > crate::MAX_FRAME_LEN {
             return Err(PreviewError::TooLarge);
         }

@@ -100,6 +100,7 @@ impl ViewUpdate {
     pub fn snapshot(&self) -> omega::InstanceSnapshot {
         omega::InstanceSnapshot {
             destroyed: self.destroyed,
+            module: self.surface.module.as_ref().map(ToString::to_string),
             instance: Some(self.instance.wire()),
             plugin: self.surface.plugin.to_string(),
             surface: self.surface.surface.to_string(),

@@ -55,6 +55,8 @@ impl PresentCmd {
             serde_json::Value::String(value) => Some(Kind::StringValue(value)),
             serde_json::Value::Number(value) => Some(if let Some(integer) = value.as_i64() {
                 Kind::IntValue(integer)
+            } else if let Some(integer) = value.as_u64() {
+                Kind::UintValue(integer)
             } else if value.is_f64() {
                 Kind::DoubleValue(
                     value
@@ -188,5 +190,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn settings_preserve_unsigned_integers_above_the_signed_range() {
+        let settings =
+            PresentCmd::settings(r#"{"large":18446744073709551615,"small":42,"fraction":1.5}"#)
+                .unwrap();
+        assert_eq!(
+            settings["large"].kind,
+            Some(omega::value::Kind::UintValue(u64::MAX))
+        );
+        assert_eq!(
+            settings["small"].kind,
+            Some(omega::value::Kind::IntValue(42))
+        );
+        assert_eq!(
+            settings["fraction"].kind,
+            Some(omega::value::Kind::DoubleValue(1.5))
+        );
     }
 }

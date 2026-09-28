@@ -222,7 +222,7 @@ async fn a_quiet_daemon_still_says_it_is_there() {
 #[test]
 fn a_heartbeat_is_a_line_an_observer_can_tell_apart() {
     // Heartbeat frames must not decode as views or state patches.
-    let line = serde_json::to_value(omega_daemon::hub::Heartbeat { heartbeat: true }).unwrap();
+    let line = serde_json::to_value(omega_proto::omega::Heartbeat { heartbeat: true }).unwrap();
 
     assert_eq!(line["heartbeat"].as_bool(), Some(true));
     assert!(line["view"].is_null());

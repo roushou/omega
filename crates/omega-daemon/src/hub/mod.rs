@@ -18,12 +18,11 @@ use crate::state::StateStore;
 ///
 /// This metadata locates desired configuration. Runtime ownership and view
 /// identity use `InstanceKey`, including its incarnation.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SurfaceRef {
     pub plugin: PluginName,
     pub surface: SurfaceId,
     /// None for transient presentations without a configured placement.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub module: Option<ModuleId>,
 }
 
@@ -61,25 +60,15 @@ impl std::fmt::Display for SurfaceRef {
 }
 
 /// A published view: a surface's latest declarative tree.
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug)]
 pub struct ViewUpdate {
     pub destroyed: bool,
     pub instance: omega_proto::instance::InstanceKey,
     pub presentation: omega_proto::omega::Presentation,
     pub requested: i32,
     pub observed: i32,
-    #[serde(flatten)]
     pub surface: SurfaceRef,
     pub view: ViewTree,
-}
-
-/// Heartbeat independent of topic changes and subscription selection.
-#[derive(Clone, Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Heartbeat {
-    /// Always true. A field, because every line on this socket is a JSON
-    /// object and an observer tells them apart by which keys they carry.
-    pub heartbeat: bool,
 }
 
 /// Shared authoritative state and message channels. Locks must not cross await points.

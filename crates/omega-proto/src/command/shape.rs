@@ -46,7 +46,7 @@ impl CommandType {
             || self.maximum.is_some_and(|v| !v.is_finite())
             || matches!((self.minimum,self.maximum), (Some(a),Some(b)) if a > b)
             || ((self.minimum.is_some() || self.maximum.is_some())
-                && !matches!(kind, Kind::Integer | Kind::Number))
+                && !matches!(kind, Kind::Integer | Kind::Unsigned | Kind::Number))
         {
             return Err(invalid());
         }
@@ -113,7 +113,9 @@ impl CommandType {
             | (Kind::Unit, None)
             | (Kind::Boolean, Some(V::BoolValue(_)))
             | (Kind::Text, Some(V::StringValue(_))) => Ok(()),
-            (Kind::Integer, Some(V::IntValue(n))) => self.number(*n as f64),
+            (Kind::Integer, Some(V::IntValue(n))) => self.integer(i128::from(*n)),
+            (Kind::Unsigned, Some(V::UintValue(n))) => self.integer(i128::from(*n)),
+            (Kind::Unsigned, Some(V::IntValue(n))) if *n >= 0 => self.integer(i128::from(*n)),
             (Kind::Number, Some(V::DoubleValue(n))) => self.number(*n),
             (Kind::Choice, Some(V::StringValue(v))) if self.choices.contains(v) => Ok(()),
             (Kind::Optional, None) => Ok(()),
@@ -142,6 +144,20 @@ impl CommandType {
             _ => Err(invalid()),
         }
     }
+    fn integer(&self, value: i128) -> Result<(), CommandContractError> {
+        // Round the finite bounds inward, not the integer into a lossy double.
+        // Saturation at i128 limits is outside both supported 64-bit ranges.
+        if self.minimum.is_some_and(|v| value < v.ceil() as i128)
+            || self.maximum.is_some_and(|v| value > v.floor() as i128)
+        {
+            Err(CommandContractError::Invalid(
+                "numeric value outside command bounds".into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     fn number(&self, value: f64) -> Result<(), CommandContractError> {
         if !value.is_finite()
             || self.minimum.is_some_and(|v| value < v)

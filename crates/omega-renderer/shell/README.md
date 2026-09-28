@@ -46,6 +46,12 @@ symlink.
 
 `core/RendererConnection.qml` connects to the observation socket and uses the
 same `Frame` requests as the binary protocol, encoded as newline-delimited JSON.
+Inbound state, views, and liveness use generated `StateTopic`, `InstanceSnapshot`,
+and `Heartbeat` JSON messages. Enum names and omitted scalar defaults follow
+protobuf JSON. IDs and revisions remain decimal strings; generic `uintValue`
+also carries the full unsigned range as text. Unknown schema fields in requests
+are refused on their readable request stream. Observation and preview boundaries
+reject non-finite numbers instead of serializing them as null.
 The Omarchy adapter supplies a placement scope; `desktop/shell.qml` supplies a
 plugin scope for independent windows and overlays. The owner bootstraps with
 `AttachRenderer`, declaring supported features and a build fingerprint. The digest

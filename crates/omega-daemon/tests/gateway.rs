@@ -74,7 +74,12 @@ impl Observer {
     /// Wait for the matching response while consuming unrelated observations.
     async fn ask(&mut self, op: invoke::Op) -> result::Outcome {
         let request = Observation::request(1, op);
-        let line = format!("{}\n", Observation::line(&request).unwrap());
+        self.ask_line(request.stream_id, &Observation::line(&request).unwrap())
+            .await
+    }
+
+    async fn ask_line(&mut self, stream_id: u64, line: &str) -> result::Outcome {
+        let line = format!("{line}\n");
         self.lines
             .get_mut()
             .get_mut()
@@ -92,10 +97,7 @@ impl Observer {
             let Some(answer) = Observation::answer(&line) else {
                 continue;
             };
-            assert_eq!(
-                answer.stream_id, request.stream_id,
-                "answered the wrong ask"
-            );
+            assert_eq!(answer.stream_id, stream_id, "answered the wrong ask");
 
             match answer.body {
                 Some(frame::Body::Result(result)) => {
@@ -263,7 +265,7 @@ async fn a_server_that_only_streams_says_so() {
 async fn observation_actions_use_the_same_payload_validation_without_a_handler() {
     let shell = Shell::serving("gateway-malformed");
     let mut observer = shell.connect().await;
-    for level in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
+    for level in [-0.1, 1.1] {
         let refusal = observer
             .refusal(invoke::Op::Act(Act {
                 action: Some(Action {
@@ -277,6 +279,20 @@ async fn observation_actions_use_the_same_payload_validation_without_a_handler()
         assert!(
             refusal.message.contains("SetVolume.change"),
             "{level}: {refusal}"
+        );
+    }
+    for number in ["NaN", "Infinity", "-Infinity"] {
+        let line = format!(
+            r#"{{"streamId":"37","invoke":{{"act":{{"action":{{"setVolume":{{"absolute":"{number}"}}}}}}}}}}"#
+        );
+        let result::Outcome::Error(error) = observer.ask_line(37, &line).await else {
+            panic!("non-finite JSON was admitted");
+        };
+        assert_eq!(error.code, ErrorCode::InvalidArgument as i32);
+        assert!(
+            error.message.contains("finite numbers"),
+            "{}",
+            error.message
         );
     }
 }

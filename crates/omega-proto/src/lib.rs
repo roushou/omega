@@ -10,6 +10,8 @@ pub mod icons;
 pub mod ident;
 pub mod instance;
 pub mod interaction;
+#[cfg(feature = "json")]
+pub mod json;
 pub mod manifest;
 #[cfg(feature = "json")]
 pub mod observation;

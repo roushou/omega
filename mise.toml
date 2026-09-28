@@ -51,7 +51,7 @@ run = "cargo test -p omega-cli --test e2e --locked -- --ignored"
 description = "Regenerate checked-in renderer properties, keyboard cases, and icons"
 env.OMEGA_REGENERATE = "1"
 run = [
-  "cargo test -p omega-renderer --test props --test keyboard --test ui_contract --locked",
+  "cargo test -p omega-renderer --test props --test keyboard --test ui_contract --test observation --locked",
   "cargo test -p omega-omarchy --test renderer --locked the_checked_in_icon_set_is_what_the_table_generates",
 ]
 

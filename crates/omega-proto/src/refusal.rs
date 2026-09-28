@@ -15,6 +15,20 @@ impl From<&crate::ui::ContractError> for Refusal {
     }
 }
 
+#[cfg(feature = "json")]
+impl From<&crate::observation::RequestError> for Refusal {
+    fn from(error: &crate::observation::RequestError) -> Self {
+        Self::invalid(error.to_string())
+    }
+}
+
+#[cfg(feature = "json")]
+impl From<&serde_json::Error> for Refusal {
+    fn from(error: &serde_json::Error) -> Self {
+        Self::invalid(format!("invalid protocol JSON: {error}"))
+    }
+}
+
 impl Refusal {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {

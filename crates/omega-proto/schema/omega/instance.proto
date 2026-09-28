@@ -85,6 +85,8 @@ message InstanceSnapshot {
   PresentationState observed = 6;
   ViewTree view = 7;
   bool destroyed = 8;
+  // Optional configured placement; absent for transient instances.
+  optional string module = 9;
 }
 
 message CreateInstance {

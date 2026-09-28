@@ -46,6 +46,7 @@ impl RunCmd {
         match answer.kind.as_ref() {
             Some(value::Kind::StringValue(text)) => text.clone(),
             Some(value::Kind::IntValue(number)) => number.to_string(),
+            Some(value::Kind::UintValue(number)) => number.to_string(),
             Some(value::Kind::DoubleValue(number)) => number.to_string(),
             Some(value::Kind::BoolValue(flag)) => flag.to_string(),
             other => format!("{other:?}"),

@@ -6,7 +6,8 @@ use omega_proto::{FromValue, IntoValue};
 /// A command value with strict decoding and a transport-neutral description.
 /// Derive `omega::Output` for a record returned by a command. Custom types may
 /// implement this trait and the value conversions; decoding must reject invalid data.
-/// Integer wire values are signed 64-bit; `u64` values above `i64::MAX` are rejected.
+/// Signed integers use `int_value`; `u64` uses `uint_value` across its full range
+/// and also decodes nonnegative legacy `int_value` values.
 ///
 /// ```
 /// use omega::{command::CommandValue, config::IntoValue};
@@ -40,13 +41,14 @@ scalar!((), Unit);
 scalar!(bool, Boolean);
 scalar!(String, Text);
 scalar!(i64, Integer);
+scalar!(u64, Unsigned);
 scalar!(f64, Number);
 macro_rules! integer {
     ($($ty:ty),*) => { $(impl CommandValue for $ty {
         fn shape() -> CommandType { CommandType { minimum: Some(<$ty>::MIN as f64), maximum: Some((<$ty>::MAX as u64).min(i64::MAX as u64) as f64), ..CommandType::of(Kind::Integer) } }
     })* };
 }
-integer!(u8, u32, u64, i32);
+integer!(u8, u32, i32);
 macro_rules! identifier {
     ($($ty:ty),*) => { $(impl CommandValue for $ty {
         fn shape() -> CommandType { CommandType { identity: stringify!($ty).into(), ..CommandType::of(Kind::Text) } }

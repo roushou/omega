@@ -107,9 +107,25 @@ scalar!(u32, IntValue, i64::from, |held: &i64| u32::try_from(*held)
     .ok());
 scalar!(i32, IntValue, i64::from, |held: &i64| i32::try_from(*held)
     .ok());
-scalar!(u64, IntValue, |number: u64| number as i64, |held: &i64| {
-    u64::try_from(*held).ok()
-});
+/// Full-range unsigned values use `uint_value`; nonnegative legacy signed values
+/// remain readable. Smaller unsigned SDK types retain their signed wire encoding.
+impl IntoValue for u64 {
+    fn into_value(self) -> Value {
+        Value {
+            kind: Some(value::Kind::UintValue(self)),
+        }
+    }
+}
+
+impl FromValue for u64 {
+    fn from_value(value: &Value) -> Option<Self> {
+        match value.kind.as_ref()? {
+            value::Kind::UintValue(number) => Some(*number),
+            value::Kind::IntValue(number) => Self::try_from(*number).ok(),
+            _ => None,
+        }
+    }
+}
 
 /// Encode or decode lists of values.
 /// Decoding fails for the entire list if any element cannot be decoded.

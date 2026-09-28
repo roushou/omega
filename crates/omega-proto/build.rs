@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "omega/instance.proto",
         "omega/document.proto",
         "omega/wire.proto",
+        "omega/observation.proto",
         "omega/preview.proto",
     ];
 

@@ -4,6 +4,8 @@ package omega;
 
 // Generic values for plugin records, node properties, settings, and command input.
 // SDK accessors validate and convert values at input boundaries.
+// An unset kind is absent/unit; a selected default scalar is still present.
+// JSON uses decimal strings for int64/uint64, base64 for bytes, and finite doubles.
 
 message Value {
   oneof kind {
@@ -16,6 +18,8 @@ message Value {
     MapValue map = 7;
     Color color = 8;
     Image image = 9;
+    // Full unsigned range; never encode unsigned overflow by wrapping int_value.
+    uint64 uint_value = 10;
   }
 }
 

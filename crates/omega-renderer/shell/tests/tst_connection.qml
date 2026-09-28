@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../../omega-omarchy/shell" as Renderer
+import "fixtures/Observation.js" as Observation
 
 TestCase {
     name: "ConnectionRecovery"
@@ -15,6 +16,21 @@ TestCase {
     }
     function phase(link, phase, detail) {
         link.onLine(JSON.stringify({topic:"plugins",plugins:{plugins:[{plugin:"audio",phase:phase,detail:detail || ""}]}}))
+    }
+    function test_generated_observation_messages_preserve_identity_and_defaults() {
+        var link = connection()
+        link.onLine(JSON.stringify(Observation.live))
+        verify(link.presented)
+        compare(link.instance.id, "test")
+        compare(link.revision, "9007199254740993")
+        compare(link.tree.type, "text")
+        link.onLine(JSON.stringify(Observation.heartbeat))
+        compare(link.revision, "9007199254740993")
+        link.onLine(JSON.stringify(Observation.removed))
+        verify(!link.presented)
+        compare(link.tree, null)
+        compare(link.revision, "9007199254740994")
+        compare(Object.keys(link.instances).length, 0)
     }
     function test_attachment_reports_the_loaded_build_identity() {
         var link = connection()

@@ -1,0 +1,11 @@
+syntax = "proto3";
+package omega;
+
+// The observation socket carries newline-delimited protobuf JSON objects:
+// Frame for requests/replies, StateTopic for state, InstanceSnapshot for views,
+// and Heartbeat for liveness. These are separate top-level messages, not wrappers.
+// The keys invoke/result, topic, instance, and heartbeat distinguish them.
+message Heartbeat {
+  // Always true; emitted independently of state subscriptions.
+  bool heartbeat = 1;
+}
